@@ -1,3 +1,8 @@
+---
+title: "`gionx ws reopen`"
+status: planned
+---
+
 # `gionx ws reopen <id>`
 
 ## Purpose

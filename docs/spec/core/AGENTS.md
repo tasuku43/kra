@@ -1,3 +1,8 @@
+---
+title: "AGENTS.md"
+status: planned
+---
+
 # AGENTS.md
 
 ## Goal
@@ -55,4 +60,3 @@ Include:
 
 - `gionx` does not define a formal priority/override mechanism between the two files.
   Agents are expected to load relevant files based on their working directory and file touches.
-

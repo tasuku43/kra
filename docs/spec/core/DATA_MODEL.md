@@ -1,3 +1,8 @@
+---
+title: "Data Model"
+status: planned
+---
+
 # Data Model
 
 This document defines the state store schema at a conceptual level.

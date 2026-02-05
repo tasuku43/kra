@@ -1,3 +1,8 @@
+---
+title: "State Store"
+status: planned
+---
+
 # State Store
 
 ## Overview

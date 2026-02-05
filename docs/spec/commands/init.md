@@ -1,3 +1,8 @@
+---
+title: "`gionx init`"
+status: planned
+---
+
 # `gionx init`
 
 ## Purpose

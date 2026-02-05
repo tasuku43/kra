@@ -1,3 +1,8 @@
+---
+title: "`gionx ws purge`"
+status: planned
+---
+
 # `gionx ws purge <id>`
 
 ## Purpose
@@ -51,4 +56,3 @@ This is a destructive operation. It is separate from `ws close`, which keeps an 
   - removal of `archive/<id>/`
 
 If the Git working tree has unrelated changes, this command must not include them in the commit.
-

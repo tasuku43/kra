@@ -1,3 +1,8 @@
+---
+title: "`gionx ws create`"
+status: planned
+---
+
 # `gionx ws create <id>`
 
 ## Purpose

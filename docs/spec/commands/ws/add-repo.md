@@ -1,3 +1,8 @@
+---
+title: "`gionx ws add-repo`"
+status: planned
+---
+
 # `gionx ws add-repo <workspace-id> <repo>`
 
 ## Purpose
