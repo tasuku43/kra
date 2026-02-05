@@ -14,7 +14,7 @@ This supports the common case where a task was considered done, but more work is
 
 - `archive/<id>` must exist
 - `workspaces/<id>` must not exist
-- Workspace `<id>` must exist in the global state store and be `closed`
+- Workspace `<id>` must exist in the global state store and be `archived`
 
 ### Steps
 
@@ -38,7 +38,7 @@ For each recorded workspace repo entry:
 
 4) Update state store
 
-- Mark the workspace as `open`.
+- Mark the workspace as `active`.
 - Update `updated_at`.
 - Record:
   - `reopened_at`
@@ -54,3 +54,6 @@ For each recorded workspace repo entry:
 
 If the Git working tree has unrelated changes, this command must not include them in the commit.
 
+6) Append an event
+
+- Append `workspace_events(event_type='reopened', workspace_id='<id>', at=...)`.

@@ -35,7 +35,7 @@ This is the primary "task completed" flow in `gionx`.
 
 4) Update state store
 
-- Mark the workspace as `closed`.
+- Mark the workspace as `archived`.
 - Update `updated_at`.
 - Record:
   - `archived_at`
@@ -49,6 +49,10 @@ This is the primary "task completed" flow in `gionx`.
   - `archive/<id>/`
   - removal of `workspaces/<id>/` (and any emptied parent folders as needed)
  - After committing, store the commit SHA in the state store as `archived_commit_sha`.
+
+6) Append an event
+
+- Append `workspace_events(event_type='archived', workspace_id='<id>', at=...)`.
 
 If the Git working tree has unrelated changes, this command must not include them in the commit.
 

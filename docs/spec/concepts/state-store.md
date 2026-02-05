@@ -12,6 +12,26 @@ The state store also keeps traceability for workspace lifecycle operations:
 - `archived_at`, `archived_commit_sha`
 - `reopened_at`, `reopened_commit_sha`
 
+## Workspace status
+
+The workspace "current state" is stored in `workspaces.status`:
+- `active`: workspace exists under `GIONX_ROOT/workspaces/<id>/`
+- `archived`: workspace exists under `GIONX_ROOT/archive/<id>/`
+
+## Event log (immutable)
+
+In addition to the mutable `workspaces` snapshot, `gionx` stores an append-only event log.
+
+Goal:
+- allow "purge" to remove a workspace snapshot (so the same workspace ID can be reused)
+- still preserve an optional audit trail / diagnostics trail
+
+Suggested table: `workspace_events`
+- `workspace_id` (TEXT)
+- `event_type` (TEXT) e.g. `created`, `archived`, `reopened`, `purged`
+- `at` (timestamp)
+- `meta` (optional JSON/text)
+
 This state store is stored outside `GIONX_ROOT`.
 
 ## Locations (defaults)

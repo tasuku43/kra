@@ -7,7 +7,7 @@ List workspaces with status and risk, similar in spirit to `gion manifest ls`.
 ## Display fields (MVP)
 
 - `id`
-- `status` (open/closed)
+- `status` (`active`/`archived`)
 - `updated_at`
 - `repo_count`
 - `risk` (live)
@@ -25,4 +25,3 @@ List workspaces with status and risk, similar in spirit to `gion manifest ls`.
   - mark it as `missing` in the state store (do not delete)
 - If a workspace directory exists on disk but is missing in the state store:
   - import it automatically using the directory name as the workspace ID
-
