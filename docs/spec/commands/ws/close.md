@@ -37,6 +37,9 @@ This is the primary "task completed" flow in `gionx`.
 
 - Mark the workspace as `closed`.
 - Update `updated_at`.
+- Record:
+  - `archived_at`
+  - `archived_commit_sha` (the commit created by this operation)
 
 5) Commit the archive change (always)
 
@@ -45,6 +48,7 @@ This is the primary "task completed" flow in `gionx`.
 - Stage only paths touched by this operation, at minimum:
   - `archive/<id>/`
   - removal of `workspaces/<id>/` (and any emptied parent folders as needed)
+ - After committing, store the commit SHA in the state store as `archived_commit_sha`.
 
 If the Git working tree has unrelated changes, this command must not include them in the commit.
 
@@ -52,4 +56,3 @@ If the Git working tree has unrelated changes, this command must not include the
 
 - `workspaces/**/repos/**` is ignored in `.gitignore`, but `ws close` must still delete worktrees
   (archives should not contain repos).
-

@@ -8,6 +8,10 @@
 - workspace metadata (status, description, timestamps)
 - workspace <-> repo bindings (repoKey, alias, branch, worktree path, etc.)
 
+The state store also keeps traceability for workspace lifecycle operations:
+- `archived_at`, `archived_commit_sha`
+- `reopened_at`, `reopened_commit_sha`
+
 This state store is stored outside `GIONX_ROOT`.
 
 ## Locations (defaults)
@@ -26,4 +30,3 @@ Migrations are applied in order from `migrations/*.sql`.
 Recommended approach:
 - keep a `schema_migrations` table storing applied migration identifiers
 - at startup, apply any missing migrations inside a transaction
-

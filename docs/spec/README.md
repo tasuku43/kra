@@ -15,3 +15,4 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/add-repo.md`: `gionx ws add-repo`
   - `commands/ws/list.md`: `gionx ws list`
   - `commands/ws/close.md`: `gionx ws close`
+  - `commands/ws/reopen.md`: `gionx ws reopen`
