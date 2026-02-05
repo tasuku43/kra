@@ -7,11 +7,10 @@ Implementation should reference these specs. When behavior changes, update the s
 
 - Core
   - `core/DATA_MODEL.md`: State store data model (tables, keys, constraints)
+  - `core/AGENTS.md`: AGENTS.md generation and conventions
 - Concepts
   - `concepts/layout.md`: GIONX_ROOT layout and Git tracking policy
-  - `concepts/agents.md`: AGENTS.md generation and conventions
   - `concepts/state-store.md`: Global state store (SQLite) and migrations
-  - `concepts/testing.md`: Testing principles
 - Commands
   - `commands/init.md`: `gionx init`
   - `commands/ws/create.md`: `gionx ws create`
@@ -20,3 +19,6 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/close.md`: `gionx ws close`
   - `commands/ws/reopen.md`: `gionx ws reopen`
   - `commands/ws/purge.md`: `gionx ws purge`
+
+- Development
+  - `../dev/TESTING.md`: Testing principles (developer guidance)
