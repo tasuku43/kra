@@ -26,8 +26,20 @@ Goal:
 - allow "purge" to remove a workspace snapshot (so the same workspace ID can be reused)
 - still preserve an optional audit trail / diagnostics trail
 
+## Workspace generation
+
+Because a workspace ID can be reused after purge, `gionx` must be able to distinguish
+different "generations" of the same workspace ID in the event log.
+
+- `workspaces.generation`: current generation number for the workspace snapshot
+- `workspace_events.workspace_generation`: generation number associated with the event
+
+When a workspace is purged, its snapshot row is removed, but its events remain.
+When the same ID is created again, the new snapshot uses `generation = 1 + max(existing events)`.
+
 Suggested table: `workspace_events`
 - `workspace_id` (TEXT)
+- `workspace_generation` (INTEGER)
 - `event_type` (TEXT) e.g. `created`, `archived`, `reopened`, `purged`
 - `at` (INTEGER unix epoch)
 - `meta` (optional JSON string)
