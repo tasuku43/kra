@@ -39,6 +39,21 @@ Legend:
 - **Serial**: on the critical path (blocks other items).
 - **Parallel**: can be implemented independently once its dependencies are done.
 
+## Parallelizable groups (guide)
+
+This is a quick guide for what can be worked on in parallel once prerequisites are met.
+It does not replace per-item dependencies.
+
+- After MVP-001:
+  - MVP-002 and MVP-003 can proceed in parallel.
+- After MVP-002 + MVP-003:
+  - MVP-010 can proceed (usually best to do early).
+  - MVP-030 can proceed in parallel (repo pool is used later by add-repo/reopen).
+- After MVP-010:
+  - MVP-020 and MVP-021 can proceed in parallel.
+- After MVP-020 + MVP-030 + MVP-010:
+  - MVP-031 unblocks the archive lifecycle commands (MVP-040/041/042).
+
 ## Foundation (critical path)
 
 - [ ] MVP-001: Project skeleton (CLI entrypoint + subcommand routing)
