@@ -7,10 +7,16 @@ status: planned
 
 This file is the implementation backlog for `gionx`.
 
-## Current focus (next session)
+## How to pick the next item (dynamic)
 
-- Critical path: MVP-001 -> MVP-002/MVP-003 -> MVP-010
-- Next up: MVP-001 (CLI skeleton)
+Avoid baking "next up" decisions into this file. Instead, decide per session:
+
+1) If the working tree is dirty, finish that slice first (or explicitly park it with a WIP commit).
+2) Prefer the smallest-numbered **Serial** item whose dependencies are satisfied.
+3) If you want parallel work, pick a **Parallel** item that is unblocked by dependencies.
+
+Tip:
+- An item is "done" only when its linked specs are updated to `status: implemented` and the code/tests exist.
 
 Rules:
 - Each backlog item maps to one or more spec files in `docs/spec/**`.
