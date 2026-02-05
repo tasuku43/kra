@@ -1,0 +1,39 @@
+---
+title: "`gionx ws add-repo`"
+status: planned
+---
+
+# `gionx ws add-repo <workspace-id> <repo>`
+
+## Purpose
+
+Add a repository to a workspace as a Git worktree.
+
+## Inputs
+
+- `workspace-id`: an existing workspace ID
+- `repo`: `gion`-style repo spec (`git@...` / `https://...`)
+
+## Behavior (MVP)
+
+- Normalize `repo` into `repoKey` using `gion-core/repospec`
+- Derive `repoUid` as `<host>/<repoKey>` (e.g. `github.com/tasuku43/sugoroku`)
+- Determine `alias` from the repo URL tail:
+  - `git@github.com:tasuku43/sample-frontend.git` -> `sample-frontend`
+  - `git@github.com:tasuku43/sugoroku.git` -> `sugoroku`
+  - alias overrides are not supported in the MVP
+  - if `alias` conflicts within the same workspace, return an error
+- Ensure a bare repo exists in the repo pool for `repoUid`
+  - always `fetch` (prefetch should start as soon as `repo` is known to overlap user input time)
+- Prompt for `base_ref`
+  - allow empty input (meaning "use the detected default branch")
+  - when non-empty, it must be in the form `origin/<branch>` (same convention as `gion`)
+  - prefill the input with the detected default base ref for the repo (typically `origin/<default>` derived from `refs/remotes/origin/HEAD`)
+- Prompt for the branch name
+  - prefill the input with `<workspace-id>/` but allow deleting it
+  - accept any branch name that passes `git check-ref-format` (no extra rules)
+  - if the remote branch exists, check it out (track it)
+  - otherwise, create a new branch from `base_ref` (or default branch when `base_ref` is empty)
+  - if the same branch is already checked out by another worktree, error (Git worktree constraint)
+- Create the worktree at `GIONX_ROOT/workspaces/<id>/repos/<alias>`
+- Record the binding in the global state store
