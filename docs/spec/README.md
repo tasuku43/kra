@@ -24,7 +24,7 @@ Implementation should reference these specs. When behavior changes, update the s
 ## Index
 
 - Core
-  - `core/BACKLOG.md`: Implementation backlog (dependencies, parallelism, spec mapping)
+  - `../BACKLOG.md`: Implementation backlog (dependencies, parallelism, spec mapping)
   - `core/DATA_MODEL.md`: State store data model (tables, keys, constraints)
   - `core/AGENTS.md`: AGENTS.md generation and conventions
 - Concepts
