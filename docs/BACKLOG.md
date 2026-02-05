@@ -88,7 +88,7 @@ It does not replace per-item dependencies.
   - Depends: MVP-001
   - Parallel: yes (with MVP-003)
 
-- [ ] MVP-003: SQLite state store + migrations runner
+- [x] MVP-003: SQLite state store + migrations runner
   - What: open DB, `PRAGMA foreign_keys=ON`, apply `migrations/*.sql`, track `schema_migrations`
   - Specs:
     - `docs/spec/concepts/state-store.md`
