@@ -16,6 +16,12 @@ This document is the fastest "next session" entrypoint for Codex CLI (and humans
 - Pick the next **Serial** item on the critical path.
 - If you plan to work in parallel, pick a **Parallel** item that is unblocked by dependencies.
 
+1.5) Quick reality check (avoid stale assumptions)
+
+- If the working tree is dirty, either:
+  - finish and commit the slice, or
+  - explicitly park it with a WIP commit (do not mix unrelated changes).
+
 2) Open the related spec files listed in the backlog item
 - Confirm the behavior is fully specified.
 - If anything is ambiguous, update the spec first (spec-driven workflow).
@@ -28,6 +34,14 @@ This document is the fastest "next session" entrypoint for Codex CLI (and humans
 - Update spec `status` when a behavior is implemented.
 - Keep `docs/BACKLOG.md` current (check off items only when done).
 
+## What "done" means
+
+For this project, a backlog item is complete only when:
+
+- its behavior exists in code (and is usable from the CLI, if applicable)
+- it has tests for at least some non-happy-path behavior (see `docs/dev/TESTING.md`)
+- the related spec frontmatter is updated to `status: implemented`
+
 ## Where to look for key decisions
 
 - Backlog / dependencies: `docs/BACKLOG.md`
@@ -35,4 +49,3 @@ This document is the fastest "next session" entrypoint for Codex CLI (and humans
 - State store / migrations: `docs/spec/concepts/state-store.md` and `migrations/*.sql`
 - Root layout + git tracking: `docs/spec/concepts/layout.md`
 - Testing principles (dev guidance): `docs/dev/TESTING.md`
-
