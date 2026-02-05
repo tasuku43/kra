@@ -71,3 +71,7 @@ Migrations are applied in order from `migrations/*.sql`.
 Recommended approach:
 - keep a `schema_migrations` table storing applied migration identifiers
 - at startup, apply any missing migrations inside a transaction
+
+SQLite note:
+- foreign key constraints are only enforced when `PRAGMA foreign_keys = ON` is set.
+  `gionx` should enable it for every connection.

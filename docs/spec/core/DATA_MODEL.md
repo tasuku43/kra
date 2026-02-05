@@ -90,6 +90,8 @@ Columns (MVP):
 
 Recommended constraints:
 - `UNIQUE(workspace_id, alias)`
+- `FOREIGN KEY (workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE`
+- `FOREIGN KEY (repo_uid) REFERENCES repos(repo_uid)`
 
 Notes:
 - `worktree_path` is not stored; it is derived from layout:
@@ -124,4 +126,3 @@ Notes:
 - `workspace_repos(workspace_id)`
 - `workspace_repos(repo_uid)`
 - `repos(repo_key)`
-
