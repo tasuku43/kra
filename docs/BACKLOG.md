@@ -7,6 +7,18 @@ status: planned
 
 This file is the implementation backlog for `gionx`.
 
+## Definition of done (per backlog item)
+
+Do not treat an item as "done" until all of the following are true:
+
+- Code exists and behavior matches the linked specs.
+- Tests exist, including at least some non-happy-path coverage (see `docs/dev/TESTING.md`).
+- The linked spec frontmatter is updated to `status: implemented`.
+
+Special note (commands that commit inside `GIONX_ROOT`):
+- The spec must define the staging allowlist (which path prefixes may be staged/committed).
+- The implementation must enforce it (stage allowlist only, verify staged paths are within allowlist, abort otherwise).
+
 ## How to pick the next item (dynamic)
 
 Avoid baking "next up" decisions into this file. Instead, decide per session:

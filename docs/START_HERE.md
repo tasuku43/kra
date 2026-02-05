@@ -25,6 +25,8 @@ This document is the fastest "next session" entrypoint for Codex CLI (and humans
 2) Open the related spec files listed in the backlog item
 - Confirm the behavior is fully specified.
 - If anything is ambiguous, update the spec first (spec-driven workflow).
+- For commands that commit inside `GIONX_ROOT`, confirm the spec clearly defines the staging allowlist
+  (which path prefixes may be staged/committed). If it doesn't, update the spec before writing code.
 
 3) Implement with tight commit loops
 - Small commits, each mapped to one backlog item or a small sub-slice.
