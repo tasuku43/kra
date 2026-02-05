@@ -144,4 +144,3 @@ func loadApplied(ctx context.Context, q interface {
 	}
 	return out, nil
 }
-

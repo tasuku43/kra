@@ -35,4 +35,3 @@ func All() ([]Migration, error) {
 	}
 	return out, nil
 }
-
