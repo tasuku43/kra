@@ -54,7 +54,7 @@ CREATE TABLE IF NOT EXISTS workspace_events (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   workspace_id TEXT NOT NULL,
   workspace_generation INTEGER NOT NULL,
-  event_type TEXT NOT NULL,
+  event_type TEXT NOT NULL CHECK (event_type IN ('created', 'archived', 'reopened', 'purged')),
   at INTEGER NOT NULL,
   meta TEXT NOT NULL
 );
@@ -70,4 +70,3 @@ CREATE INDEX IF NOT EXISTS idx_workspace_repos_repo_uid
 
 CREATE INDEX IF NOT EXISTS idx_repos_repo_key
   ON repos (repo_key);
-

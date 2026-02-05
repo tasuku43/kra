@@ -106,7 +106,7 @@ Columns (MVP):
 - `id` (INTEGER, PRIMARY KEY AUTOINCREMENT)
 - `workspace_id` (TEXT, NOT NULL)
 - `workspace_generation` (INTEGER, NOT NULL)
-- `event_type` (TEXT, NOT NULL) - e.g. `created`, `archived`, `reopened`, `purged`
+- `event_type` (TEXT, NOT NULL) - allowed values: `created`, `archived`, `reopened`, `purged`
 - `at` (INTEGER, NOT NULL) - unix epoch
 - `meta` (TEXT, NOT NULL) - JSON string; in MVP it's `{}` (reserved for future)
 
