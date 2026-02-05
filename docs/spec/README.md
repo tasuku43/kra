@@ -7,6 +7,7 @@ Implementation should reference these specs. When behavior changes, update the s
 
 - Concepts
   - `concepts/layout.md`: GIONX_ROOT layout and Git tracking policy
+  - `concepts/agents.md`: AGENTS.md generation and conventions
   - `concepts/state-store.md`: Global state store (SQLite) and migrations
 - Commands
   - `commands/init.md`: `gionx init`
