@@ -10,13 +10,21 @@ func (c *CLI) printRootUsage(w io.Writer) {
   gionx <command> [args]
 
 Commands:
-  init              Initialize GIONX_ROOT (not implemented yet)
+  init              Initialize GIONX_ROOT
   ws                Workspace commands
   version           Print version
   help              Show this help
 
 Run:
   gionx <command> --help
+`)
+}
+
+func (c *CLI) printInitUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx init
+
+Initialize GIONX_ROOT (current directory by default, or $GIONX_ROOT if set).
 `)
 }
 

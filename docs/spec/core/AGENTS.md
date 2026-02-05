@@ -1,6 +1,6 @@
 ---
 title: "AGENTS.md"
-status: planned
+status: implemented
 ---
 
 # AGENTS.md

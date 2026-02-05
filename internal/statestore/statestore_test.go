@@ -3,6 +3,7 @@ package statestore
 import (
 	"context"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -69,5 +70,58 @@ INSERT INTO workspace_repos (
 `)
 	if err == nil {
 		t.Fatalf("expected foreign key error, got nil")
+	}
+}
+
+func TestEnsureSettings_InsertsThenNoopsWhenSame(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "state.db")
+
+	db, err := Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("Open() error: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := EnsureSettings(ctx, db, "/tmp/root1", "/tmp/pool1"); err != nil {
+		t.Fatalf("EnsureSettings(insert) error: %v", err)
+	}
+	if err := EnsureSettings(ctx, db, "/tmp/root1", "/tmp/pool1"); err != nil {
+		t.Fatalf("EnsureSettings(noop) error: %v", err)
+	}
+
+	var count int
+	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM settings WHERE id = 1").Scan(&count); err != nil {
+		t.Fatalf("count settings: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("settings row count = %d, want 1", count)
+	}
+}
+
+func TestEnsureSettings_ErrorsWhenDifferent(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	dbPath := filepath.Join(t.TempDir(), "state.db")
+
+	db, err := Open(ctx, dbPath)
+	if err != nil {
+		t.Fatalf("Open() error: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	if err := EnsureSettings(ctx, db, "/tmp/root1", "/tmp/pool1"); err != nil {
+		t.Fatalf("EnsureSettings(insert) error: %v", err)
+	}
+
+	err = EnsureSettings(ctx, db, "/tmp/root2", "/tmp/pool1")
+	if err == nil {
+		t.Fatalf("EnsureSettings(different) error = nil, want error")
+	}
+	if !strings.Contains(err.Error(), "different value") {
+		t.Fatalf("unexpected error: %v", err)
 	}
 }

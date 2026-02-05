@@ -10,6 +10,7 @@ const (
 	exitOK             = 0
 	exitNotImplemented = 1
 	exitUsage          = 2
+	exitError          = 3
 )
 
 type CLI struct {
@@ -40,7 +41,7 @@ func (c *CLI) Run(args []string) int {
 		fmt.Fprintln(c.Out, c.Version)
 		return exitOK
 	case "init":
-		return c.notImplemented("init")
+		return c.runInit(args[1:])
 	case "ws":
 		return c.runWS(args[1:])
 	default:
