@@ -55,6 +55,31 @@ Before ending a session, always write a short "next steps" note (in your final o
 
 This is required because sessions may run in parallel and you may not know the latest completion status.
 
+## (Recommended) Create the next workspace at ticket completion
+
+When you finish a ticket/backlog item, you can pre-stage and confirm the next workspace creation flow.
+This keeps momentum between sessions while still requiring explicit agreement before making changes.
+
+1) Stage the next backlog item in the manifest (do not apply yet):
+
+```sh
+gion manifest add --no-apply --repo git@github.com:tasuku43/gionx.git MVP-001
+```
+
+Note: `MVP-001` is **an example** ticket/backlog id. Replace it with the **next** ticket you intend to start.
+
+2) Preview the workspace(s) that would be created:
+
+```sh
+gion plan
+```
+
+3) After you get agreement, apply without prompts:
+
+```sh
+gion apply --no-prompt
+```
+
 ## Where to look for key decisions
 
 - Backlog / dependencies: `docs/BACKLOG.md`
