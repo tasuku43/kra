@@ -12,12 +12,13 @@ Add a repository to a workspace as a Git worktree.
 ## Behavior (MVP)
 
 - Normalize `repo` into `repoKey` using `gion-core/repospec`
+- Derive `repoUid` as `<host>/<repoKey>` (e.g. `github.com/tasuku43/sugoroku`)
 - Determine `alias` from the repo URL tail:
   - `git@github.com:tasuku43/sample-frontend.git` -> `sample-frontend`
   - `git@github.com:tasuku43/sugoroku.git` -> `sugoroku`
   - alias overrides are not supported in the MVP
   - if `alias` conflicts within the same workspace, return an error
-- Ensure a bare repo exists in the repo pool for `repoKey`
+- Ensure a bare repo exists in the repo pool for `repoUid`
   - always `fetch` (prefetch should start as soon as `repo` is known to overlap user input time)
 - Prompt for `base_ref`
   - allow empty input (meaning "use the detected default branch")

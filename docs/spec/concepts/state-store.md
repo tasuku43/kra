@@ -6,7 +6,7 @@
 - the configured `GIONX_ROOT` path (single root)
 - the repo pool path (bare repo pool)
 - workspace metadata (status, description, timestamps)
-- workspace <-> repo bindings (repoKey, alias, branch, worktree path, etc.)
+- workspace <-> repo bindings (repoUid, repoKey, alias, branch, etc.)
 
 The state store also keeps traceability for workspace lifecycle operations:
 - `archived_at`, `archived_commit_sha`
@@ -33,6 +33,15 @@ Suggested table: `workspace_events`
 - `meta` (optional JSON string)
 
 This state store is stored outside `GIONX_ROOT`.
+
+## Repository identity
+
+To support multiple Git hosts (e.g. GitHub and GitLab), `gionx` distinguishes:
+
+- `repoKey`: canonical `owner/name` (derived via `gion-core/repospec`)
+- `repoUid`: host-qualified repo identity, e.g. `github.com/owner/name`
+
+`repoUid` should be the primary identifier in the state store to avoid collisions.
 
 ## Locations (defaults)
 
