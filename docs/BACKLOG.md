@@ -38,6 +38,17 @@ When you finish a backlog item, include a short next-steps report in your final 
 - Parallel candidates (unblocked items).
 - Conditional guidance: "If <deps> are done, then <item> is ready."
 
+Recommended (workspace handoff):
+- Pre-stage the next ticket in the manifest, preview, then apply only after agreement:
+
+```sh
+gion manifest add --no-apply --repo git@github.com:tasuku43/gionx.git MVP-001
+gion plan
+gion apply --no-prompt
+```
+
+Note: `MVP-001` is **an example** ticket/backlog id. Replace it with the **next** ticket you intend to start.
+
 Rules:
 - Each backlog item maps to one or more spec files in `docs/spec/**`.
 - Dependencies are explicit so we can see what must be serial vs what can be parallel.
