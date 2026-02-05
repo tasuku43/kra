@@ -2,8 +2,6 @@
 title: "Layout"
 status: implemented
 pending:
-  - init-layout
-  - gitignore-worktrees
   - workspace-scaffolding
 ---
 

@@ -99,7 +99,7 @@ It does not replace per-item dependencies.
 
 ## Init
 
-- [ ] MVP-010: `gionx init`
+- [x] MVP-010: `gionx init`
   - What: ensure layout dirs, create root `AGENTS.md`, create `.gitignore`, run `git init` if needed,
     initialize state store settings
   - Specs:

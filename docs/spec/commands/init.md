@@ -1,6 +1,6 @@
 ---
 title: "`gionx init`"
-status: planned
+status: implemented
 ---
 
 # `gionx init`
