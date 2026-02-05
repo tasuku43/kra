@@ -7,6 +7,11 @@ status: planned
 
 This file is the implementation backlog for `gionx`.
 
+## Current focus (next session)
+
+- Critical path: MVP-001 -> MVP-002/MVP-003 -> MVP-010
+- Next up: MVP-001 (CLI skeleton)
+
 Rules:
 - Each backlog item maps to one or more spec files in `docs/spec/**`.
 - Dependencies are explicit so we can see what must be serial vs what can be parallel.
@@ -129,4 +134,3 @@ Legend:
     - `docs/dev/TESTING.md`
   - Depends: MVP-003
   - Parallel: continuous (start early; extend per command)
-
