@@ -21,9 +21,10 @@ This spec exists so an agent (e.g. Agen2MD) can extract test requirements and ke
   - avoid relying on global user environment
 - When a command performs multiple phases (DB + FS + Git), ensure tests cover partial failure behavior.
 
-## Drift / inconsistency scenarios (must-have)
+## Drift / inconsistency scenarios
 
-The following are considered "typical" and should have explicit tests:
+The following are examples of "typical" drift/inconsistency scenarios.
+They are not exhaustive, but should have explicit tests because they are common in practice:
 
 ### State store vs filesystem
 
@@ -83,4 +84,3 @@ Non-happy path:
 - workspace already exists -> error
 - recorded branch cannot be checked out due to worktree constraint -> error
 - commit should stage only touched paths
-
