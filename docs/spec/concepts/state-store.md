@@ -69,6 +69,9 @@ XDG environment variables may override these defaults:
 - `$XDG_DATA_HOME` (default: `~/.local/share`)
 - `$XDG_CACHE_HOME` (default: `~/.cache`)
 
+Notes:
+- When `$XDG_*_HOME` is set, it is used as-is (then joined with `gionx/...`).
+
 ## SQLite + migrations
 
 Migrations are applied in order from `migrations/*.sql`.

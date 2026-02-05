@@ -80,7 +80,7 @@ It does not replace per-item dependencies.
   - Depends: -
   - Parallel: with MVP-002/MVP-003 if different owners; otherwise do serial
 
-- [ ] MVP-002: Path resolution and root detection
+- [x] MVP-002: Path resolution and root detection
   - What: resolve `GIONX_ROOT`, XDG paths for `state.db` and repo pool
   - Specs:
     - `docs/spec/concepts/state-store.md`

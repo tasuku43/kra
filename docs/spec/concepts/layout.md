@@ -1,6 +1,10 @@
 ---
 title: "Layout"
-status: planned
+status: implemented
+pending:
+  - init-layout
+  - gitignore-worktrees
+  - workspace-scaffolding
 ---
 
 # Layout
@@ -8,6 +12,17 @@ status: planned
 ## GIONX_ROOT
 
 `GIONX_ROOT` is a user-chosen working directory that is intended to be Git-managed.
+
+## Root detection (filesystem)
+
+When a command needs to operate on an existing root, `gionx` detects `GIONX_ROOT` by:
+
+1) If `$GIONX_ROOT` is set: use it (must look like a root).
+2) Otherwise: walk up from the current working directory and pick the nearest directory that looks like a root.
+
+A directory "looks like a root" when both of these exist and are directories:
+- `workspaces/`
+- `archive/`
 
 ## Workspace folders
 
