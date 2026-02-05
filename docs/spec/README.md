@@ -17,3 +17,4 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/list.md`: `gionx ws list`
   - `commands/ws/close.md`: `gionx ws close`
   - `commands/ws/reopen.md`: `gionx ws reopen`
+  - `commands/ws/purge.md`: `gionx ws purge`
