@@ -47,3 +47,19 @@ When asking the user to make a decision:
 - Then ask the user to pick (e.g. by number).
 
 Avoid asking with options only (no trade-offs).
+
+## Session Wrap-up Output (required)
+
+At the end of a work session (or after completing a backlog item), always output:
+
+- What you completed (commits + backlog item ids).
+- The next **Serial** candidate to start.
+- 1-3 **Parallel** candidates (if any are unblocked).
+- Conditional guidance for parallel work, using "if X is done, then Y is unblocked" wording, because you may
+  not know what other sessions have completed.
+
+How to decide "next":
+- Treat `docs/BACKLOG.md` as the source of truth for items + dependencies.
+- If you are not sure whether an item is already complete, check whether its linked spec frontmatter is
+  `status: implemented` and whether the code/tests exist. If still uncertain, phrase the recommendation
+  conditionally.

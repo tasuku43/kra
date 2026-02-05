@@ -44,6 +44,17 @@ For this project, a backlog item is complete only when:
 - it has tests for at least some non-happy-path behavior (see `docs/dev/TESTING.md`)
 - the related spec frontmatter is updated to `status: implemented`
 
+## Session wrap-up (required)
+
+Before ending a session, always write a short "next steps" note (in your final output) that includes:
+
+- Next **Serial** item to start (based on `docs/BACKLOG.md` dependencies).
+- 1-3 **Parallel** items that are unblocked (if any).
+- Conditional unblocking statements when working in parallel (e.g. "If MVP-002 and MVP-003 are complete,
+  then MVP-010 is ready.").
+
+This is required because sessions may run in parallel and you may not know the latest completion status.
+
 ## Where to look for key decisions
 
 - Backlog / dependencies: `docs/BACKLOG.md`

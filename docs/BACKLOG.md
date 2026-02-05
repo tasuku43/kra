@@ -30,6 +30,14 @@ Avoid baking "next up" decisions into this file. Instead, decide per session:
 Tip:
 - An item is "done" only when its linked specs are updated to `status: implemented` and the code/tests exist.
 
+## Reporting next steps (required)
+
+When you finish a backlog item, include a short next-steps report in your final output:
+
+- Next Serial candidate (smallest-numbered Serial whose deps are satisfied).
+- Parallel candidates (unblocked items).
+- Conditional guidance: "If <deps> are done, then <item> is ready."
+
 Rules:
 - Each backlog item maps to one or more spec files in `docs/spec/**`.
 - Dependencies are explicit so we can see what must be serial vs what can be parallel.
