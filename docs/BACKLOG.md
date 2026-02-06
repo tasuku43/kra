@@ -209,3 +209,50 @@ It does not replace per-item dependencies.
     - `docs/spec/testing/integration.md`
   - Depends: MVP-042
   - Parallel: yes (recommended once lifecycle commands land)
+
+## WS UX Polish (status-managed rollout)
+
+- [ ] UX-WS-001: Lifecycle concept + selector architecture spec
+  - What: define canonical state transitions (`active -> archived -> purged`) and shared non-fullscreen selector UI.
+    Also clarify `ws list` as read-only summary command (`--tree` as opt-in detail).
+  - Specs:
+    - `docs/spec/concepts/workspace-lifecycle.md`
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/core/DATA_MODEL.md`
+  - Depends: MVP-042
+  - Serial: yes (foundation for all ws UX changes)
+
+- [ ] UX-WS-002: `gionx ws close` selector-mode + bulk safety gate
+  - What: keep direct mode (`ws close <id>`) and add selector mode (`ws close`) with multi-select and all-or-nothing
+    risk gate; enforce strict allowlist + gitignore abort policy for archive commits.
+  - Specs:
+    - `docs/spec/commands/ws/close.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-001, MVP-040
+  - Serial: yes
+
+- [ ] UX-WS-003: `gionx ws go` command (start-work flow)
+  - What: add `ws go` with selector/direct mode, default `active` scope, optional `--archived`, and `--emit-cd`
+    output for shell function integration.
+  - Specs:
+    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-001, MVP-020
+  - Parallel: yes (with UX-WS-002)
+
+- [ ] UX-WS-004: `gionx ws reopen` selector-mode
+  - What: keep direct mode (`ws reopen <id>`) and add selector mode (`ws reopen`) scoped to archived workspaces.
+  - Specs:
+    - `docs/spec/commands/ws/reopen.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-001, MVP-041
+  - Parallel: yes
+
+- [ ] UX-WS-005: `gionx ws purge` selector-mode
+  - What: keep direct mode (`ws purge <id>`) and add selector mode (`ws purge`) scoped to archived workspaces.
+  - Specs:
+    - `docs/spec/commands/ws/purge.md`
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/concepts/workspace-lifecycle.md`
+  - Depends: UX-WS-001, MVP-042
+  - Parallel: yes

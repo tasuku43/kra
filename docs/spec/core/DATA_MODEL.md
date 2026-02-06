@@ -16,6 +16,8 @@ Concrete DDL should be implemented via SQLite migrations.
 - Allow reusing the same workspace ID after purge, while keeping an immutable audit trail (event log).
 - Support multiple Git hosts (e.g. GitHub and GitLab) without key collisions.
 
+Lifecycle semantics and allowed transitions are documented in `docs/spec/concepts/workspace-lifecycle.md`.
+
 ## Tables (MVP)
 
 ### `settings`

@@ -1,9 +1,12 @@
 ---
 title: "`gionx ws close`"
 status: implemented
+pending:
+  - UX-WS-002-shared-selector
+  - UX-WS-003-bulk-close-risk-gate
 ---
 
-# `gionx ws close <id>`
+# `gionx ws close [<id>]`
 
 ## Purpose
 
@@ -65,3 +68,25 @@ If the Git working tree has unrelated changes, this command must not include the
 
 - `workspaces/**/repos/**` is ignored in `.gitignore`, but `ws close` must still delete worktrees
   (archives should not contain repos).
+
+## Next UX iteration (planned)
+
+### Selector mode and direct mode
+
+- If `<id>` is provided, run existing direct mode.
+- If `<id>` is omitted, launch shared selector UI (`commands/ws/selector.md`) in `active` scope.
+- Selector mode allows multiple selection.
+
+### Bulk close safety gate
+
+- After selector confirmation, evaluate risk for all selected workspaces.
+- If any selected workspace is `risky` or `unknown`, abort the whole operation (no partial close).
+
+### Commit strictness (non-repo files)
+
+- Policy: non-`repos/` contents must be captured in the archive commit.
+- Stage by allowlist only:
+  - `workspaces/<id>/`
+  - `archive/<id>/`
+- Verify staged paths are a strict subset of the allowlist; otherwise abort.
+- If `gitignore` causes any non-`repos/` files under selected workspace to be unstageable, abort.

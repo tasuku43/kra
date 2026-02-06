@@ -1,6 +1,9 @@
 ---
 title: "`gionx ws list`"
 status: implemented
+pending:
+  - UX-WS-001-selector-foundation
+  - UX-WS-001-list-role-clarification
 ---
 
 # `gionx ws list`
@@ -8,6 +11,31 @@ status: implemented
 ## Purpose
 
 List workspaces with status and risk, similar in spirit to `gion manifest ls`.
+
+`ws list` is a read-only listing command. Interactive selection flows are specified in `selector.md` and
+action commands (`ws close`, `ws go`, `ws reopen`, `ws purge`).
+
+## Role boundary
+
+- `ws list` only shows current state and exits (non-interactive).
+- Action execution belongs to `ws close/go/reopen/purge` selector flows.
+
+## Default display (planned refinement)
+
+- One row per workspace (summary view), with at least:
+  - `id`
+  - `status`
+  - `risk` (badge-like token, e.g. `[clean]`, `[dirty]`, `[unpushed]`, `[unknown]`)
+  - `repo_count`
+  - `updated_at`
+  - `description`
+
+## Expanded display (planned refinement)
+
+- `--tree` shows repo-level detail under each workspace row.
+- Default output remains summary-first to keep task-list UX and scripting usage simple.
+- Repo tree lines are supplemental information and should use muted/low-contrast styling consistent with
+  `commands/ws/selector.md` visual rules.
 
 ## Display fields (MVP)
 
