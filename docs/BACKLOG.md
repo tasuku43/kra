@@ -161,7 +161,7 @@ It does not replace per-item dependencies.
   - Depends: MVP-031
   - Serial: yes
 
-- [ ] MVP-041: `gionx ws reopen`
+- [x] MVP-041: `gionx ws reopen`
   - What: atomic rename back, recreate worktrees, commit touched paths, update snapshot + append event
   - Specs:
     - `docs/spec/commands/ws/reopen.md`

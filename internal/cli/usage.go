@@ -37,7 +37,7 @@ Subcommands:
   list              List workspaces
   add-repo          Add repo to workspace
   close             Close workspace
-  reopen            Reopen workspace (not implemented yet)
+  reopen            Reopen workspace
   purge             Purge workspace
   help              Show this help
 
@@ -86,6 +86,17 @@ Close (archive) a workspace:
 - remove git worktrees under workspaces/<id>/repos/
 - move workspaces/<id>/ to archive/<id>/ atomically
 - commit the archive change in GIONX_ROOT
+`)
+}
+
+func (c *CLI) printWSReopenUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx ws reopen <id>
+
+Reopen an archived workspace:
+- move archive/<id>/ to workspaces/<id>/ atomically
+- recreate git worktrees under workspaces/<id>/repos/
+- commit the reopen change in GIONX_ROOT
 `)
 }
 

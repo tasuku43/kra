@@ -78,7 +78,7 @@ func (c *CLI) runWS(args []string) int {
 	case "close":
 		return c.runWSClose(args[1:])
 	case "reopen":
-		return c.notImplemented("ws reopen")
+		return c.runWSReopen(args[1:])
 	case "purge":
 		return c.runWSPurge(args[1:])
 	default:
