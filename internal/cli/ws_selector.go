@@ -213,6 +213,11 @@ func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected []bo
 		desc = truncateDisplay(desc, availableDescCols)
 
 		bodyRaw := prefix + desc
+		bodyStyled := bodyRaw
+		if useColor && !selected[i] {
+			coloredRisk := colorizeRiskTag(risk, it.Risk)
+			bodyStyled = fmt.Sprintf("%s %-*s %-*s - %s", mark, idWidth, it.ID, riskWidth, coloredRisk, desc)
+		}
 		lineRaw := focus + " " + bodyRaw
 		lineRaw = truncateDisplay(lineRaw, maxCols)
 		if len(lineRaw) > maxWidth {
@@ -227,11 +232,13 @@ func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected []bo
 					// Keep selected rows muted, but keep cursor visibility with accent marker.
 					line = focusAccent + "\x1b[90m" + bodyRaw + "\x1b[0m"
 				} else {
-					// Subtle focus emphasis (fzf-like): accent marker + light weight boost.
-					line = focusAccent + "\x1b[1m" + bodyRaw + "\x1b[0m"
+					// Subtle focus emphasis (fzf-like): accent marker + risk-tag color.
+					line = focusAccent + bodyStyled
 				}
 			} else if selected[i] {
 				line = "\x1b[90m" + line + "\x1b[0m"
+			} else {
+				line = focus + " " + bodyStyled
 			}
 		}
 		bodyLines = append(bodyLines, line)
@@ -319,4 +326,15 @@ func truncateDisplay(s string, maxCols int) string {
 		return "…"
 	}
 	return b.String() + "…"
+}
+
+func colorizeRiskTag(tag string, risk workspacerisk.WorkspaceRisk) string {
+	switch risk {
+	case workspacerisk.WorkspaceRiskUnpushed, workspacerisk.WorkspaceRiskDiverged:
+		return "\x1b[33m" + tag + "\x1b[0m"
+	case workspacerisk.WorkspaceRiskDirty, workspacerisk.WorkspaceRiskUnknown:
+		return "\x1b[31m" + tag + "\x1b[0m"
+	default:
+		return tag
+	}
 }
