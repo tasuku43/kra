@@ -180,6 +180,22 @@ It does not replace per-item dependencies.
 
 ## Hardening / tests
 
+- [ ] MVP-050: `gionx state` foundation (registry)
+  - What: introduce registry metadata for root-scoped `state.db` discovery and hygiene workflows
+  - Specs:
+    - `docs/spec/commands/state/registry.md`
+    - `docs/spec/concepts/state-store.md`
+  - Depends: MVP-002, MVP-003, MVP-010
+  - Parallel: yes (independent from ws archive lifecycle)
+
+- [ ] MVP-051: `gionx context` (root switch fallback)
+  - What: add context management and root resolution fallback when `GIONX_ROOT` is unset
+  - Specs:
+    - `docs/spec/commands/context.md`
+    - `docs/spec/commands/state/registry.md`
+  - Depends: MVP-050
+  - Parallel: yes
+
 - [x] MVP-900: Test harness + non-happy-path coverage baseline
   - What: temp `GIONX_ROOT`, isolated sqlite file per test, drift scenario tests
   - Specs:
