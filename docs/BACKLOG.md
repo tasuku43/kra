@@ -170,7 +170,7 @@ It does not replace per-item dependencies.
   - Depends: MVP-040
   - Serial: yes
 
-- [ ] MVP-042: `gionx ws purge`
+- [x] MVP-042: `gionx ws purge`
   - What: confirmations, delete dirs, remove snapshot row, append event, commit touched paths
   - Specs:
     - `docs/spec/commands/ws/purge.md`
