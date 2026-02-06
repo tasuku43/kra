@@ -1,6 +1,6 @@
 ---
 title: "`gionx ws add-repo`"
-status: planned
+status: implemented
 ---
 
 # `gionx ws add-repo <workspace-id> <repo>`

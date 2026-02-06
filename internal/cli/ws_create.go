@@ -185,8 +185,10 @@ func (c *CLI) promptLine(prompt string) (string, error) {
 	if prompt != "" {
 		fmt.Fprint(c.Err, prompt)
 	}
-	r := bufio.NewReader(c.In)
-	line, err := r.ReadString('\n')
+	if c.inReader == nil {
+		c.inReader = bufio.NewReader(c.In)
+	}
+	line, err := c.inReader.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
 		return "", err
 	}

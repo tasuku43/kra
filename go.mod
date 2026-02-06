@@ -1,8 +1,11 @@
 module github.com/tasuku43/gionx
 
-go 1.22
+go 1.24.0
 
-require modernc.org/sqlite v1.35.0
+require (
+	github.com/tasuku43/gion-core v0.1.0
+	modernc.org/sqlite v1.35.0
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect

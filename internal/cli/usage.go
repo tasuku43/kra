@@ -35,7 +35,7 @@ func (c *CLI) printWSUsage(w io.Writer) {
 Subcommands:
   create            Create a workspace
   list              List workspaces
-  add-repo          Add repo to workspace (not implemented yet)
+  add-repo          Add repo to workspace
   close             Close workspace (not implemented yet)
   reopen            Reopen workspace (not implemented yet)
   purge             Purge workspace (not implemented yet)
@@ -62,5 +62,17 @@ func (c *CLI) printWSListUsage(w io.Writer) {
   gionx ws list
 
 List workspaces from the state store and repair basic drift from the filesystem.
+`)
+}
+
+func (c *CLI) printWSAddRepoUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx ws add-repo <workspace-id> <repo>
+
+Add a repository to a workspace as a Git worktree.
+
+Inputs:
+  workspace-id       Existing workspace ID (must be active)
+  repo               Repo spec (git@... / https://... / file://...)
 `)
 }

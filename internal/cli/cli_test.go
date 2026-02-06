@@ -376,3 +376,124 @@ VALUES ('MVP-020', 1, 'active', '', '', 1, 1, NULL, NULL)
 		t.Fatalf("stderr missing already-exists: %q", err.String())
 	}
 }
+
+func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found in PATH")
+	}
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	// Prepare a local "remote" bare repo addressable via a file:// spec that ends with <host>/<owner>/<repo>.
+	src := filepath.Join(t.TempDir(), "src")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	runGit(src, "init", "-b", "main")
+	runGit(src, "config", "user.email", "test@example.com")
+	runGit(src, "config", "user.name", "test")
+	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	runGit(src, "add", ".")
+	runGit(src, "commit", "-m", "init")
+
+	remoteBare := filepath.Join(t.TempDir(), "github.com", "tasuku43", "sample.git")
+	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
+		t.Fatalf("mkdir remoteBare dir: %v", err)
+	}
+	runGit("", "clone", "--bare", src, remoteBare)
+	repoSpec := "file://" + remoteBare
+
+	root := t.TempDir()
+	dataHome := filepath.Join(t.TempDir(), "xdg-data")
+	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
+
+	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
+		t.Fatalf("create workspaces/: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
+		t.Fatalf("create archive/: %v", err)
+	}
+
+	t.Setenv("GIONX_ROOT", root)
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("XDG_CACHE_HOME", cacheHome)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+
+		code := c.Run([]string{"ws", "create", "--no-prompt", "MVP-020"})
+		if code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		// base_ref: empty (use default), branch: explicit
+		c.In = strings.NewReader("\nMVP-020/test\n")
+
+		code := c.Run([]string{"ws", "add-repo", "MVP-020", repoSpec})
+		if code != exitOK {
+			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+
+		worktreePath := filepath.Join(root, "workspaces", "MVP-020", "repos", "sample")
+		if _, statErr := os.Stat(filepath.Join(worktreePath, ".git")); statErr != nil {
+			t.Fatalf("worktree .git missing: %v", statErr)
+		}
+	}
+
+	ctx := context.Background()
+	dbPath := filepath.Join(dataHome, "gionx", "state.db")
+	db, openErr := statestore.Open(ctx, dbPath)
+	if openErr != nil {
+		t.Fatalf("Open(state db) error: %v", openErr)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	var repoKey string
+	var remoteURL string
+	if err := db.QueryRowContext(ctx, "SELECT repo_key, remote_url FROM repos WHERE repo_uid = ?", "github.com/tasuku43/sample").Scan(&repoKey, &remoteURL); err != nil {
+		t.Fatalf("query repos: %v", err)
+	}
+	if repoKey != "tasuku43/sample" {
+		t.Fatalf("repos.repo_key = %q, want %q", repoKey, "tasuku43/sample")
+	}
+	if remoteURL != repoSpec {
+		t.Fatalf("repos.remote_url = %q, want %q", remoteURL, repoSpec)
+	}
+
+	var alias string
+	var branch string
+	var baseRef string
+	if err := db.QueryRowContext(ctx, `
+SELECT alias, branch, base_ref
+FROM workspace_repos
+WHERE workspace_id = ? AND repo_uid = ?
+`, "MVP-020", "github.com/tasuku43/sample").Scan(&alias, &branch, &baseRef); err != nil {
+		t.Fatalf("query workspace_repos: %v", err)
+	}
+	if alias != "sample" {
+		t.Fatalf("workspace_repos.alias = %q, want %q", alias, "sample")
+	}
+	if branch != "MVP-020/test" {
+		t.Fatalf("workspace_repos.branch = %q, want %q", branch, "MVP-020/test")
+	}
+	if baseRef != "" {
+		t.Fatalf("workspace_repos.base_ref = %q, want empty", baseRef)
+	}
+}
