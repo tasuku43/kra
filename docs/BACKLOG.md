@@ -180,9 +180,16 @@ It does not replace per-item dependencies.
 
 ## Hardening / tests
 
-- [ ] MVP-900: Test harness + non-happy-path coverage baseline
+- [x] MVP-900: Test harness + non-happy-path coverage baseline
   - What: temp `GIONX_ROOT`, isolated sqlite file per test, drift scenario tests
   - Specs:
     - `docs/dev/TESTING.md`
   - Depends: MVP-003
   - Parallel: continuous (start early; extend per command)
+
+- [ ] MVP-901: Integration tests expansion (through MVP-042)
+  - What: expand CLI-level tests to cover drift/partial-failure scenarios through the full archive lifecycle
+  - Specs:
+    - `docs/spec/testing/integration.md`
+  - Depends: MVP-042
+  - Parallel: yes (recommended once lifecycle commands land)
