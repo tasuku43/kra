@@ -266,4 +266,3 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	fmt.Fprintf(c.Out, "added: %s\n", worktreePath)
 	return exitOK
 }
-

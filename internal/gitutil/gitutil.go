@@ -143,4 +143,3 @@ func EnsureBareRepoFetched(ctx context.Context, remoteURL string, barePath strin
 
 	return "", fmt.Errorf("failed to detect default base ref (origin/HEAD missing)")
 }
-
