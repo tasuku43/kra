@@ -52,6 +52,8 @@ ORDER BY w.id ASC
 type WorkspaceRepo struct {
 	RepoUID   string
 	Alias     string
+	Branch    string
+	BaseRef   string
 	MissingAt sql.NullInt64
 }
 
@@ -61,7 +63,7 @@ func ListWorkspaceRepos(ctx context.Context, db *sql.DB, workspaceID string) ([]
 	}
 
 	rows, err := db.QueryContext(ctx, `
-SELECT repo_uid, alias, missing_at
+SELECT repo_uid, alias, branch, base_ref, missing_at
 FROM workspace_repos
 WHERE workspace_id = ?
 ORDER BY alias ASC
@@ -74,7 +76,7 @@ ORDER BY alias ASC
 	var out []WorkspaceRepo
 	for rows.Next() {
 		var r WorkspaceRepo
-		if err := rows.Scan(&r.RepoUID, &r.Alias, &r.MissingAt); err != nil {
+		if err := rows.Scan(&r.RepoUID, &r.Alias, &r.Branch, &r.BaseRef, &r.MissingAt); err != nil {
 			return nil, fmt.Errorf("scan workspace repo: %w", err)
 		}
 		out = append(out, r)

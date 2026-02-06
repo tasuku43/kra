@@ -159,3 +159,64 @@ VALUES (?, ?, 'archived', ?, '{}')
 	}
 	return nil
 }
+
+type ReopenWorkspaceInput struct {
+	ID                string
+	ReopenedCommitSHA string
+	Now               int64
+}
+
+// ReopenWorkspace marks an archived workspace as active and appends a `reopened` event
+// in a single transaction.
+func ReopenWorkspace(ctx context.Context, db *sql.DB, in ReopenWorkspaceInput) error {
+	in.ID = strings.TrimSpace(in.ID)
+	in.ReopenedCommitSHA = strings.TrimSpace(in.ReopenedCommitSHA)
+	if in.ID == "" {
+		return fmt.Errorf("workspace id is required")
+	}
+	if in.ReopenedCommitSHA == "" {
+		return fmt.Errorf("reopened commit sha is required")
+	}
+	if in.Now <= 0 {
+		return fmt.Errorf("now is required")
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var gen int
+	var status string
+	qErr := tx.QueryRowContext(ctx, "SELECT generation, status FROM workspaces WHERE id = ?", in.ID).Scan(&gen, &status)
+	if errors.Is(qErr, sql.ErrNoRows) {
+		return fmt.Errorf("workspace not found: %s", in.ID)
+	}
+	if qErr != nil {
+		return fmt.Errorf("select workspace: %w", qErr)
+	}
+	if status != "archived" {
+		return fmt.Errorf("workspace is not archived (status=%s): %s", status, in.ID)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+UPDATE workspaces
+SET status = 'active', updated_at = ?, reopened_commit_sha = ?
+WHERE id = ?
+`, in.Now, in.ReopenedCommitSHA, in.ID); err != nil {
+		return fmt.Errorf("update workspace: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO workspace_events (workspace_id, workspace_generation, event_type, at, meta)
+VALUES (?, ?, 'reopened', ?, '{}')
+`, in.ID, gen, in.Now); err != nil {
+		return fmt.Errorf("insert workspace event: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}
