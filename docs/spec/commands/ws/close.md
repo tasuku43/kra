@@ -76,11 +76,14 @@ If the Git working tree has unrelated changes, this command must not include the
 - If `<id>` is provided, run existing direct mode.
 - If `<id>` is omitted, launch shared selector UI (`commands/ws/selector.md`) in `active` scope.
 - Selector mode allows multiple selection.
+- Non-TTY invocation without `<id>` must error (no fallback mode).
 
 ### Bulk close safety gate
 
 - After selector confirmation, evaluate risk for all selected workspaces.
-- If any selected workspace is `risky` or `unknown`, abort the whole operation (no partial close).
+- `risky` is defined as `dirty` / `unpushed` / `diverged` (plus `unknown` as non-safe).
+- If any selected workspace is non-clean (`risky` or `unknown`), abort the whole operation (no partial close).
+- Risk label semantics and severity follow `commands/ws/selector.md`.
 
 ### Commit strictness (non-repo files)
 

@@ -17,12 +17,18 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
 - `Ctrl+D`: confirm current selection and execute command-specific action.
 - `Ctrl+C`: cancel without side effects.
 
+## TTY requirement
+
+- Selector mode requires an interactive TTY on stdin.
+- If a selector-capable command is invoked without `<id>` in non-TTY context, it must fail fast with an error
+  equivalent to `interactive workspace selection requires a TTY`.
+- No automatic fallback is allowed in non-TTY mode.
+
 ## Display model
 
 Each row should include at least:
 - selected marker
 - workspace `id`
-- `status`
 - `risk` (command-appropriate)
 - summary text (for example description)
 
@@ -41,6 +47,30 @@ Header/footer should show:
 - Color is optional fallback:
   - when color is unavailable, preserve hierarchy via prefixes/indentation only.
 
+## Row layout and alignment
+
+- Row information order is fixed:
+  - focus marker, selection marker, `id`, `[risk]`, `- description`
+- Canonical row shape:
+  - `> ✔︎ WS-202 [dirty] - payment hotfix`
+  - `  ○  WS-101 [clean] - login flow`
+- `status` is not rendered per row. State context is provided by header `scope`.
+- The description column must be vertically aligned across rows (fixed description start column).
+- `risk` is always rendered as a word badge:
+  - `[clean]`, `[unpushed]`, `[diverged]`, `[dirty]`, `[unknown]`
+
+## Selection visual behavior (task-list style)
+
+- Unselected row:
+  - normal contrast + `○`
+- Selected row:
+  - row-wide muted/low-contrast + `✔︎`
+  - this muted style also applies to the risk badge on that row
+- Focus row:
+  - `>` marker indicates current cursor row
+- Optional enhancement:
+  - strikethrough for selected rows may be used when terminal capability is reliable; otherwise muted-only.
+
 ## Shared UI component policy
 
 To prevent per-command drift, selector-related rendering must be built from shared components.
@@ -56,6 +86,24 @@ Rules:
 - Command handlers (`ws close/go/reopen/purge`) must not define ad-hoc colors or row formats inline.
 - Display differences by command should be expressed via data (mode/scope/actions), not bespoke render code.
 - `ws list --tree` should reuse `WorkspaceRowRenderer` and `RepoTreeRenderer` for visual parity with selector flows.
+
+## Risk label semantics (aligned with `gion`)
+
+- Repo-level labels:
+  - `unknown`: status cannot be determined (for example git status error, detached HEAD, missing/unknown upstream)
+  - `dirty`: uncommitted changes exist (staged / unstaged / untracked / unmerged)
+  - `diverged`: `ahead > 0 && behind > 0`
+  - `unpushed`: `ahead > 0` (and not diverged)
+  - `clean`: none of the above
+- `behind only` is treated as `clean`.
+- Workspace-level aggregation priority:
+  - `unknown > dirty > diverged > unpushed > clean`
+
+## Risk severity (warning strength)
+
+- `danger` (strong warning): `unknown`, `dirty`
+- `warning` (normal warning): `diverged`, `unpushed`
+- `clean`: no warning marker required
 
 ## Scope rules
 

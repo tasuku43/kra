@@ -79,13 +79,17 @@ Inputs:
 
 func (c *CLI) printWSCloseUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws close <id>
+  gionx ws close [<id>]
 
 Close (archive) a workspace:
 - inspect repo risk (live) and prompt if not clean
 - remove git worktrees under workspaces/<id>/repos/
 - move workspaces/<id>/ to archive/<id>/ atomically
 - commit the archive change in GIONX_ROOT
+
+Modes:
+- direct mode: provide <id>
+- selector mode: omit <id> (interactive TTY required)
 `)
 }
 

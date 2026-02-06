@@ -187,9 +187,6 @@ func TestCLI_WS_Close_DirtyRepo_PromptsAndCanAbort(t *testing.T) {
 			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
-	runGit(env.Root, "config", "user.email", "test@example.com")
-	runGit(env.Root, "config", "user.name", "test")
-
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
@@ -199,6 +196,8 @@ func TestCLI_WS_Close_DirtyRepo_PromptsAndCanAbort(t *testing.T) {
 			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
+	runGit(env.Root, "config", "user.email", "test@example.com")
+	runGit(env.Root, "config", "user.name", "test")
 
 	src := filepath.Join(t.TempDir(), "src")
 	if err := os.MkdirAll(src, 0o755); err != nil {
@@ -257,6 +256,50 @@ func TestCLI_WS_Close_DirtyRepo_PromptsAndCanAbort(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(env.Root, "archive", "WS1")); err == nil {
 		t.Fatalf("archive/WS1 should not exist after abort")
+	}
+}
+
+func TestCLI_WS_Close_SelectorModeWithoutTTY_Errors(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env := testutil.NewEnv(t)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"init"})
+		if code != exitOK {
+			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		c.In = strings.NewReader("")
+
+		code := c.Run([]string{"ws", "close"})
+		if code != exitError {
+			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+		}
+		if !strings.Contains(err.String(), "interactive workspace selection requires a TTY") {
+			t.Fatalf("stderr missing non-tty error: %q", err.String())
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); err != nil {
+		t.Fatalf("workspace should remain: %v", err)
 	}
 }
 

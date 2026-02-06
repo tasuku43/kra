@@ -29,6 +29,8 @@ action commands (`ws close`, `ws go`, `ws reopen`, `ws purge`).
   - `repo_count`
   - `updated_at`
   - `description`
+- Summary output should follow the same shared row rendering semantics as selector flows
+  (`commands/ws/selector.md`), while remaining non-interactive.
 
 ## Expanded display (planned refinement)
 
@@ -36,6 +38,12 @@ action commands (`ws close`, `ws go`, `ws reopen`, `ws purge`).
 - Default output remains summary-first to keep task-list UX and scripting usage simple.
 - Repo tree lines are supplemental information and should use muted/low-contrast styling consistent with
   `commands/ws/selector.md` visual rules.
+
+## Machine-readable output policy
+
+- `ws list` is specified as human-oriented task-list output in this UX phase.
+- Do not introduce a new machine-readable format contract in this ticket.
+- If structured output is needed later, define it in a dedicated follow-up spec item (for example `--format`).
 
 ## Display fields (MVP)
 
