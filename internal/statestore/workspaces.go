@@ -220,3 +220,55 @@ VALUES (?, ?, 'reopened', ?, '{}')
 	}
 	return nil
 }
+
+type PurgeWorkspaceInput struct {
+	ID  string
+	Now int64
+}
+
+// PurgeWorkspace appends a `purged` event and removes the workspace snapshot row
+// in a single transaction.
+func PurgeWorkspace(ctx context.Context, db *sql.DB, in PurgeWorkspaceInput) error {
+	in.ID = strings.TrimSpace(in.ID)
+	if in.ID == "" {
+		return fmt.Errorf("workspace id is required")
+	}
+	if in.Now <= 0 {
+		return fmt.Errorf("now is required")
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var gen int
+	var status string
+	qErr := tx.QueryRowContext(ctx, "SELECT generation, status FROM workspaces WHERE id = ?", in.ID).Scan(&gen, &status)
+	if errors.Is(qErr, sql.ErrNoRows) {
+		return fmt.Errorf("workspace not found: %s", in.ID)
+	}
+	if qErr != nil {
+		return fmt.Errorf("select workspace: %w", qErr)
+	}
+	if status != "active" && status != "archived" {
+		return fmt.Errorf("workspace has unsupported status for purge (status=%s): %s", status, in.ID)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO workspace_events (workspace_id, workspace_generation, event_type, at, meta)
+VALUES (?, ?, 'purged', ?, '{}')
+`, in.ID, gen, in.Now); err != nil {
+		return fmt.Errorf("insert workspace event: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, "DELETE FROM workspaces WHERE id = ?", in.ID); err != nil {
+		return fmt.Errorf("delete workspace: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}

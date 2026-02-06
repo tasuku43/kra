@@ -80,7 +80,7 @@ func (c *CLI) runWS(args []string) int {
 	case "reopen":
 		return c.runWSReopen(args[1:])
 	case "purge":
-		return c.notImplemented("ws purge")
+		return c.runWSPurge(args[1:])
 	default:
 		fmt.Fprintf(c.Err, "unknown command: %q\n", strings.Join(append([]string{"ws"}, args[0]), " "))
 		c.printWSUsage(c.Err)

@@ -38,7 +38,7 @@ Subcommands:
   add-repo          Add repo to workspace
   close             Close workspace
   reopen            Reopen workspace
-  purge             Purge workspace (not implemented yet)
+  purge             Purge workspace
   help              Show this help
 
 Run:
@@ -97,5 +97,22 @@ Reopen an archived workspace:
 - move archive/<id>/ to workspaces/<id>/ atomically
 - recreate git worktrees under workspaces/<id>/repos/
 - commit the reopen change in GIONX_ROOT
+`)
+}
+
+func (c *CLI) printWSPurgeUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx ws purge [--no-prompt --force] <id>
+
+Purge (permanently delete) a workspace:
+- always asks confirmation in interactive mode
+- if workspace is active, inspects repo risk and asks an extra confirmation when risky
+- remove git worktrees under workspaces/<id>/repos/ (if present)
+- delete workspaces/<id>/ and archive/<id>/ (if present)
+- commit the purge change in GIONX_ROOT (message: "purge: <id>")
+
+Options:
+  --no-prompt        Do not ask confirmations (requires --force)
+  --force            Required with --no-prompt
 `)
 }
