@@ -131,7 +131,7 @@ It does not replace per-item dependencies.
 
 ## Repo pool + worktrees
 
-- [ ] MVP-030: Repo pool (bare clone store) access
+- [x] MVP-030: Repo pool (bare clone store) access
   - What: ensure bare repo for `repo_uid`, fetch, default branch detection
   - Specs:
     - `docs/spec/concepts/state-store.md`
