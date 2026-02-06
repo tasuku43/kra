@@ -11,6 +11,7 @@ Initialize `GIONX_ROOT` and the global state store.
 
 ## Behavior
 
+- Ensure `GIONX_ROOT/` exists (create if missing)
 - Ensure `GIONX_ROOT/workspaces/` exists
 - Ensure `GIONX_ROOT/archive/` exists
 - Create `GIONX_ROOT/AGENTS.md` with a default "how to use gionx" guidance (for the no-template MVP)

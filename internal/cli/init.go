@@ -76,7 +76,7 @@ func resolveInitRoot() (string, error) {
 			return "", err
 		}
 		root = filepath.Clean(root)
-		if err := ensureDirExists(root); err != nil {
+		if err := ensureDir(root); err != nil {
 			return "", err
 		}
 		return root, nil
@@ -91,7 +91,7 @@ func resolveInitRoot() (string, error) {
 		return "", err
 	}
 	root = filepath.Clean(root)
-	if err := ensureDirExists(root); err != nil {
+	if err := ensureDir(root); err != nil {
 		return "", err
 	}
 	return root, nil
@@ -191,7 +191,10 @@ func ensureGitInit(root string) error {
 	return nil
 }
 
-func ensureDirExists(path string) error {
+func ensureDir(path string) error {
+	if err := os.MkdirAll(path, 0o755); err != nil {
+		return err
+	}
 	fi, err := os.Stat(path)
 	if err != nil {
 		return err

@@ -179,6 +179,43 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	}
 }
 
+func TestCLI_Init_CreatesMissingGIONXRootDirectory(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found in PATH")
+	}
+
+	parent := t.TempDir()
+	root := filepath.Join(parent, "new-gionx-root")
+	dataHome := filepath.Join(t.TempDir(), "xdg-data")
+	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
+
+	t.Setenv("GIONX_ROOT", root)
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("XDG_CACHE_HOME", cacheHome)
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"init"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
+	}
+
+	if _, statErr := os.Stat(root); statErr != nil {
+		t.Fatalf("root dir not created: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "workspaces")); statErr != nil {
+		t.Fatalf("workspaces/ not created: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "archive")); statErr != nil {
+		t.Fatalf("archive/ not created: %v", statErr)
+	}
+}
+
 func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	root := t.TempDir()
 	dataHome := filepath.Join(t.TempDir(), "xdg-data")
