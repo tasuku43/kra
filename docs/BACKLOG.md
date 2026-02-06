@@ -112,7 +112,7 @@ It does not replace per-item dependencies.
 
 ## Workspace core (no Git worktrees yet)
 
-- [ ] MVP-020: `gionx ws create`
+- [x] MVP-020: `gionx ws create`
   - What: create workspace scaffolding + insert workspace snapshot + append `created` event
   - Specs:
     - `docs/spec/commands/ws/create.md`
