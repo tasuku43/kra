@@ -7,8 +7,8 @@ status: implemented
 
 ## Overview
 
-`gionx` uses a global state store as the source of truth for:
-- the configured `GIONX_ROOT` path (single root)
+`gionx` uses a per-root state store as the source of truth for:
+- the configured `GIONX_ROOT` path (single root per DB)
 - the repo pool path (bare repo pool)
 - workspace metadata (status, description, timestamps)
 - workspace <-> repo bindings (repoUid, repoKey, alias, branch, etc.)
@@ -50,6 +50,7 @@ Suggested table: `workspace_events`
 - `meta` (optional JSON string)
 
 This state store is stored outside `GIONX_ROOT`.
+Each `GIONX_ROOT` gets its own SQLite file.
 
 ## Repository identity
 
@@ -62,7 +63,7 @@ To support multiple Git hosts (e.g. GitHub and GitLab), `gionx` distinguishes:
 
 ## Locations (defaults)
 
-- State store (data): `~/.local/share/gionx/state.db`
+- State store (data): `~/.local/share/gionx/roots/<root-hash>/state.db`
 - Repo pool (cache): `~/.cache/gionx/repo-pool/`
 
 XDG environment variables may override these defaults:

@@ -72,7 +72,7 @@ func (c *CLI) runWSPurge(args []string) int {
 	}
 
 	ctx := context.Background()
-	dbPath, err := paths.DefaultStateDBPath()
+	dbPath, err := paths.StateDBPathForRoot(root)
 	if err != nil {
 		fmt.Fprintf(c.Err, "resolve state db path: %v\n", err)
 		return exitError

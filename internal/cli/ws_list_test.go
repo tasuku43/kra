@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
 )
 
@@ -60,7 +61,10 @@ func TestCLI_WS_List_ImportsWorkspaceDirAndPrintsIt(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dbPath := filepath.Join(dataHome, "gionx", "state.db")
+	dbPath, pathErr := paths.StateDBPathForRoot(root)
+	if pathErr != nil {
+		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
+	}
 	db, openErr := statestore.Open(ctx, dbPath)
 	if openErr != nil {
 		t.Fatalf("Open(state db) error: %v", openErr)
@@ -96,7 +100,10 @@ func TestCLI_WS_List_MarksMissingRepoWorktree(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
 
 	ctx := context.Background()
-	dbPath := filepath.Join(dataHome, "gionx", "state.db")
+	dbPath, pathErr := paths.StateDBPathForRoot(root)
+	if pathErr != nil {
+		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
+	}
 	db, openErr := statestore.Open(ctx, dbPath)
 	if openErr != nil {
 		t.Fatalf("Open(state db) error: %v", openErr)

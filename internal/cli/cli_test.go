@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
 )
 
@@ -115,6 +116,7 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if _, err := exec.LookPath("git"); err != nil {
 		t.Skip("git not found in PATH")
 	}
+	setGitIdentity(t)
 
 	root := t.TempDir()
 	dataHome := filepath.Join(t.TempDir(), "xdg-data")
@@ -155,9 +157,20 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(root, ".git")); statErr != nil {
 		t.Fatalf(".git not created: %v", statErr)
 	}
+	commitCount := runGit(t, root, "rev-list", "--count", "HEAD")
+	if strings.TrimSpace(commitCount) != "1" {
+		t.Fatalf("init commit count = %q, want %q", strings.TrimSpace(commitCount), "1")
+	}
+	tracked := runGit(t, root, "ls-files")
+	if strings.TrimSpace(tracked) != ".gitignore\nAGENTS.md" && strings.TrimSpace(tracked) != "AGENTS.md\n.gitignore" {
+		t.Fatalf("tracked files = %q, want only .gitignore and AGENTS.md", strings.TrimSpace(tracked))
+	}
 
 	ctx := context.Background()
-	dbPath := filepath.Join(dataHome, "gionx", "state.db")
+	dbPath, pathErr := paths.StateDBPathForRoot(root)
+	if pathErr != nil {
+		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
+	}
 	db, openErr := statestore.Open(ctx, dbPath)
 	if openErr != nil {
 		t.Fatalf("Open(state db) error: %v", openErr)
@@ -177,6 +190,63 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if gotPool != wantPool {
 		t.Fatalf("settings.repo_pool_path = %q, want %q", gotPool, wantPool)
 	}
+}
+
+func TestCLI_Init_CreatesMissingGIONXRootDirectory(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found in PATH")
+	}
+	setGitIdentity(t)
+
+	parent := t.TempDir()
+	root := filepath.Join(parent, "new-gionx-root")
+	dataHome := filepath.Join(t.TempDir(), "xdg-data")
+	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
+
+	t.Setenv("GIONX_ROOT", root)
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("XDG_CACHE_HOME", cacheHome)
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"init"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
+	}
+
+	if _, statErr := os.Stat(root); statErr != nil {
+		t.Fatalf("root dir not created: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "workspaces")); statErr != nil {
+		t.Fatalf("workspaces/ not created: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "archive")); statErr != nil {
+		t.Fatalf("archive/ not created: %v", statErr)
+	}
+}
+
+func runGit(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	cmd := exec.Command("git", args...)
+	cmd.Dir = dir
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+	}
+	return string(out)
+}
+
+func setGitIdentity(t *testing.T) {
+	t.Helper()
+	t.Setenv("GIT_AUTHOR_NAME", "gionx-test")
+	t.Setenv("GIT_AUTHOR_EMAIL", "gionx-test@example.com")
+	t.Setenv("GIT_COMMITTER_NAME", "gionx-test")
+	t.Setenv("GIT_COMMITTER_EMAIL", "gionx-test@example.com")
 }
 
 func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
@@ -227,7 +297,10 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dbPath := filepath.Join(dataHome, "gionx", "state.db")
+	dbPath, pathErr := paths.StateDBPathForRoot(root)
+	if pathErr != nil {
+		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
+	}
 	db, openErr := statestore.Open(ctx, dbPath)
 	if openErr != nil {
 		t.Fatalf("Open(state db) error: %v", openErr)
@@ -288,7 +361,10 @@ func TestCLI_WS_Create_ArchivedCollision_GuidesReopen(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
 
 	ctx := context.Background()
-	dbPath := filepath.Join(dataHome, "gionx", "state.db")
+	dbPath, pathErr := paths.StateDBPathForRoot(root)
+	if pathErr != nil {
+		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
+	}
 	db, openErr := statestore.Open(ctx, dbPath)
 	if openErr != nil {
 		t.Fatalf("Open(state db) error: %v", openErr)
@@ -341,7 +417,10 @@ func TestCLI_WS_Create_ActiveCollision_Errors(t *testing.T) {
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
 
 	ctx := context.Background()
-	dbPath := filepath.Join(dataHome, "gionx", "state.db")
+	dbPath, pathErr := paths.StateDBPathForRoot(root)
+	if pathErr != nil {
+		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
+	}
 	db, openErr := statestore.Open(ctx, dbPath)
 	if openErr != nil {
 		t.Fatalf("Open(state db) error: %v", openErr)
@@ -458,7 +537,10 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 	}
 
 	ctx := context.Background()
-	dbPath := filepath.Join(dataHome, "gionx", "state.db")
+	dbPath, pathErr := paths.StateDBPathForRoot(root)
+	if pathErr != nil {
+		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
+	}
 	db, openErr := statestore.Open(ctx, dbPath)
 	if openErr != nil {
 		t.Fatalf("Open(state db) error: %v", openErr)

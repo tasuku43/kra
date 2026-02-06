@@ -1,20 +1,30 @@
 package paths
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
 )
 
-// DefaultStateDBPath returns the default location for the SQLite state store,
+// StateDBPathForRoot returns the per-root location for the SQLite state store,
 // following XDG conventions.
-func DefaultStateDBPath() (string, error) {
+func StateDBPathForRoot(root string) (string, error) {
+	cleanRoot, err := cleanAbs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve root: %w", err)
+	}
+
 	xdgDataHome, err := XDGDataHome()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(xdgDataHome, "gionx", "state.db"), nil
+
+	sum := sha256.Sum256([]byte(cleanRoot))
+	rootHash := hex.EncodeToString(sum[:16])
+	return filepath.Join(xdgDataHome, "gionx", "roots", rootHash, "state.db"), nil
 }
 
 // DefaultRepoPoolPath returns the default location for the bare repo pool,

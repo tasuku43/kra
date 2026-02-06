@@ -31,7 +31,9 @@ Implementation should reference these specs. When behavior changes, update the s
   - `concepts/layout.md`: GIONX_ROOT layout and Git tracking policy
   - `concepts/state-store.md`: Global state store (SQLite) and migrations
 - Commands
+  - `commands/context.md`: `gionx context`
   - `commands/init.md`: `gionx init`
+  - `commands/state/registry.md`: `gionx state` foundation (registry)
   - `commands/ws/create.md`: `gionx ws create`
   - `commands/ws/add-repo.md`: `gionx ws add-repo`
   - `commands/ws/list.md`: `gionx ws list`

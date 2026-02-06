@@ -11,11 +11,15 @@ Initialize `GIONX_ROOT` and the global state store.
 
 ## Behavior
 
+- Ensure `GIONX_ROOT/` exists (create if missing)
 - Ensure `GIONX_ROOT/workspaces/` exists
 - Ensure `GIONX_ROOT/archive/` exists
 - Create `GIONX_ROOT/AGENTS.md` with a default "how to use gionx" guidance (for the no-template MVP)
   - include a short explanation of `notes/` vs `artifacts/`
 - If `GIONX_ROOT` is not a Git repo, run `git init`
+- When `git init` is newly performed by `gionx init`, create an initial commit containing:
+  - `GIONX_ROOT/.gitignore`
+  - `GIONX_ROOT/AGENTS.md`
 - Write `.gitignore` such that `workspaces/**/repos/**` is ignored
 - Initialize the global state store (SQLite) if missing
 - Record:

@@ -123,8 +123,9 @@ LIMIT 1
 	}
 }
 
-func TestCLI_Init_SettingsDrift_ErrorsOnDifferentRoot(t *testing.T) {
+func TestCLI_Init_UsesDifferentStateDBPerRoot(t *testing.T) {
 	testutil.RequireCommand(t, "git")
+	setGitIdentity(t)
 
 	env := testutil.NewEnv(t)
 
@@ -145,15 +146,16 @@ func TestCLI_Init_SettingsDrift_ErrorsOnDifferentRoot(t *testing.T) {
 	c2 := New(&out2, &err2)
 
 	code = c2.Run([]string{"init"})
-	if code != exitError {
-		t.Fatalf("second init exit code = %d, want %d (stderr=%q)", code, exitError, err2.String())
+	if code != exitOK {
+		t.Fatalf("second init exit code = %d, want %d (stderr=%q)", code, exitOK, err2.String())
 	}
-	if !strings.Contains(err2.String(), "settings already initialized") {
-		t.Fatalf("stderr missing settings drift error: %q", err2.String())
+	if err2.Len() != 0 {
+		t.Fatalf("second init stderr not empty: %q", err2.String())
 	}
 
 	ctx := context.Background()
-	db, err := statestore.Open(ctx, env.StateDBPath())
+	dbPath1 := env.StateDBPath()
+	db, err := statestore.Open(ctx, dbPath1)
 	if err != nil {
 		t.Fatalf("Open(state db) error: %v", err)
 	}
@@ -165,6 +167,30 @@ func TestCLI_Init_SettingsDrift_ErrorsOnDifferentRoot(t *testing.T) {
 	}
 	if gotRoot != env.Root {
 		t.Fatalf("settings.root_path = %q, want %q", gotRoot, env.Root)
+	}
+
+	otherEnv := testutil.Env{
+		Root:      otherRoot,
+		DataHome:  env.DataHome,
+		CacheHome: env.CacheHome,
+	}
+	dbPath2 := otherEnv.StateDBPath()
+	if dbPath1 == dbPath2 {
+		t.Fatalf("state db path should differ by root: %q", dbPath1)
+	}
+
+	db2, err := statestore.Open(ctx, dbPath2)
+	if err != nil {
+		t.Fatalf("Open(other state db) error: %v", err)
+	}
+	t.Cleanup(func() { _ = db2.Close() })
+
+	var gotRoot2 string
+	if err := db2.QueryRowContext(ctx, "SELECT root_path FROM settings WHERE id = 1").Scan(&gotRoot2); err != nil {
+		t.Fatalf("query other settings: %v", err)
+	}
+	if gotRoot2 != otherRoot {
+		t.Fatalf("other settings.root_path = %q, want %q", gotRoot2, otherRoot)
 	}
 }
 

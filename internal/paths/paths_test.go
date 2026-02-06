@@ -6,18 +6,23 @@ import (
 	"testing"
 )
 
-func TestDefaultStateDBPath_UsesXDGDefaults(t *testing.T) {
+func TestStateDBPathForRoot_UsesXDGDefaults(t *testing.T) {
 	home := t.TempDir()
+	root := filepath.Join(t.TempDir(), "gionroot")
+	mustMkdirAll(t, root)
 	t.Setenv("HOME", home)
 	t.Setenv("XDG_DATA_HOME", "")
 
-	got, err := DefaultStateDBPath()
+	got, err := StateDBPathForRoot(root)
 	if err != nil {
-		t.Fatalf("DefaultStateDBPath() err = %v", err)
+		t.Fatalf("StateDBPathForRoot() err = %v", err)
 	}
-	want := filepath.Join(home, ".local", "share", "gionx", "state.db")
-	if got != want {
-		t.Fatalf("DefaultStateDBPath() = %q, want %q", got, want)
+	prefix := filepath.Join(home, ".local", "share", "gionx", "roots")
+	if filepath.Dir(filepath.Dir(got)) != prefix {
+		t.Fatalf("state db parent = %q, want under %q", filepath.Dir(filepath.Dir(got)), prefix)
+	}
+	if filepath.Base(got) != "state.db" {
+		t.Fatalf("state db filename = %q, want %q", filepath.Base(got), "state.db")
 	}
 }
 
@@ -36,18 +41,33 @@ func TestDefaultRepoPoolPath_UsesXDGDefaults(t *testing.T) {
 	}
 }
 
-func TestDefaultPaths_UseXDGOverrides(t *testing.T) {
+func TestStateDBPathForRoot_UsesXDGOverridesAndDiffersByRoot(t *testing.T) {
+	root1 := filepath.Join(t.TempDir(), "gionroot1")
+	root2 := filepath.Join(t.TempDir(), "gionroot2")
+	mustMkdirAll(t, root1)
+	mustMkdirAll(t, root2)
+
 	dataHome := filepath.Join(t.TempDir(), "xdg-data")
 	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
 
-	gotDB, err := DefaultStateDBPath()
+	gotDB1, err := StateDBPathForRoot(root1)
 	if err != nil {
-		t.Fatalf("DefaultStateDBPath() err = %v", err)
+		t.Fatalf("StateDBPathForRoot(root1) err = %v", err)
 	}
-	if gotDB != filepath.Join(dataHome, "gionx", "state.db") {
-		t.Fatalf("state db path = %q", gotDB)
+	gotDB2, err := StateDBPathForRoot(root2)
+	if err != nil {
+		t.Fatalf("StateDBPathForRoot(root2) err = %v", err)
+	}
+	if gotDB1 == gotDB2 {
+		t.Fatalf("state db path should differ by root, got %q", gotDB1)
+	}
+	if filepath.Dir(filepath.Dir(gotDB1)) != filepath.Join(dataHome, "gionx", "roots") {
+		t.Fatalf("state db path = %q", gotDB1)
+	}
+	if filepath.Dir(filepath.Dir(gotDB2)) != filepath.Join(dataHome, "gionx", "roots") {
+		t.Fatalf("state db path = %q", gotDB2)
 	}
 
 	gotPool, err := DefaultRepoPoolPath()
