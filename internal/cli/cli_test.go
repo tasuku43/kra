@@ -86,14 +86,11 @@ func TestCLI_WS_Create_NotImplemented(t *testing.T) {
 	c := New(&out, &err)
 
 	code := c.Run([]string{"ws", "create"})
-	if code != exitNotImplemented {
-		t.Fatalf("exit code = %d, want %d", code, exitNotImplemented)
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
 	}
-	if out.Len() != 0 {
-		t.Fatalf("stdout not empty: %q", out.String())
-	}
-	if !strings.Contains(err.String(), "not implemented: ws create") {
-		t.Fatalf("stderr missing not-implemented: %q", err.String())
+	if !strings.Contains(err.String(), "gionx ws create") {
+		t.Fatalf("stderr missing ws create usage: %q", err.String())
 	}
 }
 
@@ -179,5 +176,203 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	wantPool := filepath.Join(cacheHome, "gionx", "repo-pool")
 	if gotPool != wantPool {
 		t.Fatalf("settings.repo_pool_path = %q, want %q", gotPool, wantPool)
+	}
+}
+
+func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
+	root := t.TempDir()
+	dataHome := filepath.Join(t.TempDir(), "xdg-data")
+	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
+
+	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
+		t.Fatalf("create workspaces/: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
+		t.Fatalf("create archive/: %v", err)
+	}
+
+	t.Setenv("GIONX_ROOT", root)
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("XDG_CACHE_HOME", cacheHome)
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	c.In = strings.NewReader("hello world\n")
+
+	code := c.Run([]string{"ws", "create", "MVP-020"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+
+	wsDir := filepath.Join(root, "workspaces", "MVP-020")
+	if _, statErr := os.Stat(wsDir); statErr != nil {
+		t.Fatalf("workspace dir not created: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(wsDir, "notes")); statErr != nil {
+		t.Fatalf("notes/ not created: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(wsDir, "artifacts")); statErr != nil {
+		t.Fatalf("artifacts/ not created: %v", statErr)
+	}
+	agentsBytes, statErr := os.ReadFile(filepath.Join(wsDir, "AGENTS.md"))
+	if statErr != nil {
+		t.Fatalf("AGENTS.md not created: %v", statErr)
+	}
+	if !strings.Contains(string(agentsBytes), "ID: MVP-020") {
+		t.Fatalf("AGENTS.md missing id: %q", string(agentsBytes))
+	}
+	if !strings.Contains(string(agentsBytes), "Description: hello world") {
+		t.Fatalf("AGENTS.md missing description: %q", string(agentsBytes))
+	}
+
+	ctx := context.Background()
+	dbPath := filepath.Join(dataHome, "gionx", "state.db")
+	db, openErr := statestore.Open(ctx, dbPath)
+	if openErr != nil {
+		t.Fatalf("Open(state db) error: %v", openErr)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	var status string
+	var desc string
+	var gen int
+	qErr := db.QueryRowContext(ctx, "SELECT status, description, generation FROM workspaces WHERE id = ?", "MVP-020").Scan(&status, &desc, &gen)
+	if qErr != nil {
+		t.Fatalf("query workspaces: %v", qErr)
+	}
+	if status != "active" {
+		t.Fatalf("workspaces.status = %q, want %q", status, "active")
+	}
+	if desc != "hello world" {
+		t.Fatalf("workspaces.description = %q, want %q", desc, "hello world")
+	}
+	if gen != 1 {
+		t.Fatalf("workspaces.generation = %d, want %d", gen, 1)
+	}
+
+	var eventType string
+	var eventGen int
+	evErr := db.QueryRowContext(ctx, `
+SELECT event_type, workspace_generation
+FROM workspace_events
+WHERE workspace_id = ?
+ORDER BY id DESC
+LIMIT 1
+`, "MVP-020").Scan(&eventType, &eventGen)
+	if evErr != nil {
+		t.Fatalf("query workspace_events: %v", evErr)
+	}
+	if eventType != "created" {
+		t.Fatalf("workspace_events.event_type = %q, want %q", eventType, "created")
+	}
+	if eventGen != 1 {
+		t.Fatalf("workspace_events.workspace_generation = %d, want %d", eventGen, 1)
+	}
+}
+
+func TestCLI_WS_Create_ArchivedCollision_GuidesReopen(t *testing.T) {
+	root := t.TempDir()
+	dataHome := filepath.Join(t.TempDir(), "xdg-data")
+	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
+
+	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
+		t.Fatalf("create workspaces/: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
+		t.Fatalf("create archive/: %v", err)
+	}
+
+	t.Setenv("GIONX_ROOT", root)
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("XDG_CACHE_HOME", cacheHome)
+
+	ctx := context.Background()
+	dbPath := filepath.Join(dataHome, "gionx", "state.db")
+	db, openErr := statestore.Open(ctx, dbPath)
+	if openErr != nil {
+		t.Fatalf("Open(state db) error: %v", openErr)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	repoPoolPath := filepath.Join(cacheHome, "gionx", "repo-pool")
+	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
+		t.Fatalf("EnsureSettings error: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+INSERT INTO workspaces (
+  id, generation, status, description, source_url,
+  created_at, updated_at,
+  archived_commit_sha, reopened_commit_sha
+)
+VALUES ('MVP-020', 1, 'archived', '', '', 1, 1, NULL, NULL)
+`); err != nil {
+		t.Fatalf("insert archived workspace: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	c.In = strings.NewReader("should-not-be-read\n")
+
+	code := c.Run([]string{"ws", "create", "MVP-020"})
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d", code, exitError)
+	}
+	if !strings.Contains(err.String(), "ws reopen") {
+		t.Fatalf("stderr missing reopen guidance: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Create_ActiveCollision_Errors(t *testing.T) {
+	root := t.TempDir()
+	dataHome := filepath.Join(t.TempDir(), "xdg-data")
+	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
+
+	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
+		t.Fatalf("create workspaces/: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
+		t.Fatalf("create archive/: %v", err)
+	}
+
+	t.Setenv("GIONX_ROOT", root)
+	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("XDG_CACHE_HOME", cacheHome)
+
+	ctx := context.Background()
+	dbPath := filepath.Join(dataHome, "gionx", "state.db")
+	db, openErr := statestore.Open(ctx, dbPath)
+	if openErr != nil {
+		t.Fatalf("Open(state db) error: %v", openErr)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	repoPoolPath := filepath.Join(cacheHome, "gionx", "repo-pool")
+	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
+		t.Fatalf("EnsureSettings error: %v", err)
+	}
+	if _, err := db.ExecContext(ctx, `
+INSERT INTO workspaces (
+  id, generation, status, description, source_url,
+  created_at, updated_at,
+  archived_commit_sha, reopened_commit_sha
+)
+VALUES ('MVP-020', 1, 'active', '', '', 1, 1, NULL, NULL)
+`); err != nil {
+		t.Fatalf("insert active workspace: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	c.In = strings.NewReader("should-not-be-read\n")
+
+	code := c.Run([]string{"ws", "create", "MVP-020"})
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d", code, exitError)
+	}
+	if !strings.Contains(err.String(), "already exists") {
+		t.Fatalf("stderr missing already-exists: %q", err.String())
 	}
 }
