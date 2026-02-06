@@ -187,7 +187,7 @@ It does not replace per-item dependencies.
   - Depends: MVP-003
   - Parallel: continuous (start early; extend per command)
 
-- [ ] MVP-901: Integration tests expansion (through MVP-042)
+- [x] MVP-901: Integration tests expansion (through MVP-042)
   - What: expand CLI-level tests to cover drift/partial-failure scenarios through the full archive lifecycle
   - Specs:
     - `docs/spec/testing/integration.md`
