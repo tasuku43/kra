@@ -1,6 +1,6 @@
 ---
 title: "`gionx ws close`"
-status: planned
+status: implemented
 ---
 
 # `gionx ws close <id>`

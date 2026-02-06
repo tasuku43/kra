@@ -151,7 +151,7 @@ It does not replace per-item dependencies.
 
 ## Archive lifecycle (Git-managed root)
 
-- [ ] MVP-040: `gionx ws close`
+- [x] MVP-040: `gionx ws close`
   - What: risk inspection (live), delete worktrees, atomic rename to `archive/`, commit touched paths,
     update snapshot + append event
   - Specs:
