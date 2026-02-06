@@ -98,6 +98,11 @@ func resolveInitRoot() (string, error) {
 }
 
 func ensureInitLayout(root string) error {
+	didGitInit, err := ensureGitInit(root)
+	if err != nil {
+		return err
+	}
+
 	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
 		return fmt.Errorf("create workspaces/: %w", err)
 	}
@@ -111,8 +116,10 @@ func ensureInitLayout(root string) error {
 	if err := ensureRootGitignore(root); err != nil {
 		return err
 	}
-	if err := ensureGitInit(root); err != nil {
-		return err
+	if didGitInit {
+		if err := commitInitFiles(root); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -170,23 +177,68 @@ func hasGitignoreLine(contents string, want string) bool {
 	return false
 }
 
-func ensureGitInit(root string) error {
+func ensureGitInit(root string) (bool, error) {
 	gitMeta := filepath.Join(root, ".git")
 	if _, err := os.Stat(gitMeta); err == nil {
-		return nil
+		return false, nil
 	} else if !os.IsNotExist(err) {
-		return fmt.Errorf("stat .git: %w", err)
+		return false, fmt.Errorf("stat .git: %w", err)
 	}
 
 	if _, err := exec.LookPath("git"); err != nil {
-		return fmt.Errorf("git not found in PATH: %w", err)
+		return false, fmt.Errorf("git not found in PATH: %w", err)
 	}
 
 	cmd := exec.Command("git", "init")
 	cmd.Dir = root
 	output, err := cmd.CombinedOutput()
 	if err != nil {
-		return fmt.Errorf("git init failed: %w (output=%s)", err, strings.TrimSpace(string(output)))
+		return false, fmt.Errorf("git init failed: %w (output=%s)", err, strings.TrimSpace(string(output)))
+	}
+	return true, nil
+}
+
+func commitInitFiles(root string) error {
+	const commitMessage = "init: add gionx bootstrap files"
+	allowlist := map[string]struct{}{
+		gitignoreFilename:  {},
+		rootAgentsFilename: {},
+	}
+
+	addCmd := exec.Command("git", "add", "--", gitignoreFilename, rootAgentsFilename)
+	addCmd.Dir = root
+	addOutput, err := addCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git add init files failed: %w (output=%s)", err, strings.TrimSpace(string(addOutput)))
+	}
+
+	listCmd := exec.Command("git", "diff", "--cached", "--name-only")
+	listCmd.Dir = root
+	listOutput, err := listCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git diff --cached failed: %w (output=%s)", err, strings.TrimSpace(string(listOutput)))
+	}
+
+	staged := 0
+	for _, line := range strings.Split(strings.TrimSpace(string(listOutput)), "\n") {
+		p := strings.TrimSpace(line)
+		if p == "" {
+			continue
+		}
+		staged++
+		if _, ok := allowlist[p]; !ok {
+			return fmt.Errorf("staged path outside allowlist during init: %s", p)
+		}
+	}
+	if staged == 0 {
+		return nil
+	}
+
+	commitCmd := exec.Command("git", "commit", "-m", commitMessage)
+	commitCmd.Dir = root
+	commitOutput, err := commitCmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("git commit init files failed: %w (output=%s)", err, strings.TrimSpace(string(commitOutput)))
 	}
 	return nil
 }

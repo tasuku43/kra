@@ -125,6 +125,7 @@ LIMIT 1
 
 func TestCLI_Init_UsesDifferentStateDBPerRoot(t *testing.T) {
 	testutil.RequireCommand(t, "git")
+	setGitIdentity(t)
 
 	env := testutil.NewEnv(t)
 
