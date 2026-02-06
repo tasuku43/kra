@@ -167,3 +167,48 @@ func TestCLI_Init_SettingsDrift_ErrorsOnDifferentRoot(t *testing.T) {
 		t.Fatalf("settings.root_path = %q, want %q", gotRoot, env.Root)
 	}
 }
+
+func TestCLI_Init_SettingsDrift_ErrorsOnDifferentRepoPool(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env := testutil.NewEnv(t)
+
+	var out1 bytes.Buffer
+	var err1 bytes.Buffer
+	c1 := New(&out1, &err1)
+
+	code := c1.Run([]string{"init"})
+	if code != exitOK {
+		t.Fatalf("first init exit code = %d, want %d (stderr=%q)", code, exitOK, err1.String())
+	}
+
+	newCacheHome := filepath.Join(t.TempDir(), "other-xdg-cache")
+	t.Setenv("XDG_CACHE_HOME", newCacheHome)
+
+	var out2 bytes.Buffer
+	var err2 bytes.Buffer
+	c2 := New(&out2, &err2)
+
+	code = c2.Run([]string{"init"})
+	if code != exitError {
+		t.Fatalf("second init exit code = %d, want %d (stderr=%q)", code, exitError, err2.String())
+	}
+	if !strings.Contains(err2.String(), "settings already initialized") {
+		t.Fatalf("stderr missing settings drift error: %q", err2.String())
+	}
+
+	ctx := context.Background()
+	db, err := statestore.Open(ctx, env.StateDBPath())
+	if err != nil {
+		t.Fatalf("Open(state db) error: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+
+	var gotRepoPool string
+	if err := db.QueryRowContext(ctx, "SELECT repo_pool_path FROM settings WHERE id = 1").Scan(&gotRepoPool); err != nil {
+		t.Fatalf("query settings: %v", err)
+	}
+	if gotRepoPool != env.RepoPoolPath() {
+		t.Fatalf("settings.repo_pool_path = %q, want %q", gotRepoPool, env.RepoPoolPath())
+	}
+}
