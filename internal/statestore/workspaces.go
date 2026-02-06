@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 )
 
 type WorkspaceAlreadyExistsError struct {
@@ -96,4 +97,65 @@ VALUES (?, ?, 'created', ?, '{}')
 		return 0, fmt.Errorf("commit tx: %w", err)
 	}
 	return gen, nil
+}
+
+type ArchiveWorkspaceInput struct {
+	ID                string
+	ArchivedCommitSHA string
+	Now               int64
+}
+
+// ArchiveWorkspace marks an active workspace as archived and appends an `archived` event
+// in a single transaction.
+func ArchiveWorkspace(ctx context.Context, db *sql.DB, in ArchiveWorkspaceInput) error {
+	in.ID = strings.TrimSpace(in.ID)
+	in.ArchivedCommitSHA = strings.TrimSpace(in.ArchivedCommitSHA)
+	if in.ID == "" {
+		return fmt.Errorf("workspace id is required")
+	}
+	if in.ArchivedCommitSHA == "" {
+		return fmt.Errorf("archived commit sha is required")
+	}
+	if in.Now <= 0 {
+		return fmt.Errorf("now is required")
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var gen int
+	var status string
+	qErr := tx.QueryRowContext(ctx, "SELECT generation, status FROM workspaces WHERE id = ?", in.ID).Scan(&gen, &status)
+	if errors.Is(qErr, sql.ErrNoRows) {
+		return fmt.Errorf("workspace not found: %s", in.ID)
+	}
+	if qErr != nil {
+		return fmt.Errorf("select workspace: %w", qErr)
+	}
+	if status != "active" {
+		return fmt.Errorf("workspace is not active (status=%s): %s", status, in.ID)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+UPDATE workspaces
+SET status = 'archived', updated_at = ?, archived_commit_sha = ?
+WHERE id = ?
+`, in.Now, in.ArchivedCommitSHA, in.ID); err != nil {
+		return fmt.Errorf("update workspace: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, `
+INSERT INTO workspace_events (workspace_id, workspace_generation, event_type, at, meta)
+VALUES (?, ?, 'archived', ?, '{}')
+`, in.ID, gen, in.Now); err != nil {
+		return fmt.Errorf("insert workspace event: %w", err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
 }

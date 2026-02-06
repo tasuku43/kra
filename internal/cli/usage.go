@@ -36,7 +36,7 @@ Subcommands:
   create            Create a workspace
   list              List workspaces
   add-repo          Add repo to workspace
-  close             Close workspace (not implemented yet)
+  close             Close workspace
   reopen            Reopen workspace (not implemented yet)
   purge             Purge workspace (not implemented yet)
   help              Show this help
@@ -74,5 +74,17 @@ Add a repository to a workspace as a Git worktree.
 Inputs:
   workspace-id       Existing workspace ID (must be active)
   repo               Repo spec (git@... / https://... / file://...)
+`)
+}
+
+func (c *CLI) printWSCloseUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx ws close <id>
+
+Close (archive) a workspace:
+- inspect repo risk (live) and prompt if not clean
+- remove git worktrees under workspaces/<id>/repos/
+- move workspaces/<id>/ to archive/<id>/ atomically
+- commit the archive change in GIONX_ROOT
 `)
 }

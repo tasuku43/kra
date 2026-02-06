@@ -104,6 +104,23 @@ VALUES (?, ?, ?, ?, ?)
 	return nil
 }
 
+func LookupRepoRemoteURL(ctx context.Context, db *sql.DB, repoUID string) (remoteURL string, ok bool, err error) {
+	repoUID = strings.TrimSpace(repoUID)
+	if repoUID == "" {
+		return "", false, fmt.Errorf("repo uid is required")
+	}
+
+	var url string
+	qErr := db.QueryRowContext(ctx, "SELECT remote_url FROM repos WHERE repo_uid = ?", repoUID).Scan(&url)
+	if errors.Is(qErr, sql.ErrNoRows) {
+		return "", false, nil
+	}
+	if qErr != nil {
+		return "", false, fmt.Errorf("select repo remote_url: %w", qErr)
+	}
+	return url, true, nil
+}
+
 type AddWorkspaceRepoInput struct {
 	WorkspaceID   string
 	RepoUID       string

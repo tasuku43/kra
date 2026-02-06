@@ -76,7 +76,7 @@ func (c *CLI) runWS(args []string) int {
 	case "add-repo":
 		return c.runWSAddRepo(args[1:])
 	case "close":
-		return c.notImplemented("ws close")
+		return c.runWSClose(args[1:])
 	case "reopen":
 		return c.notImplemented("ws reopen")
 	case "purge":
