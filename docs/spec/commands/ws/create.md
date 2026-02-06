@@ -1,6 +1,6 @@
 ---
 title: "`gionx ws create`"
-status: planned
+status: implemented
 ---
 
 # `gionx ws create <id>`
@@ -13,6 +13,7 @@ Create an empty workspace with scaffolding for notes/artifacts.
 
 - `id`: user-provided workspace ID
   - validation rules should follow `gion` (e.g. reject `/`)
+- `--no-prompt` (optional): do not prompt for `description` (store empty)
 
 ## Behavior
 

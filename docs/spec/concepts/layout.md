@@ -1,8 +1,6 @@
 ---
 title: "Layout"
 status: implemented
-pending:
-  - workspace-scaffolding
 ---
 
 # Layout

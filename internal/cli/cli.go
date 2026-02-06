@@ -3,6 +3,7 @@ package cli
 import (
 	"fmt"
 	"io"
+	"os"
 	"strings"
 )
 
@@ -14,6 +15,7 @@ const (
 )
 
 type CLI struct {
+	In      io.Reader
 	Out     io.Writer
 	Err     io.Writer
 	Version string
@@ -21,6 +23,7 @@ type CLI struct {
 
 func New(out io.Writer, err io.Writer) *CLI {
 	return &CLI{
+		In:      os.Stdin,
 		Out:     out,
 		Err:     err,
 		Version: "dev",
@@ -62,7 +65,7 @@ func (c *CLI) runWS(args []string) int {
 		c.printWSUsage(c.Out)
 		return exitOK
 	case "create":
-		return c.notImplemented("ws create")
+		return c.runWSCreate(args[1:])
 	case "list":
 		return c.notImplemented("ws list")
 	case "add-repo":
