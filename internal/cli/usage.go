@@ -34,7 +34,7 @@ func (c *CLI) printWSUsage(w io.Writer) {
 
 Subcommands:
   create            Create a workspace
-  list              List workspaces (not implemented yet)
+  list              List workspaces
   add-repo          Add repo to workspace (not implemented yet)
   close             Close workspace (not implemented yet)
   reopen            Reopen workspace (not implemented yet)
@@ -54,5 +54,13 @@ Create a workspace directory under GIONX_ROOT/workspaces/<id>/ and record it in 
 
 Options:
   --no-prompt        Do not prompt for description (store empty)
+`)
+}
+
+func (c *CLI) printWSListUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx ws list
+
+List workspaces from the state store and repair basic drift from the filesystem.
 `)
 }

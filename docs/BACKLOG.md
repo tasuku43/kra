@@ -121,7 +121,7 @@ It does not replace per-item dependencies.
   - Depends: MVP-010
   - Parallel: yes (with MVP-021 once MVP-010 done)
 
-- [ ] MVP-021: `gionx ws list` (without repo risk at first)
+- [x] MVP-021: `gionx ws list` (without repo risk at first)
   - What: list snapshot + basic drift import/mark-missing behavior
   - Specs:
     - `docs/spec/commands/ws/list.md`

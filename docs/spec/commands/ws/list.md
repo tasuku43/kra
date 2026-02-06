@@ -1,6 +1,6 @@
 ---
 title: "`gionx ws list`"
-status: planned
+status: implemented
 ---
 
 # `gionx ws list`
@@ -22,7 +22,9 @@ List workspaces with status and risk, similar in spirit to `gion manifest ls`.
 
 - The global state store is the primary source of desired state.
 - The filesystem under `GIONX_ROOT/workspaces/` is treated as actual state.
-- `risk` is computed live on every run by inspecting each workspace's repos.
+- `risk` is reported as:
+  - `clean` when `repo_count == 0`
+  - `unknown` otherwise (repo-level risk computation is implemented later)
 
 ### Drift repair (MVP)
 

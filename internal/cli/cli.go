@@ -67,7 +67,7 @@ func (c *CLI) runWS(args []string) int {
 	case "create":
 		return c.runWSCreate(args[1:])
 	case "list":
-		return c.notImplemented("ws list")
+		return c.runWSList(args[1:])
 	case "add-repo":
 		return c.notImplemented("ws add-repo")
 	case "close":
