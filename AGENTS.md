@@ -38,6 +38,13 @@ This project has two different "commit scopes":
   - then verify the staged paths (`git diff --cached --name-only`) are a strict subset of the allowlist
   - if anything outside the allowlist is staged, abort the command (do not commit)
 
+## Go Formatting (required)
+
+- Before committing (and before opening/updating a PR), ensure `gofmt` is clean:
+  - run: `gofmt -w $(gofmt -l .)`
+  - verify: `test -z "$(gofmt -l .)"`
+- If CI has a `gofmt` step, treat it as a hard requirement (fix formatting first).
+
 ## Asking Questions
 
 When asking the user to make a decision:
