@@ -183,7 +183,11 @@ func printRepoRemoveSelection(out io.Writer, selected []statestore.RootRepoCandi
 func printRepoRemoveResult(out io.Writer, removed []statestore.RootRepoCandidate, useColor bool) {
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, renderResultTitle(useColor))
-	fmt.Fprintf(out, "%sRemoved %d / %d\n", uiIndent, len(removed), len(removed))
+	summary := fmt.Sprintf("Removed %d / %d", len(removed), len(removed))
+	if useColor {
+		summary = styleSuccess(summary, true)
+	}
+	fmt.Fprintf(out, "%s%s\n", uiIndent, summary)
 	for _, it := range removed {
 		fmt.Fprintf(out, "%s- %s\n", uiIndent, it.RepoKey)
 	}

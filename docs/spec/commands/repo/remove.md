@@ -43,10 +43,13 @@ It does not delete physical bare repositories from the shared repo pool.
   - selected repo keys
 - `Result:` section
   - summary: `Removed <n> / <m>`
+  - summary color semantics follow shared `Result:` rules:
+    - all success: success token
+    - all failed: error token
+    - mixed/partial: warning token
   - per-repo lines
 
 ## Safety notes
 
 - Physical bare repo directories under repo pool are kept.
 - Physical cleanup is handled by a separate `repo gc` flow.
-

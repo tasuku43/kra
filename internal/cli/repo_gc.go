@@ -175,7 +175,7 @@ func (c *CLI) runRepoGC(args []string) int {
 	summary := fmt.Sprintf("Removed %d / %d", len(removed), len(eligibleSelected))
 	if useColor {
 		switch {
-		case len(removed) == len(selected):
+		case len(removed) == len(eligibleSelected):
 			summary = styleSuccess(summary, true)
 		case len(removed) == 0:
 			summary = styleError(summary, true)

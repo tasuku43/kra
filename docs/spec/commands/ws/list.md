@@ -40,7 +40,7 @@ action commands (`ws close`, `ws go`, `ws reopen`, `ws purge`).
   (`commands/ws/selector.md`), while remaining non-interactive.
 - Status label coloring must follow shared semantics from selector UI:
   - `active`: active accent color
-  - `archived`: archived accent color
+  - `archived`: muted color (`text.muted`)
   - no-color terminals: plain text fallback
 - Selector markers (`[ ]`, `[x]`) are not used in `ws list`.
 - Textual risk tags (`[clean]`, `[dirty]`, etc.) are not used in summary rows.

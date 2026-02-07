@@ -380,3 +380,35 @@ It does not replace per-item dependencies.
     - `docs/dev/TESTING.md`
   - Depends: UX-WS-014
   - Parallel: yes
+
+- [x] UX-WS-016: Section spacing consistency (Risk newline parity)
+  - What: enforce heading spacing parity across ws flows so `Risk:` keeps one blank line after heading
+    (`Workspaces/Risk` one blank, `Result` no blank).
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/commands/ws/purge.md`
+  - Depends: UX-WS-013
+  - Parallel: yes
+
+- [x] UX-WS-017: `ws list` archived color semantic alignment
+  - What: align `ws list` archived color description to shared semantic token rule (`text.muted`).
+  - Specs:
+    - `docs/spec/commands/ws/list.md`
+    - `docs/spec/concepts/ui-color.md`
+  - Depends: UX-WS-014
+  - Parallel: yes
+
+- [x] UX-REPO-001: Result color semantics parity (`repo remove`)
+  - What: apply shared `Result:` summary color semantics to `repo remove` for consistency with `repo add/gc`.
+  - Specs:
+    - `docs/spec/commands/repo/remove.md`
+    - `docs/spec/concepts/ui-color.md`
+  - Depends: UX-WS-014
+  - Parallel: yes
+
+- [x] UX-REPO-002: `repo gc` summary condition cleanup
+  - What: use consistent denominator (`eligibleSelected`) for summary color condition to avoid future drift.
+  - Specs:
+    - `docs/spec/commands/repo/gc.md`
+  - Depends: MVP-063
+  - Parallel: yes

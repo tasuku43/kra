@@ -264,6 +264,7 @@ func collectPurgeWorkspaceMeta(ctx context.Context, db *sql.DB, root string, wor
 func printPurgeRiskSection(out io.Writer, selectedIDs []string, riskMeta map[string]purgeWorkspaceMeta, useColor bool) {
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, renderRiskTitle(useColor))
+	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%spurge is permanent and cannot be undone.\n", uiIndent)
 	fmt.Fprintf(out, "%sselected: %d\n", uiIndent, len(selectedIDs))
 

@@ -303,7 +303,7 @@ func TestPrintPurgeRiskSection_UsesSharedIndent(t *testing.T) {
 
 	printPurgeRiskSection(&out, selectedIDs, riskMeta, false)
 	got := out.String()
-	if !strings.Contains(got, "\nRisk:\n  purge is permanent and cannot be undone.\n  selected: 1\n") {
+	if !strings.Contains(got, "\nRisk:\n\n  purge is permanent and cannot be undone.\n  selected: 1\n") {
 		t.Fatalf("risk section header/body indentation mismatch: %q", got)
 	}
 	if !strings.Contains(got, "\n  active workspace risk detected:\n  - WS1 [dirty]\n    - repo1\tdirty\n") {
