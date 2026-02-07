@@ -230,6 +230,59 @@ func TestCLI_WS_Purge_NoPromptForce_ActiveWorkspace_Succeeds(t *testing.T) {
 	}
 }
 
+func TestCLI_WS_Purge_SelectorModeWithoutTTY_Errors(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "close", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		c.In = strings.NewReader("")
+
+		code := c.Run([]string{"ws", "purge"})
+		if code != exitError {
+			t.Fatalf("ws purge exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+		}
+		if !strings.Contains(err.String(), "interactive workspace selection requires a TTY") {
+			t.Fatalf("stderr missing non-tty error: %q", err.String())
+		}
+	}
+}
+
+func TestCLI_WS_Purge_NoPromptForce_WithoutID_Refuses(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "purge", "--no-prompt", "--force"})
+	if code != exitUsage {
+		t.Fatalf("ws purge exit code = %d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(err.String(), "--no-prompt selector mode is not supported") {
+		t.Fatalf("stderr missing refusal reason: %q", err.String())
+	}
+}
+
 func initAndConfigureRootRepo(t *testing.T, root string) {
 	t.Helper()
 	testutil.RequireCommand(t, "git")

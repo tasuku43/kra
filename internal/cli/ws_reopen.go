@@ -3,6 +3,7 @@ package cli
 import (
 	"context"
 	"database/sql"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -15,6 +16,8 @@ import (
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
 )
+
+var errNoArchivedWorkspaces = errors.New("no archived workspaces available")
 
 func (c *CLI) runWSReopen(args []string) int {
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
@@ -29,20 +32,19 @@ func (c *CLI) runWSReopen(args []string) int {
 		}
 	}
 
-	if len(args) == 0 {
-		c.printWSReopenUsage(c.Err)
-		return exitUsage
-	}
 	if len(args) > 1 {
 		fmt.Fprintf(c.Err, "unexpected args for ws reopen: %q\n", strings.Join(args[1:], " "))
 		c.printWSReopenUsage(c.Err)
 		return exitUsage
 	}
 
-	workspaceID := args[0]
-	if err := validateWorkspaceID(workspaceID); err != nil {
-		fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
-		return exitUsage
+	directWorkspaceID := ""
+	if len(args) == 1 {
+		directWorkspaceID = args[0]
+		if err := validateWorkspaceID(directWorkspaceID); err != nil {
+			fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
+			return exitUsage
+		}
 	}
 
 	if err := gitutil.EnsureGitInPath(); err != nil {
@@ -63,7 +65,7 @@ func (c *CLI) runWSReopen(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-reopen"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
-	c.debugf("run ws reopen id=%s", workspaceID)
+	c.debugf("run ws reopen args=%q", args)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -97,71 +99,142 @@ func (c *CLI) runWSReopen(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
+	useColorOut := writerSupportsColor(c.Out)
 
-	if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID); err != nil {
-		fmt.Fprintf(c.Err, "load workspace: %v\n", err)
-		return exitError
-	} else if !ok {
-		fmt.Fprintf(c.Err, "workspace not found: %s\n", workspaceID)
-		return exitError
-	} else if status != "archived" {
-		fmt.Fprintf(c.Err, "workspace is not archived (status=%s): %s\n", status, workspaceID)
-		return exitError
+	flow := workspaceSelectRiskResultFlowConfig{
+		FlowName: "ws reopen",
+		SelectItems: func() ([]workspaceFlowSelection, error) {
+			if directWorkspaceID != "" {
+				selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
+				c.debugf("ws reopen direct mode selected=%v", workspaceFlowSelectionIDs(selected))
+				return selected, nil
+			}
+
+			candidates, err := listArchivedWorkspaceCandidates(ctx, db)
+			if err != nil {
+				return nil, fmt.Errorf("list archived workspaces: %w", err)
+			}
+			if len(candidates) == 0 {
+				return nil, errNoArchivedWorkspaces
+			}
+
+			ids, err := c.promptWorkspaceSelector("archived", candidates)
+			if err != nil {
+				return nil, err
+			}
+			c.debugf("ws reopen selector mode selected=%v", ids)
+			selected := make([]workspaceFlowSelection, 0, len(ids))
+			for _, id := range ids {
+				selected = append(selected, workspaceFlowSelection{ID: id})
+			}
+			return selected, nil
+		},
+		ApplyOne: func(item workspaceFlowSelection) error {
+			c.debugf("ws reopen start workspace=%s", item.ID)
+			if err := c.reopenWorkspace(ctx, db, root, repoPoolPath, item.ID); err != nil {
+				return err
+			}
+			c.debugf("ws reopen completed workspace=%s", item.ID)
+			return nil
+		},
+		ResultVerb: "Reopened",
+		ResultMark: "✔",
 	}
 
-	archivePath := filepath.Join(root, "archive", workspaceID)
-	if fi, err := os.Stat(archivePath); err != nil {
-		fmt.Fprintf(c.Err, "stat archive dir: %v\n", err)
-		return exitError
-	} else if !fi.IsDir() {
-		fmt.Fprintf(c.Err, "archive path is not a directory: %s\n", archivePath)
-		return exitError
-	}
-
-	wsPath := filepath.Join(root, "workspaces", workspaceID)
-	if _, err := os.Stat(wsPath); err == nil {
-		fmt.Fprintf(c.Err, "workspace directory already exists: %s\n", wsPath)
-		return exitError
-	} else if err != nil && !os.IsNotExist(err) {
-		fmt.Fprintf(c.Err, "stat workspace dir: %v\n", err)
-		return exitError
-	}
-
-	repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+	reopened, err := c.runWorkspaceSelectRiskResultFlow(flow, useColorOut)
 	if err != nil {
-		fmt.Fprintf(c.Err, "list workspace repos: %v\n", err)
-		return exitError
-	}
-
-	if err := os.Rename(archivePath, wsPath); err != nil {
-		fmt.Fprintf(c.Err, "restore workspace (rename): %v\n", err)
-		return exitError
-	}
-
-	if err := recreateWorkspaceWorktrees(ctx, db, root, repoPoolPath, workspaceID, repos); err != nil {
-		fmt.Fprintf(c.Err, "recreate worktrees: %v\n", err)
-		return exitError
-	}
-
-	if sha, err := commitReopenChange(ctx, root, workspaceID); err != nil {
-		_ = os.Rename(wsPath, archivePath)
-		fmt.Fprintf(c.Err, "commit reopen change: %v\n", err)
-		return exitError
-	} else {
-		now := time.Now().Unix()
-		if err := statestore.ReopenWorkspace(ctx, db, statestore.ReopenWorkspaceInput{
-			ID:                workspaceID,
-			ReopenedCommitSHA: sha,
-			Now:               now,
-		}); err != nil {
-			fmt.Fprintf(c.Err, "update state store: %v\n", err)
+		switch {
+		case errors.Is(err, errNoArchivedWorkspaces):
+			fmt.Fprintln(c.Err, "no archived workspaces available")
+			return exitError
+		case errors.Is(err, errSelectorCanceled):
+			c.debugf("ws reopen selector canceled")
+			fmt.Fprintln(c.Err, "aborted")
+			return exitError
+		case errors.Is(err, errWorkspaceFlowCanceled):
+			c.debugf("ws reopen canceled in flow")
+			return exitError
+		default:
+			fmt.Fprintf(c.Err, "run ws reopen flow: %v\n", err)
 			return exitError
 		}
 	}
 
-	fmt.Fprintf(c.Out, "reopened: %s\n", workspaceID)
-	c.debugf("ws reopen completed id=%s", workspaceID)
+	c.debugf("ws reopen completed reopened=%v", reopened)
 	return exitOK
+}
+
+func listArchivedWorkspaceCandidates(ctx context.Context, db *sql.DB) ([]workspaceSelectorCandidate, error) {
+	items, err := statestore.ListWorkspaces(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]workspaceSelectorCandidate, 0, len(items))
+	for _, it := range items {
+		if it.Status != "archived" {
+			continue
+		}
+		out = append(out, workspaceSelectorCandidate{
+			ID:          it.ID,
+			Description: strings.TrimSpace(it.Description),
+		})
+	}
+	return out, nil
+}
+
+func (c *CLI) reopenWorkspace(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string) error {
+	if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID); err != nil {
+		return fmt.Errorf("load workspace: %w", err)
+	} else if !ok {
+		return fmt.Errorf("workspace not found: %s", workspaceID)
+	} else if status != "archived" {
+		return fmt.Errorf("workspace is not archived (status=%s): %s", status, workspaceID)
+	}
+
+	archivePath := filepath.Join(root, "archive", workspaceID)
+	if fi, err := os.Stat(archivePath); err != nil {
+		return fmt.Errorf("stat archive dir: %w", err)
+	} else if !fi.IsDir() {
+		return fmt.Errorf("archive path is not a directory: %s", archivePath)
+	}
+
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	if _, err := os.Stat(wsPath); err == nil {
+		return fmt.Errorf("workspace directory already exists: %s", wsPath)
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("stat workspace dir: %w", err)
+	}
+
+	repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+	if err != nil {
+		return fmt.Errorf("list workspace repos: %w", err)
+	}
+
+	if err := os.Rename(archivePath, wsPath); err != nil {
+		return fmt.Errorf("restore workspace (rename): %w", err)
+	}
+
+	if err := recreateWorkspaceWorktrees(ctx, db, root, repoPoolPath, workspaceID, repos); err != nil {
+		return fmt.Errorf("recreate worktrees: %w", err)
+	}
+
+	sha, err := commitReopenChange(ctx, root, workspaceID)
+	if err != nil {
+		_ = os.Rename(wsPath, archivePath)
+		return fmt.Errorf("commit reopen change: %w", err)
+	}
+
+	now := time.Now().Unix()
+	if err := statestore.ReopenWorkspace(ctx, db, statestore.ReopenWorkspaceInput{
+		ID:                workspaceID,
+		ReopenedCommitSHA: sha,
+		Now:               now,
+	}); err != nil {
+		return fmt.Errorf("update state store: %w", err)
+	}
+
+	return nil
 }
 
 func ensureNoStagedChangesForReopen(ctx context.Context, root string) error {

@@ -212,7 +212,7 @@ It does not replace per-item dependencies.
 
 ## WS UX Polish (status-managed rollout)
 
-- [ ] UX-WS-001: Lifecycle concept + selector architecture spec
+- [x] UX-WS-001: Lifecycle concept + selector architecture spec
   - What: define canonical state transitions (`active -> archived -> purged`) and shared non-fullscreen selector UI.
     Also clarify `ws list` as read-only summary command (`--tree` as opt-in detail).
   - Specs:
@@ -222,7 +222,7 @@ It does not replace per-item dependencies.
   - Depends: MVP-042
   - Serial: yes (foundation for all ws UX changes)
 
-- [ ] UX-WS-002: `gionx ws close` selector-mode + bulk safety gate
+- [x] UX-WS-002: `gionx ws close` selector-mode + bulk safety gate
   - What: keep direct mode (`ws close <id>`) and add selector mode (`ws close`) with multi-select and all-or-nothing
     risk gate; enforce strict allowlist + gitignore abort policy for archive commits.
   - Specs:
@@ -240,7 +240,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-001, MVP-020
   - Parallel: yes (with UX-WS-002)
 
-- [ ] UX-WS-004: `gionx ws reopen` selector-mode
+- [x] UX-WS-004: `gionx ws reopen` selector-mode
   - What: keep direct mode (`ws reopen <id>`) and add selector mode (`ws reopen`) scoped to archived workspaces.
   - Specs:
     - `docs/spec/commands/ws/reopen.md`
@@ -248,7 +248,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-001, MVP-041
   - Parallel: yes
 
-- [ ] UX-WS-005: `gionx ws purge` selector-mode
+- [x] UX-WS-005: `gionx ws purge` selector-mode
   - What: keep direct mode (`ws purge <id>`) and add selector mode (`ws purge`) scoped to archived workspaces.
   - Specs:
     - `docs/spec/commands/ws/purge.md`

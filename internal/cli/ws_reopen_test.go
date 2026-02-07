@@ -289,3 +289,44 @@ func TestCLI_WS_Reopen_ErrorsWhenBranchCheckedOutElsewhere(t *testing.T) {
 		t.Fatalf("workspace status = %q, want %q", status, "archived")
 	}
 }
+
+func TestCLI_WS_Reopen_SelectorModeWithoutTTY_Errors(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "close", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		c.In = strings.NewReader("")
+
+		code := c.Run([]string{"ws", "reopen"})
+		if code != exitError {
+			t.Fatalf("ws reopen exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+		}
+		if !strings.Contains(err.String(), "interactive workspace selection requires a TTY") {
+			t.Fatalf("stderr missing non-tty error: %q", err.String())
+		}
+	}
+}
