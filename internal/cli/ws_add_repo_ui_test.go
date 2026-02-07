@@ -106,10 +106,10 @@ func TestResolveBranchInput_UsesRawInputWithoutPrefixEnforcement(t *testing.T) {
 	}
 }
 
-func TestResolveBranchInput_UsesDefaultOnlyWhenEmpty(t *testing.T) {
+func TestResolveBranchInput_KeepsEmptyWhenEmpty(t *testing.T) {
 	got := resolveBranchInput("", "TEST-010")
-	if got != "TEST-010" {
-		t.Fatalf("expected default branch for empty input, got=%q", got)
+	if got != "" {
+		t.Fatalf("expected empty branch for empty input, got=%q", got)
 	}
 }
 
