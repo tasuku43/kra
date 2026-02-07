@@ -41,6 +41,21 @@ func TestDefaultRepoPoolPath_UsesXDGDefaults(t *testing.T) {
 	}
 }
 
+func TestRegistryPath_UsesXDGDefaults(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_DATA_HOME", "")
+
+	got, err := RegistryPath()
+	if err != nil {
+		t.Fatalf("RegistryPath() err = %v", err)
+	}
+	want := filepath.Join(home, ".local", "share", "gionx", "registry.json")
+	if got != want {
+		t.Fatalf("RegistryPath() = %q, want %q", got, want)
+	}
+}
+
 func TestStateDBPathForRoot_UsesXDGOverridesAndDiffersByRoot(t *testing.T) {
 	root1 := filepath.Join(t.TempDir(), "gionroot1")
 	root2 := filepath.Join(t.TempDir(), "gionroot2")
@@ -76,6 +91,14 @@ func TestStateDBPathForRoot_UsesXDGOverridesAndDiffersByRoot(t *testing.T) {
 	}
 	if gotPool != filepath.Join(cacheHome, "gionx", "repo-pool") {
 		t.Fatalf("repo pool path = %q", gotPool)
+	}
+
+	gotRegistry, err := RegistryPath()
+	if err != nil {
+		t.Fatalf("RegistryPath() err = %v", err)
+	}
+	if gotRegistry != filepath.Join(dataHome, "gionx", "registry.json") {
+		t.Fatalf("registry path = %q", gotRegistry)
 	}
 }
 

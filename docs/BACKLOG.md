@@ -180,7 +180,7 @@ It does not replace per-item dependencies.
 
 ## Hardening / tests
 
-- [ ] MVP-050: `gionx state` foundation (registry)
+- [x] MVP-050: `gionx state` foundation (registry)
   - What: introduce registry metadata for root-scoped `state.db` discovery and hygiene workflows
   - Specs:
     - `docs/spec/commands/state/registry.md`

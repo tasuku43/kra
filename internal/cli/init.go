@@ -68,6 +68,10 @@ func (c *CLI) runInit(args []string) int {
 		fmt.Fprintf(c.Err, "initialize settings: %v\n", err)
 		return exitError
 	}
+	if err := c.touchStateRegistry(root, dbPath); err != nil {
+		fmt.Fprintf(c.Err, "update state registry: %v\n", err)
+		return exitError
+	}
 
 	fmt.Fprintf(c.Out, "initialized: %s\n", root)
 	c.debugf("init completed root=%s", root)

@@ -86,6 +86,10 @@ func (c *CLI) runWSCreate(args []string) int {
 		fmt.Fprintf(c.Err, "initialize settings: %v\n", err)
 		return exitError
 	}
+	if err := c.touchStateRegistry(root, dbPath); err != nil {
+		fmt.Fprintf(c.Err, "update state registry: %v\n", err)
+		return exitError
+	}
 
 	if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, id); err != nil {
 		fmt.Fprintf(c.Err, "load workspace: %v\n", err)

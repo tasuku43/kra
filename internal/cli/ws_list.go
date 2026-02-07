@@ -82,6 +82,10 @@ func (c *CLI) runWSList(args []string) int {
 		fmt.Fprintf(c.Err, "initialize settings: %v\n", err)
 		return exitError
 	}
+	if err := c.touchStateRegistry(root, dbPath); err != nil {
+		fmt.Fprintf(c.Err, "update state registry: %v\n", err)
+		return exitError
+	}
 
 	now := time.Now().Unix()
 	if err := importWorkspaceDirs(ctx, db, root, now); err != nil {

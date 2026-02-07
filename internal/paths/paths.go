@@ -37,6 +37,15 @@ func DefaultRepoPoolPath() (string, error) {
 	return filepath.Join(xdgCacheHome, "gionx", "repo-pool"), nil
 }
 
+// RegistryPath returns the global registry metadata path.
+func RegistryPath() (string, error) {
+	xdgDataHome, err := XDGDataHome()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(xdgDataHome, "gionx", "registry.json"), nil
+}
+
 // XDGDataHome resolves $XDG_DATA_HOME or falls back to ~/.local/share.
 func XDGDataHome() (string, error) {
 	if v := os.Getenv("XDG_DATA_HOME"); v != "" {
