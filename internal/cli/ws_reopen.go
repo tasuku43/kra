@@ -60,6 +60,10 @@ func (c *CLI) runWSReopen(args []string) int {
 		fmt.Fprintf(c.Err, "resolve GIONX_ROOT: %v\n", err)
 		return exitError
 	}
+	if err := c.ensureDebugLog(root, "ws-reopen"); err != nil {
+		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
+	}
+	c.debugf("run ws reopen id=%s", workspaceID)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -156,6 +160,7 @@ func (c *CLI) runWSReopen(args []string) int {
 	}
 
 	fmt.Fprintf(c.Out, "reopened: %s\n", workspaceID)
+	c.debugf("ws reopen completed id=%s", workspaceID)
 	return exitOK
 }
 

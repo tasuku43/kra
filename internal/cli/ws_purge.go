@@ -70,6 +70,10 @@ func (c *CLI) runWSPurge(args []string) int {
 		fmt.Fprintf(c.Err, "resolve GIONX_ROOT: %v\n", err)
 		return exitError
 	}
+	if err := c.ensureDebugLog(root, "ws-purge"); err != nil {
+		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
+	}
+	c.debugf("run ws purge id=%s noPrompt=%t force=%t", workspaceID, noPrompt, force)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -188,6 +192,7 @@ func (c *CLI) runWSPurge(args []string) int {
 	}
 
 	fmt.Fprintf(c.Out, "purged: %s (%s)\n", workspaceID, sha)
+	c.debugf("ws purge completed id=%s commit=%s", workspaceID, sha)
 	return exitOK
 }
 

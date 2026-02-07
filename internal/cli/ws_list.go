@@ -41,6 +41,10 @@ func (c *CLI) runWSList(args []string) int {
 		fmt.Fprintf(c.Err, "resolve GIONX_ROOT: %v\n", err)
 		return exitError
 	}
+	if err := c.ensureDebugLog(root, "ws-list"); err != nil {
+		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
+	}
+	c.debugf("run ws list")
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -101,6 +105,7 @@ func (c *CLI) runWSList(args []string) int {
 			it.Description,
 		)
 	}
+	c.debugf("ws list completed count=%d", len(items))
 	return exitOK
 }
 

@@ -7,7 +7,7 @@ import (
 
 func (c *CLI) printRootUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx <command> [args]
+  gionx [--debug] <command> [args]
 
 Commands:
   init              Initialize GIONX_ROOT

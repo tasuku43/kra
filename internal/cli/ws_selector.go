@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"bufio"
 	"errors"
 	"fmt"
 	"io"
@@ -9,9 +8,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-isatty"
 	"github.com/tasuku43/gion-core/workspacerisk"
-	"golang.org/x/term"
 )
 
 var errSelectorCanceled = errors.New("selector canceled")
@@ -20,6 +20,132 @@ type closeSelectorCandidate struct {
 	ID          string
 	Description string
 	Risk        workspacerisk.WorkspaceRisk
+}
+
+type closeSelectorModel struct {
+	candidates []closeSelectorCandidate
+	selected   map[int]bool
+	cursor     int
+	width      int
+	useColor   bool
+	debugf     func(string, ...any)
+	message    string
+	canceled   bool
+	done       bool
+}
+
+func newCloseSelectorModel(candidates []closeSelectorCandidate, useColor bool, debugf func(string, ...any)) closeSelectorModel {
+	if debugf == nil {
+		debugf = func(string, ...any) {}
+	}
+	return closeSelectorModel{
+		candidates: candidates,
+		selected:   make(map[int]bool, len(candidates)),
+		cursor:     0,
+		width:      80,
+		useColor:   useColor,
+		debugf:     debugf,
+	}
+}
+
+func (m closeSelectorModel) Init() tea.Cmd {
+	return nil
+}
+
+func (m closeSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		if msg.Width > 0 {
+			m.width = msg.Width
+		}
+		return m, nil
+	case tea.KeyMsg:
+		m.debugf("selector key type=%v runes=%q cursor=%d", msg.Type, string(msg.Runes), m.cursor)
+		switch msg.Type {
+		case tea.KeyCtrlC, tea.KeyEsc:
+			m.canceled = true
+			m.debugf("selector canceled")
+			return m, tea.Quit
+		case tea.KeyUp:
+			if m.cursor > 0 {
+				m.cursor--
+			}
+			m.message = ""
+			m.debugf("selector move up cursor=%d", m.cursor)
+			return m, nil
+		case tea.KeyDown:
+			if m.cursor < len(m.candidates)-1 {
+				m.cursor++
+			}
+			m.message = ""
+			m.debugf("selector move down cursor=%d", m.cursor)
+			return m, nil
+		case tea.KeySpace:
+			m.selected[m.cursor] = !m.selected[m.cursor]
+			m.message = ""
+			m.debugf("selector toggle cursor=%d selected=%t", m.cursor, m.selected[m.cursor])
+			return m, nil
+		case tea.KeyEnter:
+			if m.selectedCount() == 0 {
+				m.message = "at least one workspace must be selected"
+				m.debugf("selector enter rejected: no selection")
+				return m, nil
+			}
+			m.done = true
+			m.debugf("selector done selected=%v", m.selectedIDs())
+			return m, tea.Quit
+		}
+		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
+			switch msg.Runes[0] {
+			case 'j', 'J':
+				if m.cursor < len(m.candidates)-1 {
+					m.cursor++
+				}
+				m.message = ""
+				m.debugf("selector move down cursor=%d", m.cursor)
+				return m, nil
+			case 'k', 'K':
+				if m.cursor > 0 {
+					m.cursor--
+				}
+				m.message = ""
+				m.debugf("selector move up cursor=%d", m.cursor)
+				return m, nil
+			case ' ':
+				m.selected[m.cursor] = !m.selected[m.cursor]
+				m.message = ""
+				m.debugf("selector toggle cursor=%d selected=%t", m.cursor, m.selected[m.cursor])
+				return m, nil
+			}
+		}
+	}
+
+	return m, nil
+}
+
+func (m closeSelectorModel) View() string {
+	lines := renderCloseSelectorLines(m.candidates, m.selected, m.cursor, m.message, m.useColor, m.width)
+	return strings.Join(lines, "\n")
+}
+
+func (m closeSelectorModel) selectedCount() int {
+	count := 0
+	for _, picked := range m.selected {
+		if picked {
+			count++
+		}
+	}
+	return count
+}
+
+func (m closeSelectorModel) selectedIDs() []string {
+	ids := make([]string, 0, len(m.candidates))
+	for i, it := range m.candidates {
+		if m.selected[i] {
+			ids = append(ids, it.ID)
+		}
+	}
+	return ids
 }
 
 func (c *CLI) promptWorkspaceCloseSelector(candidates []closeSelectorCandidate) ([]string, error) {
@@ -33,119 +159,42 @@ func (c *CLI) promptWorkspaceCloseSelector(candidates []closeSelectorCandidate) 
 	}
 
 	useColor := writerSupportsColor(c.Err)
-
-	return runCloseSelector(inFile, c.Err, candidates, useColor)
+	return runCloseSelector(inFile, c.Err, candidates, useColor, c.debugf)
 }
 
-func runCloseSelector(in *os.File, out io.Writer, candidates []closeSelectorCandidate, useColor bool) ([]string, error) {
+func runCloseSelector(in *os.File, out io.Writer, candidates []closeSelectorCandidate, useColor bool, debugf func(string, ...any)) ([]string, error) {
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no workspace candidates")
 	}
 
-	state, err := term.MakeRaw(int(in.Fd()))
+	model := newCloseSelectorModel(candidates, useColor, debugf)
+	program := tea.NewProgram(
+		model,
+		tea.WithInput(in),
+		tea.WithOutput(out),
+		tea.WithoutSignalHandler(),
+	)
+
+	finalModel, err := program.Run()
 	if err != nil {
 		return nil, err
 	}
-	defer func() { _ = term.Restore(int(in.Fd()), state) }()
-
-	fmt.Fprint(out, "\x1b[?25l")
-	defer fmt.Fprint(out, "\x1b[?25h")
-
-	selected := make([]bool, len(candidates))
-	cursor := 0
-	message := ""
-	prevLines := 0
-
-	render := func() {
-		width, _, sizeErr := term.GetSize(int(in.Fd()))
-		if sizeErr != nil || width <= 0 {
-			width = 80
-		}
-		lines := renderCloseSelectorLines(candidates, selected, cursor, message, useColor, width)
-		if prevLines > 0 {
-			fmt.Fprintf(out, "\x1b[%dA", prevLines)
-		}
-		for _, line := range lines {
-			fmt.Fprintf(out, "\r\x1b[2K%s\n", line)
-		}
-		prevLines = len(lines)
+	m, ok := finalModel.(closeSelectorModel)
+	if !ok {
+		return nil, fmt.Errorf("unexpected selector model type")
+	}
+	if m.canceled {
+		return nil, errSelectorCanceled
 	}
 
-	render()
-	reader := bufio.NewReader(in)
-
-	for {
-		b, err := reader.ReadByte()
-		if err != nil {
-			return nil, err
-		}
-
-		switch b {
-		case 0x03: // Ctrl+C
-			return nil, errSelectorCanceled
-		case ' ': // Space
-			selected[cursor] = !selected[cursor]
-			message = ""
-			render()
-		case '\r', '\n': // Enter -> proceed
-			ids := make([]string, 0, len(candidates))
-			for i, picked := range selected {
-				if picked {
-					ids = append(ids, candidates[i].ID)
-				}
-			}
-			if len(ids) == 0 {
-				message = "at least one workspace must be selected"
-				render()
-				continue
-			}
-			return ids, nil
-		case 'j', 'J':
-			if cursor < len(candidates)-1 {
-				cursor++
-			}
-			message = ""
-			render()
-		case 'k', 'K':
-			if cursor > 0 {
-				cursor--
-			}
-			message = ""
-			render()
-		case 0x1b: // ESC sequence (arrow keys)
-			if reader.Buffered() == 0 {
-				return nil, errSelectorCanceled
-			}
-			b2, err := reader.ReadByte()
-			if err != nil {
-				return nil, err
-			}
-			if b2 != '[' {
-				return nil, errSelectorCanceled
-			}
-			b3, err := reader.ReadByte()
-			if err != nil {
-				return nil, err
-			}
-			switch b3 {
-			case 'A':
-				if cursor > 0 {
-					cursor--
-				}
-				message = ""
-				render()
-			case 'B':
-				if cursor < len(candidates)-1 {
-					cursor++
-				}
-				message = ""
-				render()
-			}
-		}
+	ids := m.selectedIDs()
+	if len(ids) == 0 {
+		return nil, errSelectorCanceled
 	}
+	return ids, nil
 }
 
-func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected []bool, cursor int, message string, useColor bool, termWidth int) []string {
+func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected map[int]bool, cursor int, message string, useColor bool, termWidth int) []string {
 	idWidth := len("workspace")
 	for _, it := range candidates {
 		if n := len(it.ID); n > idWidth {
@@ -160,8 +209,8 @@ func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected []bo
 	}
 
 	selectedCount := 0
-	for i := range candidates {
-		if selected[i] {
+	for _, picked := range selected {
+		if picked {
 			selectedCount++
 		}
 	}
@@ -181,14 +230,17 @@ func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected []bo
 		if i == cursor {
 			focus = ">"
 		}
+
 		mark := " "
 		if selected[i] {
 			mark = "x"
 		}
+
 		desc := strings.TrimSpace(it.Description)
 		if desc == "" {
 			desc = "(no description)"
 		}
+
 		idPlain := fmt.Sprintf("%-*s", idWidth, truncateDisplay(it.ID, idWidth))
 		prefixPlain := fmt.Sprintf("[%s] %s  ", mark, idPlain)
 		availableDescCols := maxCols - displayWidth(prefixPlain) - 2 // include focus + space
@@ -196,10 +248,11 @@ func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected []bo
 			availableDescCols = 8
 		}
 		desc = truncateDisplay(desc, availableDescCols)
+
 		idText := colorizeRiskID(idPlain, it.Risk, useColor)
 		prefix := fmt.Sprintf("[%s] %s  ", mark, idText)
-
 		bodyRaw := prefix + desc
+
 		lineRaw := focus + " " + bodyRaw
 		lineRaw = truncateDisplay(lineRaw, maxCols)
 
@@ -207,10 +260,10 @@ func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected []bo
 		if useColor {
 			bodyStyled := bodyRaw
 			if selected[i] {
-				bodyStyled = styleBold(bodyStyled, true)
+				bodyStyled = lipgloss.NewStyle().Bold(true).Render(bodyRaw)
 			}
 			if i == cursor {
-				focusAccent := "\x1b[96;1m>\x1b[0m "
+				focusAccent := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(">") + " "
 				line = focusAccent + bodyStyled
 			} else {
 				line = focus + " " + bodyStyled
@@ -218,6 +271,7 @@ func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected []bo
 		}
 		bodyLines = append(bodyLines, line)
 	}
+
 	footerRaw = truncateDisplay(footerRaw, maxCols)
 	footer = styleMuted(footerRaw, useColor)
 
@@ -231,7 +285,7 @@ func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected []bo
 	if strings.TrimSpace(message) == "" {
 		lines = append(lines, "")
 	} else if useColor {
-		lines = append(lines, "\x1b[90m"+truncateDisplay(message, maxCols)+"\x1b[0m")
+		lines = append(lines, styleMuted(truncateDisplay(message, maxCols), true))
 	} else {
 		lines = append(lines, truncateDisplay(message, maxCols))
 	}

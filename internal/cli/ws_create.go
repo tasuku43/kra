@@ -58,6 +58,10 @@ func (c *CLI) runWSCreate(args []string) int {
 		fmt.Fprintf(c.Err, "resolve GIONX_ROOT: %v\n", err)
 		return exitError
 	}
+	if err := c.ensureDebugLog(root, "ws-create"); err != nil {
+		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
+	}
+	c.debugf("run ws create id=%s noPrompt=%t", id, noPrompt)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -178,6 +182,7 @@ func (c *CLI) runWSCreate(args []string) int {
 	}
 
 	fmt.Fprintf(c.Out, "created: %s\n", wsPath)
+	c.debugf("ws create completed id=%s path=%s", id, wsPath)
 	return exitOK
 }
 

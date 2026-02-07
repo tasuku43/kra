@@ -35,6 +35,10 @@ func (c *CLI) runInit(args []string) int {
 		fmt.Fprintf(c.Err, "resolve GIONX_ROOT: %v\n", err)
 		return exitError
 	}
+	if err := c.ensureDebugLog(root, "init"); err != nil {
+		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
+	}
+	c.debugf("run init args=%q", args)
 
 	if err := ensureInitLayout(root); err != nil {
 		fmt.Fprintf(c.Err, "init layout: %v\n", err)
@@ -66,6 +70,7 @@ func (c *CLI) runInit(args []string) int {
 	}
 
 	fmt.Fprintf(c.Out, "initialized: %s\n", root)
+	c.debugf("init completed root=%s", root)
 	return exitOK
 }
 

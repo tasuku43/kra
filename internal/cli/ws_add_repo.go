@@ -62,6 +62,10 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		fmt.Fprintf(c.Err, "resolve GIONX_ROOT: %v\n", err)
 		return exitError
 	}
+	if err := c.ensureDebugLog(root, "ws-add-repo"); err != nil {
+		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
+	}
+	c.debugf("run ws add-repo workspace=%s repo=%s", workspaceID, repoSpecInput)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -264,5 +268,13 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	}
 
 	fmt.Fprintf(c.Out, "added: %s\n", worktreePath)
+	c.debugf(
+		"ws add-repo completed workspace=%s alias=%s branch=%s baseRef=%s path=%s",
+		workspaceID,
+		alias,
+		branch,
+		baseRefInput,
+		worktreePath,
+	)
 	return exitOK
 }

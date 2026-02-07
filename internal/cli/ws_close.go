@@ -54,6 +54,10 @@ func (c *CLI) runWSClose(args []string) int {
 		fmt.Fprintf(c.Err, "resolve GIONX_ROOT: %v\n", err)
 		return exitError
 	}
+	if err := c.ensureDebugLog(root, "ws-close"); err != nil {
+		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
+	}
+	c.debugf("run ws close args=%q", args)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -98,6 +102,7 @@ func (c *CLI) runWSClose(args []string) int {
 			return exitUsage
 		}
 		selectedIDs = append(selectedIDs, workspaceID)
+		c.debugf("ws close direct mode selected=%v", selectedIDs)
 	} else {
 		candidates, err := listActiveCloseCandidates(ctx, db, root)
 		if err != nil {
@@ -112,6 +117,7 @@ func (c *CLI) runWSClose(args []string) int {
 		ids, err := c.promptWorkspaceCloseSelector(candidates)
 		if err != nil {
 			if errors.Is(err, errSelectorCanceled) {
+				c.debugf("ws close selector canceled")
 				fmt.Fprintln(c.Err, "aborted")
 				return exitError
 			}
@@ -119,6 +125,7 @@ func (c *CLI) runWSClose(args []string) int {
 			return exitError
 		}
 		selectedIDs = ids
+		c.debugf("ws close selector mode selected=%v", selectedIDs)
 	}
 
 	riskItems, err := collectWorkspaceRiskDetails(ctx, db, root, selectedIDs)
@@ -127,6 +134,7 @@ func (c *CLI) runWSClose(args []string) int {
 		return exitError
 	}
 	if hasNonCleanRisk(riskItems) {
+		c.debugf("ws close risk detected count=%d", len(riskItems))
 		printRiskSection(c.Out, riskItems, useColorOut)
 		ok, err := c.confirmRiskProceed()
 		if err != nil {
@@ -134,6 +142,7 @@ func (c *CLI) runWSClose(args []string) int {
 			return exitError
 		}
 		if !ok {
+			c.debugf("ws close canceled at risk confirmation")
 			fmt.Fprintln(c.Out, renderResultTitle(useColorOut))
 			fmt.Fprintf(c.Out, "%saborted: canceled at Risk\n", uiIndent)
 			return exitError
@@ -142,11 +151,13 @@ func (c *CLI) runWSClose(args []string) int {
 
 	var archived []string
 	for _, workspaceID := range selectedIDs {
+		c.debugf("ws close archive start workspace=%s", workspaceID)
 		if err := c.closeWorkspace(ctx, db, root, repoPoolPath, workspaceID); err != nil {
 			fmt.Fprintf(c.Err, "close workspace %s: %v\n", workspaceID, err)
 			return exitError
 		}
 		archived = append(archived, workspaceID)
+		c.debugf("ws close archive completed workspace=%s", workspaceID)
 	}
 
 	fmt.Fprintln(c.Out, renderResultTitle(useColorOut))
@@ -154,6 +165,7 @@ func (c *CLI) runWSClose(args []string) int {
 	for _, id := range archived {
 		fmt.Fprintf(c.Out, "%s✔ %s\n", uiIndent, id)
 	}
+	c.debugf("ws close completed archived=%v", archived)
 	return exitOK
 }
 
