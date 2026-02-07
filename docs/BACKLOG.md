@@ -265,3 +265,64 @@ It does not replace per-item dependencies.
     - `docs/spec/commands/ws/selector.md`
   - Depends: UX-WS-001, MVP-021
   - Serial: yes (prevent UI drift across ws commands)
+
+- [ ] UX-WS-007: WS close wording consistency (`close` vs `archived`)
+  - What: unify user-facing wording to `close` (for command/action/result labels), while keeping internal lifecycle
+    state naming as `archived`.
+  - Specs:
+    - `docs/spec/commands/ws/close.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-002
+  - Serial: yes
+
+- [ ] UX-WS-008: Selector footer readability and truncation rules
+  - What: shorten key-hint text, define deterministic truncation behavior for narrow terminals, and keep
+    `selected: n/m` consistently visible.
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-001
+  - Parallel: yes
+
+- [ ] UX-WS-009: `ws list` row layout hardening
+  - What: lock default summary row order to `ID | risk | repos | description` with stable column alignment and
+    ellipsis policy.
+  - Specs:
+    - `docs/spec/commands/ws/list.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-006
+  - Serial: yes
+
+- [ ] UX-WS-010: Risk presentation policy (color-only)
+  - What: enforce color-only risk hints across ws selector/list surfaces (no textual risk tags in summary rows).
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/commands/ws/list.md`
+  - Depends: UX-WS-001
+  - Parallel: yes
+
+- [ ] UX-WS-011: Confirmation policy consistency
+  - What: keep `ws close` confirmation only when non-clean risk exists, and keep `ws purge` always-confirm policy
+    explicit in specs/tests.
+  - Specs:
+    - `docs/spec/commands/ws/close.md`
+    - `docs/spec/commands/ws/purge.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-002, UX-WS-005
+  - Parallel: yes
+
+- [ ] UX-WS-012: Selector keybind extensions (phase 1)
+  - What: add `/` filter, `a` select-all, and `A` clear-all to selector-mode commands.
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-001
+  - Parallel: yes
+
+- [ ] UX-WS-013: Section indentation consistency (Workspaces/Risk/Result)
+  - What: enforce shared indentation rules for selector footer/help and risk/confirm prompts so section body lines
+    consistently align under each heading.
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/commands/ws/purge.md`
+    - `docs/spec/commands/ws/close.md`
+  - Depends: UX-WS-001, UX-WS-005
+  - Parallel: yes

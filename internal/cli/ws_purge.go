@@ -183,9 +183,9 @@ func (c *CLI) runWSPurge(args []string) int {
 			if noPrompt {
 				return true, nil
 			}
-			prompt := "purge selected workspaces? this is permanent (y/N): "
+			prompt := fmt.Sprintf("%spurge selected workspaces? this is permanent (y/N): ", uiIndent)
 			if len(selectedIDs) == 1 {
-				prompt = fmt.Sprintf("purge workspace %s? this is permanent (y/N): ", selectedIDs[0])
+				prompt = fmt.Sprintf("%spurge workspace %s? this is permanent (y/N): ", uiIndent, selectedIDs[0])
 			}
 			ok, err := c.confirmContinue(prompt)
 			if err != nil {
@@ -197,7 +197,7 @@ func (c *CLI) runWSPurge(args []string) int {
 			if !hasActiveRisk {
 				return true, nil
 			}
-			return c.confirmContinue("workspace has risk; continue purging? (y/N): ")
+			return c.confirmContinue(fmt.Sprintf("%sworkspace has risk; continue purging? (y/N): ", uiIndent))
 		},
 		ApplyOne: func(item workspaceFlowSelection) error {
 			c.debugf("ws purge start workspace=%s", item.ID)

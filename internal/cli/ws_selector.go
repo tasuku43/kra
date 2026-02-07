@@ -25,12 +25,14 @@ type workspaceSelectorCandidate struct {
 type workspaceSelectorModel struct {
 	candidates []workspaceSelectorCandidate
 	selected   map[int]bool
-	cursor     int
+	cursor     int // cursor position within filtered indices
 	width      int
 	status     string
 	useColor   bool
 	debugf     func(string, ...any)
 	message    string
+	filter     string
+	filterMode bool
 	canceled   bool
 	done       bool
 }
@@ -62,32 +64,26 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, nil
 	case tea.KeyMsg:
-		m.debugf("selector key type=%v runes=%q cursor=%d", msg.Type, string(msg.Runes), m.cursor)
+		m.debugf("selector key type=%v runes=%q cursor=%d filter=%q filterMode=%t", msg.Type, string(msg.Runes), m.cursor, m.filter, m.filterMode)
 		switch msg.Type {
 		case tea.KeyCtrlC, tea.KeyEsc:
 			m.canceled = true
 			m.debugf("selector canceled")
 			return m, tea.Quit
-		case tea.KeyUp:
-			if m.cursor > 0 {
-				m.cursor--
+		case tea.KeyBackspace, tea.KeyDelete:
+			if m.filter != "" {
+				m.filter = trimLastRune(m.filter)
+				m.ensureCursorInFilteredRange()
+				m.message = ""
+				return m, nil
 			}
-			m.message = ""
-			m.debugf("selector move up cursor=%d", m.cursor)
-			return m, nil
-		case tea.KeyDown:
-			if m.cursor < len(m.candidates)-1 {
-				m.cursor++
-			}
-			m.message = ""
-			m.debugf("selector move down cursor=%d", m.cursor)
-			return m, nil
-		case tea.KeySpace:
-			m.selected[m.cursor] = !m.selected[m.cursor]
-			m.message = ""
-			m.debugf("selector toggle cursor=%d selected=%t", m.cursor, m.selected[m.cursor])
 			return m, nil
 		case tea.KeyEnter:
+			if m.filterMode {
+				m.filterMode = false
+				m.message = ""
+				return m, nil
+			}
 			if m.selectedCount() == 0 {
 				m.message = "at least one workspace must be selected"
 				m.debugf("selector enter rejected: no selection")
@@ -96,17 +92,69 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.done = true
 			m.debugf("selector done selected=%v", m.selectedIDs())
 			return m, tea.Quit
+		case tea.KeyUp:
+			if m.filterMode {
+				return m, nil
+			}
+			if m.cursor > 0 {
+				m.cursor--
+			}
+			m.message = ""
+			m.debugf("selector move up cursor=%d", m.cursor)
+			return m, nil
+		case tea.KeyDown:
+			if m.filterMode {
+				return m, nil
+			}
+			visible := m.filteredIndices()
+			if m.cursor < len(visible)-1 {
+				m.cursor++
+			}
+			m.message = ""
+			m.debugf("selector move down cursor=%d", m.cursor)
+			return m, nil
+		case tea.KeySpace:
+			if m.filterMode {
+				return m, nil
+			}
+			visible := m.filteredIndices()
+			if len(visible) == 0 {
+				m.message = "no workspaces match current filter"
+				return m, nil
+			}
+			idx := visible[m.cursor]
+			m.selected[idx] = !m.selected[idx]
+			m.message = ""
+			m.debugf("selector toggle idx=%d selected=%t", idx, m.selected[idx])
+			return m, nil
 		}
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
 			switch msg.Runes[0] {
+			case '/':
+				m.filterMode = true
+				m.message = ""
+				return m, nil
 			case 'j', 'J':
-				if m.cursor < len(m.candidates)-1 {
+				if m.filterMode {
+					m.filter += string(msg.Runes[0])
+					m.ensureCursorInFilteredRange()
+					m.message = ""
+					return m, nil
+				}
+				visible := m.filteredIndices()
+				if m.cursor < len(visible)-1 {
 					m.cursor++
 				}
 				m.message = ""
 				m.debugf("selector move down cursor=%d", m.cursor)
 				return m, nil
 			case 'k', 'K':
+				if m.filterMode {
+					m.filter += string(msg.Runes[0])
+					m.ensureCursorInFilteredRange()
+					m.message = ""
+					return m, nil
+				}
 				if m.cursor > 0 {
 					m.cursor--
 				}
@@ -114,10 +162,29 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.debugf("selector move up cursor=%d", m.cursor)
 				return m, nil
 			case ' ', '　':
-				m.selected[m.cursor] = !m.selected[m.cursor]
+				if m.filterMode {
+					m.filter += string(msg.Runes[0])
+					m.ensureCursorInFilteredRange()
+					m.message = ""
+					return m, nil
+				}
+				visible := m.filteredIndices()
+				if len(visible) == 0 {
+					m.message = "no workspaces match current filter"
+					return m, nil
+				}
+				idx := visible[m.cursor]
+				m.selected[idx] = !m.selected[idx]
 				m.message = ""
-				m.debugf("selector toggle cursor=%d selected=%t", m.cursor, m.selected[m.cursor])
+				m.debugf("selector toggle idx=%d selected=%t", idx, m.selected[idx])
 				return m, nil
+			default:
+				if m.filterMode {
+					m.filter += string(msg.Runes[0])
+					m.ensureCursorInFilteredRange()
+					m.message = ""
+					return m, nil
+				}
 			}
 		}
 	}
@@ -126,8 +193,27 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m workspaceSelectorModel) View() string {
-	lines := renderWorkspaceSelectorLines(m.status, m.candidates, m.selected, m.cursor, m.message, m.useColor, m.width)
+	lines := renderWorkspaceSelectorLines(m.status, m.candidates, m.selected, m.cursor, m.message, m.filter, m.filterMode, m.useColor, m.width)
 	return strings.Join(lines, "\n")
+}
+
+func (m *workspaceSelectorModel) ensureCursorInFilteredRange() {
+	visible := m.filteredIndices()
+	if len(visible) == 0 {
+		m.cursor = 0
+		return
+	}
+	if m.cursor < 0 {
+		m.cursor = 0
+		return
+	}
+	if m.cursor >= len(visible) {
+		m.cursor = len(visible) - 1
+	}
+}
+
+func (m workspaceSelectorModel) filteredIndices() []int {
+	return filteredCandidateIndices(m.candidates, m.filter)
 }
 
 func (m workspaceSelectorModel) selectedCount() int {
@@ -199,7 +285,7 @@ func runWorkspaceSelector(in *os.File, out io.Writer, status string, candidates 
 	return ids, nil
 }
 
-func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorCandidate, selected map[int]bool, cursor int, message string, useColor bool, termWidth int) []string {
+func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorCandidate, selected map[int]bool, cursor int, message string, filter string, filterMode bool, useColor bool, termWidth int) []string {
 	idWidth := len("workspace")
 	for _, it := range candidates {
 		if n := len(it.ID); n > idWidth {
@@ -219,9 +305,12 @@ func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorC
 			selectedCount++
 		}
 	}
+	visible := filteredCandidateIndices(candidates, filter)
+	totalVisible := len(visible)
+	filterLabel := strings.TrimSpace(filter)
 
 	titleLine := renderWorkspacesTitle(status, useColor)
-	footerRaw := fmt.Sprintf("selected: %d/%d  ↑↓ move  space toggle  enter proceed  esc/c-c cancel", selectedCount, len(candidates))
+	footerRaw := fmt.Sprintf("%sselected: %d/%d  ↑↓ move  space toggle  enter proceed  / filter  esc/c-c cancel", uiIndent, selectedCount, len(candidates))
 	footer := styleMuted(footerRaw, useColor)
 
 	if termWidth < 48 {
@@ -230,14 +319,22 @@ func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorC
 	maxCols := termWidth - 1
 
 	bodyLines := make([]string, 0, len(candidates))
-	for i, it := range candidates {
+	if totalVisible == 0 {
+		empty := uiIndent + "(no matches)"
+		if useColor {
+			empty = styleMuted(empty, true)
+		}
+		bodyLines = append(bodyLines, empty)
+	}
+	for visiblePos, sourceIdx := range visible {
+		it := candidates[sourceIdx]
 		focus := " "
-		if i == cursor {
+		if visiblePos == cursor {
 			focus = ">"
 		}
 
 		mark := " "
-		if selected[i] {
+		if selected[sourceIdx] {
 			mark = "x"
 		}
 
@@ -264,10 +361,10 @@ func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorC
 		line := lineRaw
 		if useColor {
 			bodyStyled := bodyRaw
-			if selected[i] {
+			if selected[sourceIdx] {
 				bodyStyled = lipgloss.NewStyle().Bold(true).Render(bodyRaw)
 			}
-			if i == cursor {
+			if visiblePos == cursor {
 				// Keep cursor emphasis visible but subtle across light/dark terminal themes.
 				bodyStyled = lipgloss.NewStyle().
 					Background(lipgloss.AdaptiveColor{Light: "252", Dark: "236"}).
@@ -289,6 +386,17 @@ func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorC
 	lines = append(lines, "")
 	lines = append(lines, bodyLines...)
 	lines = append(lines, "")
+	if filterLabel != "" {
+		filterLine := fmt.Sprintf("%sfilter: %s", uiIndent, truncateDisplay(filterLabel, maxCols-8))
+		if filterMode {
+			filterLine += " _"
+		}
+		if useColor {
+			lines = append(lines, styleMuted(filterLine, true))
+		} else {
+			lines = append(lines, filterLine)
+		}
+	}
 	lines = append(lines, footer)
 
 	if strings.TrimSpace(message) == "" {
@@ -300,6 +408,31 @@ func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorC
 	}
 
 	return lines
+}
+
+func filteredCandidateIndices(candidates []workspaceSelectorCandidate, filter string) []int {
+	query := strings.ToLower(strings.TrimSpace(filter))
+	out := make([]int, 0, len(candidates))
+	for i, c := range candidates {
+		if query == "" {
+			out = append(out, i)
+			continue
+		}
+		id := strings.ToLower(c.ID)
+		desc := strings.ToLower(c.Description)
+		if strings.Contains(id, query) || strings.Contains(desc, query) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+func trimLastRune(s string) string {
+	if s == "" {
+		return ""
+	}
+	runes := []rune(s)
+	return string(runes[:len(runes)-1])
 }
 
 func runeDisplayWidth(r rune) int {

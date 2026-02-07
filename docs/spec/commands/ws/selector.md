@@ -16,6 +16,8 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
 - `Space`: toggle check on focused row.
 - `Enter`: proceed with current selection.
 - `Esc` or `Ctrl+C`: cancel without side effects.
+- `/`: enter filter input mode.
+- Filter text must persist after selection toggle; it is cleared only when the user explicitly deletes it.
 
 ## TTY requirement
 
@@ -43,6 +45,9 @@ Section-style output should use consistent headings:
 
 Section body indentation must be controlled by shared global constants (no per-command hardcoded spaces).
 - Global section body indentation is fixed to two spaces.
+- Selector footer/status lines (for example `selected: n/m` and key hints) are part of section body and must use
+  the same two-space indentation.
+- Confirmation prompts shown under `Risk:` must follow the same body indentation.
 
 `<status>` color semantics (TTY):
 - `active`: accent/cool color
