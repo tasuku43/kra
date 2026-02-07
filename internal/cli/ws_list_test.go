@@ -10,6 +10,7 @@ import (
 
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
+	"github.com/tasuku43/gionx/internal/testutil"
 )
 
 func TestCLI_WS_List_Help_ShowsUsage(t *testing.T) {
@@ -158,5 +159,110 @@ WHERE workspace_id = 'WS1' AND repo_uid = 'github.com/o/r'
 	}
 	if missingAt == nil || *missingAt == 0 {
 		t.Fatalf("missing_at not set: %v", missingAt)
+	}
+}
+
+func TestCLI_WS_List_DefaultScopeShowsActiveOnlyAndNoSelectionMarker(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "create", "--no-prompt", "WS_ACTIVE"})
+		if code != exitOK {
+			t.Fatalf("ws create WS_ACTIVE exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "create", "--no-prompt", "WS_ARCHIVED"})
+		if code != exitOK {
+			t.Fatalf("ws create WS_ARCHIVED exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "close", "WS_ARCHIVED"})
+		if code != exitOK {
+			t.Fatalf("ws close WS_ARCHIVED exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "list"})
+	if code != exitOK {
+		t.Fatalf("ws list exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "Workspaces(active):") {
+		t.Fatalf("stdout missing active heading: %q", got)
+	}
+	if !strings.Contains(got, "WS_ACTIVE") {
+		t.Fatalf("stdout missing active workspace: %q", got)
+	}
+	if strings.Contains(got, "WS_ARCHIVED") {
+		t.Fatalf("stdout should not include archived workspace in default scope: %q", got)
+	}
+	if strings.Contains(got, "[ ]") || strings.Contains(got, "[x]") {
+		t.Fatalf("stdout must not include selector markers: %q", got)
+	}
+}
+
+func TestCLI_WS_List_ArchivedScopeShowsArchivedOnly(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "create", "--no-prompt", "WS_ACTIVE"})
+		if code != exitOK {
+			t.Fatalf("ws create WS_ACTIVE exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "create", "--no-prompt", "WS_ARCHIVED"})
+		if code != exitOK {
+			t.Fatalf("ws create WS_ARCHIVED exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "close", "WS_ARCHIVED"})
+		if code != exitOK {
+			t.Fatalf("ws close WS_ARCHIVED exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "list", "--archived"})
+	if code != exitOK {
+		t.Fatalf("ws list --archived exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "Workspaces(archived):") {
+		t.Fatalf("stdout missing archived heading: %q", got)
+	}
+	if !strings.Contains(got, "WS_ARCHIVED") {
+		t.Fatalf("stdout missing archived workspace: %q", got)
+	}
+	if strings.Contains(got, "WS_ACTIVE") {
+		t.Fatalf("stdout should not include active workspace in archived scope: %q", got)
 	}
 }
