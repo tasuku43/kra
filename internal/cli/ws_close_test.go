@@ -89,14 +89,15 @@ func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *te
 	}
 	runGit("", "clone", "--bare", src, remoteBare)
 	repoSpec := "file://" + remoteBare
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		c.In = strings.NewReader("\nWS1/test\n") // base_ref: empty (use default), branch: explicit
+		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
 
-		code := c.Run([]string{"ws", "add-repo", "WS1", repoSpec})
+		code := c.Run([]string{"ws", "add-repo", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
@@ -221,14 +222,15 @@ func TestCLI_WS_Close_DirtyRepo_PromptsAndCanAbort(t *testing.T) {
 	}
 	runGit("", "clone", "--bare", src, remoteBare)
 	repoSpec := "file://" + remoteBare
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		c.In = strings.NewReader("\nWS1/test\n")
+		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
 
-		code := c.Run([]string{"ws", "add-repo", "WS1", repoSpec})
+		code := c.Run([]string{"ws", "add-repo", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}

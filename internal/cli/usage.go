@@ -73,13 +73,17 @@ Options:
 
 func (c *CLI) printWSAddRepoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws add-repo <workspace-id> <repo>
+  gionx ws add-repo [<workspace-id>]
 
-Add a repository to a workspace as a Git worktree.
+Add repositories from the repo pool to a workspace.
 
 Inputs:
-  workspace-id       Existing workspace ID (must be active)
-  repo               Repo spec (git@... / https://... / file://...)
+  workspace-id       Existing active workspace ID (optional when running under workspaces/<id>/)
+
+Behavior:
+  - Select one or more repos from the existing bare repo pool.
+  - For each selected repo, input base_ref and branch.
+  - Show Plan, ask final confirmation, then create worktrees and bindings atomically.
 `)
 }
 

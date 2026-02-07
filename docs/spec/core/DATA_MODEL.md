@@ -136,3 +136,21 @@ Notes:
 - `workspace_repos(workspace_id)`
 - `workspace_repos(repo_uid)`
 - `repos(repo_key)`
+
+### `repo_usage_daily`
+
+Daily lightweight counters for repo selection ranking in `ws add-repo`.
+
+Primary key:
+- (`repo_uid`, `day`)
+
+Columns:
+- `repo_uid` (TEXT, NOT NULL)
+- `day` (INTEGER, NOT NULL) - local date key `YYYYMMDD`
+- `add_count` (INTEGER, NOT NULL) - count of successful add-repo operations on that day
+- `last_added_at` (INTEGER, NOT NULL) - unix epoch of last increment
+
+Notes:
+- This table is UX-oriented ranking metadata (not strict audit log).
+- Ranking currently uses 30-day simple sum (`SUM(add_count)` where `day >= start_day`).
+- Update timing is success-only: increment after `ws add-repo` completes successfully.

@@ -11,6 +11,7 @@ import (
 
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
+	"github.com/tasuku43/gionx/internal/testutil"
 )
 
 func TestCLI_Root_NoArgs_ShowsUsage(t *testing.T) {
@@ -506,6 +507,7 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 	t.Setenv("GIONX_ROOT", root)
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	env := testutil.Env{Root: root, DataHome: dataHome, CacheHome: cacheHome}
 
 	{
 		var out bytes.Buffer
@@ -522,10 +524,10 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		// base_ref: empty (use default), branch: explicit
-		c.In = strings.NewReader("\nMVP-020/test\n")
+		_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
+		c.In = strings.NewReader(addRepoSelectionInput("", "MVP-020/test"))
 
-		code := c.Run([]string{"ws", "add-repo", "MVP-020", repoSpec})
+		code := c.Run([]string{"ws", "add-repo", "MVP-020"})
 		if code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}

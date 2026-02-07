@@ -170,12 +170,13 @@ func TestCLI_WS_Purge_ActiveDirtyRepo_AsksSecondConfirmationAndCanAbort(t *testi
 	}
 
 	repoSpec := prepareRemoteRepoSpec(t, runGit)
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		c.In = strings.NewReader("\nWS1/test\n")
-		code := c.Run([]string{"ws", "add-repo", "WS1", repoSpec})
+		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
+		code := c.Run([]string{"ws", "add-repo", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}

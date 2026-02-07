@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tasuku43/gion-core/repospec"
 	"github.com/tasuku43/gion-core/repostore"
@@ -56,30 +57,39 @@ func TestCLI_WS_AddRepo_CorruptedRepoPool_FailsWithoutStateMutation(t *testing.T
 		t.Fatalf("write corrupted bare path: %v", err)
 	}
 
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader("\nWS1/test\n")
-		code := c.Run([]string{"ws", "add-repo", "WS1", repoSpec})
-		if code != exitError {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
-		}
-		if !strings.Contains(err.String(), "ensure bare repo") {
-			t.Fatalf("stderr missing ensure bare repo error: %q", err.String())
-		}
-	}
-
-	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1", "repos", "r")); err == nil {
-		t.Fatalf("worktree should not be created on failure")
-	}
-
 	ctx := context.Background()
 	db, err := statestore.Open(ctx, env.StateDBPath())
 	if err != nil {
 		t.Fatalf("Open(state db) error: %v", err)
 	}
 	t.Cleanup(func() { _ = db.Close() })
+	now := time.Now().Unix()
+	if err := statestore.EnsureRepo(ctx, db, statestore.EnsureRepoInput{
+		RepoUID:   "github.com/o/r",
+		RepoKey:   "o/r",
+		RemoteURL: repoSpec,
+		Now:       now,
+	}); err != nil {
+		t.Fatalf("EnsureRepo error: %v", err)
+	}
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
+		code := c.Run([]string{"ws", "add-repo", "WS1"})
+		if code != exitError {
+			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+		}
+		if !strings.Contains(err.String(), "no repos available in pool") {
+			t.Fatalf("stderr missing pool candidate error: %q", err.String())
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1", "repos", "r")); err == nil {
+		t.Fatalf("worktree should not be created on failure")
+	}
 
 	var cnt int
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workspace_repos WHERE workspace_id = ?", "WS1").Scan(&cnt); err != nil {
@@ -119,12 +129,13 @@ func TestCLI_WS_Close_RepoMetadataDrift_FailsWithoutArchiving(t *testing.T) {
 	}
 
 	repoSpec := prepareRemoteRepoSpec(t, runGit)
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		c.In = strings.NewReader("\nWS1/test\n")
-		code := c.Run([]string{"ws", "add-repo", "WS1", repoSpec})
+		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
+		code := c.Run([]string{"ws", "add-repo", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
