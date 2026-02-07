@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tasuku43/gion-core/workspacerisk"
 	"github.com/tasuku43/gionx/internal/statestore"
 	"github.com/tasuku43/gionx/internal/testutil"
 )
@@ -305,6 +306,40 @@ func TestCLI_WS_Close_SelectorModeWithoutTTY_Errors(t *testing.T) {
 
 	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); err != nil {
 		t.Fatalf("workspace should remain: %v", err)
+	}
+}
+
+func TestPrintCloseRiskSection_UsesSharedSpacingAndIndent(t *testing.T) {
+	var out bytes.Buffer
+	items := []workspaceRiskDetail{
+		{
+			id:   "WS1",
+			risk: workspacerisk.WorkspaceRiskDirty,
+			perRepo: []repoRiskItem{
+				{alias: "repo-a", state: workspacerisk.RepoStateDirty},
+			},
+		},
+		{
+			id:      "WS2",
+			risk:    workspacerisk.WorkspaceRiskClean,
+			perRepo: []repoRiskItem{{alias: "repo-b", state: workspacerisk.RepoStateClean}},
+		},
+	}
+
+	printRiskSection(&out, items, false)
+	got := out.String()
+
+	if !strings.HasPrefix(got, "Risk:\n\n") {
+		t.Fatalf("risk section should have one blank line after heading: %q", got)
+	}
+	if !strings.Contains(got, "\n  • WS1 [dirty]\n") {
+		t.Fatalf("workspace risk row should use shared indentation: %q", got)
+	}
+	if !strings.Contains(got, "\n    - repo-a [dirty]\n") {
+		t.Fatalf("repo risk detail indentation mismatch: %q", got)
+	}
+	if !strings.Contains(got, "\n  summary: clean=1 warning=0 danger=1\n  policy: all-or-nothing close\n") {
+		t.Fatalf("risk summary block mismatch: %q", got)
 	}
 }
 
