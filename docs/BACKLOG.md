@@ -188,7 +188,7 @@ It does not replace per-item dependencies.
   - Depends: MVP-002, MVP-003, MVP-010
   - Parallel: yes (independent from ws archive lifecycle)
 
-- [ ] MVP-051: `gionx context` (root switch fallback)
+- [x] MVP-051: `gionx context` (root switch fallback)
   - What: add context management and root resolution fallback when `GIONX_ROOT` is unset
   - Specs:
     - `docs/spec/commands/context.md`
