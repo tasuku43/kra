@@ -109,18 +109,18 @@ func TestWorkspaceSelectorModel_FilterPersistsAfterToggle(t *testing.T) {
 func TestWorkspaceSelectorModel_FilterClearsByDeleteOneRuneAtATime(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", "proceed", false, nil)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
 	next, ok := updated.(workspaceSelectorModel)
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
-	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("d")})
 	next, ok = updated.(workspaceSelectorModel)
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
-	if next.filter != "ab" {
-		t.Fatalf("filter = %q, want %q", next.filter, "ab")
+	if next.filter != "cd" {
+		t.Fatalf("filter = %q, want %q", next.filter, "cd")
 	}
 
 	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyBackspace})
@@ -128,7 +128,7 @@ func TestWorkspaceSelectorModel_FilterClearsByDeleteOneRuneAtATime(t *testing.T)
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
-	if next.filter != "a" {
+	if next.filter != "c" {
 		t.Fatalf("backspace should delete one rune from filter, got %q", next.filter)
 	}
 
@@ -139,6 +139,55 @@ func TestWorkspaceSelectorModel_FilterClearsByDeleteOneRuneAtATime(t *testing.T)
 	}
 	if next.filter != "" {
 		t.Fatalf("filter should be cleared only by explicit delete, got %q", next.filter)
+	}
+}
+
+func TestWorkspaceSelectorModel_LowerASelectsAllVisible(t *testing.T) {
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{
+		{ID: "WS1", Description: "abc", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS2", Description: "abx", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS3", Description: "zzz", Risk: workspacerisk.WorkspaceRiskClean},
+	}, "active", "proceed", false, nil)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	next, ok := updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
+	next, ok = updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if !next.selected[0] || !next.selected[1] {
+		t.Fatalf("lowercase a should select all visible rows: %#v", next.selected)
+	}
+	if next.selected[2] {
+		t.Fatalf("non-visible row should remain unchanged: %#v", next.selected)
+	}
+}
+
+func TestWorkspaceSelectorModel_UpperAClearsAllVisible(t *testing.T) {
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{
+		{ID: "WS1", Description: "abc", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS2", Description: "abx", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS3", Description: "zzz", Risk: workspacerisk.WorkspaceRiskClean},
+	}, "active", "proceed", false, nil)
+	m.selected[0] = true
+	m.selected[1] = true
+	m.selected[2] = true
+	m.filter = "b"
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("A")})
+	next, ok := updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if next.selected[0] || next.selected[1] {
+		t.Fatalf("uppercase A should clear visible selections: %#v", next.selected)
+	}
+	if !next.selected[2] {
+		t.Fatalf("non-visible selection should stay set: %#v", next.selected)
 	}
 }
 

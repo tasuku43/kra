@@ -16,6 +16,8 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
 - `Space`: toggle check on focused row.
 - `Enter`: proceed with current selection.
 - `Esc` or `Ctrl+C`: cancel without side effects.
+- `a`: select all visible rows (current filter result).
+- `A`: clear all visible rows (current filter result).
 - Text input is always treated as filter query input (no dedicated filter mode).
 - `Backspace` / `Delete`: remove one rune from filter query.
 - Filter text must persist after selection toggle; it is cleared only when the user explicitly deletes it.
@@ -37,7 +39,7 @@ Each row should include at least:
 Header/footer should show:
 - command mode (`close`, `go`, `reopen`, `purge`)
 - scope (`active` or `archived`)
-- key hints (`Space`, `Enter`, text filter input, `Esc`/`Ctrl+C`)
+- key hints (`Space`, `Enter`, `a`/`A`, text filter input, `Esc`/`Ctrl+C`)
 - `Enter` hint label should be command-specific action text (for example `enter close` for `ws close`).
 - Footer readability/truncation rule:
   - left-most `selected: n/m` must remain visible.

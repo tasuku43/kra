@@ -130,6 +130,12 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case ' ', '　':
 				m.toggleCurrentSelection()
 				return m, nil
+			case 'a':
+				m.setVisibleSelection(true)
+				return m, nil
+			case 'A':
+				m.setVisibleSelection(false)
+				return m, nil
 			default:
 				if isFilterAppendableRune(r) {
 					m.filter += string(r)
@@ -165,6 +171,23 @@ func (m *workspaceSelectorModel) toggleCurrentSelection() {
 	m.selected[idx] = !m.selected[idx]
 	m.message = ""
 	m.debugf("selector toggle idx=%d selected=%t", idx, m.selected[idx])
+}
+
+func (m *workspaceSelectorModel) setVisibleSelection(selected bool) {
+	visible := m.filteredIndices()
+	if len(visible) == 0 {
+		m.message = "no workspaces match current filter"
+		return
+	}
+	for _, idx := range visible {
+		m.selected[idx] = selected
+	}
+	m.message = ""
+	if selected {
+		m.debugf("selector select-all visible count=%d", len(visible))
+	} else {
+		m.debugf("selector clear-all visible count=%d", len(visible))
+	}
 }
 
 func (m *workspaceSelectorModel) ensureCursorInFilteredRange() {
@@ -397,6 +420,8 @@ func renderSelectorFooterLine(selectedCount int, total int, action string, maxCo
 		"↑↓ move",
 		"space toggle",
 		fmt.Sprintf("enter %s", action),
+		"a all",
+		"A none",
 		"type filter",
 		"esc cancel",
 	}
