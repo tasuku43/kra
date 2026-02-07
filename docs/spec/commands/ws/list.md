@@ -1,12 +1,9 @@
 ---
 title: "`gionx ws list`"
 status: implemented
-pending:
-  - UX-WS-001-selector-foundation
-  - UX-WS-001-list-role-clarification
 ---
 
-# `gionx ws list`
+# `gionx ws list [--archived] [--tree] [--format human|tsv]`
 
 ## Purpose
 
@@ -20,22 +17,46 @@ action commands (`ws close`, `ws go`, `ws reopen`, `ws purge`).
 - `ws list` only shows current state and exits (non-interactive).
 - Action execution belongs to `ws close/go/reopen/purge` selector flows.
 
-## Default display (planned refinement)
+## Default display
 
-- One row per workspace (summary view), with at least:
+- One row per workspace (summary view) using selector-parity visual hierarchy.
+- Row content is single-line and summary-first:
   - `id`
-  - `status`
-  - `risk` (badge-like token, e.g. `[clean]`, `[dirty]`, `[unpushed]`, `[unknown]`)
+  - `risk` (color-only indicator; no textual tag)
   - `repo_count`
-  - `updated_at`
   - `description`
+- Summary row order is fixed as `ID | risk | repos | description`.
+- Column alignment rules:
+  - `ID`, `risk`, and `repos` columns use fixed widths computed from the visible row set.
+  - `description` starts at a stable column for all rows.
+- Ellipsis policy:
+  - only `description` is truncated with `…` when terminal width is tight.
+  - row output width must not exceed the selected terminal width.
+- Header shows scope only:
+  - default: `Workspaces(active):`
+  - `--archived`: `Workspaces(archived):`
+- `status` is represented by scope, not repeated per row.
+- Summary output should follow the same shared row rendering semantics as selector flows
+  (`commands/ws/selector.md`), while remaining non-interactive.
+- Status label coloring must follow shared semantics from selector UI:
+  - `active`: active accent color
+  - `archived`: muted color (`text.muted`)
+  - no-color terminals: plain text fallback
+- Selector markers (`[ ]`, `[x]`) are not used in `ws list`.
+- Textual risk tags (`[clean]`, `[dirty]`, etc.) are not used in summary rows.
 
-## Expanded display (planned refinement)
+## Expanded display
 
 - `--tree` shows repo-level detail under each workspace row.
 - Default output remains summary-first to keep task-list UX and scripting usage simple.
 - Repo tree lines are supplemental information and should use muted/low-contrast styling consistent with
   `commands/ws/selector.md` visual rules.
+
+## Machine-readable output policy
+
+- `ws list` is specified as human-oriented task-list output in this UX phase.
+- Machine-readable output is explicit via `--format tsv`.
+- Default format is `human`.
 
 ## Display fields (MVP)
 

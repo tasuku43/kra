@@ -30,10 +30,16 @@ Implementation should reference these specs. When behavior changes, update the s
 - Concepts
   - `concepts/layout.md`: GIONX_ROOT layout and Git tracking policy
   - `concepts/state-store.md`: Global state store (SQLite) and migrations
+  - `concepts/ui-color.md`: CLI/TUI semantic color token policy
   - `concepts/workspace-lifecycle.md`: Workspace lifecycle state machine and transition policy
 - Commands
   - `commands/context.md`: `gionx context`
   - `commands/init.md`: `gionx init`
+  - `commands/repo/add.md`: `gionx repo add`
+  - `commands/repo/discover.md`: `gionx repo discover`
+  - `commands/repo/remove.md`: `gionx repo remove`
+  - `commands/repo/gc.md`: `gionx repo gc`
+  - `commands/shell/init.md`: `gionx shell init`
   - `commands/state/registry.md`: `gionx state` foundation (registry)
   - `commands/ws/selector.md`: Shared inline selector UI for workspace actions
   - `commands/ws/create.md`: `gionx ws create`

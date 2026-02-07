@@ -1,6 +1,6 @@
 ---
 title: "Workspace Lifecycle"
-status: planned
+status: implemented
 ---
 
 # Workspace Lifecycle
@@ -40,4 +40,3 @@ Disallowed transitions:
   - close/go: default scope is `active`
   - reopen/purge: default scope is `archived`
 - For visibility, commands may support explicit scope flags (for example `ws go --archived`).
-

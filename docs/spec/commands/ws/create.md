@@ -30,3 +30,13 @@ Create an empty workspace with scaffolding for notes/artifacts.
   - if `<id>` already exists as `archived`, guide the user to `gionx ws reopen <id>`
   - if `<id>` was previously purged, allow creating it again as a new generation
 - Do not create repos at this stage (repos are added via `ws add-repo`)
+
+## Output
+
+- Success output must use shared section style:
+  - `Result:`
+  - `  Created 1 / 1`
+  - `  ✔ <workspace-id>`
+  - `  path: <GIONX_ROOT/workspaces/<id>>`
+- `Result:` heading style follows shared UI token rules (`text.primary` + bold).
+- Summary line should follow shared result color semantics (`status.success` on success).

@@ -22,6 +22,9 @@ type CLI struct {
 	Version string
 
 	inReader *bufio.Reader
+	Debug    bool
+
+	debugSession debugSession
 }
 
 func New(out io.Writer, err io.Writer) *CLI {
@@ -35,6 +38,9 @@ func New(out io.Writer, err io.Writer) *CLI {
 
 func (c *CLI) Run(args []string) int {
 	c.inReader = bufio.NewReader(c.In)
+	c.Debug = false
+	args = c.consumeGlobalDebugFlag(args)
+	defer c.closeDebugLog()
 
 	if len(args) == 0 {
 		c.printRootUsage(c.Err)
@@ -50,6 +56,12 @@ func (c *CLI) Run(args []string) int {
 		return exitOK
 	case "init":
 		return c.runInit(args[1:])
+	case "context":
+		return c.runContext(args[1:])
+	case "repo":
+		return c.runRepo(args[1:])
+	case "shell":
+		return c.runShell(args[1:])
 	case "ws":
 		return c.runWS(args[1:])
 	default:
@@ -75,6 +87,8 @@ func (c *CLI) runWS(args []string) int {
 		return c.runWSList(args[1:])
 	case "add-repo":
 		return c.runWSAddRepo(args[1:])
+	case "go":
+		return c.runWSGo(args[1:])
 	case "close":
 		return c.runWSClose(args[1:])
 	case "reopen":
@@ -91,4 +105,16 @@ func (c *CLI) runWS(args []string) int {
 func (c *CLI) notImplemented(name string) int {
 	fmt.Fprintf(c.Err, "not implemented: %s\n", name)
 	return exitNotImplemented
+}
+
+func (c *CLI) consumeGlobalDebugFlag(args []string) []string {
+	filtered := make([]string, 0, len(args))
+	for _, arg := range args {
+		if arg == "--debug" {
+			c.Debug = true
+			continue
+		}
+		filtered = append(filtered, arg)
+	}
+	return filtered
 }

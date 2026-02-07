@@ -26,6 +26,11 @@ This spec exists so an agent (e.g. Agen2MD) can extract test requirements and ke
   - avoid relying on global user environment
 - When a command performs multiple phases (DB + FS + Git), ensure tests cover partial failure behavior.
 
+## UI color compliance check
+
+- Run `./scripts/lint-ui-color.sh` as part of the minimum quality gate.
+- Goal: prevent ad-hoc color drift by enforcing semantic color token usage.
+
 ## Drift / inconsistency scenarios
 
 The following are examples of "typical" drift/inconsistency scenarios.

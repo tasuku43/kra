@@ -64,6 +64,7 @@ To support multiple Git hosts (e.g. GitHub and GitLab), `gionx` distinguishes:
 ## Locations (defaults)
 
 - State store (data): `~/.local/share/gionx/roots/<root-hash>/state.db`
+- State registry (data): `~/.local/share/gionx/registry.json`
 - Repo pool (cache): `~/.cache/gionx/repo-pool/`
 
 XDG environment variables may override these defaults:
@@ -72,6 +73,22 @@ XDG environment variables may override these defaults:
 
 Notes:
 - When `$XDG_*_HOME` is set, it is used as-is (then joined with `gionx/...`).
+
+## State registry foundation
+
+`gionx` keeps a registry file to track root-scoped state DB usage metadata.
+
+- Path: `XDG_DATA_HOME/gionx/registry.json`
+- Entry fields:
+  - `root_path` (absolute canonical path, unique)
+  - `state_db_path`
+  - `first_seen_at`
+  - `last_used_at` (monotonic non-decreasing)
+
+MVP integration updates registry entries from current state-open command paths:
+- `init`
+- `ws create`
+- `ws list`
 
 ## SQLite + migrations
 
@@ -86,3 +103,6 @@ Recommended approach:
 SQLite note:
 - foreign key constraints are only enforced when `PRAGMA foreign_keys = ON` is set.
   `gionx` should enable it for every connection.
+For repository intake, `gionx repo add` / `gionx repo discover` use a hybrid model:
+- shared physical bare pool (`repo_pool_path`)
+- root-local logical registry (`repos` table in each root state DB)

@@ -2,7 +2,10 @@ package cli
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -13,6 +16,12 @@ import (
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
 )
+
+type purgeWorkspaceMeta struct {
+	status  string
+	risk    workspacerisk.WorkspaceRisk
+	perRepo []repoRiskItem
+}
 
 func (c *CLI) runWSPurge(args []string) int {
 	var noPrompt bool
@@ -35,10 +44,6 @@ func (c *CLI) runWSPurge(args []string) int {
 		}
 	}
 
-	if len(args) == 0 {
-		c.printWSPurgeUsage(c.Err)
-		return exitUsage
-	}
 	if len(args) > 1 {
 		fmt.Fprintf(c.Err, "unexpected args for ws purge: %q\n", strings.Join(args[1:], " "))
 		c.printWSPurgeUsage(c.Err)
@@ -48,11 +53,18 @@ func (c *CLI) runWSPurge(args []string) int {
 		fmt.Fprintln(c.Err, "--no-prompt requires --force for ws purge")
 		return exitUsage
 	}
-
-	workspaceID := args[0]
-	if err := validateWorkspaceID(workspaceID); err != nil {
-		fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
+	if noPrompt && len(args) == 0 {
+		fmt.Fprintln(c.Err, "--no-prompt selector mode is not supported; pass <id> with --force")
 		return exitUsage
+	}
+
+	directWorkspaceID := ""
+	if len(args) == 1 {
+		directWorkspaceID = args[0]
+		if err := validateWorkspaceID(directWorkspaceID); err != nil {
+			fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
+			return exitUsage
+		}
 	}
 
 	if err := gitutil.EnsureGitInPath(); err != nil {
@@ -70,6 +82,10 @@ func (c *CLI) runWSPurge(args []string) int {
 		fmt.Fprintf(c.Err, "resolve GIONX_ROOT: %v\n", err)
 		return exitError
 	}
+	if err := c.ensureDebugLog(root, "ws-purge"); err != nil {
+		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
+	}
+	c.debugf("run ws purge args=%q noPrompt=%t force=%t", args, noPrompt, force)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -103,79 +119,211 @@ func (c *CLI) runWSPurge(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
+	useColorOut := writerSupportsColor(c.Out)
 
-	status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID)
+	selectedIDs := make([]string, 0, 4)
+	riskMeta := make(map[string]purgeWorkspaceMeta, 4)
+	hasActiveRisk := false
+
+	flow := workspaceSelectRiskResultFlowConfig{
+		FlowName: "ws purge",
+		SelectItems: func() ([]workspaceFlowSelection, error) {
+			if directWorkspaceID != "" {
+				selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
+				c.debugf("ws purge direct mode selected=%v", workspaceFlowSelectionIDs(selected))
+				return selected, nil
+			}
+
+			candidates, err := listWorkspaceCandidatesByStatus(ctx, db, "archived")
+			if err != nil {
+				return nil, fmt.Errorf("list archived workspaces: %w", err)
+			}
+			if len(candidates) == 0 {
+				return nil, errNoArchivedWorkspaces
+			}
+
+			ids, err := c.promptWorkspaceSelector("archived", "purge", candidates)
+			if err != nil {
+				return nil, err
+			}
+			c.debugf("ws purge selector mode selected=%v", ids)
+			selected := make([]workspaceFlowSelection, 0, len(ids))
+			for _, id := range ids {
+				selected = append(selected, workspaceFlowSelection{ID: id})
+			}
+			return selected, nil
+		},
+		CollectRiskStage: func(items []workspaceFlowSelection) (workspaceFlowRiskStage, error) {
+			selectedIDs = workspaceFlowSelectionIDs(items)
+			riskMeta = make(map[string]purgeWorkspaceMeta, len(items))
+			hasActiveRisk = false
+			for _, id := range selectedIDs {
+				meta, err := collectPurgeWorkspaceMeta(ctx, db, root, id)
+				if err != nil {
+					return workspaceFlowRiskStage{}, err
+				}
+				riskMeta[id] = meta
+				if meta.status == "active" && meta.risk != workspacerisk.WorkspaceRiskClean {
+					hasActiveRisk = true
+				}
+			}
+
+			if noPrompt {
+				return workspaceFlowRiskStage{}, nil
+			}
+
+			return workspaceFlowRiskStage{
+				HasRisk: true,
+				Print: func(useColor bool) {
+					printPurgeRiskSection(c.Out, selectedIDs, riskMeta, useColor)
+				},
+			}, nil
+		},
+		ConfirmRisk: func() (bool, error) {
+			if noPrompt {
+				return true, nil
+			}
+			prompt := fmt.Sprintf("%spurge selected workspaces? this is permanent (y/N): ", uiIndent)
+			if len(selectedIDs) == 1 {
+				prompt = fmt.Sprintf("%spurge workspace %s? this is permanent (y/N): ", uiIndent, selectedIDs[0])
+			}
+			ok, err := c.confirmContinue(prompt)
+			if err != nil {
+				return false, err
+			}
+			if !ok {
+				return false, nil
+			}
+			if !hasActiveRisk {
+				return true, nil
+			}
+			return c.confirmContinue(fmt.Sprintf("%sworkspace has risk; continue purging? (y/N): ", uiIndent))
+		},
+		ApplyOne: func(item workspaceFlowSelection) error {
+			c.debugf("ws purge start workspace=%s", item.ID)
+			if err := c.purgeWorkspace(ctx, db, root, repoPoolPath, item.ID); err != nil {
+				return err
+			}
+			c.debugf("ws purge completed workspace=%s", item.ID)
+			return nil
+		},
+		ResultVerb: "Purged",
+		ResultMark: "✔",
+	}
+
+	purged, err := c.runWorkspaceSelectRiskResultFlow(flow, useColorOut)
 	if err != nil {
-		fmt.Fprintf(c.Err, "load workspace: %v\n", err)
-		return exitError
-	}
-	if !ok {
-		fmt.Fprintf(c.Err, "workspace not found: %s\n", workspaceID)
-		return exitError
-	}
-	if status != "active" && status != "archived" {
-		fmt.Fprintf(c.Err, "workspace cannot be purged (status=%s): %s\n", status, workspaceID)
-		return exitError
-	}
-
-	if !noPrompt {
-		ok, err := c.confirmContinue(fmt.Sprintf("purge workspace %s? this is permanent (y/N): ", workspaceID))
-		if err != nil {
-			fmt.Fprintf(c.Err, "read confirmation: %v\n", err)
+		switch {
+		case errors.Is(err, errNoArchivedWorkspaces):
+			fmt.Fprintln(c.Err, "no archived workspaces available")
 			return exitError
-		}
-		if !ok {
+		case errors.Is(err, errSelectorCanceled):
+			c.debugf("ws purge selector canceled")
 			fmt.Fprintln(c.Err, "aborted")
 			return exitError
+		case errors.Is(err, errWorkspaceFlowCanceled):
+			c.debugf("ws purge canceled in flow")
+			return exitError
+		default:
+			fmt.Fprintf(c.Err, "run ws purge flow: %v\n", err)
+			return exitError
 		}
+	}
+
+	c.debugf("ws purge done=%v", purged)
+	return exitOK
+}
+
+func collectPurgeWorkspaceMeta(ctx context.Context, db *sql.DB, root string, workspaceID string) (purgeWorkspaceMeta, error) {
+	status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID)
+	if err != nil {
+		return purgeWorkspaceMeta{}, fmt.Errorf("load workspace: %w", err)
+	}
+	if !ok {
+		return purgeWorkspaceMeta{}, fmt.Errorf("workspace not found: %s", workspaceID)
+	}
+	if status != "active" && status != "archived" {
+		return purgeWorkspaceMeta{}, fmt.Errorf("workspace cannot be purged (status=%s): %s", status, workspaceID)
+	}
+
+	meta := purgeWorkspaceMeta{status: status, risk: workspacerisk.WorkspaceRiskClean}
+	if status != "active" {
+		return meta, nil
 	}
 
 	repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
 	if err != nil {
-		fmt.Fprintf(c.Err, "list workspace repos: %v\n", err)
-		return exitError
+		return purgeWorkspaceMeta{}, fmt.Errorf("list workspace repos: %w", err)
 	}
+	risk, perRepo := inspectWorkspaceRepoRisk(ctx, root, workspaceID, repos)
+	meta.risk = risk
+	meta.perRepo = perRepo
+	return meta, nil
+}
 
-	if status == "active" {
-		risk, perRepo := inspectWorkspaceRepoRisk(ctx, root, workspaceID, repos)
-		if risk != workspacerisk.WorkspaceRiskClean && !noPrompt {
-			fmt.Fprintf(c.Err, "workspace risk=%s: %s\n", risk, workspaceID)
-			for _, it := range perRepo {
-				fmt.Fprintf(c.Err, "- %s\t%s\n", it.alias, it.state)
-			}
+func printPurgeRiskSection(out io.Writer, selectedIDs []string, riskMeta map[string]purgeWorkspaceMeta, useColor bool) {
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, renderRiskTitle(useColor))
+	fmt.Fprintln(out)
+	fmt.Fprintf(out, "%spurge is permanent and cannot be undone.\n", uiIndent)
+	fmt.Fprintf(out, "%sselected: %d\n", uiIndent, len(selectedIDs))
 
-			ok, err := c.confirmContinue("workspace has risk; continue purging? (y/N): ")
-			if err != nil {
-				fmt.Fprintf(c.Err, "read confirmation: %v\n", err)
-				return exitError
-			}
-			if !ok {
-				fmt.Fprintln(c.Err, "aborted")
-				return exitError
-			}
+	hasRepoRisk := false
+	for _, id := range selectedIDs {
+		meta := riskMeta[id]
+		if meta.status == "active" && meta.risk != workspacerisk.WorkspaceRiskClean {
+			hasRepoRisk = true
+			break
 		}
 	}
+	if !hasRepoRisk {
+		return
+	}
 
+	fmt.Fprintf(out, "%sactive workspace risk detected:\n", uiIndent)
+	for _, id := range selectedIDs {
+		meta := riskMeta[id]
+		if meta.status != "active" || meta.risk == workspacerisk.WorkspaceRiskClean {
+			continue
+		}
+		fmt.Fprintf(out, "%s- %s [%s]\n", uiIndent, id, meta.risk)
+		for _, repo := range meta.perRepo {
+			fmt.Fprintf(out, "%s  - %s\t%s\n", uiIndent, repo.alias, repo.state)
+		}
+	}
+}
+
+func (c *CLI) purgeWorkspace(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string) error {
+	status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID)
+	if err != nil {
+		return fmt.Errorf("load workspace: %w", err)
+	}
+	if !ok {
+		return fmt.Errorf("workspace not found: %s", workspaceID)
+	}
+	if status != "active" && status != "archived" {
+		return fmt.Errorf("workspace cannot be purged (status=%s): %s", status, workspaceID)
+	}
+
+	repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+	if err != nil {
+		return fmt.Errorf("list workspace repos: %w", err)
+	}
 	if err := removeWorkspaceWorktrees(ctx, db, root, repoPoolPath, workspaceID, repos); err != nil {
-		fmt.Fprintf(c.Err, "remove worktrees: %v\n", err)
-		return exitError
+		return fmt.Errorf("remove worktrees: %w", err)
 	}
 
 	wsPath := filepath.Join(root, "workspaces", workspaceID)
 	if err := os.RemoveAll(wsPath); err != nil {
-		fmt.Fprintf(c.Err, "delete workspace dir: %v\n", err)
-		return exitError
+		return fmt.Errorf("delete workspace dir: %w", err)
 	}
 	archivePath := filepath.Join(root, "archive", workspaceID)
 	if err := os.RemoveAll(archivePath); err != nil {
-		fmt.Fprintf(c.Err, "delete archive dir: %v\n", err)
-		return exitError
+		return fmt.Errorf("delete archive dir: %w", err)
 	}
 
-	sha, err := commitPurgeChange(ctx, root, workspaceID)
-	if err != nil {
-		fmt.Fprintf(c.Err, "commit purge change: %v\n", err)
-		return exitError
+	if _, err := commitPurgeChange(ctx, root, workspaceID); err != nil {
+		return fmt.Errorf("commit purge change: %w", err)
 	}
 
 	now := time.Now().Unix()
@@ -183,12 +331,9 @@ func (c *CLI) runWSPurge(args []string) int {
 		ID:  workspaceID,
 		Now: now,
 	}); err != nil {
-		fmt.Fprintf(c.Err, "update state store: %v\n", err)
-		return exitError
+		return fmt.Errorf("update state store: %w", err)
 	}
-
-	fmt.Fprintf(c.Out, "purged: %s (%s)\n", workspaceID, sha)
-	return exitOK
+	return nil
 }
 
 func commitPurgeChange(ctx context.Context, root string, workspaceID string) (string, error) {

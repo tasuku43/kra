@@ -201,3 +201,229 @@ VALUES (?, ?, ?, ?, ?, ?, ?, NULL, ?, ?)
 	}
 	return nil
 }
+
+func DeleteWorkspaceRepoBinding(ctx context.Context, db *sql.DB, workspaceID string, repoUID string) error {
+	workspaceID = strings.TrimSpace(workspaceID)
+	repoUID = strings.TrimSpace(repoUID)
+	if workspaceID == "" {
+		return fmt.Errorf("workspace id is required")
+	}
+	if repoUID == "" {
+		return fmt.Errorf("repo uid is required")
+	}
+	if _, err := db.ExecContext(ctx, `
+DELETE FROM workspace_repos
+WHERE workspace_id = ? AND repo_uid = ?
+`, workspaceID, repoUID); err != nil {
+		return fmt.Errorf("delete workspace repo binding: %w", err)
+	}
+	return nil
+}
+
+func TouchRepoUpdatedAt(ctx context.Context, db *sql.DB, repoUID string, now int64) error {
+	repoUID = strings.TrimSpace(repoUID)
+	if repoUID == "" {
+		return fmt.Errorf("repo uid is required")
+	}
+	if now <= 0 {
+		now = time.Now().Unix()
+	}
+	if _, err := db.ExecContext(ctx, "UPDATE repos SET updated_at = ? WHERE repo_uid = ?", now, repoUID); err != nil {
+		return fmt.Errorf("touch repo updated_at: %w", err)
+	}
+	return nil
+}
+
+type RepoPoolCandidate struct {
+	RepoUID   string
+	RepoKey   string
+	RemoteURL string
+	UpdatedAt int64
+	Score30d  int
+}
+
+type RootRepoCandidate struct {
+	RepoUID           string
+	RepoKey           string
+	RemoteURL         string
+	UpdatedAt         int64
+	Score30d          int
+	WorkspaceRefCount int
+}
+
+func ListRepoPoolCandidates(ctx context.Context, db *sql.DB, startDay int) ([]RepoPoolCandidate, error) {
+	rows, err := db.QueryContext(ctx, `
+SELECT
+  r.repo_uid,
+  r.repo_key,
+  r.remote_url,
+  r.updated_at,
+  COALESCE(SUM(u.add_count), 0) AS score_30d
+FROM repos r
+LEFT JOIN repo_usage_daily u
+  ON u.repo_uid = r.repo_uid
+ AND u.day >= ?
+GROUP BY r.repo_uid, r.repo_key, r.remote_url, r.updated_at
+ORDER BY score_30d DESC, r.updated_at DESC, r.repo_key ASC
+`, startDay)
+	if err != nil {
+		return nil, fmt.Errorf("query repo pool candidates: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]RepoPoolCandidate, 0, 32)
+	for rows.Next() {
+		var it RepoPoolCandidate
+		if err := rows.Scan(&it.RepoUID, &it.RepoKey, &it.RemoteURL, &it.UpdatedAt, &it.Score30d); err != nil {
+			return nil, fmt.Errorf("scan repo pool candidate: %w", err)
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate repo pool candidates: %w", err)
+	}
+	return out, nil
+}
+
+func IncrementRepoUsageDaily(ctx context.Context, db *sql.DB, repoUID string, day int, now int64) error {
+	repoUID = strings.TrimSpace(repoUID)
+	if repoUID == "" {
+		return fmt.Errorf("repo uid is required")
+	}
+	if day <= 0 {
+		return fmt.Errorf("day is required")
+	}
+	if now <= 0 {
+		now = time.Now().Unix()
+	}
+
+	if _, err := db.ExecContext(ctx, `
+INSERT INTO repo_usage_daily (repo_uid, day, add_count, last_added_at)
+VALUES (?, ?, 1, ?)
+ON CONFLICT(repo_uid, day)
+DO UPDATE SET
+  add_count = add_count + 1,
+  last_added_at = excluded.last_added_at
+`, repoUID, day, now); err != nil {
+		return fmt.Errorf("increment repo_usage_daily: %w", err)
+	}
+	return nil
+}
+
+func ListRepoUIDs(ctx context.Context, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
+SELECT repo_uid
+FROM repos
+ORDER BY repo_uid
+`)
+	if err != nil {
+		return nil, fmt.Errorf("query repo_uids: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]string, 0, 32)
+	for rows.Next() {
+		var repoUID string
+		if err := rows.Scan(&repoUID); err != nil {
+			return nil, fmt.Errorf("scan repo_uid: %w", err)
+		}
+		out = append(out, repoUID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate repo_uids: %w", err)
+	}
+	return out, nil
+}
+
+func ListWorkspaceRepoUIDs(ctx context.Context, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
+SELECT DISTINCT repo_uid
+FROM workspace_repos
+ORDER BY repo_uid
+`)
+	if err != nil {
+		return nil, fmt.Errorf("query workspace repo_uids: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]string, 0, 32)
+	for rows.Next() {
+		var repoUID string
+		if err := rows.Scan(&repoUID); err != nil {
+			return nil, fmt.Errorf("scan workspace repo_uid: %w", err)
+		}
+		out = append(out, repoUID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate workspace repo_uids: %w", err)
+	}
+	return out, nil
+}
+
+func ListRootRepoCandidates(ctx context.Context, db *sql.DB, startDay int) ([]RootRepoCandidate, error) {
+	rows, err := db.QueryContext(ctx, `
+SELECT
+  r.repo_uid,
+  r.repo_key,
+  r.remote_url,
+  r.updated_at,
+  COALESCE(SUM(u.add_count), 0) AS score_30d,
+  COUNT(DISTINCT wr.workspace_id) AS workspace_ref_count
+FROM repos r
+LEFT JOIN repo_usage_daily u
+  ON u.repo_uid = r.repo_uid
+ AND u.day >= ?
+LEFT JOIN workspace_repos wr
+  ON wr.repo_uid = r.repo_uid
+GROUP BY r.repo_uid, r.repo_key, r.remote_url, r.updated_at
+ORDER BY score_30d DESC, r.updated_at DESC, r.repo_key ASC
+`, startDay)
+	if err != nil {
+		return nil, fmt.Errorf("query root repo candidates: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]RootRepoCandidate, 0, 32)
+	for rows.Next() {
+		var it RootRepoCandidate
+		if err := rows.Scan(&it.RepoUID, &it.RepoKey, &it.RemoteURL, &it.UpdatedAt, &it.Score30d, &it.WorkspaceRefCount); err != nil {
+			return nil, fmt.Errorf("scan root repo candidate: %w", err)
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate root repo candidates: %w", err)
+	}
+	return out, nil
+}
+
+func DeleteReposByUIDs(ctx context.Context, db *sql.DB, repoUIDs []string) error {
+	if len(repoUIDs) == 0 {
+		return nil
+	}
+	placeholders := make([]string, 0, len(repoUIDs))
+	args := make([]any, 0, len(repoUIDs))
+	for _, repoUID := range repoUIDs {
+		repoUID = strings.TrimSpace(repoUID)
+		if repoUID == "" {
+			return fmt.Errorf("repo uid is required")
+		}
+		placeholders = append(placeholders, "?")
+		args = append(args, repoUID)
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	query := fmt.Sprintf("DELETE FROM repos WHERE repo_uid IN (%s)", strings.Join(placeholders, ","))
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("delete repos: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
+}

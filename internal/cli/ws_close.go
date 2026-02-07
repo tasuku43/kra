@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,6 +19,8 @@ import (
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
 )
+
+var errNoActiveWorkspaces = errors.New("no active workspaces available")
 
 func (c *CLI) runWSClose(args []string) int {
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
@@ -31,19 +35,9 @@ func (c *CLI) runWSClose(args []string) int {
 		}
 	}
 
-	if len(args) == 0 {
-		c.printWSCloseUsage(c.Err)
-		return exitUsage
-	}
 	if len(args) > 1 {
 		fmt.Fprintf(c.Err, "unexpected args for ws close: %q\n", strings.Join(args[1:], " "))
 		c.printWSCloseUsage(c.Err)
-		return exitUsage
-	}
-
-	workspaceID := args[0]
-	if err := validateWorkspaceID(workspaceID); err != nil {
-		fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
 		return exitUsage
 	}
 
@@ -62,6 +56,10 @@ func (c *CLI) runWSClose(args []string) int {
 		fmt.Fprintf(c.Err, "resolve GIONX_ROOT: %v\n", err)
 		return exitError
 	}
+	if err := c.ensureDebugLog(root, "ws-close"); err != nil {
+		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
+	}
+	c.debugf("run ws close args=%q", args)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -95,91 +93,194 @@ func (c *CLI) runWSClose(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
+	useColorOut := writerSupportsColor(c.Out)
 
+	directWorkspaceID := ""
+	if len(args) == 1 {
+		directWorkspaceID = args[0]
+		if err := validateWorkspaceID(directWorkspaceID); err != nil {
+			fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
+			return exitUsage
+		}
+	}
+
+	flow := workspaceSelectRiskResultFlowConfig{
+		FlowName: "ws close",
+		SelectItems: func() ([]workspaceFlowSelection, error) {
+			if directWorkspaceID != "" {
+				selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
+				c.debugf("ws close direct mode selected=%v", workspaceFlowSelectionIDs(selected))
+				return selected, nil
+			}
+
+			candidates, err := listActiveCloseCandidates(ctx, db, root)
+			if err != nil {
+				return nil, fmt.Errorf("list close candidates: %w", err)
+			}
+			if len(candidates) == 0 {
+				return nil, errNoActiveWorkspaces
+			}
+
+			ids, err := c.promptWorkspaceSelector("active", "close", candidates)
+			if err != nil {
+				return nil, err
+			}
+			c.debugf("ws close selector mode selected=%v", ids)
+			selected := make([]workspaceFlowSelection, 0, len(ids))
+			for _, id := range ids {
+				selected = append(selected, workspaceFlowSelection{ID: id})
+			}
+			return selected, nil
+		},
+		CollectRiskStage: func(items []workspaceFlowSelection) (workspaceFlowRiskStage, error) {
+			riskItems, err := collectWorkspaceRiskDetails(ctx, db, root, workspaceFlowSelectionIDs(items))
+			if err != nil {
+				return workspaceFlowRiskStage{}, fmt.Errorf("inspect workspace risk: %w", err)
+			}
+			hasRisk := hasNonCleanRisk(riskItems)
+			if hasRisk {
+				c.debugf("ws close risk detected count=%d", len(riskItems))
+			}
+			return workspaceFlowRiskStage{
+				HasRisk: hasRisk,
+				Print: func(useColor bool) {
+					printRiskSection(c.Out, riskItems, useColor)
+				},
+			}, nil
+		},
+		ConfirmRisk: c.confirmRiskProceed,
+		ApplyOne: func(item workspaceFlowSelection) error {
+			c.debugf("ws close archive start workspace=%s", item.ID)
+			if err := c.closeWorkspace(ctx, db, root, repoPoolPath, item.ID); err != nil {
+				return err
+			}
+			c.debugf("ws close archive completed workspace=%s", item.ID)
+			return nil
+		},
+		ResultVerb: "Closed",
+		ResultMark: "✔",
+	}
+
+	archived, err := c.runWorkspaceSelectRiskResultFlow(flow, useColorOut)
+	if err != nil {
+		switch {
+		case errors.Is(err, errNoActiveWorkspaces):
+			fmt.Fprintln(c.Err, "no active workspaces available")
+			return exitError
+		case errors.Is(err, errSelectorCanceled):
+			c.debugf("ws close selector canceled")
+			fmt.Fprintln(c.Err, "aborted")
+			return exitError
+		case errors.Is(err, errWorkspaceFlowCanceled):
+			c.debugf("ws close canceled at risk confirmation")
+			return exitError
+		default:
+			fmt.Fprintf(c.Err, "run ws close flow: %v\n", err)
+			return exitError
+		}
+	}
+
+	c.debugf("ws close completed archived=%v", archived)
+	return exitOK
+}
+
+func listActiveCloseCandidates(ctx context.Context, db *sql.DB, root string) ([]workspaceSelectorCandidate, error) {
+	items, err := statestore.ListWorkspaces(ctx, db)
+	if err != nil {
+		return nil, err
+	}
+
+	out := make([]workspaceSelectorCandidate, 0, len(items))
+	for _, it := range items {
+		if it.Status != "active" {
+			continue
+		}
+		repos, err := statestore.ListWorkspaceRepos(ctx, db, it.ID)
+		if err != nil {
+			return nil, err
+		}
+		risk, _ := inspectWorkspaceRepoRisk(ctx, root, it.ID, repos)
+		out = append(out, workspaceSelectorCandidate{
+			ID:          it.ID,
+			Description: strings.TrimSpace(it.Description),
+			Risk:        risk,
+		})
+	}
+	return out, nil
+}
+
+func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string) error {
 	if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID); err != nil {
-		fmt.Fprintf(c.Err, "load workspace: %v\n", err)
-		return exitError
+		return fmt.Errorf("load workspace: %w", err)
 	} else if !ok {
-		fmt.Fprintf(c.Err, "workspace not found: %s\n", workspaceID)
-		return exitError
+		return fmt.Errorf("workspace not found: %s", workspaceID)
 	} else if status != "active" {
-		fmt.Fprintf(c.Err, "workspace is not active (status=%s): %s\n", status, workspaceID)
-		return exitError
+		return fmt.Errorf("workspace is not active (status=%s): %s", status, workspaceID)
 	}
 
 	wsPath := filepath.Join(root, "workspaces", workspaceID)
 	if fi, err := os.Stat(wsPath); err != nil {
-		fmt.Fprintf(c.Err, "stat workspace dir: %v\n", err)
-		return exitError
+		return fmt.Errorf("stat workspace dir: %w", err)
 	} else if !fi.IsDir() {
-		fmt.Fprintf(c.Err, "workspace path is not a directory: %s\n", wsPath)
-		return exitError
+		return fmt.Errorf("workspace path is not a directory: %s", wsPath)
 	}
 	archivePath := filepath.Join(root, "archive", workspaceID)
 	if _, err := os.Stat(archivePath); err == nil {
-		fmt.Fprintf(c.Err, "archive directory already exists: %s\n", archivePath)
-		return exitError
+		return fmt.Errorf("archive directory already exists: %s", archivePath)
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		fmt.Fprintf(c.Err, "stat archive dir: %v\n", err)
-		return exitError
+		return fmt.Errorf("stat archive dir: %w", err)
 	}
 
 	repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
 	if err != nil {
-		fmt.Fprintf(c.Err, "list workspace repos: %v\n", err)
-		return exitError
-	}
-
-	risk, perRepo := inspectWorkspaceRepoRisk(ctx, root, workspaceID, repos)
-	if risk != workspacerisk.WorkspaceRiskClean {
-		fmt.Fprintf(c.Err, "workspace risk=%s: %s\n", risk, workspaceID)
-		for _, it := range perRepo {
-			fmt.Fprintf(c.Err, "- %s\t%s\n", it.alias, it.state)
-		}
-
-		ok, err := c.confirmContinue("continue closing? (y/N): ")
-		if err != nil {
-			fmt.Fprintf(c.Err, "read confirmation: %v\n", err)
-			return exitError
-		}
-		if !ok {
-			fmt.Fprintln(c.Err, "aborted")
-			return exitError
-		}
+		return fmt.Errorf("list workspace repos: %w", err)
 	}
 
 	if err := removeWorkspaceWorktrees(ctx, db, root, repoPoolPath, workspaceID, repos); err != nil {
-		fmt.Fprintf(c.Err, "remove worktrees: %v\n", err)
-		return exitError
+		return fmt.Errorf("remove worktrees: %w", err)
+	}
+
+	expectedFiles, err := listWorkspaceNonRepoFiles(wsPath)
+	if err != nil {
+		return fmt.Errorf("list workspace files for archive commit: %w", err)
 	}
 
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
-		fmt.Fprintf(c.Err, "ensure archive dir: %v\n", err)
-		return exitError
+		return fmt.Errorf("ensure archive dir: %w", err)
 	}
 	if err := os.Rename(wsPath, archivePath); err != nil {
-		fmt.Fprintf(c.Err, "archive (rename): %v\n", err)
-		return exitError
+		return fmt.Errorf("archive (rename): %w", err)
 	}
 
-	if sha, err := commitArchiveChange(ctx, root, workspaceID); err != nil {
+	sha, err := commitArchiveChange(ctx, root, workspaceID, expectedFiles)
+	if err != nil {
 		_ = os.Rename(archivePath, wsPath)
-		fmt.Fprintf(c.Err, "commit archive change: %v\n", err)
-		return exitError
-	} else {
-		now := time.Now().Unix()
-		if err := statestore.ArchiveWorkspace(ctx, db, statestore.ArchiveWorkspaceInput{
-			ID:                workspaceID,
-			ArchivedCommitSHA: sha,
-			Now:               now,
-		}); err != nil {
-			fmt.Fprintf(c.Err, "update state store: %v\n", err)
-			return exitError
-		}
+		return fmt.Errorf("commit archive change: %w", err)
 	}
 
-	fmt.Fprintf(c.Out, "archived: %s\n", workspaceID)
-	return exitOK
+	now := time.Now().Unix()
+	if err := statestore.ArchiveWorkspace(ctx, db, statestore.ArchiveWorkspaceInput{
+		ID:                workspaceID,
+		ArchivedCommitSHA: sha,
+		Now:               now,
+	}); err != nil {
+		return fmt.Errorf("update state store: %w", err)
+	}
+
+	return nil
+}
+
+func (c *CLI) confirmRiskProceed() (bool, error) {
+	line, err := c.promptLine(fmt.Sprintf("%sclose selected workspaces? [Enter=yes / n=no]: ", uiIndent))
+	if err != nil {
+		return false, err
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "", "y", "yes":
+		return true, nil
+	default:
+		return false, nil
+	}
 }
 
 func (c *CLI) confirmContinue(prompt string) (bool, error) {
@@ -198,6 +299,72 @@ func (c *CLI) confirmContinue(prompt string) (bool, error) {
 type repoRiskItem struct {
 	alias string
 	state workspacerisk.RepoState
+}
+
+type workspaceRiskDetail struct {
+	id      string
+	risk    workspacerisk.WorkspaceRisk
+	perRepo []repoRiskItem
+}
+
+func collectWorkspaceRiskDetails(ctx context.Context, db *sql.DB, root string, workspaceIDs []string) ([]workspaceRiskDetail, error) {
+	out := make([]workspaceRiskDetail, 0, len(workspaceIDs))
+	for _, workspaceID := range workspaceIDs {
+		repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+		if err != nil {
+			return nil, fmt.Errorf("list workspace repos for %s: %w", workspaceID, err)
+		}
+		risk, perRepo := inspectWorkspaceRepoRisk(ctx, root, workspaceID, repos)
+		out = append(out, workspaceRiskDetail{
+			id:      workspaceID,
+			risk:    risk,
+			perRepo: perRepo,
+		})
+	}
+	return out, nil
+}
+
+func hasNonCleanRisk(items []workspaceRiskDetail) bool {
+	for _, it := range items {
+		if it.risk != workspacerisk.WorkspaceRiskClean {
+			return true
+		}
+	}
+	return false
+}
+
+func printRiskSection(w io.Writer, items []workspaceRiskDetail, useColor bool) {
+	fmt.Fprintln(w, renderRiskTitle(useColor))
+	fmt.Fprintln(w)
+
+	cleanCount := 0
+	warningCount := 0
+	dangerCount := 0
+
+	for _, it := range items {
+		switch it.risk {
+		case workspacerisk.WorkspaceRiskClean:
+			cleanCount++
+		case workspacerisk.WorkspaceRiskUnpushed, workspacerisk.WorkspaceRiskDiverged:
+			warningCount++
+		default:
+			dangerCount++
+		}
+
+		fmt.Fprintf(w, "%s• %s %s\n", uiIndent, it.id, renderWorkspaceRiskBadge(it.risk, useColor))
+		if it.risk == workspacerisk.WorkspaceRiskClean {
+			continue
+		}
+		for _, repo := range it.perRepo {
+			if repo.state == workspacerisk.RepoStateClean {
+				continue
+			}
+			fmt.Fprintf(w, "%s- %s %s\n", uiIndent+uiIndent, repo.alias, renderRepoRiskState(repo.state, useColor))
+		}
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "%ssummary: clean=%d warning=%d danger=%d\n", uiIndent, cleanCount, warningCount, dangerCount)
+	fmt.Fprintf(w, "%spolicy: all-or-nothing close\n", uiIndent)
 }
 
 func inspectWorkspaceRepoRisk(ctx context.Context, root string, workspaceID string, repos []statestore.WorkspaceRepo) (workspacerisk.WorkspaceRisk, []repoRiskItem) {
@@ -292,6 +459,30 @@ func parseAheadBehind(left string, right string) (ahead int, behind int, err err
 	return a, b, nil
 }
 
+func renderWorkspaceRiskBadge(risk workspacerisk.WorkspaceRisk, useColor bool) string {
+	tag := fmt.Sprintf("[%s]", risk)
+	switch risk {
+	case workspacerisk.WorkspaceRiskDirty, workspacerisk.WorkspaceRiskUnknown:
+		return styleError(tag, useColor)
+	case workspacerisk.WorkspaceRiskDiverged, workspacerisk.WorkspaceRiskUnpushed:
+		return styleWarn(tag, useColor)
+	default:
+		return tag
+	}
+}
+
+func renderRepoRiskState(state workspacerisk.RepoState, useColor bool) string {
+	tag := fmt.Sprintf("[%s]", state)
+	switch state {
+	case workspacerisk.RepoStateDirty, workspacerisk.RepoStateUnknown:
+		return styleError(tag, useColor)
+	case workspacerisk.RepoStateDiverged, workspacerisk.RepoStateUnpushed:
+		return styleWarn(tag, useColor)
+	default:
+		return tag
+	}
+}
+
 func removeWorkspaceWorktrees(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string, repos []statestore.WorkspaceRepo) error {
 	reposDir := filepath.Join(root, "workspaces", workspaceID, "repos")
 
@@ -377,7 +568,55 @@ func ensureNoStagedChanges(ctx context.Context, root string) error {
 	return nil
 }
 
-func commitArchiveChange(ctx context.Context, root string, workspaceID string) (string, error) {
+func listWorkspaceNonRepoFiles(wsPath string) ([]string, error) {
+	files := make([]string, 0, 8)
+	reposDir := filepath.Join(wsPath, "repos")
+
+	err := filepath.WalkDir(wsPath, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if path == wsPath {
+			return nil
+		}
+		if path == reposDir {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if strings.HasPrefix(path, reposDir+string(filepath.Separator)) {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if d.IsDir() {
+			return nil
+		}
+
+		rel, err := filepath.Rel(wsPath, path)
+		if err != nil {
+			return err
+		}
+		rel = filepath.ToSlash(filepath.Clean(rel))
+		if rel == "." {
+			return nil
+		}
+		files = append(files, rel)
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	return files, nil
+}
+
+func resetArchiveStaging(ctx context.Context, root, archiveArg, workspacesArg string) {
+	_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg, workspacesArg)
+}
+
+func commitArchiveChange(ctx context.Context, root string, workspaceID string, expectedArchiveFiles []string) (string, error) {
 	archivePrefix := filepath.Join("archive", workspaceID) + string(filepath.Separator)
 	workspacesPrefix := filepath.Join("workspaces", workspaceID) + string(filepath.Separator)
 
@@ -391,29 +630,40 @@ func commitArchiveChange(ctx context.Context, root string, workspaceID string) (
 		// In an uninitialized git history, `workspaces/<id>` may not be tracked at all yet.
 		// Still allow archiving so the archive can be committed.
 		if !strings.Contains(err.Error(), "did not match any files") && !strings.Contains(err.Error(), "did not match any file") {
-			_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg)
+			resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
 			return "", err
 		}
 	}
 
 	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only")
 	if err != nil {
-		_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg)
+		resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
 		return "", err
 	}
 
 	staged := strings.Fields(out)
+	stagedSet := make(map[string]struct{}, len(staged))
 	for _, p := range staged {
 		p = filepath.Clean(filepath.FromSlash(p))
+		stagedSet[p] = struct{}{}
 		if strings.HasPrefix(p, archivePrefix) || strings.HasPrefix(p, workspacesPrefix) {
 			continue
 		}
-		_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg)
+		resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
 		return "", fmt.Errorf("unexpected staged path outside allowlist: %s", p)
 	}
 
+	for _, rel := range expectedArchiveFiles {
+		candidate := filepath.Clean(filepath.Join("archive", workspaceID, filepath.FromSlash(rel)))
+		if _, ok := stagedSet[candidate]; ok {
+			continue
+		}
+		resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
+		return "", fmt.Errorf("workspace contains files ignored by git; cannot archive commit: %s", rel)
+	}
+
 	if _, err := gitutil.Run(ctx, root, "commit", "-m", fmt.Sprintf("archive: %s", workspaceID)); err != nil {
-		_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg)
+		resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
 		return "", err
 	}
 

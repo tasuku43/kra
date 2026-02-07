@@ -180,7 +180,7 @@ It does not replace per-item dependencies.
 
 ## Hardening / tests
 
-- [ ] MVP-050: `gionx state` foundation (registry)
+- [x] MVP-050: `gionx state` foundation (registry)
   - What: introduce registry metadata for root-scoped `state.db` discovery and hygiene workflows
   - Specs:
     - `docs/spec/commands/state/registry.md`
@@ -188,12 +188,48 @@ It does not replace per-item dependencies.
   - Depends: MVP-002, MVP-003, MVP-010
   - Parallel: yes (independent from ws archive lifecycle)
 
-- [ ] MVP-051: `gionx context` (root switch fallback)
+- [x] MVP-051: `gionx context` (root switch fallback)
   - What: add context management and root resolution fallback when `GIONX_ROOT` is unset
   - Specs:
     - `docs/spec/commands/context.md`
     - `docs/spec/commands/state/registry.md`
   - Depends: MVP-050
+  - Parallel: yes
+
+- [x] MVP-060: `gionx repo add` (shared pool upsert)
+  - What: add root-scoped repo registration command that upserts shared bare pool and current root `repos` rows
+    from repo specs (best-effort, conflict-safe).
+  - Specs:
+    - `docs/spec/commands/repo/add.md`
+    - `docs/spec/concepts/state-store.md`
+  - Depends: MVP-051
+  - Parallel: yes
+
+- [x] MVP-061: `gionx repo discover` (provider-based bulk add)
+  - What: add provider adapter flow (`--provider` default github) to discover org repos, exclude current-root
+    registered repos, and bulk add selected repos through `repo add` path.
+  - Specs:
+    - `docs/spec/commands/repo/discover.md`
+    - `docs/spec/commands/repo/add.md`
+  - Depends: MVP-060
+  - Parallel: yes
+
+- [x] MVP-062: `gionx repo remove` (root-local logical detach)
+  - What: remove selected repos from current root `repos` registration using selector/direct mode.
+    Keep physical bare repos untouched, and fail fast when selected repos are still referenced by
+    `workspace_repos`.
+  - Specs:
+    - `docs/spec/commands/repo/remove.md`
+    - `docs/spec/concepts/state-store.md`
+  - Depends: MVP-060, MVP-061
+  - Parallel: yes
+
+- [x] MVP-063: `gionx repo gc` (safe physical pool cleanup)
+  - What: garbage-collect bare repos from shared pool only when safety gates pass.
+  - Specs:
+    - `docs/spec/commands/repo/gc.md`
+    - `docs/spec/commands/state/registry.md`
+  - Depends: MVP-062
   - Parallel: yes
 
 - [x] MVP-900: Test harness + non-happy-path coverage baseline
@@ -212,7 +248,7 @@ It does not replace per-item dependencies.
 
 ## WS UX Polish (status-managed rollout)
 
-- [ ] UX-WS-001: Lifecycle concept + selector architecture spec
+- [x] UX-WS-001: Lifecycle concept + selector architecture spec
   - What: define canonical state transitions (`active -> archived -> purged`) and shared non-fullscreen selector UI.
     Also clarify `ws list` as read-only summary command (`--tree` as opt-in detail).
   - Specs:
@@ -222,7 +258,7 @@ It does not replace per-item dependencies.
   - Depends: MVP-042
   - Serial: yes (foundation for all ws UX changes)
 
-- [ ] UX-WS-002: `gionx ws close` selector-mode + bulk safety gate
+- [x] UX-WS-002: `gionx ws close` selector-mode + bulk safety gate
   - What: keep direct mode (`ws close <id>`) and add selector mode (`ws close`) with multi-select and all-or-nothing
     risk gate; enforce strict allowlist + gitignore abort policy for archive commits.
   - Specs:
@@ -231,7 +267,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-001, MVP-040
   - Serial: yes
 
-- [ ] UX-WS-003: `gionx ws go` command (start-work flow)
+- [x] UX-WS-003: `gionx ws go` command (start-work flow)
   - What: add `ws go` with selector/direct mode, default `active` scope, optional `--archived`, and `--emit-cd`
     output for shell function integration.
   - Specs:
@@ -240,7 +276,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-001, MVP-020
   - Parallel: yes (with UX-WS-002)
 
-- [ ] UX-WS-004: `gionx ws reopen` selector-mode
+- [x] UX-WS-004: `gionx ws reopen` selector-mode
   - What: keep direct mode (`ws reopen <id>`) and add selector mode (`ws reopen`) scoped to archived workspaces.
   - Specs:
     - `docs/spec/commands/ws/reopen.md`
@@ -248,11 +284,166 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-001, MVP-041
   - Parallel: yes
 
-- [ ] UX-WS-005: `gionx ws purge` selector-mode
+- [x] UX-WS-005: `gionx ws purge` selector-mode
   - What: keep direct mode (`ws purge <id>`) and add selector mode (`ws purge`) scoped to archived workspaces.
   - Specs:
     - `docs/spec/commands/ws/purge.md`
     - `docs/spec/commands/ws/selector.md`
     - `docs/spec/concepts/workspace-lifecycle.md`
   - Depends: UX-WS-001, MVP-042
+  - Parallel: yes
+
+- [x] UX-WS-006: `gionx ws list` selector-parity output
+  - What: replace current TSV output with selector-parity non-interactive list UI (summary-first), and add
+    optional expanded detail mode (`--tree`) using the same shared rendering hierarchy.
+  - Specs:
+    - `docs/spec/commands/ws/list.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-001, MVP-021
+  - Serial: yes (prevent UI drift across ws commands)
+
+- [x] UX-WS-007: WS close wording consistency (`close` vs `archived`)
+  - What: unify user-facing wording to `close` (for command/action/result labels), while keeping internal lifecycle
+    state naming as `archived`.
+  - Specs:
+    - `docs/spec/commands/ws/close.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-002
+  - Serial: yes
+
+- [x] UX-WS-008: Selector footer readability and truncation rules
+  - What: shorten key-hint text, define deterministic truncation behavior for narrow terminals, and keep
+    `selected: n/m` consistently visible.
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-001
+  - Parallel: yes
+
+- [x] UX-WS-009: `ws list` row layout hardening
+  - What: lock default summary row order to `ID | risk | repos | description` with stable column alignment and
+    ellipsis policy.
+  - Specs:
+    - `docs/spec/commands/ws/list.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-006
+  - Serial: yes
+
+- [x] UX-WS-010: Risk presentation policy (color-only)
+  - What: enforce color-only risk hints across ws selector/list surfaces (no textual risk tags in summary rows).
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/commands/ws/list.md`
+  - Depends: UX-WS-001
+  - Parallel: yes
+
+- [x] UX-WS-011: Confirmation policy consistency
+  - What: keep `ws close` confirmation only when non-clean risk exists, and keep `ws purge` always-confirm policy
+    explicit in specs/tests.
+  - Specs:
+    - `docs/spec/commands/ws/close.md`
+    - `docs/spec/commands/ws/purge.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-002, UX-WS-005
+  - Parallel: yes
+
+- [x] UX-WS-012: Selector keybind extensions (phase 1)
+  - What: evaluate selector keybind extensions; `a`/`A` were explicitly rejected to preserve always-on filter input.
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-001
+  - Parallel: yes
+
+- [x] UX-WS-013: Section indentation consistency (Workspaces/Risk/Result)
+  - What: enforce shared indentation rules for selector footer/help and risk/confirm prompts so section body lines
+    consistently align under each heading.
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/commands/ws/purge.md`
+    - `docs/spec/commands/ws/close.md`
+  - Depends: UX-WS-001, UX-WS-005
+  - Parallel: yes
+
+- [x] UX-WS-014: Semantic color token baseline
+  - What: define and apply a shared semantic token set for CLI/TUI output (`text.*`, `status.*`, `accent`,
+    `focus`, `selection`, `diff.*`) and align selector/progress/result rendering with those tokens.
+  - Specs:
+    - `docs/spec/concepts/ui-color.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-001
+  - Parallel: yes
+
+- [x] UX-WS-015: Semantic color guardrail enforcement
+  - What: add a CI/lint gate that blocks raw ANSI or ad-hoc color usage outside shared token paths,
+    and document the rule in AGENTS/testing docs.
+  - Specs:
+    - `docs/spec/concepts/ui-color.md`
+    - `docs/dev/TESTING.md`
+  - Depends: UX-WS-014
+  - Parallel: yes
+
+- [x] UX-WS-016: Section spacing consistency (Risk newline parity)
+  - What: enforce heading spacing parity across ws flows so `Risk:` keeps one blank line after heading
+    (`Workspaces/Risk` one blank, `Result` no blank).
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/commands/ws/purge.md`
+  - Depends: UX-WS-013
+  - Parallel: yes
+
+- [x] UX-WS-017: `ws list` archived color semantic alignment
+  - What: align `ws list` archived color description to shared semantic token rule (`text.muted`).
+  - Specs:
+    - `docs/spec/commands/ws/list.md`
+    - `docs/spec/concepts/ui-color.md`
+  - Depends: UX-WS-014
+  - Parallel: yes
+
+- [x] UX-REPO-001: Result color semantics parity (`repo remove`)
+  - What: apply shared `Result:` summary color semantics to `repo remove` for consistency with `repo add/gc`.
+  - Specs:
+    - `docs/spec/commands/repo/remove.md`
+    - `docs/spec/concepts/ui-color.md`
+  - Depends: UX-WS-014
+  - Parallel: yes
+
+- [x] UX-REPO-002: `repo gc` summary condition cleanup
+  - What: use consistent denominator (`eligibleSelected`) for summary color condition to avoid future drift.
+  - Specs:
+    - `docs/spec/commands/repo/gc.md`
+  - Depends: MVP-063
+  - Parallel: yes
+
+- [x] UX-CORE-001: Core command `Result:` output parity (`init`/`ws create`/`context use`)
+  - What: align human-readable success outputs of core commands to shared section flow and semantic color tokens.
+  - Specs:
+    - `docs/spec/commands/init.md`
+    - `docs/spec/commands/ws/create.md`
+    - `docs/spec/commands/context.md`
+    - `docs/spec/concepts/ui-color.md`
+  - Depends: UX-WS-014
+  - Parallel: yes
+
+- [x] UX-WS-018: `ws add-repo` inputs tree stability polish
+  - What: finalize input-tree connector transitions and section spacing consistency while keeping editable defaults.
+  - Specs:
+    - `docs/spec/commands/ws/add-repo.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: MVP-031, UX-WS-013
+  - Parallel: yes
+
+- [x] UX-WS-019: `ws go` single-select UI mode
+  - What: switch `ws go` selector to cursor-confirm single-select mode (no checkbox markers, no selected summary).
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/commands/ws/go.md`
+  - Depends: UX-WS-001, UX-WS-003
+  - Parallel: yes
+
+- [x] UX-CORE-002: Shell integration bootstrap (`gionx shell init`)
+  - What: add shell integration command that prints eval-ready wrapper function and align `ws go` default output
+    to shell snippet mode.
+  - Specs:
+    - `docs/spec/commands/shell/init.md`
+    - `docs/spec/commands/ws/go.md`
+  - Depends: UX-WS-003
   - Parallel: yes

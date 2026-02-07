@@ -36,7 +36,7 @@ func TestOpen_appliesMigrationsAndRecordsSchemaMigrations(t *testing.T) {
 	}
 	_ = rows.Close()
 
-	want := []string{"0001_init.sql"}
+	want := []string{"0001_init.sql", "0002_repo_usage_daily.sql"}
 	if len(got) != len(want) {
 		t.Fatalf("schema_migrations length mismatch: want=%d got=%d (got=%v)", len(want), len(got), got)
 	}

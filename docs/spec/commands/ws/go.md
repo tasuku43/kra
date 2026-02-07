@@ -1,9 +1,9 @@
 ---
 title: "`gionx ws go`"
-status: planned
+status: implemented
 ---
 
-# `gionx ws go [--archived] [<id>]`
+# `gionx ws go [--archived] [--ui] [--emit-cd] [<id>]`
 
 ## Purpose
 
@@ -13,7 +13,8 @@ Jump to a workspace directory as a "start work" action.
 
 - `<id>` (optional): workspace id for direct mode
 - `--archived` (optional): target archived workspaces instead of active workspaces
-- `--emit-cd` (optional): emit shell snippet for `cd` integration
+- `--ui` (optional): print human-readable `Result:` section
+- `--emit-cd` (optional): backward-compatible alias of default shell snippet output
 
 ## Behavior
 
@@ -25,6 +26,7 @@ Jump to a workspace directory as a "start work" action.
   - launch shared selector UI (`commands/ws/selector.md`)
   - default scope is `active`; use `--archived` to switch scope
   - selection cardinality is single-only
+  - UI is single-select mode (no checkbox markers / no `selected: n/m` footer)
 
 ### Target path
 
@@ -33,17 +35,21 @@ Jump to a workspace directory as a "start work" action.
 
 ### UX detail
 
-- After selection confirm, show selected row briefly (about 0.5s), then emit/print destination.
+- In standard mode, print only shell snippet (`cd '<path>'`) to stdout.
+- In `--ui` mode, print `Result:` and destination path (human-readable).
+- `--emit-cd` keeps backward compatibility and behaves the same as standard mode.
+- In selector mode, non-TTY invocation must fail (no fallback).
 
 ### Shell integration
 
 - `gionx` cannot mutate the parent shell cwd directly.
-- For practical navigation, support shell-evaluable output in `--emit-cd` mode.
-- Expected usage style: `eval "$(gionx ws go --emit-cd)"`.
+- For practical navigation, default output is shell-evaluable.
+- Expected usage style: `eval "$(gionx ws go)"`.
+- Shell-wide wrapper integration is provided via `gionx shell init <shell>`.
 
 ## Errors
 
 - no matching workspace in selected scope
 - invalid mixed selection (more than one selected in selector mode)
 - target directory does not exist
-
+- non-TTY invocation in selector mode

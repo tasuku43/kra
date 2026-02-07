@@ -30,3 +30,11 @@ Initialize `GIONX_ROOT` and the global state store.
 ## Notes
 
 - If `GIONX_ROOT` is already Git-managed, `gionx init` must not overwrite existing Git settings.
+
+## Output
+
+- Success output must use shared section style:
+  - `Result:`
+  - `  Initialized: <GIONX_ROOT>`
+- `Result:` heading style follows shared UI token rules (`text.primary` + bold).
+- Success line should use shared success semantics (`status.success`).

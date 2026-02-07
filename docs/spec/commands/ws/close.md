@@ -1,9 +1,6 @@
 ---
 title: "`gionx ws close`"
 status: implemented
-pending:
-  - UX-WS-002-shared-selector
-  - UX-WS-003-bulk-close-risk-gate
 ---
 
 # `gionx ws close [<id>]`
@@ -69,18 +66,37 @@ If the Git working tree has unrelated changes, this command must not include the
 - `workspaces/**/repos/**` is ignored in `.gitignore`, but `ws close` must still delete worktrees
   (archives should not contain repos).
 
-## Next UX iteration (planned)
+## Modes and selector behavior
 
 ### Selector mode and direct mode
 
 - If `<id>` is provided, run existing direct mode.
 - If `<id>` is omitted, launch shared selector UI (`commands/ws/selector.md`) in `active` scope.
 - Selector mode allows multiple selection.
+- Non-TTY invocation without `<id>` must error (no fallback mode).
+- Selector and follow-up output should use section headings:
+  - `Workspaces(active):`
+  - `Risk:`
+  - `Result:`
+- `ws close` user-facing wording uses `close` for actions/results:
+  - selector footer action hint: `enter close`
+  - risk confirmation prompt: `close selected workspaces? ...`
+  - result summary verb: `Closed n / m`
+- Internal lifecycle/storage naming remains `archived` (status/event/commit message).
+- Section spacing:
+  - `Workspaces(active):` and `Risk:` have one blank line after heading.
+  - `Result:` has no blank line after heading.
+- Section body indentation must use shared global UI indentation constants.
 
 ### Bulk close safety gate
 
 - After selector confirmation, evaluate risk for all selected workspaces.
-- If any selected workspace is `risky` or `unknown`, abort the whole operation (no partial close).
+- `risky` is defined as `dirty` / `unpushed` / `diverged` (plus `unknown` as non-safe).
+- If selected set is clean-only, proceed directly to close and print `Result:`.
+- If any selected workspace is non-clean (`risky` or `unknown`), print `Risk:` section and require explicit
+  confirmation there before execution.
+- If risk confirmation is declined/canceled, abort without side effects.
+- Risk label semantics and severity follow `commands/ws/selector.md`.
 
 ### Commit strictness (non-repo files)
 

@@ -43,12 +43,13 @@ func TestCLI_WS_AddRepo_BaseRefNotFound_FailsWithoutMutatingState(t *testing.T) 
 	}
 
 	repoSpec := prepareRemoteRepoSpec(t, runGit)
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		c.In = strings.NewReader("origin/does-not-exist\nWS1/test\n")
-		code := c.Run([]string{"ws", "add-repo", "WS1", repoSpec})
+		c.In = strings.NewReader(addRepoSelectionInput("origin/does-not-exist", "WS1/test"))
+		code := c.Run([]string{"ws", "add-repo", "WS1"})
 		if code != exitError {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
 		}
@@ -72,8 +73,8 @@ func TestCLI_WS_AddRepo_BaseRefNotFound_FailsWithoutMutatingState(t *testing.T) 
 	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM repos").Scan(&repoCount); err != nil {
 		t.Fatalf("query repos count: %v", err)
 	}
-	if repoCount != 0 {
-		t.Fatalf("repos count = %d, want 0", repoCount)
+	if repoCount != 1 {
+		t.Fatalf("repos count = %d, want 1", repoCount)
 	}
 
 	var wsRepoCount int

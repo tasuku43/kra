@@ -36,6 +36,9 @@ jobs:
             exit 1
           fi
 
+      - name: lint ui color tokens
+        run: ./scripts/lint-ui-color.sh
+
       - name: go vet
         run: go vet ./...
 
@@ -58,4 +61,3 @@ jobs:
 
       - name: go test
         run: go test ./...
-

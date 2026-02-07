@@ -1,6 +1,6 @@
 ---
 title: "`gionx context`"
-status: planned
+status: implemented
 ---
 
 # `gionx context`
@@ -30,6 +30,7 @@ Notes:
 - `gionx context use <root>`
   - validate `<root>` exists (or can be initialized via `gionx init`)
   - write `current-context` atomically
+  - print success in shared section style (`Result:`)
 
 ## Error handling
 
@@ -42,3 +43,12 @@ Notes:
 - shell integration (`eval`, auto-export helpers)
 - named aliases for roots
 
+## Output
+
+- `context current`:
+  - keep machine-friendly plain path output (`<root>`) for composability.
+- `context use <root>`:
+  - success output:
+    - `Result:`
+    - `  Context set: <root>`
+  - section/title colors follow shared token rules from `docs/spec/concepts/ui-color.md`.

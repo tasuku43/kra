@@ -11,6 +11,7 @@ import (
 
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
+	"github.com/tasuku43/gionx/internal/testutil"
 )
 
 func TestCLI_Root_NoArgs_ShowsUsage(t *testing.T) {
@@ -137,6 +138,9 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if err.Len() != 0 {
 		t.Fatalf("stderr not empty: %q", err.String())
 	}
+	if got := out.String(); !strings.Contains(got, "Result:") || !strings.Contains(got, "Initialized: "+root) {
+		t.Fatalf("stdout missing result section: %q", got)
+	}
 
 	if _, statErr := os.Stat(filepath.Join(root, "workspaces")); statErr != nil {
 		t.Fatalf("workspaces/ not created: %v", statErr)
@@ -218,6 +222,9 @@ func TestCLI_Init_CreatesMissingGIONXRootDirectory(t *testing.T) {
 	if err.Len() != 0 {
 		t.Fatalf("stderr not empty: %q", err.String())
 	}
+	if got := out.String(); !strings.Contains(got, "Result:") || !strings.Contains(got, "Initialized: "+root) {
+		t.Fatalf("stdout missing result section: %q", got)
+	}
 
 	if _, statErr := os.Stat(root); statErr != nil {
 		t.Fatalf("root dir not created: %v", statErr)
@@ -273,6 +280,9 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	code := c.Run([]string{"ws", "create", "MVP-020"})
 	if code != exitOK {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	if got := out.String(); !strings.Contains(got, "Result:") || !strings.Contains(got, "Created 1 / 1") || !strings.Contains(got, "✔ MVP-020") {
+		t.Fatalf("stdout missing ws create result section: %q", got)
 	}
 
 	wsDir := filepath.Join(root, "workspaces", "MVP-020")
@@ -506,6 +516,7 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 	t.Setenv("GIONX_ROOT", root)
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	env := testutil.Env{Root: root, DataHome: dataHome, CacheHome: cacheHome}
 
 	{
 		var out bytes.Buffer
@@ -522,10 +533,10 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		// base_ref: empty (use default), branch: explicit
-		c.In = strings.NewReader("\nMVP-020/test\n")
+		_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
+		c.In = strings.NewReader(addRepoSelectionInput("", "MVP-020/test"))
 
-		code := c.Run([]string{"ws", "add-repo", "MVP-020", repoSpec})
+		code := c.Run([]string{"ws", "add-repo", "MVP-020"})
 		if code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}

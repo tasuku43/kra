@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tasuku43/gion-core/workspacerisk"
 	"github.com/tasuku43/gionx/internal/statestore"
 	"github.com/tasuku43/gionx/internal/testutil"
 )
@@ -66,6 +67,9 @@ func TestCLI_WS_Purge_ArchivedWorkspace_DeletesPathsCommitsAndUpdatesDB(t *testi
 		code := c.Run([]string{"ws", "purge", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws purge exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+		if !strings.Contains(err.String(), "purge workspace WS1?") {
+			t.Fatalf("stderr missing purge confirmation prompt: %q", err.String())
 		}
 	}
 
@@ -166,12 +170,13 @@ func TestCLI_WS_Purge_ActiveDirtyRepo_AsksSecondConfirmationAndCanAbort(t *testi
 	}
 
 	repoSpec := prepareRemoteRepoSpec(t, runGit)
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		c.In = strings.NewReader("\nWS1/test\n")
-		code := c.Run([]string{"ws", "add-repo", "WS1", repoSpec})
+		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
+		code := c.Run([]string{"ws", "add-repo", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
@@ -227,6 +232,82 @@ func TestCLI_WS_Purge_NoPromptForce_ActiveWorkspace_Succeeds(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); statErr == nil {
 		t.Fatalf("workspaces/WS1 should not exist after purge")
+	}
+}
+
+func TestCLI_WS_Purge_SelectorModeWithoutTTY_Errors(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "close", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		c.In = strings.NewReader("")
+
+		code := c.Run([]string{"ws", "purge"})
+		if code != exitError {
+			t.Fatalf("ws purge exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+		}
+		if !strings.Contains(err.String(), "interactive workspace selection requires a TTY") {
+			t.Fatalf("stderr missing non-tty error: %q", err.String())
+		}
+	}
+}
+
+func TestCLI_WS_Purge_NoPromptForce_WithoutID_Refuses(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "purge", "--no-prompt", "--force"})
+	if code != exitUsage {
+		t.Fatalf("ws purge exit code = %d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(err.String(), "--no-prompt selector mode is not supported") {
+		t.Fatalf("stderr missing refusal reason: %q", err.String())
+	}
+}
+
+func TestPrintPurgeRiskSection_UsesSharedIndent(t *testing.T) {
+	var out bytes.Buffer
+	selectedIDs := []string{"WS1"}
+	riskMeta := map[string]purgeWorkspaceMeta{
+		"WS1": {
+			status: "active",
+			risk:   workspacerisk.WorkspaceRiskDirty,
+			perRepo: []repoRiskItem{
+				{alias: "repo1", state: workspacerisk.RepoStateDirty},
+			},
+		},
+	}
+
+	printPurgeRiskSection(&out, selectedIDs, riskMeta, false)
+	got := out.String()
+	if !strings.Contains(got, "\nRisk:\n\n  purge is permanent and cannot be undone.\n  selected: 1\n") {
+		t.Fatalf("risk section header/body indentation mismatch: %q", got)
+	}
+	if !strings.Contains(got, "\n  active workspace risk detected:\n  - WS1 [dirty]\n    - repo1\tdirty\n") {
+		t.Fatalf("risk detail indentation mismatch: %q", got)
 	}
 }
 

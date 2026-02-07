@@ -1,6 +1,6 @@
 ---
 title: "`gionx state` registry foundation"
-status: planned
+status: implemented
 ---
 
 # `gionx state` registry foundation
@@ -26,6 +26,11 @@ Provide a stable foundation for state-store hygiene when `GIONX_ROOT`-scoped DB 
   - `first_seen_at` (unix epoch)
   - `last_used_at` (unix epoch)
 - Registry updates happen on state store open paths used by current commands (`init`, `ws create`, `ws list`).
+
+Implemented command integration:
+- `gionx init`
+- `gionx ws create`
+- `gionx ws list`
 
 ## Invariants
 
@@ -53,4 +58,3 @@ Provide a stable foundation for state-store hygiene when `GIONX_ROOT`-scoped DB 
 - Update `last_used_at` on repeated command runs.
 - Corrupt registry handling path.
 - Concurrent-ish overwrite safety via atomic replace semantics.
-
