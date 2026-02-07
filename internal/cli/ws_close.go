@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -86,9 +87,9 @@ func (c *CLI) runWSClose(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
+	useColorOut := writerSupportsColor(c.Out)
 
 	selectedIDs := make([]string, 0, 1)
-	promptOnRisk := true
 
 	if len(args) == 1 {
 		workspaceID := args[0]
@@ -98,7 +99,6 @@ func (c *CLI) runWSClose(args []string) int {
 		}
 		selectedIDs = append(selectedIDs, workspaceID)
 	} else {
-		promptOnRisk = false
 		candidates, err := listActiveCloseCandidates(ctx, db, root)
 		if err != nil {
 			fmt.Fprintf(c.Err, "list close candidates: %v\n", err)
@@ -119,38 +119,40 @@ func (c *CLI) runWSClose(args []string) int {
 			return exitError
 		}
 		selectedIDs = ids
+	}
 
-		byID := map[string]closeSelectorCandidate{}
-		for _, it := range candidates {
-			byID[it.ID] = it
+	riskItems, err := collectWorkspaceRiskDetails(ctx, db, root, selectedIDs)
+	if err != nil {
+		fmt.Fprintf(c.Err, "inspect workspace risk: %v\n", err)
+		return exitError
+	}
+	if hasNonCleanRisk(riskItems) {
+		printRiskSection(c.Out, riskItems, useColorOut)
+		ok, err := c.confirmRiskProceed()
+		if err != nil {
+			fmt.Fprintf(c.Err, "read risk confirmation: %v\n", err)
+			return exitError
 		}
-
-		var nonClean []string
-		for _, id := range selectedIDs {
-			it, ok := byID[id]
-			if !ok {
-				continue
-			}
-			if it.Risk == workspacerisk.WorkspaceRiskClean {
-				continue
-			}
-			nonClean = append(nonClean, fmt.Sprintf("- %s\t[%s]", it.ID, it.Risk))
-		}
-		if len(nonClean) > 0 {
-			fmt.Fprintln(c.Err, "selected workspaces include non-clean risk; aborting without partial close")
-			for _, line := range nonClean {
-				fmt.Fprintln(c.Err, line)
-			}
+		if !ok {
+			fmt.Fprintln(c.Out, renderResultTitle(useColorOut))
+			fmt.Fprintf(c.Out, "%saborted: canceled at Risk\n", uiIndent)
 			return exitError
 		}
 	}
 
+	var archived []string
 	for _, workspaceID := range selectedIDs {
-		if err := c.closeWorkspace(ctx, db, root, repoPoolPath, workspaceID, promptOnRisk); err != nil {
+		if err := c.closeWorkspace(ctx, db, root, repoPoolPath, workspaceID); err != nil {
 			fmt.Fprintf(c.Err, "close workspace %s: %v\n", workspaceID, err)
 			return exitError
 		}
-		fmt.Fprintf(c.Out, "archived: %s\n", workspaceID)
+		archived = append(archived, workspaceID)
+	}
+
+	fmt.Fprintln(c.Out, renderResultTitle(useColorOut))
+	fmt.Fprintf(c.Out, "%sArchived %d / %d\n", uiIndent, len(archived), len(selectedIDs))
+	for _, id := range archived {
+		fmt.Fprintf(c.Out, "%s✔ %s\n", uiIndent, id)
 	}
 	return exitOK
 }
@@ -180,7 +182,7 @@ func listActiveCloseCandidates(ctx context.Context, db *sql.DB, root string) ([]
 	return out, nil
 }
 
-func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string, promptOnRisk bool) error {
+func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string) error {
 	if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID); err != nil {
 		return fmt.Errorf("load workspace: %w", err)
 	} else if !ok {
@@ -205,25 +207,6 @@ func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoP
 	repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
 	if err != nil {
 		return fmt.Errorf("list workspace repos: %w", err)
-	}
-
-	risk, perRepo := inspectWorkspaceRepoRisk(ctx, root, workspaceID, repos)
-	if risk != workspacerisk.WorkspaceRiskClean {
-		if !promptOnRisk {
-			return fmt.Errorf("workspace risk=%s: %s", risk, workspaceID)
-		}
-		fmt.Fprintf(c.Err, "workspace risk=%s: %s\n", risk, workspaceID)
-		for _, it := range perRepo {
-			fmt.Fprintf(c.Err, "- %s\t%s\n", it.alias, it.state)
-		}
-
-		ok, err := c.confirmContinue("continue closing? (y/N): ")
-		if err != nil {
-			return fmt.Errorf("read confirmation: %w", err)
-		}
-		if !ok {
-			return fmt.Errorf("aborted")
-		}
 	}
 
 	if err := removeWorkspaceWorktrees(ctx, db, root, repoPoolPath, workspaceID, repos); err != nil {
@@ -260,6 +243,19 @@ func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoP
 	return nil
 }
 
+func (c *CLI) confirmRiskProceed() (bool, error) {
+	line, err := c.promptLine(fmt.Sprintf("%sarchive selected workspaces? [Enter=yes / n=no]: ", uiIndent))
+	if err != nil {
+		return false, err
+	}
+	switch strings.ToLower(strings.TrimSpace(line)) {
+	case "", "y", "yes":
+		return true, nil
+	default:
+		return false, nil
+	}
+}
+
 func (c *CLI) confirmContinue(prompt string) (bool, error) {
 	line, err := c.promptLine(prompt)
 	if err != nil {
@@ -276,6 +272,72 @@ func (c *CLI) confirmContinue(prompt string) (bool, error) {
 type repoRiskItem struct {
 	alias string
 	state workspacerisk.RepoState
+}
+
+type workspaceRiskDetail struct {
+	id      string
+	risk    workspacerisk.WorkspaceRisk
+	perRepo []repoRiskItem
+}
+
+func collectWorkspaceRiskDetails(ctx context.Context, db *sql.DB, root string, workspaceIDs []string) ([]workspaceRiskDetail, error) {
+	out := make([]workspaceRiskDetail, 0, len(workspaceIDs))
+	for _, workspaceID := range workspaceIDs {
+		repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+		if err != nil {
+			return nil, fmt.Errorf("list workspace repos for %s: %w", workspaceID, err)
+		}
+		risk, perRepo := inspectWorkspaceRepoRisk(ctx, root, workspaceID, repos)
+		out = append(out, workspaceRiskDetail{
+			id:      workspaceID,
+			risk:    risk,
+			perRepo: perRepo,
+		})
+	}
+	return out, nil
+}
+
+func hasNonCleanRisk(items []workspaceRiskDetail) bool {
+	for _, it := range items {
+		if it.risk != workspacerisk.WorkspaceRiskClean {
+			return true
+		}
+	}
+	return false
+}
+
+func printRiskSection(w io.Writer, items []workspaceRiskDetail, useColor bool) {
+	fmt.Fprintln(w, renderRiskTitle(useColor))
+	fmt.Fprintln(w)
+
+	cleanCount := 0
+	warningCount := 0
+	dangerCount := 0
+
+	for _, it := range items {
+		switch it.risk {
+		case workspacerisk.WorkspaceRiskClean:
+			cleanCount++
+		case workspacerisk.WorkspaceRiskUnpushed, workspacerisk.WorkspaceRiskDiverged:
+			warningCount++
+		default:
+			dangerCount++
+		}
+
+		fmt.Fprintf(w, "%s• %s %s\n", uiIndent, it.id, renderWorkspaceRiskBadge(it.risk, useColor))
+		if it.risk == workspacerisk.WorkspaceRiskClean {
+			continue
+		}
+		for _, repo := range it.perRepo {
+			if repo.state == workspacerisk.RepoStateClean {
+				continue
+			}
+			fmt.Fprintf(w, "%s- %s %s\n", uiIndent+uiIndent, repo.alias, renderRepoRiskState(repo.state, useColor))
+		}
+	}
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "%ssummary: clean=%d warning=%d danger=%d\n", uiIndent, cleanCount, warningCount, dangerCount)
+	fmt.Fprintf(w, "%spolicy: all-or-nothing close\n", uiIndent)
 }
 
 func inspectWorkspaceRepoRisk(ctx context.Context, root string, workspaceID string, repos []statestore.WorkspaceRepo) (workspacerisk.WorkspaceRisk, []repoRiskItem) {
@@ -368,6 +430,30 @@ func parseAheadBehind(left string, right string) (ahead int, behind int, err err
 	}
 	// HEAD...@{u} with --left-right yields left=ahead, right=behind.
 	return a, b, nil
+}
+
+func renderWorkspaceRiskBadge(risk workspacerisk.WorkspaceRisk, useColor bool) string {
+	tag := fmt.Sprintf("[%s]", risk)
+	switch risk {
+	case workspacerisk.WorkspaceRiskDirty, workspacerisk.WorkspaceRiskUnknown:
+		return styleError(tag, useColor)
+	case workspacerisk.WorkspaceRiskDiverged, workspacerisk.WorkspaceRiskUnpushed:
+		return styleWarn(tag, useColor)
+	default:
+		return tag
+	}
+}
+
+func renderRepoRiskState(state workspacerisk.RepoState, useColor bool) string {
+	tag := fmt.Sprintf("[%s]", state)
+	switch state {
+	case workspacerisk.RepoStateDirty, workspacerisk.RepoStateUnknown:
+		return styleError(tag, useColor)
+	case workspacerisk.RepoStateDiverged, workspacerisk.RepoStateUnpushed:
+		return styleWarn(tag, useColor)
+	default:
+		return tag
+	}
 }
 
 func removeWorkspaceWorktrees(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string, repos []statestore.WorkspaceRepo) error {

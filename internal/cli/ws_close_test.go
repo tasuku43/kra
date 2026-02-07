@@ -246,7 +246,7 @@ func TestCLI_WS_Close_DirtyRepo_PromptsAndCanAbort(t *testing.T) {
 		if code != exitError {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
 		}
-		if !strings.Contains(err.String(), "continue closing?") {
+		if !strings.Contains(err.String(), "archive selected workspaces?") {
 			t.Fatalf("stderr missing confirmation prompt: %q", err.String())
 		}
 	}

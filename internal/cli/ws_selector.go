@@ -32,10 +32,7 @@ func (c *CLI) promptWorkspaceCloseSelector(candidates []closeSelectorCandidate) 
 		return nil, fmt.Errorf("interactive workspace selection requires a TTY")
 	}
 
-	useColor := false
-	if outFile, ok := c.Err.(*os.File); ok && isatty.IsTerminal(outFile.Fd()) {
-		useColor = true
-	}
+	useColor := writerSupportsColor(c.Err)
 
 	return runCloseSelector(inFile, c.Err, candidates, useColor)
 }
@@ -86,7 +83,11 @@ func runCloseSelector(in *os.File, out io.Writer, candidates []closeSelectorCand
 		switch b {
 		case 0x03: // Ctrl+C
 			return nil, errSelectorCanceled
-		case 0x04: // Ctrl+D
+		case ' ': // Space
+			selected[cursor] = !selected[cursor]
+			message = ""
+			render()
+		case '\r', '\n': // Enter -> proceed
 			ids := make([]string, 0, len(candidates))
 			for i, picked := range selected {
 				if picked {
@@ -99,10 +100,6 @@ func runCloseSelector(in *os.File, out io.Writer, candidates []closeSelectorCand
 				continue
 			}
 			return ids, nil
-		case '\r', '\n':
-			selected[cursor] = !selected[cursor]
-			message = ""
-			render()
 		case 'j', 'J':
 			if cursor < len(candidates)-1 {
 				cursor++
@@ -116,12 +113,15 @@ func runCloseSelector(in *os.File, out io.Writer, candidates []closeSelectorCand
 			message = ""
 			render()
 		case 0x1b: // ESC sequence (arrow keys)
+			if reader.Buffered() == 0 {
+				return nil, errSelectorCanceled
+			}
 			b2, err := reader.ReadByte()
 			if err != nil {
 				return nil, err
 			}
 			if b2 != '[' {
-				continue
+				return nil, errSelectorCanceled
 			}
 			b3, err := reader.ReadByte()
 			if err != nil {
@@ -147,42 +147,28 @@ func runCloseSelector(in *os.File, out io.Writer, candidates []closeSelectorCand
 
 func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected []bool, cursor int, message string, useColor bool, termWidth int) []string {
 	idWidth := len("workspace")
-	riskWidth := len("[unknown]")
 	for _, it := range candidates {
 		if n := len(it.ID); n > idWidth {
 			idWidth = n
 		}
 	}
+	if idWidth < 10 {
+		idWidth = 10
+	}
+	if idWidth > 24 {
+		idWidth = 24
+	}
 
 	selectedCount := 0
-	cleanCount := 0
-	warningCount := 0
-	dangerCount := 0
-	for i, it := range candidates {
+	for i := range candidates {
 		if selected[i] {
 			selectedCount++
 		}
-		switch it.Risk {
-		case workspacerisk.WorkspaceRiskClean:
-			cleanCount++
-		case workspacerisk.WorkspaceRiskUnpushed, workspacerisk.WorkspaceRiskDiverged:
-			warningCount++
-		case workspacerisk.WorkspaceRiskDirty, workspacerisk.WorkspaceRiskUnknown:
-			dangerCount++
-		default:
-			dangerCount++
-		}
 	}
 
-	title := "ws close  | scope: active"
-	hintsRaw := "Enter: toggle  Ctrl+D: confirm  Ctrl+C: cancel"
-	statusRaw := fmt.Sprintf("selected: %d/%d  clean: %d  warning: %d  danger: %d", selectedCount, len(candidates), cleanCount, warningCount, dangerCount)
-	hints := hintsRaw
-	statusLine := statusRaw
-	if useColor {
-		statusLine = "\x1b[90m" + statusLine + "\x1b[0m"
-		hints = "\x1b[90m" + hints + "\x1b[0m"
-	}
+	titleLine := renderWorkspacesTitle("active", useColor)
+	footerRaw := fmt.Sprintf("selected: %d/%d  ↑↓ move  space toggle  enter proceed  esc/c-c cancel", selectedCount, len(candidates))
+	footer := styleMuted(footerRaw, useColor)
 
 	if termWidth < 48 {
 		termWidth = 48
@@ -190,89 +176,57 @@ func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected []bo
 	maxCols := termWidth - 1
 
 	bodyLines := make([]string, 0, len(candidates))
-	maxWidth := len(title)
 	for i, it := range candidates {
 		focus := " "
 		if i == cursor {
 			focus = ">"
 		}
-		mark := "○"
+		mark := " "
 		if selected[i] {
-			mark = "✔︎"
+			mark = "x"
 		}
-		risk := "[" + string(it.Risk) + "]"
 		desc := strings.TrimSpace(it.Description)
 		if desc == "" {
 			desc = "(no description)"
 		}
-		prefix := fmt.Sprintf("%s %-*s %-*s - ", mark, idWidth, it.ID, riskWidth, risk)
-		availableDescCols := maxCols - displayWidth(prefix) - 2 // include focus + space
+		idPlain := fmt.Sprintf("%-*s", idWidth, truncateDisplay(it.ID, idWidth))
+		prefixPlain := fmt.Sprintf("[%s] %s  ", mark, idPlain)
+		availableDescCols := maxCols - displayWidth(prefixPlain) - 2 // include focus + space
 		if availableDescCols < 8 {
 			availableDescCols = 8
 		}
 		desc = truncateDisplay(desc, availableDescCols)
+		idText := colorizeRiskID(idPlain, it.Risk, useColor)
+		prefix := fmt.Sprintf("[%s] %s  ", mark, idText)
 
 		bodyRaw := prefix + desc
-		bodyStyled := bodyRaw
-		if useColor && !selected[i] {
-			coloredRisk := colorizeRiskTag(risk, it.Risk)
-			bodyStyled = fmt.Sprintf("%s %-*s %-*s - %s", mark, idWidth, it.ID, riskWidth, coloredRisk, desc)
-		}
 		lineRaw := focus + " " + bodyRaw
 		lineRaw = truncateDisplay(lineRaw, maxCols)
-		if len(lineRaw) > maxWidth {
-			maxWidth = len(lineRaw)
-		}
 
 		line := lineRaw
 		if useColor {
+			bodyStyled := bodyRaw
+			if selected[i] {
+				bodyStyled = styleBold(bodyStyled, true)
+			}
 			if i == cursor {
 				focusAccent := "\x1b[96;1m>\x1b[0m "
-				if selected[i] {
-					// Keep selected rows muted, but keep cursor visibility with accent marker.
-					line = focusAccent + "\x1b[90m" + bodyRaw + "\x1b[0m"
-				} else {
-					// Subtle focus emphasis (fzf-like): accent marker + risk-tag color.
-					line = focusAccent + bodyStyled
-				}
-			} else if selected[i] {
-				line = "\x1b[90m" + line + "\x1b[0m"
+				line = focusAccent + bodyStyled
 			} else {
 				line = focus + " " + bodyStyled
 			}
 		}
 		bodyLines = append(bodyLines, line)
 	}
-	title = truncateDisplay(title, maxCols)
-	hintsRaw = truncateDisplay(hintsRaw, maxCols)
-	statusRaw = truncateDisplay(statusRaw, maxCols)
+	footerRaw = truncateDisplay(footerRaw, maxCols)
+	footer = styleMuted(footerRaw, useColor)
 
-	if len(statusRaw) > maxWidth {
-		maxWidth = len(statusRaw)
-	}
-	if len(hintsRaw) > maxWidth {
-		maxWidth = len(hintsRaw)
-	}
-
-	sepWidth := maxWidth
-	if sepWidth < 44 {
-		sepWidth = 44
-	}
-	if sepWidth > maxCols {
-		sepWidth = maxCols
-	}
-	sep := strings.Repeat("─", sepWidth)
-	if useColor {
-		sep = "\x1b[90m" + sep + "\x1b[0m"
-	}
-
-	lines := make([]string, 0, len(candidates)+8)
-	lines = append(lines, title)
-	lines = append(lines, sep)
+	lines := make([]string, 0, len(candidates)+7)
+	lines = append(lines, titleLine)
+	lines = append(lines, "")
 	lines = append(lines, bodyLines...)
-	lines = append(lines, sep)
-	lines = append(lines, statusLine)
-	lines = append(lines, hints)
+	lines = append(lines, "")
+	lines = append(lines, footer)
 
 	if strings.TrimSpace(message) == "" {
 		lines = append(lines, "")
@@ -328,13 +282,16 @@ func truncateDisplay(s string, maxCols int) string {
 	return b.String() + "…"
 }
 
-func colorizeRiskTag(tag string, risk workspacerisk.WorkspaceRisk) string {
+func colorizeRiskID(id string, risk workspacerisk.WorkspaceRisk, useColor bool) string {
+	if !useColor {
+		return id
+	}
 	switch risk {
-	case workspacerisk.WorkspaceRiskUnpushed, workspacerisk.WorkspaceRiskDiverged:
-		return "\x1b[33m" + tag + "\x1b[0m"
 	case workspacerisk.WorkspaceRiskDirty, workspacerisk.WorkspaceRiskUnknown:
-		return "\x1b[31m" + tag + "\x1b[0m"
+		return styleError(id, true)
+	case workspacerisk.WorkspaceRiskDiverged, workspacerisk.WorkspaceRiskUnpushed:
+		return styleWarn(id, true)
 	default:
-		return tag
+		return id
 	}
 }

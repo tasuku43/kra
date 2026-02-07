@@ -13,9 +13,9 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
 
 - Render an inline list in terminal (do not take over full screen).
 - Cursor movement by arrow keys (`Up` / `Down`).
-- `Enter`: toggle check on focused row.
-- `Ctrl+D`: confirm current selection and execute command-specific action.
-- `Ctrl+C`: cancel without side effects.
+- `Space`: toggle check on focused row.
+- `Enter`: proceed with current selection.
+- `Esc` or `Ctrl+C`: cancel without side effects.
 
 ## TTY requirement
 
@@ -29,13 +29,24 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
 Each row should include at least:
 - selected marker
 - workspace `id`
-- `risk` (command-appropriate)
 - summary text (for example description)
 
 Header/footer should show:
 - command mode (`close`, `go`, `reopen`, `purge`)
 - scope (`active` or `archived`)
-- key hints (`Enter`, `Ctrl+D`, `Ctrl+C`)
+- key hints (`Space`, `Enter`, `Esc`/`Ctrl+C`)
+
+Section-style output should use consistent headings:
+- `Workspaces(<status>):`
+- `Risk:`
+- `Result:`
+
+Section body indentation must be controlled by shared global constants (no per-command hardcoded spaces).
+
+`<status>` color semantics (TTY):
+- `active`: accent/cool color
+- `archived`: distinct alternate color
+- no-color environments: plain text only
 
 ## Visual consistency rules
 
@@ -50,37 +61,39 @@ Header/footer should show:
 ## Row layout and alignment
 
 - Row information order is fixed:
-  - focus marker, selection marker, `id`, `[risk]`, `- description`
+  - focus marker, selection marker, `id`, `description`
 - Canonical row shape:
-  - `> ✔︎ WS-202 [dirty] - payment hotfix`
-  - `  ○  WS-101 [clean] - login flow`
+  - `> [ ] WS-101      login flow`
+  - `  [x] WS-202      payment hotfix`
 - `status` is not rendered per row. State context is provided by header `scope`.
 - The description column must be vertically aligned across rows (fixed description start column).
-- `risk` is always rendered as a word badge:
-  - `[clean]`, `[unpushed]`, `[diverged]`, `[dirty]`, `[unknown]`
+- Risk tags are not rendered in `Workspaces(...)` rows.
+- Risk hint in `Workspaces(...)` is color-only and applies to workspace id:
+  - clean: default
+  - warning (`unpushed`/`diverged`): warn color
+  - danger (`dirty`/`unknown`): error color
 
 ## Selection visual behavior (task-list style)
 
 - Unselected row:
-  - normal contrast + `○`
+  - normal contrast + `[ ]`
 - Selected row:
-  - row-wide muted/low-contrast + `✔︎`
-  - this muted style also applies to the risk badge on that row
+  - normal contrast + `[x]`
 - Focus row:
   - `>` marker indicates current cursor row
-- Optional enhancement:
-  - strikethrough for selected rows may be used when terminal capability is reliable; otherwise muted-only.
 
 ## Shared UI component policy
 
 To prevent per-command drift, selector-related rendering must be built from shared components.
 
 Required shared modules (logical units):
-- `StyleToken`: semantic style set (`primary`, `muted`, `warning`, `danger`, `selected`)
+- `StyleToken`: semantic style set (`primary`, `muted`, `warning`, `danger`, `selected`, `status_active`, `status_archived`)
 - `WorkspaceRowRenderer`: one-line summary renderer for a workspace
 - `RepoTreeRenderer`: indented supplemental renderer for repo tree details
-- `RiskBadgeRenderer`: canonical risk badge formatter (`[clean]`, `[dirty]`, `[unpushed]`, `[unknown]`)
-- `SelectorFrameRenderer`: header/footer and key-hint renderer
+- `RiskBadgeRenderer`: canonical risk badge formatter for `Risk:` section
+- `SectionTitleRenderer`: section heading renderer (`Workspaces(...)`, `Risk`, `Result`)
+- `StatusLabelRenderer`: canonical status label formatter (`active`, `archived`)
+- `SelectorFrameRenderer`: footer and key-hint renderer
 
 Rules:
 - Command handlers (`ws close/go/reopen/purge`) must not define ad-hoc colors or row formats inline.
@@ -123,6 +136,8 @@ Optional flags may switch scope if defined in each command spec.
 
 ## Confirmation integration
 
-- Selector confirmation (`Ctrl+D`) only finalizes selection.
-- Destructive commands (`close`, `purge`) must still run safety checks and explicit final confirmation steps
-  defined by their command specs.
+- Selector proceed (`Enter`) finalizes current selection and moves to the next phase.
+- Destructive commands (`close`, `purge`) must still run safety checks defined by their command specs.
+- In stacked CLI-style flows, commands print sections sequentially:
+  - clean-only selection: `Workspaces(...)` -> `Result:`
+  - non-clean selection: `Workspaces(...)` -> `Risk:` -> `Result:`

@@ -77,12 +77,23 @@ If the Git working tree has unrelated changes, this command must not include the
 - If `<id>` is omitted, launch shared selector UI (`commands/ws/selector.md`) in `active` scope.
 - Selector mode allows multiple selection.
 - Non-TTY invocation without `<id>` must error (no fallback mode).
+- Selector and follow-up output should use section headings:
+  - `Workspaces(active):`
+  - `Risk:`
+  - `Result:`
+- Section spacing:
+  - `Workspaces(active):` and `Risk:` have one blank line after heading.
+  - `Result:` has no blank line after heading.
+- Section body indentation must use shared global UI indentation constants.
 
 ### Bulk close safety gate
 
 - After selector confirmation, evaluate risk for all selected workspaces.
 - `risky` is defined as `dirty` / `unpushed` / `diverged` (plus `unknown` as non-safe).
-- If any selected workspace is non-clean (`risky` or `unknown`), abort the whole operation (no partial close).
+- If selected set is clean-only, proceed directly to close and print `Result:`.
+- If any selected workspace is non-clean (`risky` or `unknown`), print `Risk:` section and require explicit
+  confirmation there before execution.
+- If risk confirmation is declined/canceled, abort without side effects.
 - Risk label semantics and severity follow `commands/ws/selector.md`.
 
 ### Commit strictness (non-repo files)
