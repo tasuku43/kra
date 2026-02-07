@@ -219,6 +219,144 @@ func TestParseRepoDiscoverOptions_DefaultProvider(t *testing.T) {
 	}
 }
 
+func TestCLI_RepoRemove_RemovesSelectedRegisteredRepo(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+	repoSpec1 := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "remove-target")
+	repoSpec2 := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "keep-target")
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"repo", "add", repoSpec1, repoSpec2}); code != exitOK {
+			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	origPrompt := promptRepoRemoveSelection
+	promptRepoRemoveSelection = func(c *CLI, candidates []workspaceSelectorCandidate) ([]string, error) {
+		return []string{"example-org/remove-target"}, nil
+	}
+	defer func() { promptRepoRemoveSelection = origPrompt }()
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	if code := c.Run([]string{"repo", "remove"}); code != exitOK {
+		t.Fatalf("repo remove exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	if !strings.Contains(out.String(), "Removed 1 / 1") {
+		t.Fatalf("stdout missing remove summary: %q", out.String())
+	}
+
+	db, openErr := statestore.Open(context.Background(), env.StateDBPath())
+	if openErr != nil {
+		t.Fatalf("Open(state db) error: %v", openErr)
+	}
+	defer func() { _ = db.Close() }()
+
+	var count int
+	if err := db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM repos WHERE repo_key = ?", "example-org/remove-target").Scan(&count); err != nil {
+		t.Fatalf("query removed repo count: %v", err)
+	}
+	if count != 0 {
+		t.Fatalf("removed repo still exists: count=%d", count)
+	}
+	if err := db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM repos WHERE repo_key = ?", "example-org/keep-target").Scan(&count); err != nil {
+		t.Fatalf("query kept repo count: %v", err)
+	}
+	if count != 1 {
+		t.Fatalf("kept repo count = %d, want 1", count)
+	}
+}
+
+func TestCLI_RepoRemove_FailsWhenRepoBoundToWorkspace(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "bound-repo")
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
+			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"ws", "create", "--no-prompt", "TEST-200"}); code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	db, openErr := statestore.Open(context.Background(), env.StateDBPath())
+	if openErr != nil {
+		t.Fatalf("Open(state db) error: %v", openErr)
+	}
+	defer func() { _ = db.Close() }()
+
+	var repoUID string
+	if err := db.QueryRowContext(context.Background(), "SELECT repo_uid FROM repos WHERE repo_key = ?", "example-org/bound-repo").Scan(&repoUID); err != nil {
+		t.Fatalf("query repo uid: %v", err)
+	}
+	now := int64(1_700_000_000)
+	if err := statestore.AddWorkspaceRepo(context.Background(), db, statestore.AddWorkspaceRepoInput{
+		WorkspaceID:   "TEST-200",
+		RepoUID:       repoUID,
+		RepoKey:       "example-org/bound-repo",
+		Alias:         "bound-repo",
+		Branch:        "TEST-200",
+		BaseRef:       "",
+		RepoSpecInput: repoSpec,
+		Now:           now,
+	}); err != nil {
+		t.Fatalf("AddWorkspaceRepo() error: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"repo", "remove", "example-org/bound-repo"})
+	if code != exitError {
+		t.Fatalf("repo remove exit code = %d, want %d", code, exitError)
+	}
+	if !strings.Contains(err.String(), "cannot remove repos that are still bound to workspaces") {
+		t.Fatalf("stderr missing bound warning: %q", err.String())
+	}
+}
+
 func prepareRemoteRepoSpecWithName(t *testing.T, runGit func(dir string, args ...string), host string, owner string, repo string) string {
 	t.Helper()
 

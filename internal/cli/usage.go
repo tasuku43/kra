@@ -41,6 +41,7 @@ func (c *CLI) printRepoUsage(w io.Writer) {
 Subcommands:
   add               Add repositories into shared repo pool
   discover          Discover repositories from provider and add selected
+  remove            Remove repositories from current root registration
   help              Show this help
 `)
 }
@@ -105,6 +106,22 @@ Discover repositories from provider, select multiple repos, and add them into th
 Options:
   --org             Organization name (required)
   --provider        Provider name (default: github)
+`)
+}
+
+func (c *CLI) printRepoRemoveUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx repo remove [<repo-key>...]
+
+Remove repositories from the current root registry (logical detach from this root only).
+
+Modes:
+  - selector mode: omit args (interactive TTY required)
+  - direct mode:   pass one or more repo keys
+
+Notes:
+  - Physical bare repos in the shared pool are NOT deleted by this command.
+  - Repos still bound to any workspace in this root cannot be removed.
 `)
 }
 

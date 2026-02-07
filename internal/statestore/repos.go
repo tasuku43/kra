@@ -242,6 +242,15 @@ type RepoPoolCandidate struct {
 	Score30d  int
 }
 
+type RootRepoCandidate struct {
+	RepoUID           string
+	RepoKey           string
+	RemoteURL         string
+	UpdatedAt         int64
+	Score30d          int
+	WorkspaceRefCount int
+}
+
 func ListRepoPoolCandidates(ctx context.Context, db *sql.DB, startDay int) ([]RepoPoolCandidate, error) {
 	rows, err := db.QueryContext(ctx, `
 SELECT
@@ -324,4 +333,72 @@ ORDER BY repo_uid
 		return nil, fmt.Errorf("iterate repo_uids: %w", err)
 	}
 	return out, nil
+}
+
+func ListRootRepoCandidates(ctx context.Context, db *sql.DB, startDay int) ([]RootRepoCandidate, error) {
+	rows, err := db.QueryContext(ctx, `
+SELECT
+  r.repo_uid,
+  r.repo_key,
+  r.remote_url,
+  r.updated_at,
+  COALESCE(SUM(u.add_count), 0) AS score_30d,
+  COUNT(DISTINCT wr.workspace_id) AS workspace_ref_count
+FROM repos r
+LEFT JOIN repo_usage_daily u
+  ON u.repo_uid = r.repo_uid
+ AND u.day >= ?
+LEFT JOIN workspace_repos wr
+  ON wr.repo_uid = r.repo_uid
+GROUP BY r.repo_uid, r.repo_key, r.remote_url, r.updated_at
+ORDER BY score_30d DESC, r.updated_at DESC, r.repo_key ASC
+`, startDay)
+	if err != nil {
+		return nil, fmt.Errorf("query root repo candidates: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]RootRepoCandidate, 0, 32)
+	for rows.Next() {
+		var it RootRepoCandidate
+		if err := rows.Scan(&it.RepoUID, &it.RepoKey, &it.RemoteURL, &it.UpdatedAt, &it.Score30d, &it.WorkspaceRefCount); err != nil {
+			return nil, fmt.Errorf("scan root repo candidate: %w", err)
+		}
+		out = append(out, it)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate root repo candidates: %w", err)
+	}
+	return out, nil
+}
+
+func DeleteReposByUIDs(ctx context.Context, db *sql.DB, repoUIDs []string) error {
+	if len(repoUIDs) == 0 {
+		return nil
+	}
+	placeholders := make([]string, 0, len(repoUIDs))
+	args := make([]any, 0, len(repoUIDs))
+	for _, repoUID := range repoUIDs {
+		repoUID = strings.TrimSpace(repoUID)
+		if repoUID == "" {
+			return fmt.Errorf("repo uid is required")
+		}
+		placeholders = append(placeholders, "?")
+		args = append(args, repoUID)
+	}
+
+	tx, err := db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("begin tx: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	query := fmt.Sprintf("DELETE FROM repos WHERE repo_uid IN (%s)", strings.Join(placeholders, ","))
+	if _, err := tx.ExecContext(ctx, query, args...); err != nil {
+		return fmt.Errorf("delete repos: %w", err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("commit tx: %w", err)
+	}
+	return nil
 }

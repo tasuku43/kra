@@ -214,6 +214,24 @@ It does not replace per-item dependencies.
   - Depends: MVP-060
   - Parallel: yes
 
+- [x] MVP-062: `gionx repo remove` (root-local logical detach)
+  - What: remove selected repos from current root `repos` registration using selector/direct mode.
+    Keep physical bare repos untouched, and fail fast when selected repos are still referenced by
+    `workspace_repos`.
+  - Specs:
+    - `docs/spec/commands/repo/remove.md`
+    - `docs/spec/concepts/state-store.md`
+  - Depends: MVP-060, MVP-061
+  - Parallel: yes
+
+- [ ] MVP-063: `gionx repo gc` (safe physical pool cleanup)
+  - What: garbage-collect bare repos from shared pool only when safety gates pass.
+  - Specs:
+    - `docs/spec/commands/repo/gc.md`
+    - `docs/spec/commands/state/registry.md`
+  - Depends: MVP-062
+  - Parallel: yes
+
 - [x] MVP-900: Test harness + non-happy-path coverage baseline
   - What: temp `GIONX_ROOT`, isolated sqlite file per test, drift scenario tests
   - Specs:
