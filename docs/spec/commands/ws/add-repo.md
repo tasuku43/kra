@@ -31,6 +31,8 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 1. Select repos from pool (multi-select)
   - section heading: `Repos(pool):`
   - row display: `repo_key` only
+  - TTY: use shared inline selector (`space` toggle, `enter` confirm, text filter input)
+  - non-TTY: fallback to numbered prompt input (`comma numbers, /filter, empty=cancel`)
 
 2. Input per-repo branch settings
   - prompt `base_ref` for each selected repo

@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattn/go-isatty"
 	"github.com/tasuku43/gion-core/repospec"
 	"github.com/tasuku43/gion-core/repostore"
 	"github.com/tasuku43/gionx/internal/gitutil"
@@ -343,6 +344,43 @@ func deriveAliasFromRepoKey(repoKey string) string {
 }
 
 func (c *CLI) promptAddRepoPoolSelection(candidates []addRepoPoolCandidate) ([]addRepoPoolCandidate, error) {
+	if len(candidates) == 0 {
+		return nil, errSelectorCanceled
+	}
+
+	inFile, ok := c.In.(*os.File)
+	if ok && isatty.IsTerminal(inFile.Fd()) {
+		selectorCandidates := make([]workspaceSelectorCandidate, 0, len(candidates))
+		candidateByID := make(map[string]addRepoPoolCandidate, len(candidates))
+		for _, it := range candidates {
+			selectorCandidates = append(selectorCandidates, workspaceSelectorCandidate{
+				ID:          it.RepoKey,
+				Description: "",
+			})
+			candidateByID[it.RepoKey] = it
+		}
+		selectedIDs, err := c.promptWorkspaceSelectorWithOptions("active", "add", "Repos(pool):", "repo", selectorCandidates)
+		if err != nil {
+			return nil, err
+		}
+		selected := make([]addRepoPoolCandidate, 0, len(selectedIDs))
+		for _, id := range selectedIDs {
+			cand, exists := candidateByID[id]
+			if !exists {
+				continue
+			}
+			selected = append(selected, cand)
+		}
+		if len(selected) == 0 {
+			return nil, errSelectorCanceled
+		}
+		return selected, nil
+	}
+
+	return c.promptAddRepoPoolSelectionFallback(candidates)
+}
+
+func (c *CLI) promptAddRepoPoolSelectionFallback(candidates []addRepoPoolCandidate) ([]addRepoPoolCandidate, error) {
 	if len(candidates) == 0 {
 		return nil, errSelectorCanceled
 	}
