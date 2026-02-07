@@ -2,8 +2,9 @@
 title: "`gionx ws list`"
 status: implemented
 pending:
-  - UX-WS-001-selector-foundation
-  - UX-WS-001-list-role-clarification
+  - UX-WS-006-selector-parity-output
+  - UX-WS-006-tree-detail-mode
+  - UX-WS-006-machine-readable-policy
 ---
 
 # `gionx ws list`
@@ -20,19 +21,25 @@ action commands (`ws close`, `ws go`, `ws reopen`, `ws purge`).
 - `ws list` only shows current state and exits (non-interactive).
 - Action execution belongs to `ws close/go/reopen/purge` selector flows.
 
-## Default display (planned refinement)
+## Default display (planned refinement, UX-WS-006)
 
-- One row per workspace (summary view), with at least:
+- One row per workspace (summary view) using selector-parity visual hierarchy.
+- Row content is single-line and summary-first:
   - `id`
   - `status`
-  - `risk` (badge-like token, e.g. `[clean]`, `[dirty]`, `[unpushed]`, `[unknown]`)
+  - `risk` (currently color-only in row body; textual risk tags are optional and still under discussion)
   - `repo_count`
-  - `updated_at`
   - `description`
+- `updated_at` should be available in expanded detail or optional metadata line, not mandatory in the default
+  summary line.
 - Summary output should follow the same shared row rendering semantics as selector flows
   (`commands/ws/selector.md`), while remaining non-interactive.
+- Status label coloring must follow shared semantics from selector UI:
+  - `active`: active accent color
+  - `archived`: archived accent color
+  - no-color terminals: plain text fallback
 
-## Expanded display (planned refinement)
+## Expanded display (planned refinement, UX-WS-006)
 
 - `--tree` shows repo-level detail under each workspace row.
 - Default output remains summary-first to keep task-list UX and scripting usage simple.
@@ -42,8 +49,16 @@ action commands (`ws close`, `ws go`, `ws reopen`, `ws purge`).
 ## Machine-readable output policy
 
 - `ws list` is specified as human-oriented task-list output in this UX phase.
-- Do not introduce a new machine-readable format contract in this ticket.
-- If structured output is needed later, define it in a dedicated follow-up spec item (for example `--format`).
+- Machine-readable output policy is still open:
+  - keep current TSV contract, or
+  - replace with explicit `--format` contract (`tsv`/`json` etc.) in a follow-up.
+- This ticket should not finalize a long-term machine-readable contract without an explicit decision.
+
+## Open points (to finalize before implementation)
+
+- whether default summary row includes textual risk tags (`[clean]`, `[dirty]`) or color-only risk hint
+- exact `--tree` shape (indent depth, repo metadata fields, missing repo marker style)
+- machine-readable policy (`legacy TSV` keep vs `--format` introduction)
 
 ## Display fields (MVP)
 

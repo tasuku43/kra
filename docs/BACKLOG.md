@@ -256,3 +256,12 @@ It does not replace per-item dependencies.
     - `docs/spec/concepts/workspace-lifecycle.md`
   - Depends: UX-WS-001, MVP-042
   - Parallel: yes
+
+- [ ] UX-WS-006: `gionx ws list` selector-parity output
+  - What: replace current TSV output with selector-parity non-interactive list UI (summary-first), and add
+    optional expanded detail mode (`--tree`) using the same shared rendering hierarchy.
+  - Specs:
+    - `docs/spec/commands/ws/list.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-001, MVP-021
+  - Serial: yes (prevent UI drift across ws commands)
