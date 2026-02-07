@@ -106,10 +106,10 @@ func (c *CLI) runWSClose(args []string) int {
 
 	flow := workspaceSelectRiskResultFlowConfig{
 		FlowName: "ws close",
-		SelectIDs: func() ([]string, error) {
+		SelectItems: func() ([]workspaceFlowSelection, error) {
 			if directWorkspaceID != "" {
-				selected := []string{directWorkspaceID}
-				c.debugf("ws close direct mode selected=%v", selected)
+				selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
+				c.debugf("ws close direct mode selected=%v", workspaceFlowSelectionIDs(selected))
 				return selected, nil
 			}
 
@@ -126,28 +126,35 @@ func (c *CLI) runWSClose(args []string) int {
 				return nil, err
 			}
 			c.debugf("ws close selector mode selected=%v", ids)
-			return ids, nil
+			selected := make([]workspaceFlowSelection, 0, len(ids))
+			for _, id := range ids {
+				selected = append(selected, workspaceFlowSelection{ID: id})
+			}
+			return selected, nil
 		},
-		CollectRiskDetails: func(ids []string) ([]workspaceRiskDetail, error) {
-			items, err := collectWorkspaceRiskDetails(ctx, db, root, ids)
+		CollectRiskStage: func(items []workspaceFlowSelection) (workspaceFlowRiskStage, error) {
+			riskItems, err := collectWorkspaceRiskDetails(ctx, db, root, workspaceFlowSelectionIDs(items))
 			if err != nil {
-				return nil, fmt.Errorf("inspect workspace risk: %w", err)
+				return workspaceFlowRiskStage{}, fmt.Errorf("inspect workspace risk: %w", err)
 			}
-			if hasNonCleanRisk(items) {
-				c.debugf("ws close risk detected count=%d", len(items))
+			hasRisk := hasNonCleanRisk(riskItems)
+			if hasRisk {
+				c.debugf("ws close risk detected count=%d", len(riskItems))
 			}
-			return items, nil
-		},
-		PrintRisk: func(items []workspaceRiskDetail, useColor bool) {
-			printRiskSection(c.Out, items, useColor)
+			return workspaceFlowRiskStage{
+				HasRisk: hasRisk,
+				Print: func(useColor bool) {
+					printRiskSection(c.Out, riskItems, useColor)
+				},
+			}, nil
 		},
 		ConfirmRisk: c.confirmRiskProceed,
-		ApplyOne: func(workspaceID string) error {
-			c.debugf("ws close archive start workspace=%s", workspaceID)
-			if err := c.closeWorkspace(ctx, db, root, repoPoolPath, workspaceID); err != nil {
+		ApplyOne: func(item workspaceFlowSelection) error {
+			c.debugf("ws close archive start workspace=%s", item.ID)
+			if err := c.closeWorkspace(ctx, db, root, repoPoolPath, item.ID); err != nil {
 				return err
 			}
-			c.debugf("ws close archive completed workspace=%s", workspaceID)
+			c.debugf("ws close archive completed workspace=%s", item.ID)
 			return nil
 		},
 		ResultVerb: "Archived",
