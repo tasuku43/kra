@@ -115,6 +115,9 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case tea.KeySpace:
 			if m.filterMode {
+				m.filter += " "
+				m.ensureCursorInFilteredRange()
+				m.message = ""
 				return m, nil
 			}
 			visible := m.filteredIndices()
@@ -386,16 +389,14 @@ func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorC
 	lines = append(lines, "")
 	lines = append(lines, bodyLines...)
 	lines = append(lines, "")
-	if filterLabel != "" {
-		filterLine := fmt.Sprintf("%sfilter: %s", uiIndent, truncateDisplay(filterLabel, maxCols-8))
-		if filterMode {
-			filterLine += " _"
-		}
-		if useColor {
-			lines = append(lines, styleMuted(filterLine, true))
-		} else {
-			lines = append(lines, filterLine)
-		}
+	filterLine := fmt.Sprintf("%sfilter: %s", uiIndent, truncateDisplay(filterLabel, maxCols-8))
+	if filterMode {
+		filterLine += " _"
+	}
+	if useColor {
+		lines = append(lines, styleMuted(filterLine, true))
+	} else {
+		lines = append(lines, filterLine)
 	}
 	lines = append(lines, footer)
 
