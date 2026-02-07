@@ -34,6 +34,8 @@ Implementation should reference these specs. When behavior changes, update the s
 - Commands
   - `commands/context.md`: `gionx context`
   - `commands/init.md`: `gionx init`
+  - `commands/repo/add.md`: `gionx repo add`
+  - `commands/repo/discover.md`: `gionx repo discover`
   - `commands/state/registry.md`: `gionx state` foundation (registry)
   - `commands/ws/selector.md`: Shared inline selector UI for workspace actions
   - `commands/ws/create.md`: `gionx ws create`

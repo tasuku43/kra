@@ -196,6 +196,24 @@ It does not replace per-item dependencies.
   - Depends: MVP-050
   - Parallel: yes
 
+- [x] MVP-060: `gionx repo add` (shared pool upsert)
+  - What: add root-scoped repo registration command that upserts shared bare pool and current root `repos` rows
+    from repo specs (best-effort, conflict-safe).
+  - Specs:
+    - `docs/spec/commands/repo/add.md`
+    - `docs/spec/concepts/state-store.md`
+  - Depends: MVP-051
+  - Parallel: yes
+
+- [x] MVP-061: `gionx repo discover` (provider-based bulk add)
+  - What: add provider adapter flow (`--provider` default github) to discover org repos, exclude current-root
+    registered repos, and bulk add selected repos through `repo add` path.
+  - Specs:
+    - `docs/spec/commands/repo/discover.md`
+    - `docs/spec/commands/repo/add.md`
+  - Depends: MVP-060
+  - Parallel: yes
+
 - [x] MVP-900: Test harness + non-happy-path coverage baseline
   - What: temp `GIONX_ROOT`, isolated sqlite file per test, drift scenario tests
   - Specs:

@@ -103,3 +103,6 @@ Recommended approach:
 SQLite note:
 - foreign key constraints are only enforced when `PRAGMA foreign_keys = ON` is set.
   `gionx` should enable it for every connection.
+For repository intake, `gionx repo add` / `gionx repo discover` use a hybrid model:
+- shared physical bare pool (`repo_pool_path`)
+- root-local logical registry (`repos` table in each root state DB)
