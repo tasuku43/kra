@@ -1,9 +1,6 @@
 ---
 title: "`gionx ws close`"
 status: implemented
-pending:
-  - UX-WS-002-shared-selector
-  - UX-WS-003-bulk-close-risk-gate
 ---
 
 # `gionx ws close [<id>]`
@@ -69,7 +66,7 @@ If the Git working tree has unrelated changes, this command must not include the
 - `workspaces/**/repos/**` is ignored in `.gitignore`, but `ws close` must still delete worktrees
   (archives should not contain repos).
 
-## Next UX iteration (planned)
+## Modes and selector behavior
 
 ### Selector mode and direct mode
 

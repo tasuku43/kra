@@ -1,8 +1,6 @@
 ---
 title: "`gionx ws reopen`"
 status: implemented
-pending:
-  - UX-WS-005-selector-reopen
 ---
 
 # `gionx ws reopen [<id>]`
@@ -65,8 +63,9 @@ If the Git working tree has unrelated changes, this command must not include the
 - Append `workspace_events(event_type='reopened', workspace_id='<id>', at=...)` (this is the source of truth
   for the reopen timestamp).
 
-## Next UX iteration (planned)
+## Modes
 
-- If `<id>` is provided, run existing direct mode.
-- If `<id>` is omitted, launch shared selector UI (`commands/ws/selector.md`) in `archived` scope.
-- Selector mode allows multiple selection.
+- If `<id>` is provided, run direct mode for that workspace.
+- If `<id>` is omitted, run selector mode in `archived` scope.
+- Selector mode supports multi-select.
+- Non-TTY invocation without `<id>` is rejected (no fallback mode).

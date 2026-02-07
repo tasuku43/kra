@@ -95,18 +95,22 @@ Modes:
 
 func (c *CLI) printWSReopenUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws reopen <id>
+  gionx ws reopen [<id>]
 
 Reopen an archived workspace:
 - move archive/<id>/ to workspaces/<id>/ atomically
 - recreate git worktrees under workspaces/<id>/repos/
 - commit the reopen change in GIONX_ROOT
+
+Modes:
+- direct mode: provide <id>
+- selector mode: omit <id> (interactive TTY required, archived scope)
 `)
 }
 
 func (c *CLI) printWSPurgeUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws purge [--no-prompt --force] <id>
+  gionx ws purge [--no-prompt --force] [<id>]
 
 Purge (permanently delete) a workspace:
 - always asks confirmation in interactive mode
@@ -118,5 +122,9 @@ Purge (permanently delete) a workspace:
 Options:
   --no-prompt        Do not ask confirmations (requires --force)
   --force            Required with --no-prompt
+
+Modes:
+- direct mode: provide <id>
+- selector mode: omit <id> (interactive TTY required, archived scope)
 `)
 }

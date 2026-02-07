@@ -1,6 +1,6 @@
 ---
 title: "`gionx ws` selector UI"
-status: planned
+status: implemented
 ---
 
 # Selector UI (shared by `ws close` / `ws go` / `ws reopen` / `ws purge`)

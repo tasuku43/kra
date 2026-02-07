@@ -1,8 +1,6 @@
 ---
 title: "`gionx ws purge`"
 status: implemented
-pending:
-  - UX-WS-006-selector-purge
 ---
 
 # `gionx ws purge [<id>]`
@@ -59,8 +57,9 @@ This is a destructive operation. It is separate from `ws close`, which keeps an 
 
 If the Git working tree has unrelated changes, this command must not include them in the commit.
 
-## Next UX iteration (planned)
+## Modes
 
-- If `<id>` is provided, run existing direct mode.
-- If `<id>` is omitted, launch shared selector UI (`commands/ws/selector.md`) in `archived` scope.
-- Selector mode allows multiple selection.
+- If `<id>` is provided, run direct mode for that workspace.
+- If `<id>` is omitted, run selector mode in `archived` scope.
+- Selector mode supports multi-select.
+- Non-TTY invocation without `<id>` is rejected (no fallback mode).
