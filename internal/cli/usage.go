@@ -60,9 +60,14 @@ Options:
 
 func (c *CLI) printWSListUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws list
+  gionx ws list [--archived] [--tree] [--format human|tsv]
 
 List workspaces from the state store and repair basic drift from the filesystem.
+
+Options:
+  --archived        Show archived workspaces (default: active only)
+  --tree            Show repo detail lines under each workspace
+  --format          Output format (default: human)
 `)
 }
 
