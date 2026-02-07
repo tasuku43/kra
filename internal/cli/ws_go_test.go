@@ -51,6 +51,12 @@ func TestCLI_WS_Go_DirectActive_PrintsDestination(t *testing.T) {
 	if !strings.Contains(out.String(), "Result:") || !strings.Contains(out.String(), want) {
 		t.Fatalf("stdout missing result destination (want=%q): %q", want, out.String())
 	}
+	if !strings.Contains(out.String(), "\nResult:\n  Destination: ") {
+		t.Fatalf("stdout must keep Result body with shared indent: %q", out.String())
+	}
+	if strings.Contains(out.String(), "Result:\n\n") {
+		t.Fatalf("Result heading must not have blank line before body: %q", out.String())
+	}
 	if err.Len() != 0 {
 		t.Fatalf("stderr not empty: %q", err.String())
 	}

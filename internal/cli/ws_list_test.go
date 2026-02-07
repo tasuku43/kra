@@ -206,6 +206,9 @@ func TestCLI_WS_List_DefaultScopeShowsActiveOnlyAndNoSelectionMarker(t *testing.
 	if !strings.Contains(got, "Workspaces(active):") {
 		t.Fatalf("stdout missing active heading: %q", got)
 	}
+	if !strings.Contains(got, "Workspaces(active):\n\n") {
+		t.Fatalf("ws list should keep one blank line after heading: %q", got)
+	}
 	if !strings.Contains(got, "WS_ACTIVE") {
 		t.Fatalf("stdout missing active workspace: %q", got)
 	}
@@ -337,5 +340,38 @@ func TestRenderWSListSummaryRow_TruncatesDescriptionWithEllipsis(t *testing.T) {
 	}
 	if w := displayWidth(line); w > 44 {
 		t.Fatalf("line width = %d, want <= 44: %q", w, line)
+	}
+}
+
+func TestRenderWSListSummaryRow_FixedColumnOrderContract(t *testing.T) {
+	row := wsListRow{
+		ID:          "WS1",
+		RepoCount:   7,
+		Risk:        workspacerisk.WorkspaceRiskClean,
+		Description: "desc",
+	}
+	line := renderWSListSummaryRow(row, 10, 1, 8, 120, false)
+	idIdx := strings.Index(line, "WS1")
+	riskIdx := strings.Index(line, "*")
+	repoIdx := strings.Index(line, "repos:7")
+	descIdx := strings.Index(line, "desc")
+	if idIdx < 0 || riskIdx < 0 || repoIdx < 0 || descIdx < 0 {
+		t.Fatalf("summary row missing required tokens: %q", line)
+	}
+	if !(idIdx < riskIdx && riskIdx < repoIdx && repoIdx < descIdx) {
+		t.Fatalf("summary row must keep ID|risk|repos|description order: %q", line)
+	}
+}
+
+func TestPrintWSListHuman_EmptyRowsUsesIndentedNone(t *testing.T) {
+	var out bytes.Buffer
+	printWSListHuman(&out, nil, "active", false, false)
+	got := out.String()
+
+	if !strings.Contains(got, "Workspaces(active):\n\n") {
+		t.Fatalf("missing heading spacing contract: %q", got)
+	}
+	if !strings.Contains(got, "\n  (none)\n") {
+		t.Fatalf("empty state should be indented with shared indent: %q", got)
 	}
 }
