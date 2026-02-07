@@ -30,6 +30,25 @@ func TestWorkspaceSelectorModel_SpaceTogglesSelection(t *testing.T) {
 	}
 }
 
+func TestWorkspaceSelectorModel_BlinkTogglesCaretVisibility(t *testing.T) {
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
+	if !m.showCaret {
+		t.Fatalf("initial caret visibility should be true")
+	}
+
+	updated, cmd := m.Update(selectorCaretBlinkMsg{})
+	next, ok := updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if next.showCaret {
+		t.Fatalf("caret visibility should toggle to false")
+	}
+	if cmd == nil {
+		t.Fatalf("blink should schedule next tick")
+	}
+}
+
 func TestWorkspaceSelectorModel_EnterRequiresSelection(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
 
@@ -187,6 +206,7 @@ func TestRenderWorkspaceSelectorLines_AlwaysShowsFilterLine(t *testing.T) {
 		0,
 		"",
 		"",
+		true,
 		false,
 		80,
 	)
