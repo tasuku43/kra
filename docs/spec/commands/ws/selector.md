@@ -155,6 +155,9 @@ Optional flags may switch scope if defined in each command spec.
 
 - Selector proceed (`Enter`) finalizes current selection and moves to the next phase.
 - Destructive commands (`close`, `purge`) must still run safety checks defined by their command specs.
+- Confirmation policy split:
+  - `ws close`: require confirmation only when selected set includes non-clean risk.
+  - `ws purge`: always require at least one purge confirmation (and an additional confirmation for active risk).
 - In stacked CLI-style flows, commands print sections sequentially:
   - clean-only selection: `Workspaces(...)` -> `Result:`
   - non-clean selection: `Workspaces(...)` -> `Risk:` -> `Result:`
