@@ -311,7 +311,7 @@ It does not replace per-item dependencies.
   - Parallel: yes
 
 - [ ] UX-WS-012: Selector keybind extensions (phase 1)
-  - What: add `/` filter, `a` select-all, and `A` clear-all to selector-mode commands.
+  - What: add `a` select-all and `A` clear-all to selector-mode commands (filter input is baseline behavior).
   - Specs:
     - `docs/spec/commands/ws/selector.md`
   - Depends: UX-WS-001
