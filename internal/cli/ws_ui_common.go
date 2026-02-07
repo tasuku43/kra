@@ -11,16 +11,69 @@ import (
 const (
 	ansiReset  = "\x1b[0m"
 	ansiBold   = "\x1b[1m"
+	ansiBlack  = "\x1b[30m"
+	ansiRed    = "\x1b[31m"
+	ansiGreen  = "\x1b[32m"
+	ansiYellow = "\x1b[33m"
+	ansiBlue   = "\x1b[34m"
+	ansiCyan   = "\x1b[36m"
 	ansiMuted  = "\x1b[90m"
-	ansiAccent = "\x1b[36m"
-	ansiWarn   = "\x1b[33m"
-	ansiError  = "\x1b[31m"
 
-	ansiStatusActive   = "\x1b[36m"
-	ansiStatusArchived = "\x1b[35m"
+	// Backward-compatible aliases for existing tests/callers.
+	ansiAccent = ansiCyan
+	ansiWarn   = ansiYellow
+	ansiError  = ansiRed
 
 	uiIndent = "  "
 )
+
+type styleToken string
+
+const (
+	tokenTextPrimary styleToken = "text.primary"
+	tokenTextMuted   styleToken = "text.muted"
+	tokenAccent      styleToken = "accent"
+
+	tokenStatusSuccess styleToken = "status.success"
+	tokenStatusWarning styleToken = "status.warning"
+	tokenStatusError   styleToken = "status.error"
+	tokenStatusInfo    styleToken = "status.info"
+
+	tokenFocus     styleToken = "focus"
+	tokenSelection styleToken = "selection"
+
+	tokenDiffAdd    styleToken = "diff.add"
+	tokenDiffRemove styleToken = "diff.remove"
+)
+
+func tokenANSI(token styleToken) string {
+	switch token {
+	case tokenTextPrimary:
+		return ""
+	case tokenTextMuted:
+		return ansiMuted
+	case tokenAccent:
+		return ansiCyan
+	case tokenStatusSuccess:
+		return ansiGreen
+	case tokenStatusWarning:
+		return ansiYellow
+	case tokenStatusError:
+		return ansiRed
+	case tokenStatusInfo:
+		return ansiBlue
+	case tokenFocus:
+		return ansiCyan
+	case tokenSelection:
+		return ansiBlack
+	case tokenDiffAdd:
+		return ansiGreen
+	case tokenDiffRemove:
+		return ansiRed
+	default:
+		return ""
+	}
+}
 
 func writerSupportsColor(w io.Writer) bool {
 	return writerIsTTY(w)
@@ -41,32 +94,39 @@ func styleBold(text string, useColor bool) string {
 	return ansiBold + text + ansiReset
 }
 
-func styleMuted(text string, useColor bool) string {
+func styleTokenize(text string, token styleToken, useColor bool) string {
 	if !useColor {
 		return text
 	}
-	return ansiMuted + text + ansiReset
+	ansi := tokenANSI(token)
+	if ansi == "" {
+		return text
+	}
+	return ansi + text + ansiReset
+}
+
+func styleMuted(text string, useColor bool) string {
+	return styleTokenize(text, tokenTextMuted, useColor)
 }
 
 func styleAccent(text string, useColor bool) string {
-	if !useColor {
-		return text
-	}
-	return ansiAccent + text + ansiReset
+	return styleTokenize(text, tokenAccent, useColor)
 }
 
 func styleWarn(text string, useColor bool) string {
-	if !useColor {
-		return text
-	}
-	return ansiWarn + text + ansiReset
+	return styleTokenize(text, tokenStatusWarning, useColor)
 }
 
 func styleError(text string, useColor bool) string {
-	if !useColor {
-		return text
-	}
-	return ansiError + text + ansiReset
+	return styleTokenize(text, tokenStatusError, useColor)
+}
+
+func styleSuccess(text string, useColor bool) string {
+	return styleTokenize(text, tokenStatusSuccess, useColor)
+}
+
+func styleInfo(text string, useColor bool) string {
+	return styleTokenize(text, tokenStatusInfo, useColor)
 }
 
 func renderWorkspaceStatusLabel(status string, useColor bool) string {
@@ -75,9 +135,9 @@ func renderWorkspaceStatusLabel(status string, useColor bool) string {
 	}
 	switch status {
 	case "active":
-		return ansiStatusActive + status + ansiReset
+		return styleAccent(status, useColor)
 	case "archived":
-		return ansiStatusArchived + status + ansiReset
+		return styleMuted(status, useColor)
 	default:
 		return status
 	}

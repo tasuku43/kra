@@ -72,6 +72,13 @@ Section body indentation must be controlled by shared global constants (no per-c
 - Color is optional fallback:
   - when color is unavailable, preserve hierarchy via prefixes/indentation only.
 
+Semantic color token policy:
+- Selector rendering must follow `docs/spec/concepts/ui-color.md`.
+- Raw ad-hoc color assignments in command handlers are disallowed.
+- `active`/`archived` label coloring uses:
+  - `active` -> `accent`
+  - `archived` -> `text.muted`
+
 ## Row layout and alignment
 
 - Row information order is fixed:

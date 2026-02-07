@@ -231,13 +231,25 @@ func printRepoPoolProgressPlain(out io.Writer, useColor bool, events <-chan repo
 	for ev := range events {
 		switch ev.Type {
 		case repoPoolAddProgressStart:
-			fmt.Fprintf(out, "%s… %s\n", uiIndent, ev.RepoKey)
+			prefix := "…"
+			if useColor {
+				prefix = styleInfo(prefix, true)
+			}
+			fmt.Fprintf(out, "%s%s %s\n", uiIndent, prefix, ev.RepoKey)
 		case repoPoolAddProgressDone:
 			if ev.Success {
-				fmt.Fprintf(out, "%s✔ %s\n", uiIndent, ev.RepoKey)
+				prefix := "✔"
+				if useColor {
+					prefix = styleSuccess(prefix, true)
+				}
+				fmt.Fprintf(out, "%s%s %s\n", uiIndent, prefix, ev.RepoKey)
 				continue
 			}
-			fmt.Fprintf(out, "%s! %s (%s)\n", uiIndent, ev.RepoKey, ev.Reason)
+			prefix := "!"
+			if useColor {
+				prefix = styleError(prefix, true)
+			}
+			fmt.Fprintf(out, "%s%s %s (%s)\n", uiIndent, prefix, ev.RepoKey, ev.Reason)
 		}
 	}
 }
@@ -326,6 +338,18 @@ func renderRepoPoolProgressLines(useColor bool, rows []repoPoolProgressRow, spin
 		case repoPoolProgressFailed:
 			prefix = "!"
 		}
+		if useColor {
+			switch row.status {
+			case repoPoolProgressRunning:
+				prefix = styleInfo(prefix, true)
+			case repoPoolProgressDone:
+				prefix = styleSuccess(prefix, true)
+			case repoPoolProgressFailed:
+				prefix = styleError(prefix, true)
+			default:
+				prefix = styleMuted(prefix, true)
+			}
+		}
 		line := fmt.Sprintf("%s%s %s", uiIndent, prefix, row.name)
 		if row.status == repoPoolProgressFailed && strings.TrimSpace(row.reason) != "" {
 			line = fmt.Sprintf("%s (%s)", line, row.reason)
@@ -358,10 +382,25 @@ func printRepoPoolAddResult(out io.Writer, outcomes []repoPoolAddOutcome, useCol
 
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, renderResultTitle(useColor))
-	fmt.Fprintf(out, "%sAdded %d / %d\n", uiIndent, success, total)
+	summary := fmt.Sprintf("Added %d / %d", success, total)
+	if useColor {
+		switch {
+		case total > 0 && success == total:
+			summary = styleSuccess(summary, true)
+		case success == 0:
+			summary = styleError(summary, true)
+		default:
+			summary = styleWarn(summary, true)
+		}
+	}
+	fmt.Fprintf(out, "%s%s\n", uiIndent, summary)
 	for _, r := range outcomes {
 		if !r.Success {
-			fmt.Fprintf(out, "%s! %s (reason: %s)\n", uiIndent, r.RepoKey, r.Reason)
+			prefix := "!"
+			if useColor {
+				prefix = styleError(prefix, true)
+			}
+			fmt.Fprintf(out, "%s%s %s (reason: %s)\n", uiIndent, prefix, r.RepoKey, r.Reason)
 		}
 	}
 }

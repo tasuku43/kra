@@ -389,7 +389,7 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 				bodyStyled = lipgloss.NewStyle().
 					Background(lipgloss.AdaptiveColor{Light: "252", Dark: "236"}).
 					Render(bodyStyled)
-				focusAccent := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(">") + " "
+				focusAccent := styleBold(styleTokenize(">", tokenFocus, true), true) + " "
 				line = focusAccent + bodyStyled
 			} else {
 				line = focus + " " + bodyStyled
@@ -414,7 +414,7 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 	}
 	if useColor {
 		base := styleMuted(fmt.Sprintf("%sfilter: %s", uiIndent, filterBody), true)
-		caretStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(caret)
+		caretStyled := styleBold(styleTokenize(caret, tokenFocus, true), true)
 		lines = append(lines, base+caretStyled)
 	} else {
 		lines = append(lines, fmt.Sprintf("%sfilter: %s%s", uiIndent, filterBody, caret))

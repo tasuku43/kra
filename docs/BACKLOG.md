@@ -362,3 +362,12 @@ It does not replace per-item dependencies.
     - `docs/spec/commands/ws/close.md`
   - Depends: UX-WS-001, UX-WS-005
   - Parallel: yes
+
+- [x] UX-WS-014: Semantic color token baseline
+  - What: define and apply a shared semantic token set for CLI/TUI output (`text.*`, `status.*`, `accent`,
+    `focus`, `selection`, `diff.*`) and align selector/progress/result rendering with those tokens.
+  - Specs:
+    - `docs/spec/concepts/ui-color.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-WS-001
+  - Parallel: yes
