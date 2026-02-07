@@ -18,6 +18,7 @@ var errWSGoSingleSelectionRequired = errors.New("ws go requires exactly one work
 func (c *CLI) runWSGo(args []string) int {
 	var archivedScope bool
 	var emitCD bool
+	var uiOutput bool
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -29,6 +30,9 @@ func (c *CLI) runWSGo(args []string) int {
 		case "--emit-cd":
 			emitCD = true
 			args = args[1:]
+		case "--ui":
+			uiOutput = true
+			args = args[1:]
 		default:
 			fmt.Fprintf(c.Err, "unknown flag for ws go: %q\n", args[0])
 			c.printWSGoUsage(c.Err)
@@ -38,6 +42,11 @@ func (c *CLI) runWSGo(args []string) int {
 
 	if len(args) > 1 {
 		fmt.Fprintf(c.Err, "unexpected args for ws go: %q\n", strings.Join(args[1:], " "))
+		c.printWSGoUsage(c.Err)
+		return exitUsage
+	}
+	if uiOutput && emitCD {
+		fmt.Fprintln(c.Err, "--ui and --emit-cd cannot be used together")
 		c.printWSGoUsage(c.Err)
 		return exitUsage
 	}
@@ -64,7 +73,7 @@ func (c *CLI) runWSGo(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-go"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
-	c.debugf("run ws go args=%q archived=%t emitCD=%t", args, archivedScope, emitCD)
+	c.debugf("run ws go args=%q archived=%t emitCD=%t ui=%t", args, archivedScope, emitCD, uiOutput)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -133,12 +142,10 @@ func (c *CLI) runWSGo(args []string) int {
 			return nil
 		},
 		PrintResult: func(done []string, total int, useColor bool) {
-			if emitCD {
+			if !uiOutput {
 				return
 			}
-			fmt.Fprintln(c.Out)
-			fmt.Fprintln(c.Out, renderResultTitle(useColor))
-			fmt.Fprintf(c.Out, "%sDestination: %s\n", uiIndent, selectedTargetPath)
+			printResultSection(c.Out, useColor, fmt.Sprintf("Destination: %s", selectedTargetPath))
 		},
 	}
 
@@ -164,7 +171,7 @@ func (c *CLI) runWSGo(args []string) int {
 		}
 	}
 
-	if emitCD {
+	if !uiOutput {
 		fmt.Fprintf(c.Out, "cd %s\n", shellSingleQuote(selectedTargetPath))
 	}
 	c.debugf("ws go destination=%s", selectedTargetPath)

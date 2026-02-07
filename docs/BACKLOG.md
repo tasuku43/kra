@@ -438,3 +438,12 @@ It does not replace per-item dependencies.
     - `docs/spec/commands/ws/go.md`
   - Depends: UX-WS-001, UX-WS-003
   - Parallel: yes
+
+- [x] UX-CORE-002: Shell integration bootstrap (`gionx shell init`)
+  - What: add shell integration command that prints eval-ready wrapper function and align `ws go` default output
+    to shell snippet mode.
+  - Specs:
+    - `docs/spec/commands/shell/init.md`
+    - `docs/spec/commands/ws/go.md`
+  - Depends: UX-WS-003
+  - Parallel: yes
