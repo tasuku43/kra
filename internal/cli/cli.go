@@ -56,6 +56,8 @@ func (c *CLI) Run(args []string) int {
 		return exitOK
 	case "init":
 		return c.runInit(args[1:])
+	case "context":
+		return c.runContext(args[1:])
 	case "ws":
 		return c.runWS(args[1:])
 	default:

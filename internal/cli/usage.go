@@ -11,12 +11,25 @@ func (c *CLI) printRootUsage(w io.Writer) {
 
 Commands:
   init              Initialize GIONX_ROOT
+  context           Context commands
   ws                Workspace commands
   version           Print version
   help              Show this help
 
 Run:
   gionx <command> --help
+`)
+}
+
+func (c *CLI) printContextUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx context <subcommand> [args]
+
+Subcommands:
+  current           Print current root
+  list              List known roots from state registry
+  use <root>        Set current root context
+  help              Show this help
 `)
 }
 

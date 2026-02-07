@@ -1,6 +1,6 @@
 ---
 title: "`gionx context`"
-status: planned
+status: implemented
 ---
 
 # `gionx context`
@@ -41,4 +41,3 @@ Notes:
 
 - shell integration (`eval`, auto-export helpers)
 - named aliases for roots
-
