@@ -40,10 +40,16 @@ func (p *GitHubGHProvider) ListOrgRepos(ctx context.Context, org string) ([]Repo
 		return nil, fmt.Errorf("org is required")
 	}
 
-	endpoint := fmt.Sprintf("/orgs/%s/repos?per_page=100&type=all", org)
-	out, err := p.run(ctx, "api", "--paginate", endpoint, "--jq", ".[] | [.full_name,.ssh_url,.clone_url] | @tsv")
+	out, err := p.run(ctx, "api", "--paginate", fmt.Sprintf("/orgs/%s/repos?per_page=100&type=all", org), "--jq", ".[] | [.full_name,.ssh_url,.clone_url] | @tsv")
 	if err != nil {
-		return nil, fmt.Errorf("list github repos for org %s: %w", org, err)
+		if !isGitHubNotFound(err) {
+			return nil, fmt.Errorf("list github repos for org %s: %w", org, err)
+		}
+		// Compat fallback: allow personal account handles in --org.
+		out, err = p.run(ctx, "api", "--paginate", fmt.Sprintf("/users/%s/repos?per_page=100&type=owner", org), "--jq", ".[] | [.full_name,.ssh_url,.clone_url] | @tsv")
+		if err != nil {
+			return nil, fmt.Errorf("list github repos for owner %s: %w", org, err)
+		}
 	}
 
 	byRepoUID := map[string]Repo{}
@@ -98,6 +104,13 @@ func (p *GitHubGHProvider) ListOrgRepos(ctx context.Context, org string) ([]Repo
 		return strings.Compare(a.RepoKey, b.RepoKey)
 	})
 	return repos, nil
+}
+
+func isGitHubNotFound(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "http 404") ||
+		strings.Contains(msg, "\"status\":\"404\"") ||
+		strings.Contains(msg, "not found")
 }
 
 func runGHCommand(ctx context.Context, args ...string) (string, error) {
