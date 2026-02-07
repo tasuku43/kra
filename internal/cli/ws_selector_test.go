@@ -8,7 +8,7 @@ import (
 	"github.com/tasuku43/gion-core/workspacerisk"
 )
 
-func TestCloseSelectorModel_SpaceTogglesSelection(t *testing.T) {
+func TestWorkspaceSelectorModel_SpaceTogglesSelection(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
@@ -30,7 +30,7 @@ func TestCloseSelectorModel_SpaceTogglesSelection(t *testing.T) {
 	}
 }
 
-func TestCloseSelectorModel_EnterRequiresSelection(t *testing.T) {
+func TestWorkspaceSelectorModel_EnterRequiresSelection(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -46,7 +46,7 @@ func TestCloseSelectorModel_EnterRequiresSelection(t *testing.T) {
 	}
 }
 
-func TestCloseSelectorModel_FullWidthSpaceTogglesSelection(t *testing.T) {
+func TestWorkspaceSelectorModel_FullWidthSpaceTogglesSelection(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("　")})
@@ -59,37 +59,19 @@ func TestCloseSelectorModel_FullWidthSpaceTogglesSelection(t *testing.T) {
 	}
 }
 
-func TestCloseSelectorModel_FilterPersistsAfterToggle(t *testing.T) {
+func TestWorkspaceSelectorModel_FilterPersistsAfterToggle(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{
 		{ID: "WS1", Description: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
 		{ID: "WS2", Description: "beta", Risk: workspacerisk.WorkspaceRiskClean},
 	}, "active", false, nil)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	next, ok := updated.(workspaceSelectorModel)
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
-	if !next.filterMode {
-		t.Fatalf("filter mode should be enabled")
-	}
-
-	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
-	next, ok = updated.(workspaceSelectorModel)
-	if !ok {
-		t.Fatalf("unexpected model type: %T", updated)
-	}
-	if next.filter != "a" {
-		t.Fatalf("filter = %q, want %q", next.filter, "a")
-	}
-
-	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	next, ok = updated.(workspaceSelectorModel)
-	if !ok {
-		t.Fatalf("unexpected model type: %T", updated)
-	}
-	if next.filterMode {
-		t.Fatalf("filter mode should be disabled after enter")
+	if next.filter != "b" {
+		t.Fatalf("filter = %q, want %q", next.filter, "b")
 	}
 
 	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeySpace})
@@ -97,38 +79,29 @@ func TestCloseSelectorModel_FilterPersistsAfterToggle(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
-	if next.filter != "a" {
+	if next.filter != "b" {
 		t.Fatalf("filter should persist after toggle, got %q", next.filter)
 	}
-	if !next.selected[0] {
-		t.Fatalf("toggle should select visible candidate")
+	if !next.selected[1] {
+		t.Fatalf("toggle should select current visible candidate")
 	}
 }
 
-func TestCloseSelectorModel_FilterClearsOnlyByDelete(t *testing.T) {
+func TestWorkspaceSelectorModel_FilterClearsByDeleteOneRuneAtATime(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
 	next, ok := updated.(workspaceSelectorModel)
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
-	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("x")})
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	next, ok = updated.(workspaceSelectorModel)
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
-	if next.filter != "x" {
-		t.Fatalf("filter = %q, want %q", next.filter, "x")
-	}
-
-	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeySpace})
-	next, ok = updated.(workspaceSelectorModel)
-	if !ok {
-		t.Fatalf("unexpected model type: %T", updated)
-	}
-	if next.filter != "x " {
-		t.Fatalf("space should be appended in filter mode, got %q", next.filter)
+	if next.filter != "ab" {
+		t.Fatalf("filter = %q, want %q", next.filter, "ab")
 	}
 
 	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyBackspace})
@@ -136,11 +109,11 @@ func TestCloseSelectorModel_FilterClearsOnlyByDelete(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
-	if next.filter != "x" {
+	if next.filter != "a" {
 		t.Fatalf("backspace should delete one rune from filter, got %q", next.filter)
 	}
 
-	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyDelete})
 	next, ok = updated.(workspaceSelectorModel)
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
@@ -150,16 +123,16 @@ func TestCloseSelectorModel_FilterClearsOnlyByDelete(t *testing.T) {
 	}
 }
 
-func TestCloseSelectorModel_FilterModeAllowsSpaceInput(t *testing.T) {
+func TestWorkspaceSelectorModel_SpaceDoesNotAppendFilter(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
 
-	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
 	next, ok := updated.(workspaceSelectorModel)
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
-	if !next.filterMode {
-		t.Fatalf("filter mode should be enabled")
+	if next.filter != "w" {
+		t.Fatalf("filter = %q, want %q", next.filter, "w")
 	}
 
 	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeySpace})
@@ -167,8 +140,42 @@ func TestCloseSelectorModel_FilterModeAllowsSpaceInput(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
-	if next.filter != " " {
-		t.Fatalf("space should be added to filter, got %q", next.filter)
+	if next.filter != "w" {
+		t.Fatalf("space should not be appended to filter, got %q", next.filter)
+	}
+	if !next.selected[0] {
+		t.Fatalf("space should toggle selection")
+	}
+}
+
+func TestWorkspaceSelectorModel_FilterNarrowingResetsCursorIntoRange(t *testing.T) {
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{
+		{ID: "WS1", Description: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS2", Description: "beta", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS3", Description: "gamma", Risk: workspacerisk.WorkspaceRiskClean},
+	}, "active", false, nil)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	next, ok := updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyDown})
+	next, ok = updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if next.cursor != 2 {
+		t.Fatalf("cursor = %d, want 2", next.cursor)
+	}
+
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
+	next, ok = updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if next.cursor != 0 {
+		t.Fatalf("cursor should be reset into filtered range, got %d", next.cursor)
 	}
 }
 
@@ -181,11 +188,13 @@ func TestRenderWorkspaceSelectorLines_AlwaysShowsFilterLine(t *testing.T) {
 		"",
 		"",
 		false,
-		false,
 		80,
 	)
 	joined := strings.Join(lines, "\n")
 	if !strings.Contains(joined, "filter:") {
 		t.Fatalf("expected filter line to be shown, got %q", joined)
+	}
+	if !strings.Contains(joined, "filter: |") {
+		t.Fatalf("expected filter caret to be shown, got %q", joined)
 	}
 }

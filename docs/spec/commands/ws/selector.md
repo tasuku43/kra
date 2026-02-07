@@ -16,7 +16,8 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
 - `Space`: toggle check on focused row.
 - `Enter`: proceed with current selection.
 - `Esc` or `Ctrl+C`: cancel without side effects.
-- `/`: enter filter input mode.
+- Text input is always treated as filter query input (no dedicated filter mode).
+- `Backspace` / `Delete`: remove one rune from filter query.
 - Filter text must persist after selection toggle; it is cleared only when the user explicitly deletes it.
 
 ## TTY requirement
@@ -36,7 +37,7 @@ Each row should include at least:
 Header/footer should show:
 - command mode (`close`, `go`, `reopen`, `purge`)
 - scope (`active` or `archived`)
-- key hints (`Space`, `Enter`, `Esc`/`Ctrl+C`)
+- key hints (`Space`, `Enter`, text filter input, `Esc`/`Ctrl+C`)
 
 Section-style output should use consistent headings:
 - `Workspaces(<status>):`
