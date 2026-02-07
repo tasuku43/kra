@@ -283,13 +283,12 @@ func renderWorkspaceSelectorLines(status string, action string, candidates []wor
 	filterLabel := filter
 
 	titleLine := renderWorkspacesTitle(status, useColor)
-	footerRaw := fmt.Sprintf("%sselected: %d/%d  ↑↓ move  space toggle  enter %s  type filter  esc/c-c cancel", uiIndent, selectedCount, len(candidates), action)
-	footer := styleMuted(footerRaw, useColor)
-
-	if termWidth < 48 {
-		termWidth = 48
+	if termWidth < 24 {
+		termWidth = 24
 	}
 	maxCols := termWidth - 1
+	footerRaw := renderSelectorFooterLine(selectedCount, len(candidates), action, maxCols)
+	footer := styleMuted(footerRaw, useColor)
 
 	bodyLines := make([]string, 0, len(candidates))
 	if totalVisible == 0 {
@@ -351,9 +350,6 @@ func renderWorkspaceSelectorLines(status string, action string, candidates []wor
 		bodyLines = append(bodyLines, line)
 	}
 
-	footerRaw = truncateDisplay(footerRaw, maxCols)
-	footer = styleMuted(footerRaw, useColor)
-
 	lines := make([]string, 0, len(candidates)+7)
 	lines = append(lines, titleLine)
 	lines = append(lines, "")
@@ -386,6 +382,40 @@ func renderWorkspaceSelectorLines(status string, action string, candidates []wor
 	}
 
 	return lines
+}
+
+func renderSelectorFooterLine(selectedCount int, total int, action string, maxCols int) string {
+	base := fmt.Sprintf("%sselected: %d/%d", uiIndent, selectedCount, total)
+	if maxCols <= 0 {
+		return ""
+	}
+	if displayWidth(base) > maxCols {
+		return truncateDisplay(base, maxCols)
+	}
+
+	parts := []string{
+		"↑↓ move",
+		"space toggle",
+		fmt.Sprintf("enter %s", action),
+		"type filter",
+		"esc cancel",
+	}
+
+	line := base
+	for i, part := range parts {
+		candidate := line + "  " + part
+		if displayWidth(candidate) > maxCols {
+			if i < len(parts)-1 {
+				withEllipsis := line + "  …"
+				if displayWidth(withEllipsis) <= maxCols {
+					return withEllipsis
+				}
+			}
+			return line
+		}
+		line = candidate
+	}
+	return line
 }
 
 func filteredCandidateIndices(candidates []workspaceSelectorCandidate, filter string) []int {

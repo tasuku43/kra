@@ -39,6 +39,10 @@ Header/footer should show:
 - scope (`active` or `archived`)
 - key hints (`Space`, `Enter`, text filter input, `Esc`/`Ctrl+C`)
 - `Enter` hint label should be command-specific action text (for example `enter close` for `ws close`).
+- Footer readability/truncation rule:
+  - left-most `selected: n/m` must remain visible.
+  - key hints are appended in a fixed order and dropped from the right on narrow terminals.
+  - if hints are partially omitted, append `…` when width allows.
 
 Section-style output should use consistent headings:
 - `Workspaces(<status>):`

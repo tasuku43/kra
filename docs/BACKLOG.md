@@ -275,7 +275,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-002
   - Serial: yes
 
-- [ ] UX-WS-008: Selector footer readability and truncation rules
+- [x] UX-WS-008: Selector footer readability and truncation rules
   - What: shorten key-hint text, define deterministic truncation behavior for narrow terminals, and keep
     `selected: n/m` consistently visible.
   - Specs:

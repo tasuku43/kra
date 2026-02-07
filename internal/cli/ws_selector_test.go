@@ -238,3 +238,23 @@ func TestRenderWorkspaceSelectorLines_UsesActionLabelInFooter(t *testing.T) {
 		t.Fatalf("expected action label in footer, got %q", joined)
 	}
 }
+
+func TestRenderSelectorFooterLine_AlwaysKeepsSelectedSummary(t *testing.T) {
+	line := renderSelectorFooterLine(2, 10, "close", 18)
+	if !strings.Contains(line, "selected:") {
+		t.Fatalf("footer should keep selected summary, got %q", line)
+	}
+}
+
+func TestRenderSelectorFooterLine_DropsHintsDeterministically(t *testing.T) {
+	line := renderSelectorFooterLine(2, 10, "close", 46)
+	if !strings.Contains(line, "selected: 2/10") {
+		t.Fatalf("footer missing selected summary: %q", line)
+	}
+	if !strings.Contains(line, "↑↓ move") {
+		t.Fatalf("footer should keep first hint, got %q", line)
+	}
+	if strings.Contains(line, "type filter") {
+		t.Fatalf("footer should truncate later hints first, got %q", line)
+	}
+}
