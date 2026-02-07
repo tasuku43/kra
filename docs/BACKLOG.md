@@ -266,7 +266,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-001, MVP-021
   - Serial: yes (prevent UI drift across ws commands)
 
-- [ ] UX-WS-007: WS close wording consistency (`close` vs `archived`)
+- [x] UX-WS-007: WS close wording consistency (`close` vs `archived`)
   - What: unify user-facing wording to `close` (for command/action/result labels), while keeping internal lifecycle
     state naming as `archived`.
   - Specs:

@@ -118,7 +118,7 @@ func (c *CLI) runWSReopen(args []string) int {
 				return nil, errNoArchivedWorkspaces
 			}
 
-			ids, err := c.promptWorkspaceSelector("archived", candidates)
+			ids, err := c.promptWorkspaceSelector("archived", "reopen", candidates)
 			if err != nil {
 				return nil, err
 			}

@@ -9,7 +9,7 @@ import (
 )
 
 func TestWorkspaceSelectorModel_SpaceTogglesSelection(t *testing.T) {
-	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", "proceed", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
 	next, ok := updated.(workspaceSelectorModel)
@@ -31,7 +31,7 @@ func TestWorkspaceSelectorModel_SpaceTogglesSelection(t *testing.T) {
 }
 
 func TestWorkspaceSelectorModel_BlinkTogglesCaretVisibility(t *testing.T) {
-	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", "proceed", false, nil)
 	if !m.showCaret {
 		t.Fatalf("initial caret visibility should be true")
 	}
@@ -50,7 +50,7 @@ func TestWorkspaceSelectorModel_BlinkTogglesCaretVisibility(t *testing.T) {
 }
 
 func TestWorkspaceSelectorModel_EnterRequiresSelection(t *testing.T) {
-	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", "proceed", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	next, ok := updated.(workspaceSelectorModel)
@@ -66,7 +66,7 @@ func TestWorkspaceSelectorModel_EnterRequiresSelection(t *testing.T) {
 }
 
 func TestWorkspaceSelectorModel_FullWidthSpaceTogglesSelection(t *testing.T) {
-	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", "proceed", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("　")})
 	next, ok := updated.(workspaceSelectorModel)
@@ -82,7 +82,7 @@ func TestWorkspaceSelectorModel_FilterPersistsAfterToggle(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{
 		{ID: "WS1", Description: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
 		{ID: "WS2", Description: "beta", Risk: workspacerisk.WorkspaceRiskClean},
-	}, "active", false, nil)
+	}, "active", "proceed", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
 	next, ok := updated.(workspaceSelectorModel)
@@ -107,7 +107,7 @@ func TestWorkspaceSelectorModel_FilterPersistsAfterToggle(t *testing.T) {
 }
 
 func TestWorkspaceSelectorModel_FilterClearsByDeleteOneRuneAtATime(t *testing.T) {
-	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", "proceed", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
 	next, ok := updated.(workspaceSelectorModel)
@@ -143,7 +143,7 @@ func TestWorkspaceSelectorModel_FilterClearsByDeleteOneRuneAtATime(t *testing.T)
 }
 
 func TestWorkspaceSelectorModel_SpaceDoesNotAppendFilter(t *testing.T) {
-	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", "proceed", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("w")})
 	next, ok := updated.(workspaceSelectorModel)
@@ -172,7 +172,7 @@ func TestWorkspaceSelectorModel_FilterNarrowingResetsCursorIntoRange(t *testing.
 		{ID: "WS1", Description: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
 		{ID: "WS2", Description: "beta", Risk: workspacerisk.WorkspaceRiskClean},
 		{ID: "WS3", Description: "gamma", Risk: workspacerisk.WorkspaceRiskClean},
-	}, "active", false, nil)
+	}, "active", "proceed", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	next, ok := updated.(workspaceSelectorModel)
@@ -201,6 +201,7 @@ func TestWorkspaceSelectorModel_FilterNarrowingResetsCursorIntoRange(t *testing.
 func TestRenderWorkspaceSelectorLines_AlwaysShowsFilterLine(t *testing.T) {
 	lines := renderWorkspaceSelectorLines(
 		"active",
+		"proceed",
 		[]workspaceSelectorCandidate{{ID: "WS1", Description: "d", Risk: workspacerisk.WorkspaceRiskClean}},
 		map[int]bool{},
 		0,
@@ -216,5 +217,24 @@ func TestRenderWorkspaceSelectorLines_AlwaysShowsFilterLine(t *testing.T) {
 	}
 	if !strings.Contains(joined, "filter: |") {
 		t.Fatalf("expected filter caret to be shown, got %q", joined)
+	}
+}
+
+func TestRenderWorkspaceSelectorLines_UsesActionLabelInFooter(t *testing.T) {
+	lines := renderWorkspaceSelectorLines(
+		"active",
+		"close",
+		[]workspaceSelectorCandidate{{ID: "WS1", Description: "d", Risk: workspacerisk.WorkspaceRiskClean}},
+		map[int]bool{},
+		0,
+		"",
+		"",
+		true,
+		false,
+		120,
+	)
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "enter close") {
+		t.Fatalf("expected action label in footer, got %q", joined)
 	}
 }

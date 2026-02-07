@@ -121,7 +121,7 @@ func (c *CLI) runWSClose(args []string) int {
 				return nil, errNoActiveWorkspaces
 			}
 
-			ids, err := c.promptWorkspaceSelector("active", candidates)
+			ids, err := c.promptWorkspaceSelector("active", "close", candidates)
 			if err != nil {
 				return nil, err
 			}
@@ -157,7 +157,7 @@ func (c *CLI) runWSClose(args []string) int {
 			c.debugf("ws close archive completed workspace=%s", item.ID)
 			return nil
 		},
-		ResultVerb: "Archived",
+		ResultVerb: "Closed",
 		ResultMark: "✔",
 	}
 
@@ -271,7 +271,7 @@ func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoP
 }
 
 func (c *CLI) confirmRiskProceed() (bool, error) {
-	line, err := c.promptLine(fmt.Sprintf("%sarchive selected workspaces? [Enter=yes / n=no]: ", uiIndent))
+	line, err := c.promptLine(fmt.Sprintf("%sclose selected workspaces? [Enter=yes / n=no]: ", uiIndent))
 	if err != nil {
 		return false, err
 	}

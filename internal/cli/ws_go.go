@@ -117,7 +117,7 @@ func (c *CLI) runWSGo(args []string) int {
 				return nil, errNoActiveWorkspaces
 			}
 
-			ids, err := c.promptWorkspaceSelector(scope, candidates)
+			ids, err := c.promptWorkspaceSelector(scope, "go", candidates)
 			if err != nil {
 				return nil, err
 			}

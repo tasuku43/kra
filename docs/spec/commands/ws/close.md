@@ -78,6 +78,11 @@ If the Git working tree has unrelated changes, this command must not include the
   - `Workspaces(active):`
   - `Risk:`
   - `Result:`
+- `ws close` user-facing wording uses `close` for actions/results:
+  - selector footer action hint: `enter close`
+  - risk confirmation prompt: `close selected workspaces? ...`
+  - result summary verb: `Closed n / m`
+- Internal lifecycle/storage naming remains `archived` (status/event/commit message).
 - Section spacing:
   - `Workspaces(active):` and `Risk:` have one blank line after heading.
   - `Result:` has no blank line after heading.
