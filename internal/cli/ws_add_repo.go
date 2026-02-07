@@ -171,12 +171,12 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	for i, cand := range selected {
 		progress[i] = addRepoInputProgress{RepoKey: cand.RepoKey}
 	}
-	renderedInputLines := renderAddRepoInputsProgress(c.Err, workspaceID, progress, 0, useColorErr, 0)
+	renderedInputLines := renderAddRepoInputsProgress(c.Err, workspaceID, progress, 0, useColorErr, 0, false)
 
 	plan := make([]addRepoPlanItem, 0, len(selected))
 	for i, cand := range selected {
 		if i > 0 {
-			renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines)
+			renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, false)
 		}
 		defaultBaseRef, err := detectDefaultBaseRefFromBare(ctx, cand.BarePath)
 		if err != nil {
@@ -199,7 +199,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 			baseRefRecord = baseRefUsed
 		}
 		progress[i].BaseRef = baseRefUsed
-		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines)
+		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, true)
 
 		branchDisplayDefault := workspaceID + "/"
 		branchInput, err := c.promptLine(renderAddRepoInputPrompt(addRepoInputDetailPromptPrefix(useColorErr), "branch", branchDisplayDefault, useColorErr))
@@ -213,7 +213,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 			return exitError
 		}
 		progress[i].Branch = branch
-		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines)
+		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, true)
 
 		plan = append(plan, addRepoPlanItem{
 			Candidate:      cand,
@@ -713,25 +713,28 @@ func printAddRepoPlan(out io.Writer, workspaceID string, plan []addRepoPlanItem,
 
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, styleBold("Plan:", useColor))
-	fmt.Fprintln(out)
 	fmt.Fprintf(out, "%s%s add %d repos to workspace %s\n", uiIndent, bullet, len(plan), workspaceID)
 	if len(plan) == 0 {
 		return
 	}
 	fmt.Fprintf(out, "%s%s %s:\n", uiIndent, bullet, reposLabel)
 	for i, p := range plan {
-		connector := "├─"
+		connector := "├─ "
 		if i == len(plan)-1 {
-			connector = "└─"
+			connector = "└─ "
 		}
 		fmt.Fprintf(out, "%s%s%s\n", uiIndent+uiIndent, connectorMuted(connector), p.Candidate.RepoKey)
 	}
 }
 
-func renderAddRepoInputsProgress(out io.Writer, workspaceID string, rows []addRepoInputProgress, activeIndex int, useColor bool, prevLines int) int {
+func renderAddRepoInputsProgress(out io.Writer, workspaceID string, rows []addRepoInputProgress, activeIndex int, useColor bool, prevLines int, afterPrompt bool) int {
 	lines := buildAddRepoInputsLines(workspaceID, rows, activeIndex, useColor)
 	if writerIsTTY(out) && prevLines > 0 {
-		fmt.Fprintf(out, "\x1b[%dA", prevLines)
+		moveUp := prevLines
+		if afterPrompt {
+			moveUp++
+		}
+		fmt.Fprintf(out, "\x1b[%dA", moveUp)
 	}
 	for _, line := range lines {
 		if writerIsTTY(out) {
@@ -751,9 +754,7 @@ func buildAddRepoInputsLines(workspaceID string, rows []addRepoInputProgress, ac
 	labelBranch := styleAccent("branch", useColor)
 
 	lines := []string{
-		"",
 		styleBold("Inputs:", useColor),
-		"",
 		fmt.Sprintf("%s%s %s: %s", uiIndent, bullet, labelWorkspace, workspaceID),
 		fmt.Sprintf("%s%s %s:", uiIndent, bullet, labelRepos),
 	}
@@ -814,12 +815,6 @@ func resolveBaseRefInput(rawInput string, defaultBaseRef string) (string, error)
 	if v == "" {
 		return strings.TrimSpace(defaultBaseRef), nil
 	}
-	if strings.HasPrefix(v, "/") {
-		v = "origin" + v
-	}
-	if !strings.HasPrefix(v, "origin/") {
-		v = "origin/" + strings.TrimPrefix(v, "origin")
-	}
 	if !strings.HasPrefix(v, "origin/") || len(v) <= len("origin/") {
 		return "", fmt.Errorf("invalid base_ref")
 	}
@@ -832,16 +827,7 @@ func resolveBranchInput(rawInput string, defaultPrefix string) string {
 	if v == "" {
 		return prefix
 	}
-	if prefix == "" {
-		return v
-	}
-	if strings.HasPrefix(v, "/") {
-		return prefix + v
-	}
-	if strings.Contains(v, "/") {
-		return v
-	}
-	return prefix + "/" + v
+	return v
 }
 
 func applyAddRepoPlanAllOrNothing(ctx context.Context, db *sql.DB, workspaceID string, plan []addRepoPlanItem, debugf func(string, ...any)) ([]addRepoAppliedItem, error) {
