@@ -8,9 +8,11 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/mattn/go-isatty"
@@ -271,22 +273,103 @@ func acquireWorkspaceAddRepoLock(root string, workspaceID string) (func(), error
 		return nil, fmt.Errorf("create lock dir: %w", err)
 	}
 	lockPath := filepath.Join(lockDir, fmt.Sprintf("ws-add-repo-%s.lock", workspaceID))
-	f, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
-	if err != nil {
-		if os.IsExist(err) {
+
+	for attempt := 0; attempt < 2; attempt++ {
+		f, err := os.OpenFile(lockPath, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		if err == nil {
+			if writeErr := writeWorkspaceAddRepoLockMetadata(f); writeErr != nil {
+				_ = f.Close()
+				_ = os.Remove(lockPath)
+				return nil, fmt.Errorf("write workspace lock metadata: %w", writeErr)
+			}
+			released := false
+			return func() {
+				if released {
+					return
+				}
+				released = true
+				_ = f.Close()
+				_ = os.Remove(lockPath)
+			}, nil
+		}
+		if !os.IsExist(err) {
+			return nil, fmt.Errorf("acquire workspace lock: %w", err)
+		}
+
+		stale, inspectErr := isWorkspaceAddRepoLockStale(lockPath)
+		if inspectErr != nil {
+			return nil, fmt.Errorf("inspect workspace lock: %w", inspectErr)
+		}
+		if !stale {
 			return nil, fmt.Errorf("workspace is locked by another add-repo operation: %s", workspaceID)
 		}
-		return nil, fmt.Errorf("acquire workspace lock: %w", err)
-	}
-	released := false
-	return func() {
-		if released {
-			return
+		if rmErr := os.Remove(lockPath); rmErr != nil && !errors.Is(rmErr, os.ErrNotExist) {
+			return nil, fmt.Errorf("remove stale workspace lock: %w", rmErr)
 		}
-		released = true
-		_ = f.Close()
-		_ = os.Remove(lockPath)
-	}, nil
+	}
+
+	return nil, fmt.Errorf("workspace is locked by another add-repo operation: %s", workspaceID)
+}
+
+func writeWorkspaceAddRepoLockMetadata(f *os.File) error {
+	meta := fmt.Sprintf("pid=%d\nstarted_at=%s\nruntime=%s/%s\n", os.Getpid(), time.Now().UTC().Format(time.RFC3339Nano), runtime.GOOS, runtime.GOARCH)
+	if _, err := f.WriteString(meta); err != nil {
+		return err
+	}
+	return f.Sync()
+}
+
+func isWorkspaceAddRepoLockStale(lockPath string) (bool, error) {
+	raw, err := os.ReadFile(lockPath)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return true, nil
+		}
+		return false, err
+	}
+	pid, ok := parseWorkspaceAddRepoLockPID(string(raw))
+	if !ok || pid <= 0 {
+		// Legacy or malformed lock file; treat as stale and recover automatically.
+		return true, nil
+	}
+	return !isProcessAlive(pid), nil
+}
+
+func parseWorkspaceAddRepoLockPID(content string) (int, bool) {
+	for _, line := range strings.Split(content, "\n") {
+		line = strings.TrimSpace(line)
+		if !strings.HasPrefix(line, "pid=") {
+			continue
+		}
+		raw := strings.TrimSpace(strings.TrimPrefix(line, "pid="))
+		if raw == "" {
+			return 0, false
+		}
+		pid, err := strconv.Atoi(raw)
+		if err != nil {
+			return 0, false
+		}
+		return pid, true
+	}
+	return 0, false
+}
+
+func isProcessAlive(pid int) bool {
+	if pid <= 0 {
+		return false
+	}
+	proc, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	if err := proc.Signal(syscall.Signal(0)); err != nil {
+		var errno syscall.Errno
+		if errors.As(err, &errno) && errno == syscall.EPERM {
+			return true
+		}
+		return false
+	}
+	return true
 }
 
 func listAddRepoPoolCandidates(ctx context.Context, db *sql.DB, repoPoolPath string, workspaceID string, now time.Time, debugf func(string, ...any)) ([]addRepoPoolCandidate, error) {

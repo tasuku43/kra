@@ -77,3 +77,6 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 
 - Command uses workspace-scoped lock.
 - Concurrent `ws add-repo` on the same workspace must fail fast.
+- Lock file stores owner PID metadata.
+- If an existing lock is stale (owner process no longer alive), command must auto-recover by removing stale lock
+  and retrying once.
