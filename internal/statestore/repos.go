@@ -300,3 +300,28 @@ DO UPDATE SET
 	}
 	return nil
 }
+
+func ListRepoUIDs(ctx context.Context, db *sql.DB) ([]string, error) {
+	rows, err := db.QueryContext(ctx, `
+SELECT repo_uid
+FROM repos
+ORDER BY repo_uid
+`)
+	if err != nil {
+		return nil, fmt.Errorf("query repo_uids: %w", err)
+	}
+	defer rows.Close()
+
+	out := make([]string, 0, 32)
+	for rows.Next() {
+		var repoUID string
+		if err := rows.Scan(&repoUID); err != nil {
+			return nil, fmt.Errorf("scan repo_uid: %w", err)
+		}
+		out = append(out, repoUID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate repo_uids: %w", err)
+	}
+	return out, nil
+}

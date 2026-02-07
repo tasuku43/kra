@@ -12,6 +12,7 @@ func (c *CLI) printRootUsage(w io.Writer) {
 Commands:
   init              Initialize GIONX_ROOT
   context           Context commands
+  repo              Repository pool commands
   ws                Workspace commands
   version           Print version
   help              Show this help
@@ -29,6 +30,17 @@ Subcommands:
   current           Print current root
   list              List known roots from state registry
   use <root>        Set current root context
+  help              Show this help
+`)
+}
+
+func (c *CLI) printRepoUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx repo <subcommand> [args]
+
+Subcommands:
+  add               Add repositories into shared repo pool
+  discover          Discover repositories from provider and add selected
   help              Show this help
 `)
 }
@@ -68,6 +80,31 @@ Create a workspace directory under GIONX_ROOT/workspaces/<id>/ and record it in 
 
 Options:
   --no-prompt        Do not prompt for description (store empty)
+`)
+}
+
+func (c *CLI) printRepoAddUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx repo add <repo-spec>...
+
+Add one or more repositories into the shared repo pool and register them in the current root state DB.
+
+Accepted repo-spec formats:
+  - git@<host>:<owner>/<repo>.git
+  - https://<host>/<owner>/<repo>[.git]
+  - file://.../<host>/<owner>/<repo>.git
+`)
+}
+
+func (c *CLI) printRepoDiscoverUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx repo discover --org <org> [--provider github]
+
+Discover repositories from provider, select multiple repos, and add them into the shared repo pool.
+
+Options:
+  --org             Organization name (required)
+  --provider        Provider name (default: github)
 `)
 }
 
