@@ -6,6 +6,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"time"
 	"unicode"
 	"unicode/utf8"
 
@@ -16,6 +17,10 @@ import (
 )
 
 var errSelectorCanceled = errors.New("selector canceled")
+
+const selectorCaretBlinkInterval = 500 * time.Millisecond
+
+type selectorCaretBlinkMsg struct{}
 
 type workspaceSelectorCandidate struct {
 	ID          string
@@ -33,6 +38,7 @@ type workspaceSelectorModel struct {
 	debugf     func(string, ...any)
 	message    string
 	filter     string
+	showCaret  bool
 	canceled   bool
 	done       bool
 }
@@ -49,11 +55,12 @@ func newWorkspaceSelectorModel(candidates []workspaceSelectorCandidate, status s
 		status:     status,
 		useColor:   useColor,
 		debugf:     debugf,
+		showCaret:  true,
 	}
 }
 
 func (m workspaceSelectorModel) Init() tea.Cmd {
-	return nil
+	return selectorCaretBlinkCmd()
 }
 
 func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -63,6 +70,12 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.width = msg.Width
 		}
 		return m, nil
+	case selectorCaretBlinkMsg:
+		if m.done || m.canceled {
+			return m, nil
+		}
+		m.showCaret = !m.showCaret
+		return m, selectorCaretBlinkCmd()
 	case tea.KeyMsg:
 		m.debugf("selector key type=%v runes=%q cursor=%d filter=%q", msg.Type, string(msg.Runes), m.cursor, m.filter)
 		switch msg.Type {
@@ -127,8 +140,14 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m workspaceSelectorModel) View() string {
-	lines := renderWorkspaceSelectorLines(m.status, m.candidates, m.selected, m.cursor, m.message, m.filter, m.useColor, m.width)
+	lines := renderWorkspaceSelectorLines(m.status, m.candidates, m.selected, m.cursor, m.message, m.filter, m.showCaret, m.useColor, m.width)
 	return strings.Join(lines, "\n")
+}
+
+func selectorCaretBlinkCmd() tea.Cmd {
+	return tea.Tick(selectorCaretBlinkInterval, func(time.Time) tea.Msg {
+		return selectorCaretBlinkMsg{}
+	})
 }
 
 func (m *workspaceSelectorModel) toggleCurrentSelection() {
@@ -231,7 +250,7 @@ func runWorkspaceSelector(in *os.File, out io.Writer, status string, candidates 
 	return ids, nil
 }
 
-func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorCandidate, selected map[int]bool, cursor int, message string, filter string, useColor bool, termWidth int) []string {
+func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorCandidate, selected map[int]bool, cursor int, message string, filter string, showCaret bool, useColor bool, termWidth int) []string {
 	idWidth := len("workspace")
 	for _, it := range candidates {
 		if n := len(it.ID); n > idWidth {
@@ -337,12 +356,16 @@ func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorC
 		availableFilterCols = 1
 	}
 	filterBody := truncateDisplay(filterLabel, availableFilterCols)
+	caret := " "
+	if showCaret {
+		caret = "|"
+	}
 	if useColor {
 		base := styleMuted(fmt.Sprintf("%sfilter: %s", uiIndent, filterBody), true)
-		caret := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render("|")
-		lines = append(lines, base+caret)
+		caretStyled := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(caret)
+		lines = append(lines, base+caretStyled)
 	} else {
-		lines = append(lines, fmt.Sprintf("%sfilter: %s|", uiIndent, filterBody))
+		lines = append(lines, fmt.Sprintf("%sfilter: %s%s", uiIndent, filterBody, caret))
 	}
 	lines = append(lines, footer)
 
