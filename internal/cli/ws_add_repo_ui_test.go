@@ -98,3 +98,33 @@ func TestBuildAddRepoInputsLines_FirstRepoFinalizedThenSecondBaseOnly(t *testing
 		t.Fatalf("unexpected inputs block:\n%s", got)
 	}
 }
+
+func TestResolveBranchInput_UsesRawInputWithoutPrefixEnforcement(t *testing.T) {
+	got := resolveBranchInput("feature/x", "TEST-010")
+	if got != "feature/x" {
+		t.Fatalf("expected raw branch input, got=%q", got)
+	}
+}
+
+func TestResolveBranchInput_UsesDefaultOnlyWhenEmpty(t *testing.T) {
+	got := resolveBranchInput("", "TEST-010")
+	if got != "TEST-010" {
+		t.Fatalf("expected default branch for empty input, got=%q", got)
+	}
+}
+
+func TestResolveBaseRefInput_RejectsNonOriginPrefix(t *testing.T) {
+	if _, err := resolveBaseRefInput("main", "origin/main"); err == nil {
+		t.Fatal("expected error for non origin/ base_ref")
+	}
+}
+
+func TestResolveBaseRefInput_UsesDefaultWhenEmpty(t *testing.T) {
+	got, err := resolveBaseRefInput("", "origin/main")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if got != "origin/main" {
+		t.Fatalf("expected default base_ref, got=%q", got)
+	}
+}
