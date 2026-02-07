@@ -300,7 +300,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-001
   - Parallel: yes
 
-- [ ] UX-WS-011: Confirmation policy consistency
+- [x] UX-WS-011: Confirmation policy consistency
   - What: keep `ws close` confirmation only when non-clean risk exists, and keep `ws purge` always-confirm policy
     explicit in specs/tests.
   - Specs:

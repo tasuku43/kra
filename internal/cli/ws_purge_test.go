@@ -67,6 +67,9 @@ func TestCLI_WS_Purge_ArchivedWorkspace_DeletesPathsCommitsAndUpdatesDB(t *testi
 		if code != exitOK {
 			t.Fatalf("ws purge exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
+		if !strings.Contains(err.String(), "purge workspace WS1?") {
+			t.Fatalf("stderr missing purge confirmation prompt: %q", err.String())
+		}
 	}
 
 	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); err == nil {

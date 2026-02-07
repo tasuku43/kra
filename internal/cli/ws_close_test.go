@@ -110,6 +110,9 @@ func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *te
 		if code != exitOK {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
+		if strings.Contains(err.String(), "close selected workspaces?") {
+			t.Fatalf("clean close should not require confirmation: %q", err.String())
+		}
 	}
 
 	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); err == nil {
