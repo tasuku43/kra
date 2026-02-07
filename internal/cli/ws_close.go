@@ -143,6 +143,7 @@ func (c *CLI) runWSClose(args []string) int {
 		}
 		if !ok {
 			c.debugf("ws close canceled at risk confirmation")
+			fmt.Fprintln(c.Out)
 			fmt.Fprintln(c.Out, renderResultTitle(useColorOut))
 			fmt.Fprintf(c.Out, "%saborted: canceled at Risk\n", uiIndent)
 			return exitError
@@ -160,6 +161,7 @@ func (c *CLI) runWSClose(args []string) int {
 		c.debugf("ws close archive completed workspace=%s", workspaceID)
 	}
 
+	fmt.Fprintln(c.Out)
 	fmt.Fprintln(c.Out, renderResultTitle(useColorOut))
 	fmt.Fprintf(c.Out, "%sArchived %d / %d\n", uiIndent, len(archived), len(selectedIDs))
 	for _, id := range archived {

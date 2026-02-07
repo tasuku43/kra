@@ -42,6 +42,7 @@ Section-style output should use consistent headings:
 - `Result:`
 
 Section body indentation must be controlled by shared global constants (no per-command hardcoded spaces).
+- Global section body indentation is fixed to two spaces.
 
 `<status>` color semantics (TTY):
 - `active`: accent/cool color
@@ -81,6 +82,8 @@ Section body indentation must be controlled by shared global constants (no per-c
   - normal contrast + `[x]`
 - Focus row:
   - `>` marker indicates current cursor row
+  - On color-capable terminals, apply a subtle low-contrast background highlight to the focused row.
+  - In no-color environments, keep marker-only focus indication (no extra decoration).
 
 ## Shared UI component policy
 

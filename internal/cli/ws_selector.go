@@ -263,6 +263,10 @@ func renderCloseSelectorLines(candidates []closeSelectorCandidate, selected map[
 				bodyStyled = lipgloss.NewStyle().Bold(true).Render(bodyRaw)
 			}
 			if i == cursor {
+				// Keep cursor emphasis visible but subtle across light/dark terminal themes.
+				bodyStyled = lipgloss.NewStyle().
+					Background(lipgloss.AdaptiveColor{Light: "252", Dark: "236"}).
+					Render(bodyStyled)
 				focusAccent := lipgloss.NewStyle().Foreground(lipgloss.Color("6")).Bold(true).Render(">") + " "
 				line = focusAccent + bodyStyled
 			} else {

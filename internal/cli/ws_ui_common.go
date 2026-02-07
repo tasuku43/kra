@@ -18,7 +18,7 @@ const (
 	ansiStatusActive   = "\x1b[36m"
 	ansiStatusArchived = "\x1b[35m"
 
-	uiIndent = "    "
+	uiIndent = "  "
 )
 
 func writerSupportsColor(w io.Writer) bool {
