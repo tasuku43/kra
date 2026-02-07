@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -126,8 +127,17 @@ func TestCloseSelectorModel_FilterClearsOnlyByDelete(t *testing.T) {
 	if !ok {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
+	if next.filter != "x " {
+		t.Fatalf("space should be appended in filter mode, got %q", next.filter)
+	}
+
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	next, ok = updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
 	if next.filter != "x" {
-		t.Fatalf("filter should remain until explicit delete, got %q", next.filter)
+		t.Fatalf("backspace should delete one rune from filter, got %q", next.filter)
 	}
 
 	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyBackspace})
@@ -136,6 +146,46 @@ func TestCloseSelectorModel_FilterClearsOnlyByDelete(t *testing.T) {
 		t.Fatalf("unexpected model type: %T", updated)
 	}
 	if next.filter != "" {
-		t.Fatalf("filter should be cleared by backspace, got %q", next.filter)
+		t.Fatalf("filter should be cleared only by explicit delete, got %q", next.filter)
+	}
+}
+
+func TestCloseSelectorModel_FilterModeAllowsSpaceInput(t *testing.T) {
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", false, nil)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("/")})
+	next, ok := updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if !next.filterMode {
+		t.Fatalf("filter mode should be enabled")
+	}
+
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeySpace})
+	next, ok = updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if next.filter != " " {
+		t.Fatalf("space should be added to filter, got %q", next.filter)
+	}
+}
+
+func TestRenderWorkspaceSelectorLines_AlwaysShowsFilterLine(t *testing.T) {
+	lines := renderWorkspaceSelectorLines(
+		"active",
+		[]workspaceSelectorCandidate{{ID: "WS1", Description: "d", Risk: workspacerisk.WorkspaceRiskClean}},
+		map[int]bool{},
+		0,
+		"",
+		"",
+		false,
+		false,
+		80,
+	)
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "filter:") {
+		t.Fatalf("expected filter line to be shown, got %q", joined)
 	}
 }
