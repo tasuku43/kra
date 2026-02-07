@@ -39,6 +39,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/repo/discover.md`: `gionx repo discover`
   - `commands/repo/remove.md`: `gionx repo remove`
   - `commands/repo/gc.md`: `gionx repo gc`
+  - `commands/shell/init.md`: `gionx shell init`
   - `commands/state/registry.md`: `gionx state` foundation (registry)
   - `commands/ws/selector.md`: Shared inline selector UI for workspace actions
   - `commands/ws/create.md`: `gionx ws create`

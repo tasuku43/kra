@@ -60,6 +60,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runContext(args[1:])
 	case "repo":
 		return c.runRepo(args[1:])
+	case "shell":
+		return c.runShell(args[1:])
 	case "ws":
 		return c.runWS(args[1:])
 	default:

@@ -13,6 +13,7 @@ Commands:
   init              Initialize GIONX_ROOT
   context           Context commands
   repo              Repository pool commands
+  shell             Shell integration commands
   ws                Workspace commands
   version           Print version
   help              Show this help
@@ -44,6 +45,21 @@ Subcommands:
   remove            Remove repositories from current root registration
   gc                Garbage-collect removable bare repos from shared pool
   help              Show this help
+`)
+}
+
+func (c *CLI) printShellUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx shell <subcommand> [args]
+
+Subcommands:
+  init [shell]      Print shell integration function for eval
+  help              Show this help
+
+Examples:
+  eval "$(gionx shell init zsh)"
+  eval "$(gionx shell init bash)"
+  eval (gionx shell init fish)
 `)
 }
 
@@ -175,7 +191,7 @@ Behavior:
 
 func (c *CLI) printWSGoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws go [--archived] [--emit-cd] [<id>]
+  gionx ws go [--archived] [--ui] [--emit-cd] [<id>]
 
 Resolve a workspace directory target:
 - active target: workspaces/<id>/
@@ -187,7 +203,8 @@ Modes:
 
 Options:
   --archived        Use archived workspace scope
-  --emit-cd         Print shell snippet (for example: eval "$(gionx ws go --emit-cd)")
+  --ui              Print human-readable Result section instead of shell snippet
+  --emit-cd         Backward-compatible alias of default output
 `)
 }
 
