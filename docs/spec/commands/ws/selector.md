@@ -38,6 +38,7 @@ Header/footer should show:
 - command mode (`close`, `go`, `reopen`, `purge`)
 - scope (`active` or `archived`)
 - key hints (`Space`, `Enter`, text filter input, `Esc`/`Ctrl+C`)
+- `Enter` hint label should be command-specific action text (for example `enter close` for `ws close`).
 
 Section-style output should use consistent headings:
 - `Workspaces(<status>):`

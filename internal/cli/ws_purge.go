@@ -142,7 +142,7 @@ func (c *CLI) runWSPurge(args []string) int {
 				return nil, errNoArchivedWorkspaces
 			}
 
-			ids, err := c.promptWorkspaceSelector("archived", candidates)
+			ids, err := c.promptWorkspaceSelector("archived", "purge", candidates)
 			if err != nil {
 				return nil, err
 			}

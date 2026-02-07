@@ -34,6 +34,7 @@ type workspaceSelectorModel struct {
 	cursor     int // cursor position within filtered indices
 	width      int
 	status     string
+	action     string
 	useColor   bool
 	debugf     func(string, ...any)
 	message    string
@@ -43,9 +44,12 @@ type workspaceSelectorModel struct {
 	done       bool
 }
 
-func newWorkspaceSelectorModel(candidates []workspaceSelectorCandidate, status string, useColor bool, debugf func(string, ...any)) workspaceSelectorModel {
+func newWorkspaceSelectorModel(candidates []workspaceSelectorCandidate, status string, action string, useColor bool, debugf func(string, ...any)) workspaceSelectorModel {
 	if debugf == nil {
 		debugf = func(string, ...any) {}
+	}
+	if strings.TrimSpace(action) == "" {
+		action = "proceed"
 	}
 	return workspaceSelectorModel{
 		candidates: candidates,
@@ -53,6 +57,7 @@ func newWorkspaceSelectorModel(candidates []workspaceSelectorCandidate, status s
 		cursor:     0,
 		width:      80,
 		status:     status,
+		action:     action,
 		useColor:   useColor,
 		debugf:     debugf,
 		showCaret:  true,
@@ -140,7 +145,7 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m workspaceSelectorModel) View() string {
-	lines := renderWorkspaceSelectorLines(m.status, m.candidates, m.selected, m.cursor, m.message, m.filter, m.showCaret, m.useColor, m.width)
+	lines := renderWorkspaceSelectorLines(m.status, m.action, m.candidates, m.selected, m.cursor, m.message, m.filter, m.showCaret, m.useColor, m.width)
 	return strings.Join(lines, "\n")
 }
 
@@ -201,7 +206,7 @@ func (m workspaceSelectorModel) selectedIDs() []string {
 	return ids
 }
 
-func (c *CLI) promptWorkspaceSelector(status string, candidates []workspaceSelectorCandidate) ([]string, error) {
+func (c *CLI) promptWorkspaceSelector(status string, action string, candidates []workspaceSelectorCandidate) ([]string, error) {
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no workspace candidates")
 	}
@@ -212,10 +217,10 @@ func (c *CLI) promptWorkspaceSelector(status string, candidates []workspaceSelec
 	}
 
 	useColor := writerSupportsColor(c.Err)
-	return runWorkspaceSelector(inFile, c.Err, status, candidates, useColor, c.debugf)
+	return runWorkspaceSelector(inFile, c.Err, status, action, candidates, useColor, c.debugf)
 }
 
-func runWorkspaceSelector(in *os.File, out io.Writer, status string, candidates []workspaceSelectorCandidate, useColor bool, debugf func(string, ...any)) ([]string, error) {
+func runWorkspaceSelector(in *os.File, out io.Writer, status string, action string, candidates []workspaceSelectorCandidate, useColor bool, debugf func(string, ...any)) ([]string, error) {
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no workspace candidates")
 	}
@@ -223,7 +228,7 @@ func runWorkspaceSelector(in *os.File, out io.Writer, status string, candidates 
 		status = "active"
 	}
 
-	model := newWorkspaceSelectorModel(candidates, status, useColor, debugf)
+	model := newWorkspaceSelectorModel(candidates, status, action, useColor, debugf)
 	program := tea.NewProgram(
 		model,
 		tea.WithInput(in),
@@ -250,7 +255,7 @@ func runWorkspaceSelector(in *os.File, out io.Writer, status string, candidates 
 	return ids, nil
 }
 
-func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorCandidate, selected map[int]bool, cursor int, message string, filter string, showCaret bool, useColor bool, termWidth int) []string {
+func renderWorkspaceSelectorLines(status string, action string, candidates []workspaceSelectorCandidate, selected map[int]bool, cursor int, message string, filter string, showCaret bool, useColor bool, termWidth int) []string {
 	idWidth := len("workspace")
 	for _, it := range candidates {
 		if n := len(it.ID); n > idWidth {
@@ -262,6 +267,9 @@ func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorC
 	}
 	if idWidth > 24 {
 		idWidth = 24
+	}
+	if strings.TrimSpace(action) == "" {
+		action = "proceed"
 	}
 
 	selectedCount := 0
@@ -275,7 +283,7 @@ func renderWorkspaceSelectorLines(status string, candidates []workspaceSelectorC
 	filterLabel := filter
 
 	titleLine := renderWorkspacesTitle(status, useColor)
-	footerRaw := fmt.Sprintf("%sselected: %d/%d  ↑↓ move  space toggle  enter proceed  type filter  esc/c-c cancel", uiIndent, selectedCount, len(candidates))
+	footerRaw := fmt.Sprintf("%sselected: %d/%d  ↑↓ move  space toggle  enter %s  type filter  esc/c-c cancel", uiIndent, selectedCount, len(candidates), action)
 	footer := styleMuted(footerRaw, useColor)
 
 	if termWidth < 48 {
