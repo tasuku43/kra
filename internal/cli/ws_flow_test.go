@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"errors"
+	"strings"
 	"testing"
 )
 
@@ -129,6 +130,25 @@ func TestWorkspaceFlow_DefaultResultUsesSharedIndent(t *testing.T) {
 	got := out.String()
 	if !containsAll(got, "\n  Applied 1 / 1", "\n  + WS-1") {
 		t.Fatalf("result body should use shared 2-space indentation: %q", got)
+	}
+	if strings.Contains(got, "Result:\n\n") {
+		t.Fatalf("result heading should not have blank line before body: %q", got)
+	}
+}
+
+func TestWorkspaceFlow_AbortedResultHasNoBlankAfterHeading(t *testing.T) {
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	c := New(&out, &errOut)
+
+	c.printWorkspaceFlowAbortedResult("canceled at Risk", false)
+	got := out.String()
+
+	if !containsAll(got, "Result:", "\n  aborted: canceled at Risk") {
+		t.Fatalf("unexpected aborted result output: %q", got)
+	}
+	if strings.Contains(got, "Result:\n\n") {
+		t.Fatalf("aborted result heading should not have blank line before body: %q", got)
 	}
 }
 
