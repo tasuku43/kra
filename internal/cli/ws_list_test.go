@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tasuku43/gion-core/workspacerisk"
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
 	"github.com/tasuku43/gionx/internal/testutil"
@@ -264,5 +265,49 @@ func TestCLI_WS_List_ArchivedScopeShowsArchivedOnly(t *testing.T) {
 	}
 	if strings.Contains(got, "WS_ACTIVE") {
 		t.Fatalf("stdout should not include active workspace in archived scope: %q", got)
+	}
+}
+
+func TestRenderWSListSummaryRow_AlignsDescriptionColumn(t *testing.T) {
+	rowA := wsListRow{
+		ID:          "WS_A",
+		RepoCount:   1,
+		Risk:        workspacerisk.WorkspaceRiskClean,
+		Description: "first description",
+	}
+	rowB := wsListRow{
+		ID:          "WORKSPACE-B-LONG",
+		RepoCount:   12,
+		Risk:        workspacerisk.WorkspaceRiskDiverged,
+		Description: "second description",
+	}
+
+	lineA := renderWSListSummaryRow(rowA, 16, 10, 8, 120, false)
+	lineB := renderWSListSummaryRow(rowB, 16, 10, 8, 120, false)
+
+	colA := strings.Index(lineA, "first description")
+	colB := strings.Index(lineB, "second description")
+	if colA <= 0 || colB <= 0 {
+		t.Fatalf("description columns not found: lineA=%q lineB=%q", lineA, lineB)
+	}
+	if colA != colB {
+		t.Fatalf("description start columns differ: got %d and %d", colA, colB)
+	}
+}
+
+func TestRenderWSListSummaryRow_TruncatesDescriptionWithEllipsis(t *testing.T) {
+	row := wsListRow{
+		ID:          "WS1",
+		RepoCount:   1,
+		Risk:        workspacerisk.WorkspaceRiskClean,
+		Description: "abcdefghijklmnopqrstuvwxyz",
+	}
+
+	line := renderWSListSummaryRow(row, 10, 10, 8, 44, false)
+	if !strings.Contains(line, "…") {
+		t.Fatalf("line should contain ellipsis when truncated: %q", line)
+	}
+	if w := displayWidth(line); w > 44 {
+		t.Fatalf("line width = %d, want <= 44: %q", w, line)
 	}
 }

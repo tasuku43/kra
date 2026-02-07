@@ -454,6 +454,9 @@ func trimLastRune(s string) string {
 }
 
 func runeDisplayWidth(r rune) int {
+	if r == '…' {
+		return 1
+	}
 	if r < 128 {
 		return 1
 	}

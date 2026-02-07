@@ -25,6 +25,13 @@ action commands (`ws close`, `ws go`, `ws reopen`, `ws purge`).
   - `risk`
   - `repo_count`
   - `description`
+- Summary row order is fixed as `ID | risk | repos | description`.
+- Column alignment rules:
+  - `ID`, `risk`, and `repos` columns use fixed widths computed from the visible row set.
+  - `description` starts at a stable column for all rows.
+- Ellipsis policy:
+  - only `description` is truncated with `…` when terminal width is tight.
+  - row output width must not exceed the selected terminal width.
 - Header shows scope only:
   - default: `Workspaces(active):`
   - `--archived`: `Workspaces(archived):`

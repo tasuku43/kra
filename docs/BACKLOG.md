@@ -283,7 +283,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-001
   - Parallel: yes
 
-- [ ] UX-WS-009: `ws list` row layout hardening
+- [x] UX-WS-009: `ws list` row layout hardening
   - What: lock default summary row order to `ID | risk | repos | description` with stable column alignment and
     ellipsis policy.
   - Specs:

@@ -223,33 +223,48 @@ func printWSListHuman(out io.Writer, rows []wsListRow, scope string, tree bool, 
 		}
 	}
 
+	riskWidth := 0
+	for _, row := range rows {
+		if n := displayWidth(renderWorkspaceRiskToken(row.Risk, false)); n > riskWidth {
+			riskWidth = n
+		}
+	}
+	if riskWidth < len("[clean]") {
+		riskWidth = len("[clean]")
+	}
+
 	maxCols := listTerminalWidth()
 	for _, row := range rows {
-		idPlain := fmt.Sprintf("%-*s", idWidth, truncateDisplay(row.ID, idWidth))
-		riskPlain := renderWorkspaceRiskToken(row.Risk, false)
-		repoPlain := fmt.Sprintf("%-*s", repoWidth, fmt.Sprintf("repos:%d", row.RepoCount))
-		desc := row.Description
-		if desc == "" {
-			desc = "(no description)"
-		}
-
-		prefixPlain := fmt.Sprintf("%s  %s  %s  ", idPlain, riskPlain, repoPlain)
-		availableDescCols := maxCols - displayWidth(prefixPlain) - displayWidth(uiIndent)
-		if availableDescCols < 16 {
-			availableDescCols = 16
-		}
-		desc = truncateDisplay(desc, availableDescCols)
-
-		idText := colorizeRiskID(idPlain, row.Risk, useColor)
-		riskText := renderWorkspaceRiskToken(row.Risk, useColor)
-
-		fmt.Fprintf(out, "%s%s  %s  %s  %s\n", uiIndent, idText, riskText, repoPlain, desc)
+		fmt.Fprintln(out, renderWSListSummaryRow(row, idWidth, riskWidth, repoWidth, maxCols, useColor))
 
 		if !tree {
 			continue
 		}
 		printWSListTreeLines(out, row.Repos, maxCols, useColor)
 	}
+}
+
+func renderWSListSummaryRow(row wsListRow, idWidth int, riskWidth int, repoWidth int, maxCols int, useColor bool) string {
+	idPlain := fmt.Sprintf("%-*s", idWidth, truncateDisplay(row.ID, idWidth))
+	riskPlain := fmt.Sprintf("%-*s", riskWidth, renderWorkspaceRiskToken(row.Risk, false))
+	repoPlain := fmt.Sprintf("%-*s", repoWidth, fmt.Sprintf("repos:%d", row.RepoCount))
+	desc := row.Description
+	if desc == "" {
+		desc = "(no description)"
+	}
+
+	prefixPlain := fmt.Sprintf("%s%s  %s  %s  ", uiIndent, idPlain, riskPlain, repoPlain)
+	availableDescCols := maxCols - displayWidth(prefixPlain)
+	if availableDescCols < 8 {
+		availableDescCols = 8
+	}
+	desc = truncateDisplay(desc, availableDescCols)
+
+	idText := colorizeRiskID(idPlain, row.Risk, useColor)
+	riskText := fmt.Sprintf("%-*s", riskWidth, renderWorkspaceRiskToken(row.Risk, useColor))
+
+	line := fmt.Sprintf("%s%s  %s  %s  %s", uiIndent, idText, riskText, repoPlain, desc)
+	return truncateDisplay(line, maxCols)
 }
 
 func printWSListTreeLines(out io.Writer, repos []statestore.WorkspaceRepo, maxCols int, useColor bool) {
