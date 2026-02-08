@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tasuku43/gion-core/workspacerisk"
+	appws "github.com/tasuku43/gionx/internal/app/ws"
 	"github.com/tasuku43/gionx/internal/gitutil"
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
@@ -129,6 +130,8 @@ func (c *CLI) runWSPurge(args []string) int {
 		return exitError
 	}
 	useColorOut := writerSupportsColor(c.Out)
+	launcherAdapter := &cliWSLauncherAdapter{cli: c, root: root}
+	selectUC := appws.NewService(launcherAdapter, launcherAdapter)
 
 	selectedIDs := make([]string, 0, 4)
 	riskMeta := make(map[string]purgeWorkspaceMeta, 4)
@@ -142,6 +145,20 @@ func (c *CLI) runWSPurge(args []string) int {
 				c.debugf("ws purge direct mode selected=%v", workspaceFlowSelectionIDs(selected))
 				return selected, nil
 			}
+			if forceSelect {
+				result, err := selectUC.RunSelect(ctx, appws.SelectRequest{
+					Scope:  appws.ScopeArchived,
+					Action: "purge",
+				})
+				if err != nil {
+					if errors.Is(err, appws.ErrWorkspaceNotSelected) {
+						return nil, errSelectorCanceled
+					}
+					return nil, err
+				}
+				c.debugf("ws purge selector mode selected=%v", []string{result.WorkspaceID})
+				return []workspaceFlowSelection{{ID: result.WorkspaceID}}, nil
+			}
 
 			candidates, err := listWorkspaceCandidatesByStatus(ctx, db, root, "archived")
 			if err != nil {
@@ -151,11 +168,7 @@ func (c *CLI) runWSPurge(args []string) int {
 				return nil, errNoArchivedWorkspaces
 			}
 
-			prompt := c.promptWorkspaceSelector
-			if forceSelect {
-				prompt = c.promptWorkspaceSelectorSingle
-			}
-			ids, err := prompt("archived", "purge", candidates)
+			ids, err := c.promptWorkspaceSelector("archived", "purge", candidates)
 			if err != nil {
 				return nil, err
 			}

@@ -18,6 +18,7 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/tasuku43/gion-core/repospec"
 	"github.com/tasuku43/gion-core/repostore"
+	appws "github.com/tasuku43/gionx/internal/app/ws"
 	"github.com/tasuku43/gionx/internal/gitutil"
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
@@ -130,12 +131,19 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	}
 
 	workspaceID := ""
+	launcherAdapter := &cliWSLauncherAdapter{cli: c, root: root}
+	selectUC := appws.NewService(launcherAdapter, launcherAdapter)
 	if forceSelect {
-		selectedID, err := c.selectWorkspaceIDByStatus(root, "active", "add-repo")
+		result, err := selectUC.RunSelect(ctx, appws.SelectRequest{
+			Scope:  appws.ScopeActive,
+			Action: "add-repo",
+		})
 		if err != nil {
 			switch {
 			case errors.Is(err, errNoActiveWorkspaces):
 				fmt.Fprintln(c.Err, "no active workspaces available")
+			case errors.Is(err, appws.ErrWorkspaceNotSelected):
+				fmt.Fprintln(c.Err, "aborted")
 			case errors.Is(err, errSelectorCanceled):
 				fmt.Fprintln(c.Err, "aborted")
 			default:
@@ -143,7 +151,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 			}
 			return exitError
 		}
-		workspaceID = selectedID
+		workspaceID = result.WorkspaceID
 	} else {
 		var resolveErr error
 		workspaceID, resolveErr = resolveWorkspaceIDForAddRepo(root, wd, args)

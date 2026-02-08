@@ -12,6 +12,7 @@ import (
 
 	"github.com/tasuku43/gion-core/repospec"
 	"github.com/tasuku43/gion-core/repostore"
+	appws "github.com/tasuku43/gionx/internal/app/ws"
 	"github.com/tasuku43/gionx/internal/gitutil"
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
@@ -109,6 +110,8 @@ func (c *CLI) runWSReopen(args []string) int {
 		return exitError
 	}
 	useColorOut := writerSupportsColor(c.Out)
+	launcherAdapter := &cliWSLauncherAdapter{cli: c, root: root}
+	selectUC := appws.NewService(launcherAdapter, launcherAdapter)
 
 	flow := workspaceSelectRiskResultFlowConfig{
 		FlowName: "ws reopen",
@@ -117,6 +120,20 @@ func (c *CLI) runWSReopen(args []string) int {
 				selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
 				c.debugf("ws reopen direct mode selected=%v", workspaceFlowSelectionIDs(selected))
 				return selected, nil
+			}
+			if forceSelect {
+				result, err := selectUC.RunSelect(ctx, appws.SelectRequest{
+					Scope:  appws.ScopeArchived,
+					Action: "reopen",
+				})
+				if err != nil {
+					if errors.Is(err, appws.ErrWorkspaceNotSelected) {
+						return nil, errSelectorCanceled
+					}
+					return nil, err
+				}
+				c.debugf("ws reopen selector mode selected=%v", []string{result.WorkspaceID})
+				return []workspaceFlowSelection{{ID: result.WorkspaceID}}, nil
 			}
 
 			candidates, err := listWorkspaceCandidatesByStatus(ctx, db, root, "archived")
@@ -127,11 +144,7 @@ func (c *CLI) runWSReopen(args []string) int {
 				return nil, errNoArchivedWorkspaces
 			}
 
-			prompt := c.promptWorkspaceSelector
-			if forceSelect {
-				prompt = c.promptWorkspaceSelectorSingle
-			}
-			ids, err := prompt("archived", "reopen", candidates)
+			ids, err := c.promptWorkspaceSelector("archived", "reopen", candidates)
 			if err != nil {
 				return nil, err
 			}

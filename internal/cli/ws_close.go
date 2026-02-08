@@ -16,6 +16,7 @@ import (
 	"github.com/tasuku43/gion-core/repospec"
 	"github.com/tasuku43/gion-core/repostore"
 	"github.com/tasuku43/gion-core/workspacerisk"
+	appws "github.com/tasuku43/gionx/internal/app/ws"
 	"github.com/tasuku43/gionx/internal/gitutil"
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
@@ -99,6 +100,8 @@ func (c *CLI) runWSClose(args []string) int {
 		return exitError
 	}
 	useColorOut := writerSupportsColor(c.Out)
+	launcherAdapter := &cliWSLauncherAdapter{cli: c, root: root}
+	selectUC := appws.NewService(launcherAdapter, launcherAdapter)
 
 	directWorkspaceID := ""
 	if len(args) == 1 {
@@ -122,6 +125,20 @@ func (c *CLI) runWSClose(args []string) int {
 				c.debugf("ws close direct mode selected=%v", workspaceFlowSelectionIDs(selected))
 				return selected, nil
 			}
+			if forceSelect {
+				result, err := selectUC.RunSelect(ctx, appws.SelectRequest{
+					Scope:  appws.ScopeActive,
+					Action: "close",
+				})
+				if err != nil {
+					if errors.Is(err, appws.ErrWorkspaceNotSelected) {
+						return nil, errSelectorCanceled
+					}
+					return nil, err
+				}
+				c.debugf("ws close selector mode selected=%v", []string{result.WorkspaceID})
+				return []workspaceFlowSelection{{ID: result.WorkspaceID}}, nil
+			}
 
 			candidates, err := listActiveCloseCandidates(ctx, db, root)
 			if err != nil {
@@ -131,11 +148,7 @@ func (c *CLI) runWSClose(args []string) int {
 				return nil, errNoActiveWorkspaces
 			}
 
-			prompt := c.promptWorkspaceSelector
-			if forceSelect {
-				prompt = c.promptWorkspaceSelectorSingle
-			}
-			ids, err := prompt("active", "close", candidates)
+			ids, err := c.promptWorkspaceSelector("active", "close", candidates)
 			if err != nil {
 				return nil, err
 			}
