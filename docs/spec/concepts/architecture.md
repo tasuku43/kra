@@ -35,7 +35,7 @@ the same application use cases.
 - `cli` must not import `statestore`, `paths`, or `gitutil` directly after migration.
 - `cli` calls `app` use cases through explicit request/response structs.
 - `app` depends on interfaces only; concrete adapters live in `infra` and `ui`.
-- Launcher (`gionx ws`) and direct operations (`ws go`, `ws close`, `ws add-repo`, ...) must execute through
+- Launcher (`gionx ws`) and direct operations (`ws --act go`, `ws --act close`, `ws --act add-repo`, ...) must execute through
   the same `app` use case path to avoid behavior drift.
 
 ## Migration strategy

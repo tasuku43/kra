@@ -279,9 +279,9 @@ Notes vs artifacts:
 ## Workflow (typical)
 
 1) gionx ws create
-2) gionx ws add-repo
+2) gionx ws --act add-repo
 3) work inside workspaces/<id>/repos/<alias>/
-4) gionx ws close
+4) gionx ws --act close
 
 ## Git policy
 

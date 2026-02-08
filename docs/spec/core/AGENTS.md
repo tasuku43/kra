@@ -38,7 +38,7 @@ Include:
   - `workspaces/<id>/repos/<alias>/`: git worktrees (NOT Git-tracked)
   - `archive/<id>/`: archived workspaces (Git-tracked)
 - Workflow:
-  - `gionx ws create` -> `gionx ws add-repo` -> work -> `gionx ws close`
+  - `gionx ws create` -> `gionx ws --act add-repo` -> work -> `gionx ws --act close`
 - Git policy:
   - track: everything except `workspaces/**/repos/**`
   - ignore: `workspaces/**/repos/**`
@@ -54,7 +54,7 @@ Include:
   - where to store artifacts
   - keep code changes inside `repos/` worktrees only
 - Closing:
-  - run `gionx ws close <id>` to archive and remove worktrees
+  - run `gionx ws --act close --id <id>` to archive and remove worktrees
 
 ## Notes
 

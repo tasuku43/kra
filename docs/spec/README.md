@@ -47,12 +47,12 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/selector.md`: Shared inline selector UI for workspace actions
   - `commands/ws/select.md`: Unified human launcher (`ws select` / context-aware `ws`)
   - `commands/ws/create.md`: `gionx ws create`
-  - `commands/ws/add-repo.md`: `gionx ws add-repo`
+  - `commands/ws/add-repo.md`: `gionx ws --act add-repo`
   - `commands/ws/list.md`: `gionx ws list`
-  - `commands/ws/go.md`: `gionx ws go`
-  - `commands/ws/close.md`: `gionx ws close`
-  - `commands/ws/reopen.md`: `gionx ws reopen`
-  - `commands/ws/purge.md`: `gionx ws purge`
+  - `commands/ws/go.md`: `gionx ws --act go`
+  - `commands/ws/close.md`: `gionx ws --act close`
+  - `commands/ws/reopen.md`: `gionx ws --act reopen`
+  - `commands/ws/purge.md`: `gionx ws --act purge`
 
 - Development
   - `../dev/TESTING.md`: Testing principles (developer guidance)

@@ -75,7 +75,8 @@ func (c *CLI) printWSUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   gionx ws [--id <id>] [--act <action>] [action-args...]
   gionx ws select [--archived] [--act <go|close|add-repo|reopen|purge>]
-  gionx ws <subcommand> [args]
+  gionx ws create [--no-prompt] <id>
+  gionx ws list|ls [--archived] [--tree] [--format human|tsv]
 
 Subcommands:
   create            Create a workspace
@@ -91,6 +92,7 @@ Notes:
 - edit actions for existing workspaces are routed by --act.
 - active actions: go, add-repo, close
 - archived actions: reopen, purge (applies archived scope automatically)
+- ws --archived --act go|add-repo|close is invalid.
 - gionx ws opens action launcher when --act is omitted.
 - gionx ws resolves workspace from --id or current workspace context.
 - gionx ws select always opens workspace selection first.

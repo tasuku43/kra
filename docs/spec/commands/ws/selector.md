@@ -3,7 +3,7 @@ title: "`gionx ws` selector UI"
 status: implemented
 ---
 
-# Selector UI (shared by `ws close` / `ws go` / `ws reopen` / `ws purge`)
+# Selector UI (shared by `ws --act close` / `ws --act go` / `ws --act reopen` / `ws --act purge`)
 
 ## Purpose
 
@@ -19,7 +19,7 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
 - Text input is always treated as filter query input (no dedicated filter mode).
 - `Backspace` / `Delete`: remove one rune from filter query.
 - Filter text must persist after selection toggle; it is cleared only when the user explicitly deletes it.
-- Single-select mode (`ws go`) uses cursor + Enter confirmation:
+- Single-select mode (`ws --act go`) uses cursor + Enter confirmation:
   - checkbox markers are hidden.
   - `Space` has no effect.
   - footer does not show `selected: n/m`.
@@ -42,7 +42,7 @@ Header/footer should show:
 - command mode (`close`, `go`, `reopen`, `purge`)
 - scope (`active` or `archived`)
 - key hints (`Space`, `Enter`, text filter input, `Esc`/`Ctrl+C`)
-- `Enter` hint label should be command-specific action text (for example `enter close` for `ws close`).
+- `Enter` hint label should be command-specific action text (for example `enter close` for `ws --act close`).
 - Footer readability/truncation rule:
   - left-most `selected: n/m` must remain visible.
   - key hints are appended in a fixed order and dropped from the right on narrow terminals.
@@ -75,7 +75,7 @@ Section body indentation must be controlled by shared global constants (no per-c
   - Preferred terminal style is gray-like ANSI colors (for example `bright black` family).
 - Validation/error messages shown below selector footer must use the shared error token (danger/error color).
 - Do not vary supplemental color semantics by command; the same visual hierarchy must be applied across
-  `ws close/go/reopen/purge`.
+  `ws --act close/go/reopen/purge`.
 - Color is optional fallback:
   - when color is unavailable, preserve hierarchy via prefixes/indentation only.
 
@@ -131,7 +131,7 @@ Required shared modules (logical units):
 - `SelectorFrameRenderer`: footer and key-hint renderer
 
 Rules:
-- Command handlers (`ws close/go/reopen/purge`) must not define ad-hoc colors or row formats inline.
+- Command handlers (`ws --act close/go/reopen/purge`) must not define ad-hoc colors or row formats inline.
 - Display differences by command should be expressed via data (mode/scope/actions), not bespoke render code.
 - `ws list --tree` should reuse `WorkspaceRowRenderer` and `RepoTreeRenderer` for visual parity with selector flows.
 - Selector-capable command handlers must delegate stage orchestration (`Workspaces -> Risk -> Result`) to the
@@ -157,10 +157,10 @@ Rules:
 
 ## Scope rules
 
-- `ws close`: default list is `active`
-- `ws go`: default list is `active`
-- `ws reopen`: default list is `archived`
-- `ws purge`: default list is `archived`
+- `ws --act close`: default list is `active`
+- `ws --act go`: default list is `active`
+- `ws --act reopen`: default list is `archived`
+- `ws --act purge`: default list is `archived`
 
 Optional flags may switch scope if defined in each command spec.
 
@@ -198,18 +198,18 @@ Launcher and selector relationship:
 
 ## Selection cardinality
 
-- `ws go`: single selection only (exactly one required)
-- `ws close`: multiple selection allowed
-- `ws reopen`: multiple selection allowed
-- `ws purge`: multiple selection allowed
+- `ws --act go`: single selection only (exactly one required)
+- `ws --act close`: multiple selection allowed
+- `ws --act reopen`: multiple selection allowed
+- `ws --act purge`: multiple selection allowed
 
 ## Confirmation integration
 
 - Selector proceed (`Enter`) finalizes current selection and moves to the next phase.
 - Destructive commands (`close`, `purge`) must still run safety checks defined by their command specs.
 - Confirmation policy split:
-  - `ws close`: require confirmation only when selected set includes non-clean risk.
-  - `ws purge`: always require at least one purge confirmation (and an additional confirmation for active risk).
+  - `ws --act close`: require confirmation only when selected set includes non-clean risk.
+  - `ws --act purge`: always require at least one purge confirmation (and an additional confirmation for active risk).
 - In stacked CLI-style flows, commands print sections sequentially:
   - clean-only selection: `Workspaces(...)` -> `Result:`
   - non-clean selection: `Workspaces(...)` -> `Risk:` -> `Result:`

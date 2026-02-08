@@ -44,7 +44,7 @@ fi
 5. 動作確認
 ```sh
 gionx ws list
-gionx ws go
+gionx ws select --act go
 ```
 
 6. 問題なければ旧 `state.db` を削除（任意）
@@ -58,6 +58,6 @@ fi
 
 - `registry.json` 破損エラーが出る場合:
   - `XDG_DATA_HOME/gionx/registry.json` をバックアップして削除し、再実行。
-- `ws reopen` が失敗する場合:
+- `ws --act reopen` が失敗する場合:
   - 対象 `archive/<id>/.gionx.meta.json` の `repos_restore` を確認。
   - bare repo が不足している場合は `gionx repo add` で再登録してから再実行。

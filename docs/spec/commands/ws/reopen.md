@@ -1,9 +1,9 @@
 ---
-title: "`gionx ws reopen`"
+title: "`gionx ws --act reopen`"
 status: implemented
 ---
 
-# `gionx ws reopen <id>`
+# `gionx ws --act reopen <id>`
 
 ## Purpose
 

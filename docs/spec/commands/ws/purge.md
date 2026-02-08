@@ -1,16 +1,16 @@
 ---
-title: "`gionx ws purge`"
+title: "`gionx ws --act purge`"
 status: implemented
 ---
 
-# `gionx ws purge [--no-prompt --force] <id>`
+# `gionx ws --act purge [--no-prompt --force] <id>`
 
 ## Purpose
 
 Permanently delete a workspace and its archive from `GIONX_ROOT`, and remove the workspace snapshot
 from runtime index data.
 
-This is a destructive operation. It is separate from `ws close`, which keeps an archive.
+This is a destructive operation. It is separate from `ws --act close`, which keeps an archive.
 
 ## Behavior (MVP)
 

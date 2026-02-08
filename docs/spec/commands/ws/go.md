@@ -41,7 +41,7 @@ Jump to a workspace directory as a "start work" action.
 - For practical navigation, shell wrappers execute action-file entries after command completion.
 - Shell-wide wrapper integration is provided via `gionx shell init <shell>`.
 - Planned extension:
-  - when routed from unified launcher flow, `go` semantics remain identical to direct `ws go`.
+  - when routed from unified launcher flow, `go` semantics remain identical to direct `ws --act go`.
   - shell integration uses post-exec action protocol (`GIONX_SHELL_ACTION_FILE`) for launcher-routed go actions.
 
 ## Errors
