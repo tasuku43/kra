@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	appws "github.com/tasuku43/gionx/internal/app/ws"
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
 )
@@ -114,6 +115,8 @@ func (c *CLI) runWSGo(args []string) int {
 	}
 	useColorOut := writerSupportsColor(c.Out)
 	selectedTargetPath := ""
+	launcherAdapter := &cliWSLauncherAdapter{cli: c, root: root}
+	selectUC := appws.NewService(launcherAdapter, launcherAdapter)
 
 	flow := workspaceSelectRiskResultFlowConfig{
 		FlowName: "ws go",
@@ -124,27 +127,18 @@ func (c *CLI) runWSGo(args []string) int {
 				return selected, nil
 			}
 
-			candidates, err := listWorkspaceCandidatesByStatus(ctx, db, root, scope)
+			result, err := selectUC.RunSelect(ctx, appws.SelectRequest{
+				Scope:  appws.Scope(scope),
+				Action: "go",
+			})
 			if err != nil {
-				return nil, fmt.Errorf("list %s workspaces: %w", scope, err)
-			}
-			if len(candidates) == 0 {
-				if scope == "archived" {
-					return nil, errNoArchivedWorkspaces
+				if errors.Is(err, appws.ErrWorkspaceNotSelected) {
+					return nil, errSelectorCanceled
 				}
-				return nil, errNoActiveWorkspaces
-			}
-
-			selectorAction := "go"
-			if forceSelect {
-				selectorAction = "go"
-			}
-			ids, err := c.promptWorkspaceSelectorSingle(scope, selectorAction, candidates)
-			if err != nil {
 				return nil, err
 			}
-			c.debugf("ws go selector mode selected=%v", ids)
-			return []workspaceFlowSelection{{ID: ids[0]}}, nil
+			c.debugf("ws go selector mode selected=%v", []string{result.WorkspaceID})
+			return []workspaceFlowSelection{{ID: result.WorkspaceID}}, nil
 		},
 		ApplyOne: func(item workspaceFlowSelection) error {
 			targetPath, err := resolveWorkspaceGoTarget(ctx, db, root, scope, item.ID)

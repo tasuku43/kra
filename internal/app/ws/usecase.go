@@ -42,7 +42,8 @@ type LauncherResult struct {
 
 // SelectRequest defines shared --select operation contract.
 type SelectRequest struct {
-	Scope Scope
+	Scope  Scope
+	Action string
 }
 
 // SelectResult returns selected workspace id from selector flow.
@@ -68,5 +69,5 @@ type LauncherUseCase interface {
 
 // SelectUseCase is the app-layer contract for operation-level --select flow.
 type SelectUseCase interface {
-	Run(ctx context.Context, req SelectRequest) (SelectResult, error)
+	RunSelect(ctx context.Context, req SelectRequest) (SelectResult, error)
 }

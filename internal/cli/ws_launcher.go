@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 
+	appws "github.com/tasuku43/gionx/internal/app/ws"
 	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/statestore"
 )
@@ -85,46 +86,39 @@ func (c *CLI) runWSLauncher(args []string) int {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
 
-	target, fromContext := workspaceContextSelection{}, false
-	if !forceSelect {
-		if current, ok := detectWorkspaceFromCWD(root, wd); ok {
-			target = current
-			fromContext = true
-		}
+	scope := appws.ScopeActive
+	if archivedScope {
+		scope = appws.ScopeArchived
 	}
 
-	if !fromContext {
-		scope := "active"
-		if archivedScope {
-			scope = "archived"
-		}
-		id, err := c.selectWorkspaceIDByStatus(root, scope, "select")
-		if err != nil {
-			switch {
-			case err == errNoActiveWorkspaces:
-				fmt.Fprintln(c.Err, "no active workspaces available")
-			case err == errNoArchivedWorkspaces:
-				fmt.Fprintln(c.Err, "no archived workspaces available")
-			case err == errSelectorCanceled:
-				fmt.Fprintln(c.Err, "aborted")
-			default:
-				fmt.Fprintf(c.Err, "select workspace: %v\n", err)
-			}
-			return exitError
-		}
-		target = workspaceContextSelection{ID: id, Status: scope}
-	}
-
-	action, err := c.promptLauncherAction(target, fromContext)
+	adapter := &cliWSLauncherAdapter{cli: c, root: root}
+	usecase := appws.NewService(adapter, adapter)
+	result, err := usecase.Run(context.Background(), appws.LauncherRequest{
+		ForceSelect: forceSelect,
+		Scope:       scope,
+		CurrentPath: wd,
+	})
 	if err != nil {
 		if err == errSelectorCanceled {
 			fmt.Fprintln(c.Err, "aborted")
 			return exitError
 		}
-		fmt.Fprintf(c.Err, "select action: %v\n", err)
+		switch {
+		case err == errNoActiveWorkspaces:
+			fmt.Fprintln(c.Err, "no active workspaces available")
+		case err == errNoArchivedWorkspaces:
+			fmt.Fprintln(c.Err, "no archived workspaces available")
+		default:
+			fmt.Fprintf(c.Err, "run ws launcher: %v\n", err)
+		}
 		return exitError
 	}
-	c.debugf("ws launcher selected workspace=%s status=%s action=%s fromContext=%t", target.ID, target.Status, action, fromContext)
+	target := workspaceContextSelection{
+		ID:     result.Workspace.ID,
+		Status: string(result.Workspace.Status),
+	}
+	action := string(result.Action)
+	c.debugf("ws launcher selected workspace=%s status=%s action=%s", target.ID, target.Status, action)
 
 	switch action {
 	case "go":
@@ -143,6 +137,37 @@ func (c *CLI) runWSLauncher(args []string) int {
 	default:
 		return exitError
 	}
+}
+
+type cliWSLauncherAdapter struct {
+	cli  *CLI
+	root string
+}
+
+func (a *cliWSLauncherAdapter) SelectWorkspace(_ context.Context, scope appws.Scope, action string, _ bool) (string, error) {
+	return a.cli.selectWorkspaceIDByStatus(a.root, string(scope), action)
+}
+
+func (a *cliWSLauncherAdapter) SelectAction(_ context.Context, workspace appws.WorkspaceRef, fromContext bool) (appws.Action, error) {
+	action, err := a.cli.promptLauncherAction(workspaceContextSelection{
+		ID:     workspace.ID,
+		Status: string(workspace.Status),
+	}, fromContext)
+	if err != nil {
+		return "", err
+	}
+	return appws.Action(action), nil
+}
+
+func (a *cliWSLauncherAdapter) ResolveFromPath(_ context.Context, path string) (appws.WorkspaceRef, bool, error) {
+	out, ok := detectWorkspaceFromCWD(a.root, path)
+	if !ok {
+		return appws.WorkspaceRef{}, false, nil
+	}
+	return appws.WorkspaceRef{
+		ID:     out.ID,
+		Status: appws.Scope(out.Status),
+	}, true, nil
 }
 
 func (c *CLI) selectWorkspaceIDByStatus(root string, status string, action string) (string, error) {
