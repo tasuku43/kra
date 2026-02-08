@@ -19,6 +19,7 @@ func (c *CLI) runWSGo(args []string) int {
 	var archivedScope bool
 	var emitCD bool
 	var uiOutput bool
+	var forceSelect bool
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -32,6 +33,9 @@ func (c *CLI) runWSGo(args []string) int {
 			args = args[1:]
 		case "--ui":
 			uiOutput = true
+			args = args[1:]
+		case "--select":
+			forceSelect = true
 			args = args[1:]
 		default:
 			fmt.Fprintf(c.Err, "unknown flag for ws go: %q\n", args[0])
@@ -59,6 +63,11 @@ func (c *CLI) runWSGo(args []string) int {
 			return exitUsage
 		}
 	}
+	if forceSelect && directWorkspaceID != "" {
+		fmt.Fprintln(c.Err, "--select cannot be used with <id>")
+		c.printWSGoUsage(c.Err)
+		return exitUsage
+	}
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -73,7 +82,7 @@ func (c *CLI) runWSGo(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-go"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
-	c.debugf("run ws go args=%q archived=%t emitCD=%t ui=%t", args, archivedScope, emitCD, uiOutput)
+	c.debugf("run ws go args=%q archived=%t emitCD=%t ui=%t select=%t", args, archivedScope, emitCD, uiOutput, forceSelect)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -126,7 +135,11 @@ func (c *CLI) runWSGo(args []string) int {
 				return nil, errNoActiveWorkspaces
 			}
 
-			ids, err := c.promptWorkspaceSelectorSingle(scope, "go", candidates)
+			selectorAction := "go"
+			if forceSelect {
+				selectorAction = "go"
+			}
+			ids, err := c.promptWorkspaceSelectorSingle(scope, selectorAction, candidates)
 			if err != nil {
 				return nil, err
 			}

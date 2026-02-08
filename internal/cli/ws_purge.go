@@ -26,6 +26,7 @@ type purgeWorkspaceMeta struct {
 func (c *CLI) runWSPurge(args []string) int {
 	var noPrompt bool
 	var force bool
+	var forceSelect bool
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -36,6 +37,9 @@ func (c *CLI) runWSPurge(args []string) int {
 			args = args[1:]
 		case "--force":
 			force = true
+			args = args[1:]
+		case "--select":
+			forceSelect = true
 			args = args[1:]
 		default:
 			fmt.Fprintf(c.Err, "unknown flag for ws purge: %q\n", args[0])
@@ -66,6 +70,11 @@ func (c *CLI) runWSPurge(args []string) int {
 			return exitUsage
 		}
 	}
+	if forceSelect && directWorkspaceID != "" {
+		fmt.Fprintln(c.Err, "--select cannot be used with <id>")
+		c.printWSPurgeUsage(c.Err)
+		return exitUsage
+	}
 
 	if err := gitutil.EnsureGitInPath(); err != nil {
 		fmt.Fprintf(c.Err, "%v\n", err)
@@ -85,7 +94,7 @@ func (c *CLI) runWSPurge(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-purge"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
-	c.debugf("run ws purge args=%q noPrompt=%t force=%t", args, noPrompt, force)
+	c.debugf("run ws purge args=%q noPrompt=%t force=%t forceSelect=%t", args, noPrompt, force, forceSelect)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -142,7 +151,11 @@ func (c *CLI) runWSPurge(args []string) int {
 				return nil, errNoArchivedWorkspaces
 			}
 
-			ids, err := c.promptWorkspaceSelector("archived", "purge", candidates)
+			prompt := c.promptWorkspaceSelector
+			if forceSelect {
+				prompt = c.promptWorkspaceSelectorSingle
+			}
+			ids, err := prompt("archived", "purge", candidates)
 			if err != nil {
 				return nil, err
 			}

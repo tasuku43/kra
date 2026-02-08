@@ -169,30 +169,34 @@ Optional flags may switch scope if defined in each command spec.
 
 ## Unified launcher flow (planned)
 
-- Human canonical launcher:
-  - `gionx ws select`
-- Context-aware shortcut:
+- Human launcher:
   - `gionx ws`
+- Shared option:
+  - `ws <operation> --select`
 
 Behavior:
 - outside workspace:
-  - `ws` behaves as `ws select`
   - first choose one workspace, then choose one action
 - inside workspace:
-  - skip workspace selection
-  - show current-workspace action menu only:
+  - if under `workspaces/<id>/`: show current-workspace action menu:
     - `add-repo`
     - `close`
-  - `go` is excluded in this in-workspace action menu
+  - if under `archive/<id>/`: show current-workspace action menu:
+    - `reopen`
+    - `purge`
 
 Action menu ordering:
-- fixed order for in-workspace mode:
+- fixed order for in-workspace active mode:
   - `add-repo` first
   - `close` second
+- fixed order for in-workspace archived mode:
+  - `reopen` first
+  - `purge` second
 
 Launcher and selector relationship:
 - launcher flow must delegate to existing action command flows to keep behavior parity.
-- direct operation commands (`ws go`, `ws close`, `ws add-repo`) remain available.
+- direct operation commands (`ws go`, `ws close`, `ws add-repo`, `ws reopen`, `ws purge`) remain available.
+- `--select` on operation commands forces single workspace selection before command execution.
 
 ## Selection cardinality
 

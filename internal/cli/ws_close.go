@@ -24,11 +24,15 @@ import (
 var errNoActiveWorkspaces = errors.New("no active workspaces available")
 
 func (c *CLI) runWSClose(args []string) int {
+	var forceSelect bool
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
 			c.printWSCloseUsage(c.Out)
 			return exitOK
+		case "--select":
+			forceSelect = true
+			args = args[1:]
 		default:
 			fmt.Fprintf(c.Err, "unknown flag for ws close: %q\n", args[0])
 			c.printWSCloseUsage(c.Err)
@@ -60,7 +64,7 @@ func (c *CLI) runWSClose(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-close"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
-	c.debugf("run ws close args=%q", args)
+	c.debugf("run ws close args=%q forceSelect=%t", args, forceSelect)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -104,6 +108,11 @@ func (c *CLI) runWSClose(args []string) int {
 			return exitUsage
 		}
 	}
+	if forceSelect && directWorkspaceID != "" {
+		fmt.Fprintln(c.Err, "--select cannot be used with <id>")
+		c.printWSCloseUsage(c.Err)
+		return exitUsage
+	}
 
 	flow := workspaceSelectRiskResultFlowConfig{
 		FlowName: "ws close",
@@ -122,7 +131,11 @@ func (c *CLI) runWSClose(args []string) int {
 				return nil, errNoActiveWorkspaces
 			}
 
-			ids, err := c.promptWorkspaceSelector("active", "close", candidates)
+			prompt := c.promptWorkspaceSelector
+			if forceSelect {
+				prompt = c.promptWorkspaceSelectorSingle
+			}
+			ids, err := prompt("active", "close", candidates)
 			if err != nil {
 				return nil, err
 			}

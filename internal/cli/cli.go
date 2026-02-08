@@ -73,8 +73,17 @@ func (c *CLI) Run(args []string) int {
 
 func (c *CLI) runWS(args []string) int {
 	if len(args) == 0 {
-		c.printWSUsage(c.Err)
-		return exitUsage
+		return c.runWSLauncher(nil)
+	}
+
+	if strings.HasPrefix(args[0], "-") {
+		switch args[0] {
+		case "-h", "--help", "help":
+			c.printWSUsage(c.Out)
+			return exitOK
+		default:
+			return c.runWSLauncher(args)
+		}
 	}
 
 	switch args[0] {

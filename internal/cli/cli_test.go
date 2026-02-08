@@ -70,16 +70,18 @@ func TestCLI_WS_NoArgs_ShowsWSUsage(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
+	t.Setenv("XDG_DATA_HOME", filepath.Join(t.TempDir(), "xdg-data"))
+	t.Setenv("GIONX_ROOT", "")
 
 	code := c.Run([]string{"ws"})
-	if code != exitUsage {
-		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d", code, exitError)
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout not empty: %q", out.String())
 	}
-	if !strings.Contains(err.String(), "gionx ws") || !strings.Contains(err.String(), "Subcommands:") {
-		t.Fatalf("stderr missing ws usage: %q", err.String())
+	if !strings.Contains(err.String(), "resolve GIONX_ROOT:") {
+		t.Fatalf("stderr missing root resolution error: %q", err.String())
 	}
 }
 

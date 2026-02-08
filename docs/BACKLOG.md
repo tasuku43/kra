@@ -457,6 +457,7 @@ It does not replace per-item dependencies.
   - What: enforce heading spacing parity across ws flows so `Risk:` keeps one blank line after heading
     (`Workspaces/Risk` one blank, `Result` no blank).
   - Specs:
+    - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/selector.md`
     - `docs/spec/commands/ws/purge.md`
   - Depends: UX-WS-013
@@ -506,6 +507,7 @@ It does not replace per-item dependencies.
 - [x] UX-WS-019: `ws go` single-select UI mode
   - What: switch `ws go` selector to cursor-confirm single-select mode (no checkbox markers, no selected summary).
   - Specs:
+    - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/selector.md`
     - `docs/spec/commands/ws/go.md`
   - Depends: UX-WS-001, UX-WS-003
@@ -526,6 +528,7 @@ It does not replace per-item dependencies.
   - What: define facade split while keeping a single execution core for workspace actions.
     Clarify role boundaries: humans use unified launcher flow, agents use operation-fixed commands.
   - Specs:
+    - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/selector.md`
     - `docs/spec/commands/ws/close.md`
     - `docs/spec/commands/ws/go.md`
@@ -534,9 +537,9 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-019, UX-CORE-002
   - Serial: yes (foundation)
 
-- [ ] UX-WS-021: `ws select` unified launcher flow (single-select)
-  - What: add `gionx ws select` as canonical human entrypoint:
-    choose one workspace, then choose one action (`go` / `close` / `add-repo`) and delegate to existing flows.
+- [ ] UX-WS-021: `ws` unified launcher flow (single-select)
+  - What: implement human launcher with single-select workspace resolution and action selection.
+    For operation commands, add shared `--select` option to select workspace first, then run command.
   - Specs:
     - `docs/spec/commands/ws/selector.md`
     - `docs/spec/commands/ws/go.md`
@@ -547,7 +550,7 @@ It does not replace per-item dependencies.
 
 - [ ] UX-WS-022: Context-aware `ws` launcher behavior
   - What: make `gionx ws` context-aware:
-    outside workspace -> behave as `ws select`;
+    outside workspace -> select workspace first;
     inside workspace -> skip workspace selection and open action menu for current workspace.
   - Specs:
     - `docs/spec/commands/ws/selector.md`

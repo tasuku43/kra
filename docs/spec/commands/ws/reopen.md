@@ -3,7 +3,7 @@ title: "`gionx ws reopen`"
 status: implemented
 ---
 
-# `gionx ws reopen [<id>]`
+# `gionx ws reopen [--select] [<id>]`
 
 ## Purpose
 
@@ -66,6 +66,9 @@ If the Git working tree has unrelated changes, this command must not include the
 ## Modes
 
 - If `<id>` is provided, run direct mode for that workspace.
+- If `--select` is provided, run single-select workspace selector first and then execute direct reopen.
+  - selector scope is `archived`
+  - `--select` cannot be combined with `<id>`
 - If `<id>` is omitted, run selector mode in `archived` scope.
 - Selector mode supports multi-select.
 - Non-TTY invocation without `<id>` is rejected (no fallback mode).

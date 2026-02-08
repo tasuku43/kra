@@ -6,7 +6,7 @@ pending:
   - shell_action_file_protocol
 ---
 
-# `gionx ws go [--archived] [--ui] [--emit-cd] [<id>]`
+# `gionx ws go [--archived] [--select] [--ui] [--emit-cd] [<id>]`
 
 ## Purpose
 
@@ -16,6 +16,7 @@ Jump to a workspace directory as a "start work" action.
 
 - `<id>` (optional): workspace id for direct mode
 - `--archived` (optional): target archived workspaces instead of active workspaces
+- `--select` (optional): force workspace selection UI before command execution
 - `--ui` (optional): print human-readable `Result:` section
 - `--emit-cd` (optional): backward-compatible alias of default shell snippet output
 
@@ -25,6 +26,11 @@ Jump to a workspace directory as a "start work" action.
 
 - If `<id>` is provided:
   - resolve the target directly
+- If `--select` is provided:
+  - launch shared selector UI first
+  - selector scope is `active` by default, `archived` when `--archived` is set
+  - selected workspace id is then used as direct target
+  - `--select` cannot be combined with `<id>`
 - If `<id>` is omitted:
   - launch shared selector UI (`commands/ws/selector.md`)
   - default scope is `active`; use `--archived` to switch scope
