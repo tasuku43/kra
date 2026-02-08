@@ -202,7 +202,7 @@ Behavior:
 
 func (c *CLI) printWSGoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws go [--archived] [--id <id>] [--ui] [--emit-cd] [<id>]
+  gionx ws go [--archived] [--id <id>] [--ui] [<id>]
 
 Resolve a workspace directory target:
 - active target: workspaces/<id>/
@@ -211,8 +211,7 @@ Resolve a workspace directory target:
 Options:
   --archived        Use archived workspace scope
   --id              Explicit workspace ID
-  --ui              Print human-readable Result section instead of shell snippet
-  --emit-cd         Backward-compatible alias of default output
+  --ui              Print human-readable Result section
 `)
 }
 

@@ -78,24 +78,14 @@ func renderPOSIXShellInitScript(shellName string) string {
 gionx() {
   local __gionx_action_file __gionx_status
   __gionx_action_file="$(mktemp "${TMPDIR:-/tmp}/gionx-action.XXXXXX")" || return 1
-  if [ "$1" = "ws" ] && [ "$2" = "go" ]; then
-    local __gionx_cd
-    __gionx_cd="$(GIONX_SHELL_ACTION_FILE="$__gionx_action_file" command gionx ws go "${@:3}")" || {
-      __gionx_status=$?
-      rm -f "$__gionx_action_file"
-      return $__gionx_status
-    }
-    eval "$__gionx_cd"
-  else
-    GIONX_SHELL_ACTION_FILE="$__gionx_action_file" command gionx "$@"
-    __gionx_status=$?
-    if [ $__gionx_status -ne 0 ]; then
-      rm -f "$__gionx_action_file"
-      return $__gionx_status
-    fi
-    if [ -s "$__gionx_action_file" ]; then
-      eval "$(cat "$__gionx_action_file")"
-    fi
+  GIONX_SHELL_ACTION_FILE="$__gionx_action_file" command gionx "$@"
+  __gionx_status=$?
+  if [ $__gionx_status -ne 0 ]; then
+    rm -f "$__gionx_action_file"
+    return $__gionx_status
+  fi
+  if [ -s "$__gionx_action_file" ]; then
+    eval "$(cat "$__gionx_action_file")"
   fi
   rm -f "$__gionx_action_file"
 }
@@ -108,23 +98,14 @@ func renderFishShellInitScript() string {
 #   eval (gionx shell init fish)
 function gionx
   set -l __gionx_action_file (mktemp "/tmp/gionx-action.XXXXXX"); or return 1
-  if test (count $argv) -ge 2; and test "$argv[1]" = "ws"; and test "$argv[2]" = "go"
-    set -l __gionx_cd (env GIONX_SHELL_ACTION_FILE="$__gionx_action_file" command gionx ws go $argv[3..-1]); or begin
-      set -l __gionx_status $status
-      rm -f "$__gionx_action_file"
-      return $__gionx_status
-    end
-    eval $__gionx_cd
-  else
-    env GIONX_SHELL_ACTION_FILE="$__gionx_action_file" command gionx $argv
-    set -l __gionx_status $status
-    if test $__gionx_status -ne 0
-      rm -f "$__gionx_action_file"
-      return $__gionx_status
-    end
-    if test -s "$__gionx_action_file"
-      eval (cat "$__gionx_action_file")
-    end
+  env GIONX_SHELL_ACTION_FILE="$__gionx_action_file" command gionx $argv
+  set -l __gionx_status $status
+  if test $__gionx_status -ne 0
+    rm -f "$__gionx_action_file"
+    return $__gionx_status
+  end
+  if test -s "$__gionx_action_file"
+    eval (cat "$__gionx_action_file")
   end
   rm -f "$__gionx_action_file"
 end

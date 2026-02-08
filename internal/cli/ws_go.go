@@ -17,7 +17,6 @@ var errWSGoSingleSelectionRequired = errors.New("ws go requires exactly one work
 
 func (c *CLI) runWSGo(args []string) int {
 	var archivedScope bool
-	var emitCD bool
 	var uiOutput bool
 	idFromFlag := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
@@ -27,9 +26,6 @@ func (c *CLI) runWSGo(args []string) int {
 			return exitOK
 		case "--archived":
 			archivedScope = true
-			args = args[1:]
-		case "--emit-cd":
-			emitCD = true
 			args = args[1:]
 		case "--ui":
 			uiOutput = true
@@ -72,11 +68,6 @@ func (c *CLI) runWSGo(args []string) int {
 	if len(args) == 0 && idFromFlag != "" {
 		args = []string{idFromFlag}
 	}
-	if uiOutput && emitCD {
-		fmt.Fprintln(c.Err, "--ui and --emit-cd cannot be used together")
-		c.printWSGoUsage(c.Err)
-		return exitUsage
-	}
 
 	directWorkspaceID := args[0]
 	if err := validateWorkspaceID(directWorkspaceID); err != nil {
@@ -97,7 +88,7 @@ func (c *CLI) runWSGo(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-go"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
-	c.debugf("run ws go args=%q archived=%t emitCD=%t ui=%t", args, archivedScope, emitCD, uiOutput)
+	c.debugf("run ws go args=%q archived=%t ui=%t", args, archivedScope, uiOutput)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -179,9 +170,6 @@ func (c *CLI) runWSGo(args []string) int {
 		return exitError
 	}
 
-	if !uiOutput {
-		fmt.Fprintf(c.Out, "cd %s\n", shellSingleQuote(selectedTargetPath))
-	}
 	c.debugf("ws go destination=%s", selectedTargetPath)
 	return exitOK
 }
@@ -238,11 +226,4 @@ func resolveWorkspaceGoTarget(ctx context.Context, db *sql.DB, root string, scop
 		return "", fmt.Errorf("target path is not a directory: %s", targetPath)
 	}
 	return targetPath, nil
-}
-
-func shellSingleQuote(s string) string {
-	if s == "" {
-		return "''"
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
 }

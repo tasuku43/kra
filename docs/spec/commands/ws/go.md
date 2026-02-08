@@ -5,7 +5,7 @@ pending:
   - ws_list_select_entrypoint_doc_sync
 ---
 
-# `gionx ws go [--archived] [--id <id>] [--ui] [--emit-cd] [<id>]`
+# `gionx ws go [--archived] [--id <id>] [--ui] [<id>]`
 
 ## Purpose
 
@@ -17,7 +17,6 @@ Jump to a workspace directory as a "start work" action.
 - `--id <id>` (optional): explicit workspace id flag (cannot be combined with positional `<id>`)
 - `--archived` (optional): target archived workspaces instead of active workspaces
 - `--ui` (optional): print human-readable `Result:` section
-- `--emit-cd` (optional): backward-compatible alias of default shell snippet output
 
 ## Behavior
 
@@ -33,21 +32,18 @@ Jump to a workspace directory as a "start work" action.
 
 ### UX detail
 
-- In standard mode, print only shell snippet (`cd '<path>'`) to stdout.
+- In standard mode, do not print shell command snippets to stdout.
 - In `--ui` mode, print `Result:` and destination path (human-readable).
-- `--emit-cd` keeps backward compatibility and behaves the same as standard mode.
 - Non-TTY constraints for selection are handled by `ws list --select`.
 
 ### Shell integration
 
 - `gionx` cannot mutate the parent shell cwd directly.
-- For practical navigation, default output is shell-evaluable.
-- Expected usage style: `eval "$(gionx ws go)"`.
+- For practical navigation, shell wrappers execute action-file entries after command completion.
 - Shell-wide wrapper integration is provided via `gionx shell init <shell>`.
 - Planned extension:
   - when routed from unified launcher flow, `go` semantics remain identical to direct `ws go`.
-  - shell integration uses post-exec action protocol (`GIONX_SHELL_ACTION_FILE`) for launcher-routed go actions
-    while preserving user-visible behavior.
+  - shell integration uses post-exec action protocol (`GIONX_SHELL_ACTION_FILE`) for launcher-routed go actions.
 
 ## Errors
 

@@ -7,7 +7,7 @@ status: implemented
 
 ## Purpose
 
-Print shell integration script that enables `gionx ws go` to change parent shell cwd.
+Print shell integration script that applies parent-shell side effects via action-file protocol.
 
 ## Inputs
 
@@ -21,9 +21,6 @@ Print shell integration script that enables `gionx ws go` to change parent shell
 - Script contains:
   - one-time setup hint comment
   - shell function `gionx` override
-  - special path for `ws go`:
-    - execute `command gionx ws go ...`
-    - `eval` returned `cd '<path>'`
   - for all command paths, set `GIONX_SHELL_ACTION_FILE=<tempfile>` and let `gionx` emit post-exec action
     (for example `cd '<path>'`) into that file when needed
   - after command success, apply action file content if present

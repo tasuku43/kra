@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +27,7 @@ func TestCLI_WS_Go_Help_ShowsUsage(t *testing.T) {
 	}
 }
 
-func TestCLI_WS_Go_DirectActive_PrintsDestination(t *testing.T) {
+func TestCLI_WS_Go_DirectActive_WritesShellActionOnly(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 
@@ -43,21 +44,29 @@ func TestCLI_WS_Go_DirectActive_PrintsDestination(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
+	actionFile := filepath.Join(t.TempDir(), "action.sh")
+	t.Setenv(shellActionFileEnv, actionFile)
 	code := c.Run([]string{"ws", "go", "WS1"})
 	if code != exitOK {
 		t.Fatalf("ws go exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
+	if out.String() != "" {
+		t.Fatalf("stdout should be empty in non-ui mode: %q", out.String())
+	}
+	action, readErr := os.ReadFile(actionFile)
+	if readErr != nil {
+		t.Fatalf("ReadFile(action) error: %v", readErr)
+	}
 	want := filepath.Join(env.Root, "workspaces", "WS1")
-	wantOut := "cd '" + want + "'\n"
-	if out.String() != wantOut {
-		t.Fatalf("stdout mismatch: got=%q want=%q", out.String(), wantOut)
+	if !strings.Contains(string(action), "cd ") || !strings.Contains(string(action), want) {
+		t.Fatalf("action file missing destination cd: %q", string(action))
 	}
 	if err.Len() != 0 {
 		t.Fatalf("stderr not empty: %q", err.String())
 	}
 }
 
-func TestCLI_WS_Go_DirectArchived_PrintsDestination(t *testing.T) {
+func TestCLI_WS_Go_DirectArchived_WritesShellActionOnly(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 
@@ -83,41 +92,22 @@ func TestCLI_WS_Go_DirectArchived_PrintsDestination(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
+	actionFile := filepath.Join(t.TempDir(), "action.sh")
+	t.Setenv(shellActionFileEnv, actionFile)
 	code := c.Run([]string{"ws", "go", "--archived", "WS1"})
 	if code != exitOK {
 		t.Fatalf("ws go --archived exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
+	if out.String() != "" {
+		t.Fatalf("stdout should be empty in non-ui mode: %q", out.String())
+	}
+	action, readErr := os.ReadFile(actionFile)
+	if readErr != nil {
+		t.Fatalf("ReadFile(action) error: %v", readErr)
+	}
 	want := filepath.Join(env.Root, "archive", "WS1")
-	wantOut := "cd '" + want + "'\n"
-	if out.String() != wantOut {
-		t.Fatalf("stdout mismatch: got=%q want=%q", out.String(), wantOut)
-	}
-}
-
-func TestCLI_WS_Go_EmitCD_PrintsShellSnippetOnly(t *testing.T) {
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-	code := c.Run([]string{"ws", "go", "--emit-cd", "WS1"})
-	if code != exitOK {
-		t.Fatalf("ws go --emit-cd exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-	}
-	want := "cd '" + filepath.Join(env.Root, "workspaces", "WS1") + "'\n"
-	if out.String() != want {
-		t.Fatalf("stdout = %q, want %q", out.String(), want)
+	if !strings.Contains(string(action), "cd ") || !strings.Contains(string(action), want) {
+		t.Fatalf("action file missing destination cd: %q", string(action))
 	}
 }
 
@@ -151,16 +141,16 @@ func TestCLI_WS_Go_UI_PrintsResultSection(t *testing.T) {
 	}
 }
 
-func TestCLI_WS_Go_UIAndEmitCD_Fails(t *testing.T) {
+func TestCLI_WS_Go_EmitCDFlag_IsUnknown(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	code := c.Run([]string{"ws", "go", "--ui", "--emit-cd", "WS1"})
+	code := c.Run([]string{"ws", "go", "--emit-cd", "WS1"})
 	if code != exitUsage {
-		t.Fatalf("ws go --ui --emit-cd exit code = %d, want %d", code, exitUsage)
+		t.Fatalf("ws go --emit-cd exit code = %d, want %d", code, exitUsage)
 	}
-	if !strings.Contains(err.String(), "cannot be used together") {
-		t.Fatalf("stderr missing conflict error: %q", err.String())
+	if !strings.Contains(err.String(), "unknown flag for ws go") {
+		t.Fatalf("stderr missing unknown-flag error: %q", err.String())
 	}
 }
 

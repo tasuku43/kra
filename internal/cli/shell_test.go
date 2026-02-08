@@ -39,14 +39,11 @@ func TestCLI_Shell_Init_Zsh_PrintsEvalReadyFunction(t *testing.T) {
 	if !strings.Contains(text, "gionx() {") {
 		t.Fatalf("missing function definition: %q", text)
 	}
-	if !strings.Contains(text, `command gionx ws go "${@:3}"`) {
-		t.Fatalf("missing ws go passthrough logic: %q", text)
-	}
-	if !strings.Contains(text, `eval "$__gionx_cd"`) {
-		t.Fatalf("missing eval behavior: %q", text)
-	}
 	if !strings.Contains(text, `GIONX_SHELL_ACTION_FILE="$__gionx_action_file"`) {
 		t.Fatalf("missing action file env wiring: %q", text)
+	}
+	if !strings.Contains(text, `command gionx "$@"`) {
+		t.Fatalf("missing unified command passthrough: %q", text)
 	}
 	if !strings.Contains(text, `if [ -s "$__gionx_action_file" ]; then`) {
 		t.Fatalf("missing action file apply block: %q", text)
