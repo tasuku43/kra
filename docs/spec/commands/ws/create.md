@@ -41,7 +41,7 @@ Create an empty workspace with scaffolding for notes/artifacts.
 - `Result:` heading style follows shared UI token rules (`text.primary` + bold).
 - Summary line should follow shared result color semantics (`status.success` on success).
 
-## Planned delta (FS-STATE-002)
+## FS metadata behavior
 
 - `ws create` must create `workspaces/<id>/.gionx.meta.json` as canonical workspace metadata.
 - Initial file content must include:

@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -125,6 +126,23 @@ func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *te
 	}
 	if _, err := os.Stat(filepath.Join(env.Root, "archive", "WS1", "repos")); err == nil {
 		t.Fatalf("archive/WS1/repos should not exist after close")
+	}
+	metaBytes, readErr := os.ReadFile(filepath.Join(env.Root, "archive", "WS1", workspaceMetaFilename))
+	if readErr != nil {
+		t.Fatalf("read %s: %v", workspaceMetaFilename, readErr)
+	}
+	var meta workspaceMetaFile
+	if err := json.Unmarshal(metaBytes, &meta); err != nil {
+		t.Fatalf("unmarshal %s: %v", workspaceMetaFilename, err)
+	}
+	if meta.Workspace.Status != "archived" {
+		t.Fatalf("workspace meta status = %q, want %q", meta.Workspace.Status, "archived")
+	}
+	if len(meta.ReposRestore) != 1 {
+		t.Fatalf("repos_restore length = %d, want %d", len(meta.ReposRestore), 1)
+	}
+	if got := meta.ReposRestore[0]; got.Alias != "r" || got.Branch != "WS1/test" {
+		t.Fatalf("repos_restore[0] = %+v, want alias=%q branch=%q", got, "r", "WS1/test")
 	}
 
 	subj := strings.TrimSpace(mustGitOutput(t, env.Root, "log", "-1", "--pretty=%s"))

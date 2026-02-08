@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -79,4 +80,65 @@ func writeWorkspaceMetaFile(wsPath string, meta workspaceMetaFile) error {
 		return fmt.Errorf("replace workspace meta file %s: %w", metaPath, err)
 	}
 	return nil
+}
+
+func loadWorkspaceMetaFile(wsPath string) (workspaceMetaFile, error) {
+	if strings.TrimSpace(wsPath) == "" {
+		return workspaceMetaFile{}, fmt.Errorf("workspace path is required")
+	}
+	metaPath := filepath.Join(wsPath, workspaceMetaFilename)
+	b, err := os.ReadFile(metaPath)
+	if err != nil {
+		return workspaceMetaFile{}, fmt.Errorf("read workspace meta file %s: %w", metaPath, err)
+	}
+	var meta workspaceMetaFile
+	if err := json.Unmarshal(b, &meta); err != nil {
+		return workspaceMetaFile{}, fmt.Errorf("parse workspace meta file %s: %w", metaPath, err)
+	}
+	if meta.SchemaVersion != 1 {
+		return workspaceMetaFile{}, fmt.Errorf("unsupported workspace meta schema_version: %d", meta.SchemaVersion)
+	}
+	if strings.TrimSpace(meta.Workspace.ID) == "" {
+		return workspaceMetaFile{}, fmt.Errorf("workspace.id is required in %s", metaPath)
+	}
+	if meta.ReposRestore == nil {
+		meta.ReposRestore = make([]workspaceMetaRepoRestore, 0)
+	}
+	return meta, nil
+}
+
+func upsertWorkspaceMetaReposRestore(wsPath string, repos []workspaceMetaRepoRestore, now int64) error {
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		return err
+	}
+	byAlias := make(map[string]workspaceMetaRepoRestore, len(meta.ReposRestore)+len(repos))
+	for _, r := range meta.ReposRestore {
+		alias := strings.TrimSpace(r.Alias)
+		if alias == "" {
+			return fmt.Errorf("repos_restore alias is required")
+		}
+		byAlias[alias] = r
+	}
+	for _, r := range repos {
+		alias := strings.TrimSpace(r.Alias)
+		if alias == "" {
+			return fmt.Errorf("repos_restore alias is required")
+		}
+		byAlias[alias] = r
+	}
+	aliases := make([]string, 0, len(byAlias))
+	for alias := range byAlias {
+		aliases = append(aliases, alias)
+	}
+	slices.Sort(aliases)
+	merged := make([]workspaceMetaRepoRestore, 0, len(aliases))
+	for _, alias := range aliases {
+		merged = append(merged, byAlias[alias])
+	}
+	meta.ReposRestore = merged
+	if now > 0 {
+		meta.Workspace.UpdatedAt = now
+	}
+	return writeWorkspaceMetaFile(wsPath, meta)
 }

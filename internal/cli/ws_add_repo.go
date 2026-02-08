@@ -248,10 +248,17 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		fmt.Fprintf(c.Err, "apply add-repo: %v\n", err)
 		return exitError
 	}
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	nowUnix := time.Now().Unix()
+	if err := upsertWorkspaceMetaReposRestore(wsPath, buildWorkspaceMetaReposRestore(applied), nowUnix); err != nil {
+		rollbackAddRepoApplied(ctx, db, workspaceID, applied, c.debugf)
+		fmt.Fprintf(c.Err, "update %s: %v\n", workspaceMetaFilename, err)
+		return exitError
+	}
 
 	now := time.Now()
 	day := localDayKey(now)
-	nowUnix := now.Unix()
+	nowUnix = now.Unix()
 	for _, it := range applied {
 		if err := statestore.TouchRepoUpdatedAt(ctx, db, it.Plan.Candidate.RepoUID, nowUnix); err != nil {
 			fmt.Fprintf(c.Err, "touch repo updated_at: %v\n", err)
@@ -979,6 +986,21 @@ func printAddRepoResult(out io.Writer, applied []addRepoAppliedItem, useColor bo
 	for _, it := range applied {
 		fmt.Fprintf(out, "%s%s ✔ %s\n", uiIndent, bullet, it.Plan.Candidate.RepoKey)
 	}
+}
+
+func buildWorkspaceMetaReposRestore(applied []addRepoAppliedItem) []workspaceMetaRepoRestore {
+	repos := make([]workspaceMetaRepoRestore, 0, len(applied))
+	for _, it := range applied {
+		repos = append(repos, workspaceMetaRepoRestore{
+			RepoUID:   it.Plan.Candidate.RepoUID,
+			RepoKey:   it.Plan.Candidate.RepoKey,
+			RemoteURL: it.Plan.Candidate.RemoteURL,
+			Alias:     it.Plan.Candidate.Alias,
+			Branch:    it.Plan.Branch,
+			BaseRef:   it.Plan.BaseRefUsed,
+		})
+	}
+	return repos
 }
 
 func localDayKey(t time.Time) int {

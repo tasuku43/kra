@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -235,8 +236,16 @@ func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoP
 	if err != nil {
 		return fmt.Errorf("list workspace repos: %w", err)
 	}
+	originalMeta, updatedMeta, err := buildWorkspaceMetaForClose(ctx, db, root, repoPoolPath, workspaceID, repos)
+	if err != nil {
+		return fmt.Errorf("prepare %s for close: %w", workspaceMetaFilename, err)
+	}
+	if err := writeWorkspaceMetaFile(wsPath, updatedMeta); err != nil {
+		return fmt.Errorf("write %s: %w", workspaceMetaFilename, err)
+	}
 
 	if err := removeWorkspaceWorktrees(ctx, db, root, repoPoolPath, workspaceID, repos); err != nil {
+		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
 		return fmt.Errorf("remove worktrees: %w", err)
 	}
 
@@ -249,12 +258,14 @@ func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoP
 		return fmt.Errorf("ensure archive dir: %w", err)
 	}
 	if err := os.Rename(wsPath, archivePath); err != nil {
+		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
 		return fmt.Errorf("archive (rename): %w", err)
 	}
 
 	sha, err := commitArchiveChange(ctx, root, workspaceID, expectedFiles)
 	if err != nil {
 		_ = os.Rename(archivePath, wsPath)
+		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
 		return fmt.Errorf("commit archive change: %w", err)
 	}
 
@@ -268,6 +279,77 @@ func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoP
 	}
 
 	return nil
+}
+
+func buildWorkspaceMetaForClose(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string, repos []statestore.WorkspaceRepo) (workspaceMetaFile, workspaceMetaFile, error) {
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	original, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		return workspaceMetaFile{}, workspaceMetaFile{}, err
+	}
+	existingByAlias := make(map[string]workspaceMetaRepoRestore, len(original.ReposRestore))
+	for _, r := range original.ReposRestore {
+		existingByAlias[r.Alias] = r
+	}
+	entries := make([]workspaceMetaRepoRestore, 0, len(repos))
+	for _, r := range repos {
+		remoteURL, ok, err := statestore.LookupRepoRemoteURL(ctx, db, r.RepoUID)
+		if err != nil {
+			return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("lookup repo remote url: %w", err)
+		}
+		if !ok {
+			return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("repo not found in repos table: %s", r.RepoUID)
+		}
+		spec, err := repospec.Normalize(remoteURL)
+		if err != nil {
+			return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("normalize repo remote url: %w", err)
+		}
+		worktreePath := filepath.Join(root, "workspaces", workspaceID, "repos", r.Alias)
+		branch := detectBranchForClose(ctx, worktreePath, r.Branch)
+		baseRef := strings.TrimSpace(r.BaseRef)
+		if baseRef == "" {
+			if prev, ok := existingByAlias[r.Alias]; ok && strings.TrimSpace(prev.BaseRef) != "" {
+				baseRef = strings.TrimSpace(prev.BaseRef)
+			}
+		}
+		if baseRef == "" {
+			barePath := repostore.StorePath(repoPoolPath, spec)
+			baseRef, err = detectDefaultBaseRefFromBare(ctx, barePath)
+			if err != nil {
+				return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("detect default base_ref for %s: %w", spec.RepoKey, err)
+			}
+		}
+
+		entries = append(entries, workspaceMetaRepoRestore{
+			RepoUID:   r.RepoUID,
+			RepoKey:   spec.RepoKey,
+			RemoteURL: remoteURL,
+			Alias:     r.Alias,
+			Branch:    branch,
+			BaseRef:   baseRef,
+		})
+	}
+	slices.SortFunc(entries, func(a, b workspaceMetaRepoRestore) int {
+		return strings.Compare(a.Alias, b.Alias)
+	})
+	updated := original
+	updated.ReposRestore = entries
+	updated.Workspace.Status = "archived"
+	updated.Workspace.UpdatedAt = time.Now().Unix()
+	return original, updated, nil
+}
+
+func detectBranchForClose(ctx context.Context, worktreePath string, fallback string) string {
+	fallback = strings.TrimSpace(fallback)
+	if fi, err := os.Stat(worktreePath); err == nil && fi.IsDir() {
+		if out, err := gitutil.Run(ctx, worktreePath, "branch", "--show-current"); err == nil {
+			branch := strings.TrimSpace(out)
+			if branch != "" {
+				return branch
+			}
+		}
+	}
+	return fallback
 }
 
 func (c *CLI) confirmRiskProceed() (bool, error) {

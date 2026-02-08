@@ -619,4 +619,35 @@ WHERE workspace_id = ? AND repo_uid = ?
 	if baseRef != "" {
 		t.Fatalf("workspace_repos.base_ref = %q, want empty", baseRef)
 	}
+
+	metaBytes, readErr := os.ReadFile(filepath.Join(root, "workspaces", "MVP-020", workspaceMetaFilename))
+	if readErr != nil {
+		t.Fatalf("read %s: %v", workspaceMetaFilename, readErr)
+	}
+	var meta workspaceMetaFile
+	if err := json.Unmarshal(metaBytes, &meta); err != nil {
+		t.Fatalf("unmarshal %s: %v", workspaceMetaFilename, err)
+	}
+	if len(meta.ReposRestore) != 1 {
+		t.Fatalf("repos_restore length = %d, want %d", len(meta.ReposRestore), 1)
+	}
+	got := meta.ReposRestore[0]
+	if got.RepoUID != "github.com/tasuku43/sample" {
+		t.Fatalf("repos_restore.repo_uid = %q, want %q", got.RepoUID, "github.com/tasuku43/sample")
+	}
+	if got.RepoKey != "tasuku43/sample" {
+		t.Fatalf("repos_restore.repo_key = %q, want %q", got.RepoKey, "tasuku43/sample")
+	}
+	if got.RemoteURL != repoSpec {
+		t.Fatalf("repos_restore.remote_url = %q, want %q", got.RemoteURL, repoSpec)
+	}
+	if got.Alias != "sample" {
+		t.Fatalf("repos_restore.alias = %q, want %q", got.Alias, "sample")
+	}
+	if got.Branch != "MVP-020/test" {
+		t.Fatalf("repos_restore.branch = %q, want %q", got.Branch, "MVP-020/test")
+	}
+	if got.BaseRef != "origin/main" {
+		t.Fatalf("repos_restore.base_ref = %q, want %q", got.BaseRef, "origin/main")
+	}
 }

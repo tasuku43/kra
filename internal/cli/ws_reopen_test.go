@@ -174,6 +174,113 @@ LIMIT 1
 	}
 }
 
+func TestCLI_WS_Reopen_RecreatesWorktreesWithoutWorkspaceRepoBindings(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	env := testutil.NewEnv(t)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"init"})
+		if code != exitOK {
+			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	runGit(env.Root, "config", "user.email", "test@example.com")
+	runGit(env.Root, "config", "user.name", "test")
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	src := filepath.Join(t.TempDir(), "src")
+	if err := os.MkdirAll(src, 0o755); err != nil {
+		t.Fatalf("mkdir src: %v", err)
+	}
+	runGit(src, "init", "-b", "main")
+	runGit(src, "config", "user.email", "test@example.com")
+	runGit(src, "config", "user.name", "test")
+	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello\n"), 0o644); err != nil {
+		t.Fatalf("write README: %v", err)
+	}
+	runGit(src, "add", ".")
+	runGit(src, "commit", "-m", "init")
+
+	remoteBare := filepath.Join(t.TempDir(), "github.com", "o", "r.git")
+	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
+		t.Fatalf("mkdir remoteBare dir: %v", err)
+	}
+	runGit("", "clone", "--bare", src, remoteBare)
+	repoSpec := "file://" + remoteBare
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
+
+		code := c.Run([]string{"ws", "add-repo", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "close", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	ctx := context.Background()
+	db, openErr := statestore.Open(ctx, env.StateDBPath())
+	if openErr != nil {
+		t.Fatalf("Open(state db) error: %v", openErr)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.ExecContext(ctx, "DELETE FROM workspace_repos WHERE workspace_id = ?", "WS1"); err != nil {
+		t.Fatalf("delete workspace_repos: %v", err)
+	}
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "reopen", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws reopen exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	worktree := filepath.Join(env.Root, "workspaces", "WS1", "repos", "r")
+	if _, err := os.Stat(filepath.Join(worktree, ".git")); err != nil {
+		t.Fatalf("reopened worktree missing .git: %v", err)
+	}
+}
+
 func TestCLI_WS_Reopen_ErrorsWhenBranchCheckedOutElsewhere(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 

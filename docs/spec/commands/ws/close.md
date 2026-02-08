@@ -1,8 +1,6 @@
 ---
 title: "`gionx ws close`"
 status: implemented
-pending:
-  - FS-STATE-004
 ---
 
 # `gionx ws close [<id>]`
@@ -109,7 +107,7 @@ If the Git working tree has unrelated changes, this command must not include the
 - Verify staged paths are a strict subset of the allowlist; otherwise abort.
 - If `gitignore` causes any non-`repos/` files under selected workspace to be unstageable, abort.
 
-## Planned delta (FS-STATE-004)
+## FS metadata behavior
 
 - Before removing worktrees, refresh `workspaces/<id>/.gionx.meta.json.repos_restore` from live repo state.
 - `repos_restore` becomes the canonical reopen input after close.

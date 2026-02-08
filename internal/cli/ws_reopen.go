@@ -187,21 +187,30 @@ func (c *CLI) reopenWorkspace(ctx context.Context, db *sql.DB, root string, repo
 		return fmt.Errorf("stat workspace dir: %w", err)
 	}
 
-	repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
-	if err != nil {
-		return fmt.Errorf("list workspace repos: %w", err)
-	}
-
 	if err := os.Rename(archivePath, wsPath); err != nil {
 		return fmt.Errorf("restore workspace (rename): %w", err)
 	}
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		_ = os.Rename(wsPath, archivePath)
+		return fmt.Errorf("load %s: %w", workspaceMetaFilename, err)
+	}
 
-	if err := recreateWorkspaceWorktrees(ctx, db, root, repoPoolPath, workspaceID, repos); err != nil {
+	if err := recreateWorkspaceWorktreesFromMeta(ctx, root, repoPoolPath, workspaceID, meta.ReposRestore); err != nil {
+		_ = os.Rename(wsPath, archivePath)
 		return fmt.Errorf("recreate worktrees: %w", err)
+	}
+	originalMeta := meta
+	meta.Workspace.Status = "active"
+	meta.Workspace.UpdatedAt = time.Now().Unix()
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		_ = os.Rename(wsPath, archivePath)
+		return fmt.Errorf("update %s: %w", workspaceMetaFilename, err)
 	}
 
 	sha, err := commitReopenChange(ctx, root, workspaceID)
 	if err != nil {
+		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
 		_ = os.Rename(wsPath, archivePath)
 		return fmt.Errorf("commit reopen change: %w", err)
 	}
@@ -229,13 +238,24 @@ func ensureNoStagedChangesForReopen(ctx context.Context, root string) error {
 	return nil
 }
 
-func recreateWorkspaceWorktrees(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string, repos []statestore.WorkspaceRepo) error {
+func recreateWorkspaceWorktreesFromMeta(ctx context.Context, root string, repoPoolPath string, workspaceID string, repos []workspaceMetaRepoRestore) error {
 	reposDir := filepath.Join(root, "workspaces", workspaceID, "repos")
 	if err := os.MkdirAll(reposDir, 0o755); err != nil {
 		return err
 	}
 
+	aliasSeen := make(map[string]bool, len(repos))
 	for _, r := range repos {
+		if strings.TrimSpace(r.Alias) == "" {
+			return fmt.Errorf("invalid repos_restore entry: alias is required")
+		}
+		if aliasSeen[r.Alias] {
+			return fmt.Errorf("invalid repos_restore entry: duplicate alias %q", r.Alias)
+		}
+		aliasSeen[r.Alias] = true
+		if strings.TrimSpace(r.RepoUID) == "" || strings.TrimSpace(r.RemoteURL) == "" || strings.TrimSpace(r.Branch) == "" {
+			return fmt.Errorf("invalid repos_restore entry for alias %q", r.Alias)
+		}
 		worktreePath := filepath.Join(reposDir, r.Alias)
 		if _, err := os.Stat(worktreePath); err == nil {
 			return fmt.Errorf("worktree path already exists: %s", worktreePath)
@@ -243,21 +263,13 @@ func recreateWorkspaceWorktrees(ctx context.Context, db *sql.DB, root string, re
 			return err
 		}
 
-		remoteURL, ok, err := statestore.LookupRepoRemoteURL(ctx, db, r.RepoUID)
-		if err != nil {
-			return err
-		}
-		if !ok {
-			return fmt.Errorf("repo not found in repos table: %s", r.RepoUID)
-		}
-
-		spec, err := repospec.Normalize(remoteURL)
+		spec, err := repospec.Normalize(r.RemoteURL)
 		if err != nil {
 			return fmt.Errorf("normalize repo remote url: %w", err)
 		}
 		barePath := repostore.StorePath(repoPoolPath, spec)
 
-		defaultBaseRef, err := gitutil.EnsureBareRepoFetched(ctx, remoteURL, barePath, baseBranchFromBaseRef(r.BaseRef))
+		defaultBaseRef, err := gitutil.EnsureBareRepoFetched(ctx, r.RemoteURL, barePath, baseBranchFromBaseRef(r.BaseRef))
 		if err != nil {
 			return err
 		}

@@ -91,7 +91,7 @@ It does not replace per-item dependencies.
   - Depends: FS-STATE-001
   - Serial: yes
 
-- [ ] FS-STATE-003: `ws add-repo` persists restore metadata in `.gionx.meta.json`
+- [x] FS-STATE-003: `ws add-repo` persists restore metadata in `.gionx.meta.json`
   - What: update `repos_restore` on successful bindings and keep alias/branch/base_ref deterministic.
   - Specs:
     - `docs/spec/concepts/workspace-meta-json.md`
@@ -99,7 +99,7 @@ It does not replace per-item dependencies.
   - Depends: FS-STATE-002
   - Serial: yes
 
-- [ ] FS-STATE-004: `ws close` snapshots restore metadata from live worktrees
+- [x] FS-STATE-004: `ws close` snapshots restore metadata from live worktrees
   - What: refresh `.gionx.meta.json.repos_restore` before removing worktrees and archiving directory.
   - Specs:
     - `docs/spec/concepts/workspace-meta-json.md`
@@ -107,7 +107,7 @@ It does not replace per-item dependencies.
   - Depends: FS-STATE-003
   - Serial: yes
 
-- [ ] FS-STATE-005: `ws reopen` restores from `.gionx.meta.json` (no DB binding dependency)
+- [x] FS-STATE-005: `ws reopen` restores from `.gionx.meta.json` (no DB binding dependency)
   - What: recreate worktrees exclusively from `repos_restore` and keep close/reopen reversible.
   - Specs:
     - `docs/spec/concepts/workspace-meta-json.md`
