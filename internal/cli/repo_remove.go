@@ -10,7 +10,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tasuku43/gionx/internal/paths"
+	"github.com/tasuku43/gionx/internal/app/repocmd"
 	"github.com/tasuku43/gionx/internal/statestore"
 )
 
@@ -32,45 +32,22 @@ func (c *CLI) runRepoRemove(args []string) int {
 		fmt.Fprintf(c.Err, "get working dir: %v\n", err)
 		return exitError
 	}
-	root, err := paths.ResolveExistingRoot(wd)
+	ctx := context.Background()
+	repoUC := repocmd.NewService(&repoAppAdapter{cli: c})
+	session, err := repoUC.Run(ctx, repocmd.Request{
+		CWD:           wd,
+		DebugTag:      "repo-remove",
+		TouchRegistry: true,
+	})
 	if err != nil {
-		fmt.Fprintf(c.Err, "resolve GIONX_ROOT: %v\n", err)
+		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	if err := c.ensureDebugLog(root, "repo-remove"); err != nil {
-		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
-	}
+	defer func() { _ = session.DB.Close() }()
 	c.debugf("run repo remove args=%d", len(args))
 
-	ctx := context.Background()
-	dbPath, err := paths.StateDBPathForRoot(root)
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve state db path: %v\n", err)
-		return exitError
-	}
-	repoPoolPath, err := paths.DefaultRepoPoolPath()
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve repo pool path: %v\n", err)
-		return exitError
-	}
-	db, err := statestore.Open(ctx, dbPath)
-	if err != nil {
-		fmt.Fprintf(c.Err, "open state store: %v\n", err)
-		return exitError
-	}
-	defer func() { _ = db.Close() }()
-
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		fmt.Fprintf(c.Err, "initialize settings: %v\n", err)
-		return exitError
-	}
-	if err := c.touchStateRegistry(root); err != nil {
-		fmt.Fprintf(c.Err, "update root registry: %v\n", err)
-		return exitError
-	}
-
 	startDay := localDayKey(time.Now().AddDate(0, 0, -29))
-	repos, err := statestore.ListRootRepoCandidates(ctx, db, startDay)
+	repos, err := statestore.ListRootRepoCandidates(ctx, session.DB, startDay)
 	if err != nil {
 		fmt.Fprintf(c.Err, "list repos: %v\n", err)
 		return exitError
@@ -112,7 +89,7 @@ func (c *CLI) runRepoRemove(args []string) int {
 	}
 
 	printRepoRemoveSelection(c.Out, selected)
-	if err := statestore.DeleteReposByUIDs(ctx, db, repoUIDs); err != nil {
+	if err := statestore.DeleteReposByUIDs(ctx, session.DB, repoUIDs); err != nil {
 		fmt.Fprintf(c.Err, "remove repos: %v\n", err)
 		return exitError
 	}

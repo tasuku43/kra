@@ -32,4 +32,3 @@ func TestDetectWorkspaceFromCWD(t *testing.T) {
 		t.Fatalf("outside path unexpectedly detected as workspace")
 	}
 }
-
