@@ -18,9 +18,10 @@ import (
 )
 
 type wsListOptions struct {
-	tree   bool
-	format string
-	scope  string
+	tree       bool
+	format     string
+	scope      string
+	selectMode bool
 }
 
 type wsListRow struct {
@@ -59,7 +60,7 @@ func (c *CLI) runWSList(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-list"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
-	c.debugf("run ws list tree=%t format=%s scope=%s", opts.tree, opts.format, opts.scope)
+	c.debugf("run ws list tree=%t format=%s scope=%s select=%t", opts.tree, opts.format, opts.scope, opts.selectMode)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -87,6 +88,51 @@ func (c *CLI) runWSList(args []string) int {
 	if err := c.touchStateRegistry(root); err != nil {
 		fmt.Fprintf(c.Err, "update root registry: %v\n", err)
 		return exitError
+	}
+
+	if opts.selectMode {
+		selectedID, err := c.selectWorkspaceIDByStatus(root, opts.scope, "select")
+		if err != nil {
+			switch {
+			case err == errNoActiveWorkspaces:
+				fmt.Fprintln(c.Err, "no active workspaces available")
+			case err == errNoArchivedWorkspaces:
+				fmt.Fprintln(c.Err, "no archived workspaces available")
+			case err == errSelectorCanceled:
+				fmt.Fprintln(c.Err, "aborted")
+			default:
+				fmt.Fprintf(c.Err, "select workspace: %v\n", err)
+			}
+			return exitError
+		}
+		target := workspaceContextSelection{ID: selectedID, Status: opts.scope}
+		action, err := c.promptLauncherAction(target, false)
+		if err != nil {
+			if err == errSelectorCanceled {
+				fmt.Fprintln(c.Err, "aborted")
+				return exitError
+			}
+			fmt.Fprintf(c.Err, "select action: %v\n", err)
+			return exitError
+		}
+		switch action {
+		case "go":
+			if opts.scope == "archived" {
+				return c.runWSGo([]string{"--ui", "--archived", selectedID})
+			}
+			return c.runWSGo([]string{"--ui", selectedID})
+		case "add-repo":
+			return c.runWSAddRepo([]string{selectedID})
+		case "close":
+			return c.runWSClose([]string{selectedID})
+		case "reopen":
+			return c.runWSReopen([]string{selectedID})
+		case "purge":
+			return c.runWSPurge([]string{selectedID})
+		default:
+			fmt.Fprintf(c.Err, "unsupported action: %s\n", action)
+			return exitError
+		}
 	}
 
 	now := time.Now().Unix()
@@ -159,6 +205,9 @@ func parseWSListOptions(args []string) (wsListOptions, error) {
 		case arg == "--tree":
 			opts.tree = true
 			rest = rest[1:]
+		case arg == "--select":
+			opts.selectMode = true
+			rest = rest[1:]
 		case strings.HasPrefix(arg, "--format="):
 			opts.format = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
 			rest = rest[1:]
@@ -180,6 +229,14 @@ func parseWSListOptions(args []string) (wsListOptions, error) {
 	case "human", "tsv":
 	default:
 		return wsListOptions{}, fmt.Errorf("unsupported --format: %q (supported: human, tsv)", opts.format)
+	}
+	if opts.selectMode {
+		if opts.format != "human" {
+			return wsListOptions{}, fmt.Errorf("--select requires --format human")
+		}
+		if opts.tree {
+			return wsListOptions{}, fmt.Errorf("--select cannot be used with --tree")
+		}
 	}
 	return opts, nil
 }

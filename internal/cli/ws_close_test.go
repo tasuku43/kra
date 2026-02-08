@@ -314,11 +314,11 @@ func TestCLI_WS_Close_SelectorModeWithoutTTY_Errors(t *testing.T) {
 		c.In = strings.NewReader("")
 
 		code := c.Run([]string{"ws", "close"})
-		if code != exitError {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+		if code != exitUsage {
+			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 		}
-		if !strings.Contains(err.String(), "interactive workspace selection requires a TTY") {
-			t.Fatalf("stderr missing non-tty error: %q", err.String())
+		if !strings.Contains(err.String(), "ws close requires <id>") {
+			t.Fatalf("stderr missing id requirement: %q", err.String())
 		}
 	}
 

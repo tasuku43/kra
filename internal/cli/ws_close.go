@@ -16,7 +16,6 @@ import (
 	"github.com/tasuku43/gion-core/repospec"
 	"github.com/tasuku43/gion-core/repostore"
 	"github.com/tasuku43/gion-core/workspacerisk"
-	appws "github.com/tasuku43/gionx/internal/app/ws"
 	"github.com/tasuku43/gionx/internal/infra/gitutil"
 	"github.com/tasuku43/gionx/internal/infra/paths"
 	"github.com/tasuku43/gionx/internal/infra/statestore"
@@ -25,15 +24,11 @@ import (
 var errNoActiveWorkspaces = errors.New("no active workspaces available")
 
 func (c *CLI) runWSClose(args []string) int {
-	var forceSelect bool
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
 			c.printWSCloseUsage(c.Out)
 			return exitOK
-		case "--select":
-			forceSelect = true
-			args = args[1:]
 		default:
 			fmt.Fprintf(c.Err, "unknown flag for ws close: %q\n", args[0])
 			c.printWSCloseUsage(c.Err)
@@ -41,8 +36,11 @@ func (c *CLI) runWSClose(args []string) int {
 		}
 	}
 
-	if len(args) > 1 {
-		fmt.Fprintf(c.Err, "unexpected args for ws close: %q\n", strings.Join(args[1:], " "))
+	if len(args) != 1 {
+		if len(args) > 1 {
+			fmt.Fprintf(c.Err, "unexpected args for ws close: %q\n", strings.Join(args[1:], " "))
+		}
+		fmt.Fprintln(c.Err, "ws close requires <id>; use `gionx ws list --select` for interactive selection")
 		c.printWSCloseUsage(c.Err)
 		return exitUsage
 	}
@@ -65,7 +63,7 @@ func (c *CLI) runWSClose(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-close"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
-	c.debugf("run ws close args=%q forceSelect=%t", args, forceSelect)
+	c.debugf("run ws close args=%q", args)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -100,63 +98,18 @@ func (c *CLI) runWSClose(args []string) int {
 		return exitError
 	}
 	useColorOut := writerSupportsColor(c.Out)
-	launcherAdapter := &cliWSLauncherAdapter{cli: c, root: root}
-	selectUC := appws.NewService(launcherAdapter, launcherAdapter)
 
-	directWorkspaceID := ""
-	if len(args) == 1 {
-		directWorkspaceID = args[0]
-		if err := validateWorkspaceID(directWorkspaceID); err != nil {
-			fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
-			return exitUsage
-		}
-	}
-	if forceSelect && directWorkspaceID != "" {
-		fmt.Fprintln(c.Err, "--select cannot be used with <id>")
-		c.printWSCloseUsage(c.Err)
+	directWorkspaceID := args[0]
+	if err := validateWorkspaceID(directWorkspaceID); err != nil {
+		fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
 		return exitUsage
 	}
 
 	flow := workspaceSelectRiskResultFlowConfig{
 		FlowName: "ws close",
 		SelectItems: func() ([]workspaceFlowSelection, error) {
-			if directWorkspaceID != "" {
-				selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
-				c.debugf("ws close direct mode selected=%v", workspaceFlowSelectionIDs(selected))
-				return selected, nil
-			}
-			if forceSelect {
-				result, err := selectUC.RunSelect(ctx, appws.SelectRequest{
-					Scope:  appws.ScopeActive,
-					Action: "close",
-				})
-				if err != nil {
-					if errors.Is(err, appws.ErrWorkspaceNotSelected) {
-						return nil, errSelectorCanceled
-					}
-					return nil, err
-				}
-				c.debugf("ws close selector mode selected=%v", []string{result.WorkspaceID})
-				return []workspaceFlowSelection{{ID: result.WorkspaceID}}, nil
-			}
-
-			candidates, err := listActiveCloseCandidates(ctx, db, root)
-			if err != nil {
-				return nil, fmt.Errorf("list close candidates: %w", err)
-			}
-			if len(candidates) == 0 {
-				return nil, errNoActiveWorkspaces
-			}
-
-			ids, err := c.promptWorkspaceSelector("active", "close", candidates)
-			if err != nil {
-				return nil, err
-			}
-			c.debugf("ws close selector mode selected=%v", ids)
-			selected := make([]workspaceFlowSelection, 0, len(ids))
-			for _, id := range ids {
-				selected = append(selected, workspaceFlowSelection{ID: id})
-			}
+			selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
+			c.debugf("ws close direct mode selected=%v", workspaceFlowSelectionIDs(selected))
 			return selected, nil
 		},
 		CollectRiskStage: func(items []workspaceFlowSelection) (workspaceFlowRiskStage, error) {

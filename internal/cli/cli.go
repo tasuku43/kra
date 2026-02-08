@@ -73,7 +73,9 @@ func (c *CLI) Run(args []string) int {
 
 func (c *CLI) runWS(args []string) int {
 	if len(args) == 0 {
-		return c.runWSLauncher(nil)
+		fmt.Fprintln(c.Err, "`gionx ws` launcher is removed; use `gionx ws list --select`")
+		c.printWSUsage(c.Err)
+		return exitUsage
 	}
 
 	if strings.HasPrefix(args[0], "-") {
@@ -82,7 +84,9 @@ func (c *CLI) runWS(args []string) int {
 			c.printWSUsage(c.Out)
 			return exitOK
 		default:
-			return c.runWSLauncher(args)
+			fmt.Fprintf(c.Err, "unknown flag for ws: %q\n", args[0])
+			c.printWSUsage(c.Err)
+			return exitUsage
 		}
 	}
 

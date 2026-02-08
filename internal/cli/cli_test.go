@@ -74,14 +74,14 @@ func TestCLI_WS_NoArgs_ShowsWSUsage(t *testing.T) {
 	t.Setenv("GIONX_ROOT", "")
 
 	code := c.Run([]string{"ws"})
-	if code != exitError {
-		t.Fatalf("exit code = %d, want %d", code, exitError)
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout not empty: %q", out.String())
 	}
-	if !strings.Contains(err.String(), "resolve GIONX_ROOT:") {
-		t.Fatalf("stderr missing root resolution error: %q", err.String())
+	if !strings.Contains(err.String(), "launcher is removed") {
+		t.Fatalf("stderr missing launcher removal hint: %q", err.String())
 	}
 }
 
@@ -111,7 +111,7 @@ func TestCLI_WS_ListAlias_LS_DelegatesToList(t *testing.T) {
 	}
 }
 
-func TestCLI_WS_SelectFlagConflictsWithID(t *testing.T) {
+func TestCLI_WS_SelectFlagRejected(t *testing.T) {
 	tests := []struct {
 		name string
 		args []string
@@ -131,9 +131,8 @@ func TestCLI_WS_SelectFlagConflictsWithID(t *testing.T) {
 			if code != exitUsage {
 				t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 			}
-			if !strings.Contains(err.String(), "--select cannot be used with <id>") &&
-				!strings.Contains(err.String(), "--select cannot be used with <workspace-id>") {
-				t.Fatalf("stderr missing conflict error: %q", err.String())
+			if !strings.Contains(err.String(), "unknown flag") {
+				t.Fatalf("stderr missing flag error: %q", err.String())
 			}
 		})
 	}

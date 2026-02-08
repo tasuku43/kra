@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"strings"
 
-	appws "github.com/tasuku43/gionx/internal/app/ws"
 	"github.com/tasuku43/gionx/internal/infra/paths"
 	"github.com/tasuku43/gionx/internal/infra/statestore"
 )
@@ -20,7 +19,6 @@ func (c *CLI) runWSGo(args []string) int {
 	var archivedScope bool
 	var emitCD bool
 	var uiOutput bool
-	var forceSelect bool
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -35,9 +33,6 @@ func (c *CLI) runWSGo(args []string) int {
 		case "--ui":
 			uiOutput = true
 			args = args[1:]
-		case "--select":
-			forceSelect = true
-			args = args[1:]
 		default:
 			fmt.Fprintf(c.Err, "unknown flag for ws go: %q\n", args[0])
 			c.printWSGoUsage(c.Err)
@@ -45,8 +40,11 @@ func (c *CLI) runWSGo(args []string) int {
 		}
 	}
 
-	if len(args) > 1 {
-		fmt.Fprintf(c.Err, "unexpected args for ws go: %q\n", strings.Join(args[1:], " "))
+	if len(args) != 1 {
+		if len(args) > 1 {
+			fmt.Fprintf(c.Err, "unexpected args for ws go: %q\n", strings.Join(args[1:], " "))
+		}
+		fmt.Fprintln(c.Err, "ws go requires <id>; use `gionx ws list --select` for interactive selection")
 		c.printWSGoUsage(c.Err)
 		return exitUsage
 	}
@@ -56,17 +54,9 @@ func (c *CLI) runWSGo(args []string) int {
 		return exitUsage
 	}
 
-	directWorkspaceID := ""
-	if len(args) == 1 {
-		directWorkspaceID = args[0]
-		if err := validateWorkspaceID(directWorkspaceID); err != nil {
-			fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
-			return exitUsage
-		}
-	}
-	if forceSelect && directWorkspaceID != "" {
-		fmt.Fprintln(c.Err, "--select cannot be used with <id>")
-		c.printWSGoUsage(c.Err)
+	directWorkspaceID := args[0]
+	if err := validateWorkspaceID(directWorkspaceID); err != nil {
+		fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
 		return exitUsage
 	}
 
@@ -83,7 +73,7 @@ func (c *CLI) runWSGo(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-go"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
-	c.debugf("run ws go args=%q archived=%t emitCD=%t ui=%t select=%t", args, archivedScope, emitCD, uiOutput, forceSelect)
+	c.debugf("run ws go args=%q archived=%t emitCD=%t ui=%t", args, archivedScope, emitCD, uiOutput)
 
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -115,30 +105,12 @@ func (c *CLI) runWSGo(args []string) int {
 	}
 	useColorOut := writerSupportsColor(c.Out)
 	selectedTargetPath := ""
-	launcherAdapter := &cliWSLauncherAdapter{cli: c, root: root}
-	selectUC := appws.NewService(launcherAdapter, launcherAdapter)
-
 	flow := workspaceSelectRiskResultFlowConfig{
 		FlowName: "ws go",
 		SelectItems: func() ([]workspaceFlowSelection, error) {
-			if directWorkspaceID != "" {
-				selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
-				c.debugf("ws go direct mode selected=%v", workspaceFlowSelectionIDs(selected))
-				return selected, nil
-			}
-
-			result, err := selectUC.RunSelect(ctx, appws.SelectRequest{
-				Scope:  appws.Scope(scope),
-				Action: "go",
-			})
-			if err != nil {
-				if errors.Is(err, appws.ErrWorkspaceNotSelected) {
-					return nil, errSelectorCanceled
-				}
-				return nil, err
-			}
-			c.debugf("ws go selector mode selected=%v", []string{result.WorkspaceID})
-			return []workspaceFlowSelection{{ID: result.WorkspaceID}}, nil
+			selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
+			c.debugf("ws go direct mode selected=%v", workspaceFlowSelectionIDs(selected))
+			return selected, nil
 		},
 		ApplyOne: func(item workspaceFlowSelection) error {
 			targetPath, err := resolveWorkspaceGoTarget(ctx, db, root, scope, item.ID)

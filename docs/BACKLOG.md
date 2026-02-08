@@ -598,7 +598,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-020
   - Parallel: yes
 
-- [ ] UX-WS-027: `ws list` as the only interactive selection entrypoint
+- [x] UX-WS-027: `ws list` as the only interactive selection entrypoint
   - What: consolidate interactive selection to `ws list` (workspace -> action), remove `ws` fallback behavior,
     and deprecate operation-level `--select` flags in favor of explicit `<id>` commands for non-interactive paths.
   - Specs:

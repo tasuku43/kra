@@ -3,7 +3,7 @@ title: "`gionx ws purge`"
 status: implemented
 ---
 
-# `gionx ws purge [--select] [<id>]`
+# `gionx ws purge [--no-prompt --force] <id>`
 
 ## Purpose
 
@@ -59,10 +59,5 @@ If the Git working tree has unrelated changes, this command must not include the
 
 ## Modes
 
-- If `<id>` is provided, run direct mode for that workspace.
-- If `--select` is provided, run single-select workspace selector first and then execute direct purge.
-  - selector scope is `archived`
-  - `--select` cannot be combined with `<id>`
-- If `<id>` is omitted, run selector mode in `archived` scope.
-- Selector mode supports multi-select.
-- Non-TTY invocation without `<id>` is rejected (no fallback mode).
+- This command is explicit-id mode only.
+- Interactive selection must use `gionx ws list --select --archived`.

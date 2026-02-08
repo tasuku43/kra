@@ -1,65 +1,31 @@
 ---
-title: "`gionx ws` launcher and shared `--select` option"
-status: planned
+title: "`gionx ws` selection entrypoint policy"
+status: implemented
 ---
 
-# `gionx ws` (no subcommand launcher) + `ws <op> --select`
+# `gionx ws` / `gionx ws list --select`
 
 ## Purpose
 
-Keep operation-fixed commands for automation while providing one human launcher path.
+Unify interactive selection into a single entrypoint while keeping operation commands explicit for automation.
 
-## Command forms
+## Entry policy
 
-- Human launcher:
-  - `gionx ws`
-- Shared selector option:
-  - `gionx ws go --select`
-  - `gionx ws close --select`
-  - `gionx ws add-repo --select`
-  - `gionx ws reopen --select`
-  - `gionx ws purge --select`
+- `gionx ws` (no subcommand) is removed as launcher.
+- Interactive selection must start from:
+  - `gionx ws list --select`
+  - `gionx ws list --select --archived` (archived scope)
 
-## Shared selector rule (`--select`)
+## Selection flow
 
-- `--select` means: select workspace first, then run the specified command.
-- Workspace selector uses single-select mode.
-- Default scope is `active`.
-- If command supports `--archived`, selector scope follows the flag.
-- `--select` and direct `<id>` cannot be used together.
+- Stage 1: select exactly one workspace from list scope.
+- Stage 2: select action for selected workspace.
+  - active scope: `go`, `add-repo`, `close`
+  - archived scope: `reopen`, `purge`
+- Stage 3: dispatch to operation command with explicit `<id>`.
 
-## Launcher behavior (`gionx ws`)
+## Operation command policy
 
-### When current directory resolves to workspace context
-
-- If inside `workspaces/<id>/...`:
-  - skip workspace selection
-  - show `Action:` menu for current workspace:
-    - `add-repo`
-    - `close`
-- If inside `archive/<id>/...`:
-  - skip workspace selection
-  - show `Action:` menu for current workspace:
-    - `reopen`
-    - `purge`
-
-### When current directory does not resolve workspace context
-
-- show workspace selector first (single-select)
-- then show `Action:` menu for selected workspace
-
-## Action menu
-
-- heading: `Action:`
-- first line: `workspace: <id>`
-- interaction: vertical list (`Up/Down`, `Enter`, `Esc`)
-- `Esc` behavior:
-  - in action menu: go back to workspace selection stage (if it exists)
-  - in first stage: cancel launcher without side effects
-
-## Role boundary
-
-- Human: launcher (`gionx ws`)
-- Agent/automation: operation-fixed commands without interactive selection by default
-- Launcher must dispatch to existing operation flows (no behavior drift).
-
+- `ws go/close/reopen/purge` require explicit `<id>`.
+- Operation-level `--select` is not supported.
+- `ws add-repo` keeps direct/cwd resolution behavior and does not provide `--select`.

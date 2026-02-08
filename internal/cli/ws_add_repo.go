@@ -18,7 +18,6 @@ import (
 	"github.com/mattn/go-isatty"
 	"github.com/tasuku43/gion-core/repospec"
 	"github.com/tasuku43/gion-core/repostore"
-	appws "github.com/tasuku43/gionx/internal/app/ws"
 	"github.com/tasuku43/gionx/internal/infra/gitutil"
 	"github.com/tasuku43/gionx/internal/infra/paths"
 	"github.com/tasuku43/gionx/internal/infra/statestore"
@@ -61,15 +60,11 @@ type addRepoAppliedItem struct {
 }
 
 func (c *CLI) runWSAddRepo(args []string) int {
-	var forceSelect bool
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
 			c.printWSAddRepoUsage(c.Out)
 			return exitOK
-		case "--select":
-			forceSelect = true
-			args = args[1:]
 		default:
 			fmt.Fprintf(c.Err, "unknown flag for ws add-repo: %q\n", args[0])
 			c.printWSAddRepoUsage(c.Err)
@@ -78,11 +73,6 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	}
 	if len(args) > 1 {
 		fmt.Fprintf(c.Err, "unexpected args for ws add-repo: %q\n", strings.Join(args[1:], " "))
-		c.printWSAddRepoUsage(c.Err)
-		return exitUsage
-	}
-	if forceSelect && len(args) == 1 {
-		fmt.Fprintln(c.Err, "--select cannot be used with <workspace-id>")
 		c.printWSAddRepoUsage(c.Err)
 		return exitUsage
 	}
@@ -131,37 +121,14 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	}
 
 	workspaceID := ""
-	launcherAdapter := &cliWSLauncherAdapter{cli: c, root: root}
-	selectUC := appws.NewService(launcherAdapter, launcherAdapter)
-	if forceSelect {
-		result, err := selectUC.RunSelect(ctx, appws.SelectRequest{
-			Scope:  appws.ScopeActive,
-			Action: "add-repo",
-		})
-		if err != nil {
-			switch {
-			case errors.Is(err, errNoActiveWorkspaces):
-				fmt.Fprintln(c.Err, "no active workspaces available")
-			case errors.Is(err, appws.ErrWorkspaceNotSelected):
-				fmt.Fprintln(c.Err, "aborted")
-			case errors.Is(err, errSelectorCanceled):
-				fmt.Fprintln(c.Err, "aborted")
-			default:
-				fmt.Fprintf(c.Err, "select workspace: %v\n", err)
-			}
-			return exitError
-		}
-		workspaceID = result.WorkspaceID
-	} else {
-		var resolveErr error
-		workspaceID, resolveErr = resolveWorkspaceIDForAddRepo(root, wd, args)
-		if resolveErr != nil {
-			fmt.Fprintf(c.Err, "%v\n", resolveErr)
-			c.printWSAddRepoUsage(c.Err)
-			return exitUsage
-		}
+	var resolveErr error
+	workspaceID, resolveErr = resolveWorkspaceIDForAddRepo(root, wd, args)
+	if resolveErr != nil {
+		fmt.Fprintf(c.Err, "%v\n", resolveErr)
+		c.printWSAddRepoUsage(c.Err)
+		return exitUsage
 	}
-	c.debugf("run ws add-repo workspace=%s cwd=%s forceSelect=%t", workspaceID, wd, forceSelect)
+	c.debugf("run ws add-repo workspace=%s cwd=%s", workspaceID, wd)
 
 	if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID); err != nil {
 		fmt.Fprintf(c.Err, "load workspace: %v\n", err)

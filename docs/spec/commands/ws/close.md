@@ -2,11 +2,10 @@
 title: "`gionx ws close`"
 status: implemented
 pending:
-  - ws_select_launcher_integration
-  - single_select_default_policy
+  - ws_list_select_entrypoint_doc_sync
 ---
 
-# `gionx ws close [--select] [<id>]`
+# `gionx ws close <id>`
 
 ## Purpose
 
@@ -71,19 +70,8 @@ If the Git working tree has unrelated changes, this command must not include the
 
 ## Modes and selector behavior
 
-### Selector mode and direct mode
-
-- If `<id>` is provided, run existing direct mode.
-- If `--select` is provided, run single-select workspace selector first and then execute direct close.
-  - selector scope is `active`
-  - `--select` cannot be combined with `<id>`
-- If `<id>` is omitted, launch shared selector UI (`commands/ws/selector.md`) in `active` scope.
-- Selector mode allows multiple selection.
-- Planned launcher policy:
-  - unified `ws` launcher flow uses single workspace selection first, then dispatches to `ws close`.
-  - in-workspace `ws` launcher mode offers `close` as one of current-workspace actions.
-  - default human flow for close is single-select; explicit batch mode is evaluated separately.
-- Non-TTY invocation without `<id>` must error (no fallback mode).
+- This command is explicit-id mode only.
+- Interactive selection must use `gionx ws list --select` (active scope).
 - Selector and follow-up output should use section headings:
   - `Workspaces(active):`
   - `Risk:`

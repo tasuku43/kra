@@ -2,10 +2,10 @@
 title: "`gionx ws go`"
 status: implemented
 pending:
-  - ws_select_launcher_integration
+  - ws_list_select_entrypoint_doc_sync
 ---
 
-# `gionx ws go [--archived] [--select] [--ui] [--emit-cd] [<id>]`
+# `gionx ws go [--archived] [--ui] [--emit-cd] <id>`
 
 ## Purpose
 
@@ -13,9 +13,8 @@ Jump to a workspace directory as a "start work" action.
 
 ## Inputs
 
-- `<id>` (optional): workspace id for direct mode
+- `<id>` (required): workspace id for direct mode
 - `--archived` (optional): target archived workspaces instead of active workspaces
-- `--select` (optional): force workspace selection UI before command execution
 - `--ui` (optional): print human-readable `Result:` section
 - `--emit-cd` (optional): backward-compatible alias of default shell snippet output
 
@@ -23,18 +22,8 @@ Jump to a workspace directory as a "start work" action.
 
 ### Mode selection
 
-- If `<id>` is provided:
-  - resolve the target directly
-- If `--select` is provided:
-  - launch shared selector UI first
-  - selector scope is `active` by default, `archived` when `--archived` is set
-  - selected workspace id is then used as direct target
-  - `--select` cannot be combined with `<id>`
-- If `<id>` is omitted:
-  - launch shared selector UI (`commands/ws/selector.md`)
-  - default scope is `active`; use `--archived` to switch scope
-  - selection cardinality is single-only
-  - UI is single-select mode (no checkbox markers / no `selected: n/m` footer)
+- This command is explicit-id mode only.
+- For interactive selection, use `gionx ws list --select`.
 
 ### Target path
 
@@ -46,7 +35,7 @@ Jump to a workspace directory as a "start work" action.
 - In standard mode, print only shell snippet (`cd '<path>'`) to stdout.
 - In `--ui` mode, print `Result:` and destination path (human-readable).
 - `--emit-cd` keeps backward compatibility and behaves the same as standard mode.
-- In selector mode, non-TTY invocation must fail (no fallback).
+- Non-TTY constraints for selection are handled by `ws list --select`.
 
 ### Shell integration
 

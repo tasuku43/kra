@@ -73,7 +73,7 @@ Initialize GIONX_ROOT (current directory by default, or $GIONX_ROOT if set).
 
 func (c *CLI) printWSUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws [--select] [--archived]
+  gionx ws list [--select] [--archived] [--tree] [--format human|tsv]
   gionx ws <subcommand> [args]
 
 Subcommands:
@@ -90,9 +90,9 @@ Subcommands:
 Run:
   gionx ws <subcommand> --help
 
-Launcher behavior (when no subcommand):
-- if current directory is inside workspace/archive, select action for that workspace
-- otherwise select workspace first, then select action
+Notes:
+- gionx ws (no subcommand) is removed.
+- Use gionx ws list --select for interactive workspace/action selection.
 `)
 }
 
@@ -168,12 +168,13 @@ Safety gates:
 
 func (c *CLI) printWSListUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws list [--archived] [--tree] [--format human|tsv]
-  gionx ws ls [--archived] [--tree] [--format human|tsv]
+  gionx ws list [--select] [--archived] [--tree] [--format human|tsv]
+  gionx ws ls [--select] [--archived] [--tree] [--format human|tsv]
 
 List workspaces from filesystem metadata and repair basic drift.
 
 Options:
+  --select          Open interactive workspace/action selector
   --archived        Show archived workspaces (default: active only)
   --tree            Show repo detail lines under each workspace
   --format          Output format (default: human)
@@ -182,13 +183,12 @@ Options:
 
 func (c *CLI) printWSAddRepoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws add-repo [--select] [<workspace-id>]
+  gionx ws add-repo [<workspace-id>]
 
 Add repositories from the repo pool to a workspace.
 
 Inputs:
   workspace-id       Existing active workspace ID (optional when running under workspaces/<id>/)
-  --select           Select target workspace from active list
 
 Behavior:
   - Select one or more repos from the existing bare repo pool.
@@ -199,19 +199,14 @@ Behavior:
 
 func (c *CLI) printWSGoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws go [--archived] [--select] [--ui] [--emit-cd] [<id>]
+  gionx ws go [--archived] [--ui] [--emit-cd] <id>
 
 Resolve a workspace directory target:
 - active target: workspaces/<id>/
 - archived target (--archived): archive/<id>/
 
-Modes:
-- direct mode: provide <id>
-- selector mode: omit <id> (interactive TTY required, single selection)
-
 Options:
   --archived        Use archived workspace scope
-  --select          Force workspace selection UI (cannot be used with <id>)
   --ui              Print human-readable Result section instead of shell snippet
   --emit-cd         Backward-compatible alias of default output
 `)
@@ -219,7 +214,7 @@ Options:
 
 func (c *CLI) printWSCloseUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws close [--select] [<id>]
+  gionx ws close <id>
 
 Close (archive) a workspace:
 - inspect repo risk (live) and prompt if not clean
@@ -227,36 +222,26 @@ Close (archive) a workspace:
 - move workspaces/<id>/ to archive/<id>/ atomically
 - commit the archive change in GIONX_ROOT
 
-Modes:
-- direct mode: provide <id>
-- selector mode: omit <id> (interactive TTY required)
-
-Options:
-  --select          Force single workspace selection UI (cannot be used with <id>)
+Use gionx ws list --select for interactive selection.
 `)
 }
 
 func (c *CLI) printWSReopenUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws reopen [--select] [<id>]
+  gionx ws reopen <id>
 
 Reopen an archived workspace:
 - move archive/<id>/ to workspaces/<id>/ atomically
 - recreate git worktrees under workspaces/<id>/repos/
 - commit the reopen change in GIONX_ROOT
 
-Modes:
-- direct mode: provide <id>
-- selector mode: omit <id> (interactive TTY required, archived scope)
-
-Options:
-  --select          Force single workspace selection UI (cannot be used with <id>)
+Use gionx ws list --select --archived for interactive selection.
 `)
 }
 
 func (c *CLI) printWSPurgeUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws purge [--select] [--no-prompt --force] [<id>]
+  gionx ws purge [--no-prompt --force] <id>
 
 Purge (permanently delete) a workspace:
 - always asks confirmation in interactive mode
@@ -266,12 +251,9 @@ Purge (permanently delete) a workspace:
 - commit the purge change in GIONX_ROOT (message: "purge: <id>")
 
 Options:
-  --select          Force single workspace selection UI (cannot be used with <id>)
   --no-prompt        Do not ask confirmations (requires --force)
   --force            Required with --no-prompt
 
-Modes:
-- direct mode: provide <id>
-- selector mode: omit <id> (interactive TTY required, archived scope)
+Use gionx ws list --select --archived for interactive selection.
 `)
 }

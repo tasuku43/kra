@@ -1,26 +1,24 @@
 ---
 title: "`gionx ws list`"
 status: implemented
-pending:
-  - ws_ls_alias
 ---
 
-# `gionx ws list [--archived] [--tree] [--format human|tsv]`
+# `gionx ws list [--select] [--archived] [--tree] [--format human|tsv]`
 
 Alias:
-- `gionx ws ls` (planned; same semantics as `ws list`)
+- `gionx ws ls` (same semantics as `ws list`)
 
 ## Purpose
 
 List workspaces with status and risk, similar in spirit to `gion manifest ls`.
 
-`ws list` is a read-only listing command. Interactive selection flows are specified in `selector.md` and
-action commands (`ws close`, `ws go`, `ws reopen`, `ws purge`).
+`ws list` is the single human interactive entrypoint when `--select` is used.
+Without `--select`, it is a read-only listing command.
 
 ## Role boundary
 
-- `ws list` only shows current state and exits (non-interactive).
-- Action execution belongs to `ws close/go/reopen/purge` selector flows.
+- `ws list --select` handles interactive workspace/action selection.
+- Operation commands run with explicit `<id>` after selection.
 
 ## Default display
 
