@@ -76,18 +76,10 @@ func TestCLI_Context_ListShowsRegistryEntries(t *testing.T) {
 
 	rootA := t.TempDir()
 	rootB := t.TempDir()
-	stateA, err := paths.StateDBPathForRoot(rootA)
-	if err != nil {
-		t.Fatalf("StateDBPathForRoot(rootA): %v", err)
-	}
-	stateB, err := paths.StateDBPathForRoot(rootB)
-	if err != nil {
-		t.Fatalf("StateDBPathForRoot(rootB): %v", err)
-	}
-	if err := stateregistry.Touch(rootA, stateA, time.Unix(100, 0)); err != nil {
+	if err := stateregistry.Touch(rootA, time.Unix(100, 0)); err != nil {
 		t.Fatalf("Touch(rootA): %v", err)
 	}
-	if err := stateregistry.Touch(rootB, stateB, time.Unix(200, 0)); err != nil {
+	if err := stateregistry.Touch(rootB, time.Unix(200, 0)); err != nil {
 		t.Fatalf("Touch(rootB): %v", err)
 	}
 

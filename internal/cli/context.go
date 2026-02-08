@@ -75,7 +75,7 @@ func (c *CLI) runContextList(args []string) int {
 
 	registryPath, err := stateregistry.Path()
 	if err != nil {
-		fmt.Fprintf(c.Err, "resolve state registry path: %v\n", err)
+		fmt.Fprintf(c.Err, "resolve root registry path: %v\n", err)
 		return exitError
 	}
 	entries, err := stateregistry.Load(registryPath)

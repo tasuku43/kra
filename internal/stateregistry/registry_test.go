@@ -6,8 +6,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/tasuku43/gionx/internal/paths"
 )
 
 func TestTouch_CreateOnFirstUse(t *testing.T) {
@@ -15,13 +13,8 @@ func TestTouch_CreateOnFirstUse(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", dataHome)
 
 	root := t.TempDir()
-	statePath, err := paths.StateDBPathForRoot(root)
-	if err != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", err)
-	}
-
 	now := time.Unix(1710000000, 0)
-	if err := Touch(root, statePath, now); err != nil {
+	if err := Touch(root, now); err != nil {
 		t.Fatalf("Touch() error: %v", err)
 	}
 
@@ -39,9 +32,6 @@ func TestTouch_CreateOnFirstUse(t *testing.T) {
 	if entries[0].RootPath != root {
 		t.Fatalf("root_path = %q, want %q", entries[0].RootPath, root)
 	}
-	if entries[0].StateDBPath != statePath {
-		t.Fatalf("state_db_path = %q, want %q", entries[0].StateDBPath, statePath)
-	}
 	if entries[0].FirstSeenAt != now.Unix() {
 		t.Fatalf("first_seen_at = %d, want %d", entries[0].FirstSeenAt, now.Unix())
 	}
@@ -55,18 +45,13 @@ func TestTouch_UpdatesLastUsedAtMonotonic(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", dataHome)
 
 	root := t.TempDir()
-	statePath, err := paths.StateDBPathForRoot(root)
-	if err != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", err)
-	}
-
-	if err := Touch(root, statePath, time.Unix(200, 0)); err != nil {
+	if err := Touch(root, time.Unix(200, 0)); err != nil {
 		t.Fatalf("Touch(first) error: %v", err)
 	}
-	if err := Touch(root, statePath, time.Unix(150, 0)); err != nil {
+	if err := Touch(root, time.Unix(150, 0)); err != nil {
 		t.Fatalf("Touch(second) error: %v", err)
 	}
-	if err := Touch(root, statePath, time.Unix(350, 0)); err != nil {
+	if err := Touch(root, time.Unix(350, 0)); err != nil {
 		t.Fatalf("Touch(third) error: %v", err)
 	}
 
@@ -105,16 +90,11 @@ func TestTouch_MalformedRegistry_ReturnsRecoveryHint(t *testing.T) {
 	}
 
 	root := t.TempDir()
-	statePath, err := paths.StateDBPathForRoot(root)
-	if err != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", err)
-	}
-
-	err = Touch(root, statePath, time.Unix(10, 0))
+	err = Touch(root, time.Unix(10, 0))
 	if err == nil {
 		t.Fatalf("Touch() error = nil, want error")
 	}
-	if !strings.Contains(err.Error(), "state registry is malformed") {
+	if !strings.Contains(err.Error(), "root registry is malformed") {
 		t.Fatalf("error missing malformed hint: %v", err)
 	}
 	if !strings.Contains(err.Error(), registryPath) {

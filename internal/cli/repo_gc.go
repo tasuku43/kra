@@ -95,12 +95,12 @@ func (c *CLI) runRepoGC(args []string) int {
 		fmt.Fprintf(c.Err, "initialize settings: %v\n", err)
 		return exitError
 	}
-	if err := c.touchStateRegistry(root, dbPath); err != nil {
-		fmt.Fprintf(c.Err, "update state registry: %v\n", err)
+	if err := c.touchStateRegistry(root); err != nil {
+		fmt.Fprintf(c.Err, "update root registry: %v\n", err)
 		return exitError
 	}
 
-	candidates, err := buildRepoGCCandidates(ctx, root, db, dbPath, repoPoolPath, c.debugf)
+	candidates, err := buildRepoGCCandidates(ctx, root, db, repoPoolPath, c.debugf)
 	if err != nil {
 		fmt.Fprintf(c.Err, "build repo gc candidates: %v\n", err)
 		return exitError
@@ -204,7 +204,7 @@ func (c *CLI) runRepoGC(args []string) int {
 	return exitOK
 }
 
-func buildRepoGCCandidates(ctx context.Context, root string, currentDB *sql.DB, currentDBPath string, repoPoolPath string, debugf func(string, ...any)) ([]repoGCCandidate, error) {
+func buildRepoGCCandidates(ctx context.Context, root string, currentDB *sql.DB, repoPoolPath string, debugf func(string, ...any)) ([]repoGCCandidate, error) {
 	poolRepos, err := listRepoPoolBareRepos(repoPoolPath)
 	if err != nil {
 		return nil, err
@@ -219,7 +219,7 @@ func buildRepoGCCandidates(ctx context.Context, root string, currentDB *sql.DB, 
 	}
 	currentRepoSet := toSet(currentRepoUIDs)
 
-	globalRefCount, currentRootRefCount, err := collectRegistryRepoRefCountsFromMetadata(currentDBPath, root)
+	globalRefCount, currentRootRefCount, err := collectRegistryRepoRefCountsFromMetadata(root)
 	if err != nil {
 		return nil, err
 	}
@@ -361,10 +361,10 @@ func listRepoPoolBareRepos(repoPoolPath string) ([]string, error) {
 	return roots, nil
 }
 
-func collectRegistryRepoRefCountsFromMetadata(currentDBPath string, currentRoot string) (map[string]int, map[string]int, error) {
+func collectRegistryRepoRefCountsFromMetadata(currentRoot string) (map[string]int, map[string]int, error) {
 	registryPath, err := stateregistry.Path()
 	if err != nil {
-		return nil, nil, fmt.Errorf("resolve state registry path: %w", err)
+		return nil, nil, fmt.Errorf("resolve root registry path: %w", err)
 	}
 	entries, err := stateregistry.Load(registryPath)
 	if err != nil {
@@ -423,9 +423,6 @@ func collectRegistryRepoRefCountsFromMetadata(currentDBPath string, currentRoot 
 	}
 	if err := addRoot(currentRoot, true); err != nil {
 		return nil, nil, err
-	}
-	if strings.TrimSpace(currentDBPath) != "" {
-		// Keep legacy currentDBPath parameter in signature for compatibility with call sites.
 	}
 	return counts, currentCounts, nil
 }

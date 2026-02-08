@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tasuku43/gionx/internal/paths"
 	"github.com/tasuku43/gionx/internal/stateregistry"
 )
 
@@ -39,15 +38,8 @@ func TestCLI_StateRegistry_InitCreatesEntry(t *testing.T) {
 		t.Fatalf("entries length = %d, want 1", len(entries))
 	}
 
-	statePath, stateErr := paths.StateDBPathForRoot(root)
-	if stateErr != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", stateErr)
-	}
 	if entries[0].RootPath != root {
 		t.Fatalf("root_path = %q, want %q", entries[0].RootPath, root)
-	}
-	if entries[0].StateDBPath != statePath {
-		t.Fatalf("state_db_path = %q, want %q", entries[0].StateDBPath, statePath)
 	}
 	if entries[0].FirstSeenAt <= 0 || entries[0].LastUsedAt <= 0 {
 		t.Fatalf("timestamps must be positive: %+v", entries[0])
@@ -75,12 +67,7 @@ func TestCLI_StateRegistry_WSCreateUpdatesLastUsed(t *testing.T) {
 	if pathErr != nil {
 		t.Fatalf("stateregistry.Path() error: %v", pathErr)
 	}
-	statePath, stateErr := paths.StateDBPathForRoot(root)
-	if stateErr != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", stateErr)
-	}
-
-	seed := fmt.Sprintf("{\n  \"entries\": [\n    {\n      \"root_path\": %q,\n      \"state_db_path\": %q,\n      \"first_seen_at\": 1,\n      \"last_used_at\": 1\n    }\n  ]\n}\n", root, statePath)
+	seed := fmt.Sprintf("{\n  \"entries\": [\n    {\n      \"root_path\": %q,\n      \"first_seen_at\": 1,\n      \"last_used_at\": 1\n    }\n  ]\n}\n", root)
 	if err := os.WriteFile(registryPath, []byte(seed), 0o644); err != nil {
 		t.Fatalf("write registry seed: %v", err)
 	}
@@ -141,10 +128,10 @@ func TestCLI_StateRegistry_WSMalformedRegistryFails(t *testing.T) {
 	if code != exitError {
 		t.Fatalf("ws list exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
 	}
-	if !strings.Contains(err.String(), "update state registry") {
-		t.Fatalf("stderr missing update state registry: %q", err.String())
+	if !strings.Contains(err.String(), "update root registry") {
+		t.Fatalf("stderr missing update root registry: %q", err.String())
 	}
-	if !strings.Contains(err.String(), "state registry is malformed") {
+	if !strings.Contains(err.String(), "root registry is malformed") {
 		t.Fatalf("stderr missing malformed hint: %q", err.String())
 	}
 	if !strings.Contains(err.String(), "fix or remove") {

@@ -15,13 +15,19 @@ import (
 
 type Entry struct {
 	RootPath    string `json:"root_path"`
-	StateDBPath string `json:"state_db_path"`
 	FirstSeenAt int64  `json:"first_seen_at"`
 	LastUsedAt  int64  `json:"last_used_at"`
 }
 
 type filePayload struct {
-	Entries []Entry `json:"entries"`
+	Entries []fileEntryPayload `json:"entries"`
+}
+
+type fileEntryPayload struct {
+	RootPath    string `json:"root_path"`
+	StateDBPath string `json:"state_db_path,omitempty"` // legacy compatibility (read-only)
+	FirstSeenAt int64  `json:"first_seen_at"`
+	LastUsedAt  int64  `json:"last_used_at"`
 }
 
 func Path() (string, error) {
@@ -39,7 +45,7 @@ func Load(path string) ([]Entry, error) {
 		if errors.Is(err, os.ErrNotExist) {
 			return nil, nil
 		}
-		return nil, fmt.Errorf("read state registry %s: %w", path, err)
+		return nil, fmt.Errorf("read root registry %s: %w", path, err)
 	}
 	if len(strings.TrimSpace(string(b))) == 0 {
 		return nil, nil
@@ -47,35 +53,28 @@ func Load(path string) ([]Entry, error) {
 
 	var p filePayload
 	if err := json.Unmarshal(b, &p); err != nil {
-		return nil, fmt.Errorf("state registry is malformed: %s (fix or remove this file and retry): %w", path, err)
+		return nil, fmt.Errorf("root registry is malformed: %s (fix or remove this file and retry): %w", path, err)
 	}
-	return p.Entries, nil
+	out := make([]Entry, 0, len(p.Entries))
+	for _, e := range p.Entries {
+		out = append(out, Entry{
+			RootPath:    e.RootPath,
+			FirstSeenAt: e.FirstSeenAt,
+			LastUsedAt:  e.LastUsedAt,
+		})
+	}
+	return out, nil
 }
 
-func Touch(rootPath string, stateDBPath string, now time.Time) error {
+func Touch(rootPath string, now time.Time) error {
 	rootAbs, err := cleanAbs(rootPath)
 	if err != nil {
 		return fmt.Errorf("resolve root_path: %w", err)
 	}
-	stateAbs, err := cleanAbs(stateDBPath)
-	if err != nil {
-		return fmt.Errorf("resolve state_db_path: %w", err)
-	}
-	expected, err := paths.StateDBPathForRoot(rootAbs)
-	if err != nil {
-		return fmt.Errorf("resolve expected state_db_path: %w", err)
-	}
-	expectedAbs, err := cleanAbs(expected)
-	if err != nil {
-		return fmt.Errorf("resolve expected state_db_path: %w", err)
-	}
-	if stateAbs != expectedAbs {
-		return fmt.Errorf("state_db_path mismatch for root_path: got=%s want=%s", stateAbs, expectedAbs)
-	}
 
 	registryPath, err := Path()
 	if err != nil {
-		return fmt.Errorf("resolve state registry path: %w", err)
+		return fmt.Errorf("resolve root registry path: %w", err)
 	}
 
 	entries, err := Load(registryPath)
@@ -93,9 +92,6 @@ func Touch(rootPath string, stateDBPath string, now time.Time) error {
 		if entries[i].RootPath != rootAbs {
 			continue
 		}
-		if entries[i].StateDBPath != stateAbs {
-			return fmt.Errorf("state registry entry mismatch for root_path=%s: state_db_path=%s", rootAbs, entries[i].StateDBPath)
-		}
 		if entries[i].FirstSeenAt <= 0 {
 			entries[i].FirstSeenAt = nowUnix
 		}
@@ -108,7 +104,6 @@ func Touch(rootPath string, stateDBPath string, now time.Time) error {
 	if !updated {
 		entries = append(entries, Entry{
 			RootPath:    rootAbs,
-			StateDBPath: stateAbs,
 			FirstSeenAt: nowUnix,
 			LastUsedAt:  nowUnix,
 		})
@@ -125,21 +120,29 @@ func Touch(rootPath string, stateDBPath string, now time.Time) error {
 }
 
 func writeAtomic(path string, entries []Entry) error {
-	payload := filePayload{Entries: entries}
+	entryPayloads := make([]fileEntryPayload, 0, len(entries))
+	for _, e := range entries {
+		entryPayloads = append(entryPayloads, fileEntryPayload{
+			RootPath:    e.RootPath,
+			FirstSeenAt: e.FirstSeenAt,
+			LastUsedAt:  e.LastUsedAt,
+		})
+	}
+	payload := filePayload{Entries: entryPayloads}
 	b, err := json.MarshalIndent(payload, "", "  ")
 	if err != nil {
-		return fmt.Errorf("marshal state registry: %w", err)
+		return fmt.Errorf("marshal root registry: %w", err)
 	}
 	b = append(b, '\n')
 
 	dir := filepath.Dir(path)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return fmt.Errorf("create state registry dir %s: %w", dir, err)
+		return fmt.Errorf("create root registry dir %s: %w", dir, err)
 	}
 
 	tmp, err := os.CreateTemp(dir, ".registry-*.tmp")
 	if err != nil {
-		return fmt.Errorf("create state registry temp file in %s: %w", dir, err)
+		return fmt.Errorf("create root registry temp file in %s: %w", dir, err)
 	}
 	tmpPath := tmp.Name()
 	cleanup := func() {
@@ -149,15 +152,15 @@ func writeAtomic(path string, entries []Entry) error {
 
 	if _, err := tmp.Write(b); err != nil {
 		cleanup()
-		return fmt.Errorf("write state registry temp file %s: %w", tmpPath, err)
+		return fmt.Errorf("write root registry temp file %s: %w", tmpPath, err)
 	}
 	if err := tmp.Close(); err != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("close state registry temp file %s: %w", tmpPath, err)
+		return fmt.Errorf("close root registry temp file %s: %w", tmpPath, err)
 	}
 	if err := os.Rename(tmpPath, path); err != nil {
 		_ = os.Remove(tmpPath)
-		return fmt.Errorf("replace state registry %s: %w", path, err)
+		return fmt.Errorf("replace root registry %s: %w", path, err)
 	}
 	return nil
 }

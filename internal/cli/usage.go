@@ -29,7 +29,7 @@ func (c *CLI) printContextUsage(w io.Writer) {
 
 Subcommands:
   current           Print current root
-  list              List known roots from state registry
+  list              List known roots from root registry
   use <root>        Set current root context
   help              Show this help
 `)
@@ -94,7 +94,7 @@ func (c *CLI) printWSCreateUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   gionx ws create [--no-prompt] <id>
 
-Create a workspace directory under GIONX_ROOT/workspaces/<id>/ and record it in the state store.
+Create a workspace directory under GIONX_ROOT/workspaces/<id>/ and write .gionx.meta.json.
 
 Options:
   --no-prompt        Do not prompt for description (store empty)
@@ -105,7 +105,7 @@ func (c *CLI) printRepoAddUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   gionx repo add <repo-spec>...
 
-Add one or more repositories into the shared repo pool and register them in the current root state DB.
+Add one or more repositories into the shared repo pool and register them in the current root index.
 
 Accepted repo-spec formats:
   - git@<host>:<owner>/<repo>.git
@@ -154,8 +154,8 @@ Modes:
 
 Safety gates:
   - not registered in current root repos
-  - not bound in current root workspace_repos
-  - not referenced by other known roots (state registry scan)
+  - not referenced by current root workspace metadata
+  - not referenced by other known roots (root registry scan)
   - no linked worktrees in bare repository
 `)
 }
@@ -164,7 +164,7 @@ func (c *CLI) printWSListUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   gionx ws list [--archived] [--tree] [--format human|tsv]
 
-List workspaces from the state store and repair basic drift from the filesystem.
+List workspaces from filesystem metadata and repair basic drift.
 
 Options:
   --archived        Show archived workspaces (default: active only)

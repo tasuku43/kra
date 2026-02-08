@@ -6,6 +6,6 @@ import (
 	"github.com/tasuku43/gionx/internal/stateregistry"
 )
 
-func (c *CLI) touchStateRegistry(root string, stateDBPath string) error {
-	return stateregistry.Touch(root, stateDBPath, time.Now())
+func (c *CLI) touchStateRegistry(root string) error {
+	return stateregistry.Touch(root, time.Now())
 }
