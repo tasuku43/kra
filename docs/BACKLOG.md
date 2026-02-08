@@ -571,14 +571,14 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-022
   - Serial: yes
 
-- [ ] UX-WS-024: `ws list` alias (`ws ls`)
+- [x] UX-WS-024: `ws list` alias (`ws ls`)
   - What: add `ws ls` as alias of `ws list` while keeping `ws list` read-only semantics unchanged.
   - Specs:
     - `docs/spec/commands/ws/list.md`
   - Depends: UX-WS-020
   - Parallel: yes
 
-- [ ] UX-WS-025: Shell action protocol (`action file`) for post-exec parent-shell effects
+- [x] UX-WS-025: Shell action protocol (`action file`) for post-exec parent-shell effects
   - What: evolve shell integration from pre-arg routing to post-exec action protocol so
     command-internal branching can still trigger safe `cd` in parent shell.
   - Specs:
