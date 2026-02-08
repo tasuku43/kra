@@ -1,36 +1,51 @@
 ---
 title: "`gionx init`"
 status: implemented
+pending:
+  - interactive_root_prompt
+  - init_updates_current_context
+  - root_flag_for_non_tty
 ---
 
-# `gionx init`
+# `gionx init [--root <path>]`
 
 ## Purpose
 
-Initialize `GIONX_ROOT` and filesystem-first runtime metadata.
+Initialize a gionx root and filesystem-first runtime metadata.
+
+## Root selection policy
+
+- `--root <path>` is an explicit non-interactive root selector.
+- Without `--root`:
+  - TTY: ask interactively for root path.
+  - default suggestion: `~/gionx`
+  - non-TTY: fail fast and require `--root`.
+- If selected root path does not exist, create it automatically (when parent exists).
 
 ## Behavior
 
-- Ensure `GIONX_ROOT/` exists (create if missing)
-- Ensure `GIONX_ROOT/workspaces/` exists
-- Ensure `GIONX_ROOT/archive/` exists
-- Create `GIONX_ROOT/AGENTS.md` with a default "how to use gionx" guidance (for the no-template MVP)
+- Ensure `<root>/` exists (create if missing)
+- Ensure `<root>/workspaces/` exists
+- Ensure `<root>/archive/` exists
+- Create `<root>/AGENTS.md` with a default "how to use gionx" guidance (for the no-template MVP)
   - include a short explanation of `notes/` vs `artifacts/`
-- If `GIONX_ROOT` is not a Git repo, run `git init`
+- If `<root>` is not a Git repo, run `git init`
 - When `git init` is newly performed by `gionx init`, create an initial commit containing:
-  - `GIONX_ROOT/.gitignore`
-  - `GIONX_ROOT/AGENTS.md`
+  - `<root>/.gitignore`
+  - `<root>/AGENTS.md`
 - Write `.gitignore` such that `workspaces/**/repos/**` is ignored
 - Touch root registry metadata for this root.
+- Update global current context (`current-context`) to this root on success.
 
 ## Notes
 
-- If `GIONX_ROOT` is already Git-managed, `gionx init` must not overwrite existing Git settings.
+- If selected root is already Git-managed, `gionx init` must not overwrite existing Git settings.
+- Re-running `gionx init` on an already initialized root is idempotent success.
 
 ## Output
 
 - Success output must use shared section style:
   - `Result:`
-  - `  Initialized: <GIONX_ROOT>`
+  - `  Initialized: <root>`
 - `Result:` heading style follows shared UI token rules (`text.primary` + bold).
 - Success line should use shared success semantics (`status.success`).
