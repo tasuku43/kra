@@ -1,7 +1,7 @@
 ---
 title: "gionx ideas"
 status: idea
-updated: 2026-02-06
+updated: 2026-02-08
 ---
 
 # Ideas (Not Scheduled Yet)
@@ -80,6 +80,36 @@ Examples:
 - Execution model (PID tracking, tmux integration, log capture, heartbeats, crash detection)
 - How to treat agents started outside of `gionx` (accept as unobservable vs attempt discovery)
 - Security/privacy (logs may contain sensitive data)
+
+## 4) Logical Work State in Active Workspaces (`todo` vs `in-progress`)
+
+### Goal
+
+- Keep physical workspace lifecycle as-is: `active` and `archive`.
+- Within `active`, derive a logical work state (`todo` or `in-progress`) at read time.
+- Make status visible in `gionx ws list` and actionable commands (e.g. `go`) so users can quickly tell
+  whether work has started.
+
+### Constraints / principles
+
+- Do not persist this logical work state in the DB.
+- Compute it from observable signals at runtime (derived state only).
+- Keep the classification deterministic and explainable (avoid opaque heuristics).
+
+### Candidate signals (proposal)
+
+- Workspace-side Git activity:
+  - local commit history since workspace creation or since last lifecycle event
+  - modified/untracked files in the workspace repos
+- Repo-level activity hints:
+  - whether branches/worktrees under `repos/` show active development movement
+  - optional comparison against base/default branch for "work has diverged"
+
+### Open questions
+
+- Exact decision rule and precedence when signals disagree (e.g. clean tree but local commits exist)
+- Performance budget for list rendering when many workspaces/repos are present
+- UX wording in list/go flows (`todo`, `in-progress`, or symbols/colors) and fallback when unknown
 
 ## How to turn these into specs/backlog (proposal)
 
