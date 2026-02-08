@@ -54,6 +54,7 @@ func (c *CLI) runWSLauncher(args []string) int {
 	var archivedScope bool
 	var forceSelect bool
 	fixedAction := ""
+	workspaceID := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "--archived":
@@ -70,14 +71,33 @@ func (c *CLI) runWSLauncher(args []string) int {
 			}
 			fixedAction = strings.TrimSpace(args[1])
 			args = args[2:]
+		case "--id":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--id requires a value")
+				c.printWSUsage(c.Err)
+				return exitUsage
+			}
+			workspaceID = strings.TrimSpace(args[1])
+			args = args[2:]
 		default:
 			if strings.HasPrefix(args[0], "--act=") {
 				fixedAction = strings.TrimSpace(strings.TrimPrefix(args[0], "--act="))
 				args = args[1:]
 				continue
 			}
+			if strings.HasPrefix(args[0], "--id=") {
+				workspaceID = strings.TrimSpace(strings.TrimPrefix(args[0], "--id="))
+				args = args[1:]
+				continue
+			}
 			fmt.Fprintf(c.Err, "unknown flag for ws: %q\n", args[0])
 			c.printWSUsage(c.Err)
+			return exitUsage
+		}
+	}
+	if workspaceID != "" {
+		if err := validateWorkspaceID(workspaceID); err != nil {
+			fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
 			return exitUsage
 		}
 	}
@@ -128,6 +148,7 @@ func (c *CLI) runWSLauncher(args []string) int {
 		ForceSelect: forceSelect,
 		Scope:       scope,
 		CurrentPath: wd,
+		WorkspaceID: workspaceID,
 		FixedAction: appws.Action(fixedAction),
 	})
 	if err != nil {
@@ -136,6 +157,10 @@ func (c *CLI) runWSLauncher(args []string) int {
 			return exitError
 		}
 		switch {
+		case errors.Is(err, appws.ErrWorkspaceNotSelected):
+			fmt.Fprintln(c.Err, "ws requires --id <id> or workspace context (use: gionx ws select)")
+		case errors.Is(err, appws.ErrWorkspaceNotFound):
+			fmt.Fprintf(c.Err, "workspace not found: %s\n", workspaceID)
 		case errors.Is(err, appws.ErrActionNotAllowed):
 			fmt.Fprintf(c.Err, "action %q is not allowed for selected scope\n", fixedAction)
 			return exitError
@@ -214,6 +239,17 @@ func (a *cliWSLauncherAdapter) ResolveFromPath(_ context.Context, path string) (
 	}, true, nil
 }
 
+func (a *cliWSLauncherAdapter) ResolveByID(ctx context.Context, id string) (appws.WorkspaceRef, bool, error) {
+	status, ok, err := lookupWorkspaceStatusByID(ctx, a.root, id)
+	if err != nil {
+		return appws.WorkspaceRef{}, false, err
+	}
+	if !ok {
+		return appws.WorkspaceRef{}, false, nil
+	}
+	return appws.WorkspaceRef{ID: id, Status: appws.Scope(status)}, true, nil
+}
+
 func (c *CLI) selectWorkspaceIDByStatus(root string, status string, action string) (string, error) {
 	ctx := context.Background()
 	dbPath, err := paths.StateDBPathForRoot(root)
@@ -249,6 +285,27 @@ func (c *CLI) selectWorkspaceIDByStatus(root string, status string, action strin
 		return "", err
 	}
 	return ids[0], nil
+}
+
+func lookupWorkspaceStatusByID(ctx context.Context, root string, workspaceID string) (string, bool, error) {
+	dbPath, err := paths.StateDBPathForRoot(root)
+	if err != nil {
+		return "", false, fmt.Errorf("resolve state db path: %w", err)
+	}
+	repoPoolPath, err := paths.DefaultRepoPoolPath()
+	if err != nil {
+		return "", false, fmt.Errorf("resolve repo pool path: %w", err)
+	}
+	db, err := statestore.Open(ctx, dbPath)
+	if err != nil {
+		return "", false, fmt.Errorf("open state store: %w", err)
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
+		return "", false, fmt.Errorf("initialize settings: %w", err)
+	}
+	return statestore.LookupWorkspaceStatus(ctx, db, workspaceID)
 }
 
 func (c *CLI) promptLauncherAction(target workspaceContextSelection, fromContext bool) (string, error) {

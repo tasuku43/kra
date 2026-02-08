@@ -73,7 +73,7 @@ Initialize GIONX_ROOT (current directory by default, or $GIONX_ROOT if set).
 
 func (c *CLI) printWSUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws [--archived]
+  gionx ws [--archived] [--id <id>] [--act <go|close|add-repo|reopen|purge>]
   gionx ws select [--archived] [--act <go|close|add-repo|reopen|purge>]
   gionx ws <subcommand> [args]
 
@@ -93,7 +93,8 @@ Run:
   gionx ws <subcommand> --help
 
 Notes:
-- gionx ws opens action launcher (context-aware).
+- gionx ws opens action launcher for explicit target (--id) or current workspace context.
+- gionx ws does not fall back to workspace list when unresolved.
 - gionx ws select always opens workspace selection first.
 `)
 }

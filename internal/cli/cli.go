@@ -82,9 +82,7 @@ func (c *CLI) runWS(args []string) int {
 			c.printWSUsage(c.Out)
 			return exitOK
 		default:
-			fmt.Fprintf(c.Err, "unknown flag for ws: %q\n", args[0])
-			c.printWSUsage(c.Err)
-			return exitUsage
+			return c.runWSLauncher(args)
 		}
 	}
 

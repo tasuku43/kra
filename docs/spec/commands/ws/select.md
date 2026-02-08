@@ -12,9 +12,12 @@ Unify interactive selection into a single entrypoint while keeping operation com
 ## Entry policy
 
 - `gionx ws` is context-aware launcher.
+- `gionx ws --id <id>` resolves launcher target explicitly by id.
 - `gionx ws select` always starts from workspace selection.
 - `gionx ws select --act <go|close|add-repo|reopen|purge>` skips action menu and executes fixed action.
 - `gionx ws list --select` remains compatibility path for selection-first flow.
+- `gionx ws` must not auto-fallback to workspace list selection when current path cannot resolve workspace.
+  unresolved invocation should fail and instruct users to run `gionx ws select`.
 
 ## Selection flow
 

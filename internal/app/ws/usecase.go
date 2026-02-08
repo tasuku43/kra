@@ -32,6 +32,7 @@ type LauncherRequest struct {
 	ForceSelect bool
 	Scope       Scope
 	CurrentPath string
+	WorkspaceID string
 	FixedAction Action
 }
 
@@ -61,6 +62,7 @@ type SelectorPort interface {
 // WorkspaceResolverPort abstracts cwd-to-workspace resolution.
 type WorkspaceResolverPort interface {
 	ResolveFromPath(ctx context.Context, path string) (WorkspaceRef, bool, error)
+	ResolveByID(ctx context.Context, id string) (WorkspaceRef, bool, error)
 }
 
 // LauncherUseCase is the app-layer orchestration contract for `gionx ws`.

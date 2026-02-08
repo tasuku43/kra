@@ -176,7 +176,8 @@ Optional flags may switch scope if defined in each command spec.
 
 Behavior:
 - outside workspace:
-  - first choose one workspace, then choose one action
+  - `gionx ws` requires explicit `--id <id>` (no implicit list fallback).
+  - selection-first flow is `gionx ws select`.
 - inside workspace:
   - if under `workspaces/<id>/`: show current-workspace action menu:
     - `add-repo`

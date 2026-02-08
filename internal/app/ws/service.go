@@ -3,9 +3,11 @@ package ws
 import (
 	"context"
 	"errors"
+	"fmt"
 )
 
 var ErrWorkspaceNotSelected = errors.New("workspace not selected")
+var ErrWorkspaceNotFound = errors.New("workspace not found")
 var ErrActionNotSelected = errors.New("action not selected")
 var ErrActionNotAllowed = errors.New("action not allowed for workspace scope")
 
@@ -26,7 +28,16 @@ func (s *Service) Run(ctx context.Context, req LauncherRequest) (LauncherResult,
 
 	ref := WorkspaceRef{}
 	fromContext := false
-	if !req.ForceSelect && s.resolver != nil {
+	if req.WorkspaceID != "" && s.resolver != nil {
+		found, ok, err := s.resolver.ResolveByID(ctx, req.WorkspaceID)
+		if err != nil {
+			return LauncherResult{}, err
+		}
+		if !ok {
+			return LauncherResult{}, fmt.Errorf("%w: %s", ErrWorkspaceNotFound, req.WorkspaceID)
+		}
+		ref = found
+	} else if !req.ForceSelect && s.resolver != nil {
 		found, ok, err := s.resolver.ResolveFromPath(ctx, req.CurrentPath)
 		if err != nil {
 			return LauncherResult{}, err
@@ -37,7 +48,10 @@ func (s *Service) Run(ctx context.Context, req LauncherRequest) (LauncherResult,
 		}
 	}
 
-	if !fromContext {
+	if req.WorkspaceID == "" && !fromContext {
+		if !req.ForceSelect {
+			return LauncherResult{}, ErrWorkspaceNotSelected
+		}
 		id, err := s.selector.SelectWorkspace(ctx, scope, "select", true)
 		if err != nil {
 			return LauncherResult{}, err
