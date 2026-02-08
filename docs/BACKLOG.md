@@ -686,14 +686,14 @@ It does not replace per-item dependencies.
   - Depends: ARCH-004
   - Parallel: yes
 
-- [ ] ARCH-009: Remove direct infra access from `internal/cli`
+- [x] ARCH-009: Remove direct infra access from `internal/cli`
   - What: complete migration and remove remaining direct `paths/statestore/gitutil` calls from cli package.
   - Specs:
     - `docs/spec/concepts/architecture.md`
   - Depends: ARCH-005, ARCH-006, ARCH-007, ARCH-008
   - Serial: yes
 
-- [ ] ARCH-010: Architecture finalization (`status: implemented`)
+- [x] ARCH-010: Architecture finalization (`status: implemented`)
   - What: finalize docs and guards, and mark architecture spec as implemented.
   - Specs:
     - `docs/spec/concepts/architecture.md`

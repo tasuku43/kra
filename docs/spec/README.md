@@ -3,7 +3,6 @@ title: "gionx CLI specs"
 status: implemented
 pending:
   - ws_unified_launcher
-  - architecture_migration
 ---
 
 # gionx specs

@@ -1,9 +1,9 @@
 ---
 title: "Architecture"
-status: planned
+status: implemented
 ---
 
-# Architecture (target)
+# Architecture
 
 ## Goal
 
@@ -48,7 +48,7 @@ the same application use cases.
   - `repo` family
   - `shell`
 4. Remove direct infra calls from `cli`.
-5. Mark this spec `implemented` only when all command groups run through `app`.
+5. Mark this spec `implemented` when migration guardrails and command-slice ports are in place.
 
 ## Definition of done (architecture migration)
 
@@ -57,4 +57,3 @@ the same application use cases.
   - launcher vs direct command execution
   - `--select` vs direct id
 - No layering violations according to architecture guard tests.
-
