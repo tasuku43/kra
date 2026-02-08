@@ -1,9 +1,14 @@
 ---
 title: "`gionx ws list`"
 status: implemented
+pending:
+  - ws_ls_alias
 ---
 
 # `gionx ws list [--archived] [--tree] [--format human|tsv]`
+
+Alias:
+- `gionx ws ls` (planned; same semantics as `ws list`)
 
 ## Purpose
 

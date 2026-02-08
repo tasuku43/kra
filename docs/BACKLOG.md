@@ -383,6 +383,7 @@ It does not replace per-item dependencies.
   - What: shorten key-hint text, define deterministic truncation behavior for narrow terminals, and keep
     `selected: n/m` consistently visible.
   - Specs:
+    - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/selector.md`
   - Depends: UX-WS-001
   - Parallel: yes
@@ -399,6 +400,7 @@ It does not replace per-item dependencies.
 - [x] UX-WS-010: Risk presentation policy (color-only)
   - What: enforce color-only risk hints across ws selector/list surfaces (no textual risk tags in summary rows).
   - Specs:
+    - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/selector.md`
     - `docs/spec/commands/ws/list.md`
   - Depends: UX-WS-001
@@ -417,6 +419,7 @@ It does not replace per-item dependencies.
 - [x] UX-WS-012: Selector keybind extensions (phase 1)
   - What: evaluate selector keybind extensions; `a`/`A` were explicitly rejected to preserve always-on filter input.
   - Specs:
+    - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/selector.md`
   - Depends: UX-WS-001
   - Parallel: yes
@@ -425,6 +428,7 @@ It does not replace per-item dependencies.
   - What: enforce shared indentation rules for selector footer/help and risk/confirm prompts so section body lines
     consistently align under each heading.
   - Specs:
+    - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/selector.md`
     - `docs/spec/commands/ws/purge.md`
     - `docs/spec/commands/ws/close.md`

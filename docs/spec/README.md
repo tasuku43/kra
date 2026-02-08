@@ -1,6 +1,8 @@
 ---
 title: "gionx CLI specs"
 status: implemented
+pending:
+  - ws_unified_launcher
 ---
 
 # gionx specs
@@ -44,6 +46,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/shell/init.md`: `gionx shell init`
   - `commands/state/registry.md`: `gionx state` foundation (registry)
   - `commands/ws/selector.md`: Shared inline selector UI for workspace actions
+  - `commands/ws/select.md`: Unified human launcher (`ws select` / context-aware `ws`)
   - `commands/ws/create.md`: `gionx ws create`
   - `commands/ws/add-repo.md`: `gionx ws add-repo`
   - `commands/ws/list.md`: `gionx ws list`

@@ -1,6 +1,9 @@
 ---
 title: "`gionx ws` selector UI"
 status: implemented
+pending:
+  - ws_select_launcher_flow
+  - ws_context_aware_launcher
 ---
 
 # Selector UI (shared by `ws close` / `ws go` / `ws reopen` / `ws purge`)
@@ -163,6 +166,33 @@ Rules:
 - `ws purge`: default list is `archived`
 
 Optional flags may switch scope if defined in each command spec.
+
+## Unified launcher flow (planned)
+
+- Human canonical launcher:
+  - `gionx ws select`
+- Context-aware shortcut:
+  - `gionx ws`
+
+Behavior:
+- outside workspace:
+  - `ws` behaves as `ws select`
+  - first choose one workspace, then choose one action
+- inside workspace:
+  - skip workspace selection
+  - show current-workspace action menu only:
+    - `add-repo`
+    - `close`
+  - `go` is excluded in this in-workspace action menu
+
+Action menu ordering:
+- fixed order for in-workspace mode:
+  - `add-repo` first
+  - `close` second
+
+Launcher and selector relationship:
+- launcher flow must delegate to existing action command flows to keep behavior parity.
+- direct operation commands (`ws go`, `ws close`, `ws add-repo`) remain available.
 
 ## Selection cardinality
 
