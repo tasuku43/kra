@@ -3,7 +3,6 @@ title: "`gionx ws go`"
 status: implemented
 pending:
   - ws_select_launcher_integration
-  - shell_action_file_protocol
 ---
 
 # `gionx ws go [--archived] [--select] [--ui] [--emit-cd] [<id>]`
@@ -57,7 +56,7 @@ Jump to a workspace directory as a "start work" action.
 - Shell-wide wrapper integration is provided via `gionx shell init <shell>`.
 - Planned extension:
   - when routed from unified launcher flow, `go` semantics remain identical to direct `ws go`.
-  - shell integration protocol may evolve from pre-arg routing to post-exec action protocol (`action file`)
+  - shell integration uses post-exec action protocol (`GIONX_SHELL_ACTION_FILE`) for launcher-routed go actions
     while preserving user-visible behavior.
 
 ## Errors

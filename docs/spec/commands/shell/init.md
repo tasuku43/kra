@@ -1,8 +1,6 @@
 ---
 title: "`gionx shell init`"
 status: implemented
-pending:
-  - shell_action_file_protocol
 ---
 
 # `gionx shell init [<shell>]`
@@ -26,13 +24,10 @@ Print shell integration script that enables `gionx ws go` to change parent shell
   - special path for `ws go`:
     - execute `command gionx ws go ...`
     - `eval` returned `cd '<path>'`
-  - all other commands delegate to `command gionx "$@"`
+  - for all command paths, set `GIONX_SHELL_ACTION_FILE=<tempfile>` and let `gionx` emit post-exec action
+    (for example `cd '<path>'`) into that file when needed
+  - after command success, apply action file content if present
 - Unsupported shell names must fail with usage error.
-
-Planned extension:
-- To support command-internal action branching in unified launcher flows, shell integration may adopt
-  post-exec action protocol (`action file`) instead of pre-arg `ws go` routing.
-- User-visible behavior (running `gionx` wrapper and landing in target directory on go action) must remain stable.
 
 ## Output examples
 

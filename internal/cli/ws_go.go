@@ -184,6 +184,11 @@ func (c *CLI) runWSGo(args []string) int {
 		}
 	}
 
+	if err := writeShellActionCD(selectedTargetPath); err != nil {
+		fmt.Fprintf(c.Err, "write shell action: %v\n", err)
+		return exitError
+	}
+
 	if !uiOutput {
 		fmt.Fprintf(c.Out, "cd %s\n", shellSingleQuote(selectedTargetPath))
 	}

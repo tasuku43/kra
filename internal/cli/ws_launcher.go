@@ -129,9 +129,9 @@ func (c *CLI) runWSLauncher(args []string) int {
 	switch action {
 	case "go":
 		if target.Status == "archived" {
-			return c.runWSGo([]string{"--archived", target.ID})
+			return c.runWSGo([]string{"--ui", "--archived", target.ID})
 		}
-		return c.runWSGo([]string{target.ID})
+		return c.runWSGo([]string{"--ui", target.ID})
 	case "add-repo":
 		return c.runWSAddRepo([]string{target.ID})
 	case "close":
