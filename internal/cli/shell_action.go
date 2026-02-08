@@ -1,18 +1,25 @@
 package cli
 
 import (
-	"fmt"
 	"os"
 	"strings"
+
+	appshell "github.com/tasuku43/gionx/internal/app/shellaction"
 )
 
 const shellActionFileEnv = "GIONX_SHELL_ACTION_FILE"
 
-func writeShellActionCD(path string) error {
+type shellActionAdapter struct{}
+
+func (a shellActionAdapter) WriteActionLine(line string) error {
 	actionPath := strings.TrimSpace(os.Getenv(shellActionFileEnv))
 	if actionPath == "" {
 		return nil
 	}
-	line := fmt.Sprintf("cd %s\n", shellSingleQuote(path))
 	return os.WriteFile(actionPath, []byte(line), 0o600)
+}
+
+func emitShellActionCD(path string) error {
+	svc := appshell.NewService(shellActionAdapter{})
+	return svc.EmitCD(path)
 }

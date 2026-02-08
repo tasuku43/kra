@@ -178,7 +178,7 @@ func (c *CLI) runWSGo(args []string) int {
 		}
 	}
 
-	if err := writeShellActionCD(selectedTargetPath); err != nil {
+	if err := emitShellActionCD(selectedTargetPath); err != nil {
 		fmt.Fprintf(c.Err, "write shell action: %v\n", err)
 		return exitError
 	}
