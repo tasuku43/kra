@@ -3,6 +3,7 @@ title: "gionx CLI specs"
 status: implemented
 pending:
   - ws_unified_launcher
+  - architecture_migration
 ---
 
 # gionx specs
@@ -35,6 +36,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `concepts/fs-source-of-truth.md`: FS=SoT and index-store downgrade policy (planned)
   - `concepts/workspace-meta-json.md`: `.gionx.meta.json` schema and atomic update rules (planned)
   - `concepts/ui-color.md`: CLI/TUI semantic color token policy
+  - `concepts/architecture.md`: Layered architecture (`cli/app/domain/infra/ui`) and migration rules
   - `concepts/workspace-lifecycle.md`: Workspace lifecycle state machine and transition policy
 - Commands
   - `commands/context.md`: `gionx context`
