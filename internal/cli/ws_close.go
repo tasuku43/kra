@@ -24,23 +24,34 @@ import (
 var errNoActiveWorkspaces = errors.New("no active workspaces available")
 
 func (c *CLI) runWSClose(args []string) int {
+	directWorkspaceID := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
 			c.printWSCloseUsage(c.Out)
 			return exitOK
+		case "--id":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--id requires a value")
+				c.printWSCloseUsage(c.Err)
+				return exitUsage
+			}
+			directWorkspaceID = strings.TrimSpace(args[1])
+			args = args[2:]
 		default:
+			if strings.HasPrefix(args[0], "--id=") {
+				directWorkspaceID = strings.TrimSpace(strings.TrimPrefix(args[0], "--id="))
+				args = args[1:]
+				continue
+			}
 			fmt.Fprintf(c.Err, "unknown flag for ws close: %q\n", args[0])
 			c.printWSCloseUsage(c.Err)
 			return exitUsage
 		}
 	}
 
-	if len(args) != 1 {
-		if len(args) > 1 {
-			fmt.Fprintf(c.Err, "unexpected args for ws close: %q\n", strings.Join(args[1:], " "))
-		}
-		fmt.Fprintln(c.Err, "ws close requires <id>; use `gionx ws list --select` for interactive selection")
+	if len(args) > 1 {
+		fmt.Fprintf(c.Err, "unexpected args for ws close: %q\n", strings.Join(args[1:], " "))
 		c.printWSCloseUsage(c.Err)
 		return exitUsage
 	}
@@ -99,10 +110,27 @@ func (c *CLI) runWSClose(args []string) int {
 	}
 	useColorOut := writerSupportsColor(c.Out)
 
-	directWorkspaceID := args[0]
-	if err := validateWorkspaceID(directWorkspaceID); err != nil {
-		fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
-		return exitUsage
+	if len(args) == 1 {
+		if directWorkspaceID != "" {
+			fmt.Fprintln(c.Err, "--id and positional <id> cannot be used together")
+			c.printWSCloseUsage(c.Err)
+			return exitUsage
+		}
+		directWorkspaceID = strings.TrimSpace(args[0])
+	}
+	if directWorkspaceID != "" {
+		if err := validateWorkspaceID(directWorkspaceID); err != nil {
+			fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
+			return exitUsage
+		}
+	} else {
+		fromCWD, ok := detectWorkspaceFromCWD(root, wd)
+		if !ok || fromCWD.Status != "active" {
+			fmt.Fprintln(c.Err, "ws close requires --id <id> or active workspace context")
+			c.printWSCloseUsage(c.Err)
+			return exitUsage
+		}
+		directWorkspaceID = fromCWD.ID
 	}
 
 	flow := workspaceSelectRiskResultFlowConfig{

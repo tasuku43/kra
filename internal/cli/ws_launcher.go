@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -52,6 +53,7 @@ func detectWorkspaceFromCWD(root string, cwd string) (workspaceContextSelection,
 func (c *CLI) runWSLauncher(args []string) int {
 	var archivedScope bool
 	var forceSelect bool
+	fixedAction := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "--archived":
@@ -60,8 +62,37 @@ func (c *CLI) runWSLauncher(args []string) int {
 		case "--select":
 			forceSelect = true
 			args = args[1:]
+		case "--act":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--act requires a value")
+				c.printWSUsage(c.Err)
+				return exitUsage
+			}
+			fixedAction = strings.TrimSpace(args[1])
+			args = args[2:]
 		default:
+			if strings.HasPrefix(args[0], "--act=") {
+				fixedAction = strings.TrimSpace(strings.TrimPrefix(args[0], "--act="))
+				args = args[1:]
+				continue
+			}
 			fmt.Fprintf(c.Err, "unknown flag for ws: %q\n", args[0])
+			c.printWSUsage(c.Err)
+			return exitUsage
+		}
+	}
+	if fixedAction != "" {
+		switch fixedAction {
+		case "go", "add-repo", "close":
+			if archivedScope {
+				fmt.Fprintf(c.Err, "--act %s cannot be used with --archived\n", fixedAction)
+				c.printWSUsage(c.Err)
+				return exitUsage
+			}
+		case "reopen", "purge":
+			archivedScope = true
+		default:
+			fmt.Fprintf(c.Err, "unsupported --act: %q\n", fixedAction)
 			c.printWSUsage(c.Err)
 			return exitUsage
 		}
@@ -97,6 +128,7 @@ func (c *CLI) runWSLauncher(args []string) int {
 		ForceSelect: forceSelect,
 		Scope:       scope,
 		CurrentPath: wd,
+		FixedAction: appws.Action(fixedAction),
 	})
 	if err != nil {
 		if err == errSelectorCanceled {
@@ -104,6 +136,9 @@ func (c *CLI) runWSLauncher(args []string) int {
 			return exitError
 		}
 		switch {
+		case errors.Is(err, appws.ErrActionNotAllowed):
+			fmt.Fprintf(c.Err, "action %q is not allowed for selected scope\n", fixedAction)
+			return exitError
 		case err == errNoActiveWorkspaces:
 			fmt.Fprintln(c.Err, "no active workspaces available")
 		case err == errNoArchivedWorkspaces:
@@ -137,6 +172,15 @@ func (c *CLI) runWSLauncher(args []string) int {
 	default:
 		return exitError
 	}
+}
+
+func (c *CLI) runWSSelect(args []string) int {
+	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help" || args[0] == "help") {
+		c.printWSUsage(c.Out)
+		return exitOK
+	}
+	all := append([]string{"--select"}, args...)
+	return c.runWSLauncher(all)
 }
 
 type cliWSLauncherAdapter struct {

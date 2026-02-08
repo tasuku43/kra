@@ -12,12 +12,12 @@ Alias:
 
 List workspaces with status and risk, similar in spirit to `gion manifest ls`.
 
-`ws list` is the single human interactive entrypoint when `--select` is used.
-Without `--select`, it is a read-only listing command.
+`ws list` is a read-only listing command.
+`--select` exists as compatibility path; primary selection entrypoint is `ws select`.
 
 ## Role boundary
 
-- `ws list --select` handles interactive workspace/action selection.
+- `ws select` handles interactive workspace/action selection.
 - Operation commands run with explicit `<id>` after selection.
 
 ## Default display

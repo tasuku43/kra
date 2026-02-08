@@ -214,7 +214,7 @@ func TestCLI_WS_Go_SelectorModeWithoutTTY_Errors(t *testing.T) {
 		if code != exitUsage {
 			t.Fatalf("ws go exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 		}
-		if !strings.Contains(err.String(), "ws go requires <id>") {
+		if !strings.Contains(err.String(), "ws go requires --id <id> or positional <id>") {
 			t.Fatalf("stderr missing id requirement: %q", err.String())
 		}
 	}

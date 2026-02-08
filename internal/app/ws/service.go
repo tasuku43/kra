@@ -7,6 +7,7 @@ import (
 
 var ErrWorkspaceNotSelected = errors.New("workspace not selected")
 var ErrActionNotSelected = errors.New("action not selected")
+var ErrActionNotAllowed = errors.New("action not allowed for workspace scope")
 
 type Service struct {
 	selector SelectorPort
@@ -47,18 +48,35 @@ func (s *Service) Run(ctx context.Context, req LauncherRequest) (LauncherResult,
 		ref = WorkspaceRef{ID: id, Status: scope}
 	}
 
-	action, err := s.selector.SelectAction(ctx, ref, fromContext)
-	if err != nil {
-		return LauncherResult{}, err
-	}
+	action := req.FixedAction
 	if action == "" {
-		return LauncherResult{}, ErrActionNotSelected
+		var err error
+		action, err = s.selector.SelectAction(ctx, ref, fromContext)
+		if err != nil {
+			return LauncherResult{}, err
+		}
+		if action == "" {
+			return LauncherResult{}, ErrActionNotSelected
+		}
+	} else if !isActionAllowedForScope(action, ref.Status) {
+		return LauncherResult{}, ErrActionNotAllowed
 	}
 
 	return LauncherResult{
 		Workspace: ref,
 		Action:    action,
 	}, nil
+}
+
+func isActionAllowedForScope(action Action, scope Scope) bool {
+	switch scope {
+	case ScopeActive:
+		return action == ActionGo || action == ActionAddRepo || action == ActionClose
+	case ScopeArchived:
+		return action == ActionReopen || action == ActionPurge
+	default:
+		return false
+	}
 }
 
 func (s *Service) RunSelect(ctx context.Context, req SelectRequest) (SelectResult, error) {

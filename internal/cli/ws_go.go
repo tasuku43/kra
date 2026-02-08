@@ -19,6 +19,7 @@ func (c *CLI) runWSGo(args []string) int {
 	var archivedScope bool
 	var emitCD bool
 	var uiOutput bool
+	idFromFlag := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -33,20 +34,43 @@ func (c *CLI) runWSGo(args []string) int {
 		case "--ui":
 			uiOutput = true
 			args = args[1:]
+		case "--id":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--id requires a value")
+				c.printWSGoUsage(c.Err)
+				return exitUsage
+			}
+			idFromFlag = strings.TrimSpace(args[1])
+			args = args[2:]
 		default:
+			if strings.HasPrefix(args[0], "--id=") {
+				idFromFlag = strings.TrimSpace(strings.TrimPrefix(args[0], "--id="))
+				args = args[1:]
+				continue
+			}
 			fmt.Fprintf(c.Err, "unknown flag for ws go: %q\n", args[0])
 			c.printWSGoUsage(c.Err)
 			return exitUsage
 		}
 	}
 
-	if len(args) != 1 {
-		if len(args) > 1 {
-			fmt.Fprintf(c.Err, "unexpected args for ws go: %q\n", strings.Join(args[1:], " "))
-		}
-		fmt.Fprintln(c.Err, "ws go requires <id>; use `gionx ws list --select` for interactive selection")
+	if len(args) > 1 {
+		fmt.Fprintf(c.Err, "unexpected args for ws go: %q\n", strings.Join(args[1:], " "))
 		c.printWSGoUsage(c.Err)
 		return exitUsage
+	}
+	if idFromFlag != "" && len(args) == 1 {
+		fmt.Fprintln(c.Err, "--id and positional <id> cannot be used together")
+		c.printWSGoUsage(c.Err)
+		return exitUsage
+	}
+	if idFromFlag == "" && len(args) == 0 {
+		fmt.Fprintln(c.Err, "ws go requires --id <id> or positional <id>")
+		c.printWSGoUsage(c.Err)
+		return exitUsage
+	}
+	if len(args) == 0 && idFromFlag != "" {
+		args = []string{idFromFlag}
 	}
 	if uiOutput && emitCD {
 		fmt.Fprintln(c.Err, "--ui and --emit-cd cannot be used together")

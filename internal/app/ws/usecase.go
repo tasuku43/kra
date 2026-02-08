@@ -32,6 +32,7 @@ type LauncherRequest struct {
 	ForceSelect bool
 	Scope       Scope
 	CurrentPath string
+	FixedAction Action
 }
 
 // LauncherResult returns selected operation and resolved workspace target.

@@ -73,11 +73,13 @@ Initialize GIONX_ROOT (current directory by default, or $GIONX_ROOT if set).
 
 func (c *CLI) printWSUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws list [--select] [--archived] [--tree] [--format human|tsv]
+  gionx ws [--archived]
+  gionx ws select [--archived] [--act <go|close|add-repo|reopen|purge>]
   gionx ws <subcommand> [args]
 
 Subcommands:
   create            Create a workspace
+  select            Select workspace (then action or fixed action)
   ls                Alias of list
   list              List workspaces
   add-repo          Add repo to workspace
@@ -91,8 +93,8 @@ Run:
   gionx ws <subcommand> --help
 
 Notes:
-- gionx ws (no subcommand) is removed.
-- Use gionx ws list --select for interactive workspace/action selection.
+- gionx ws opens action launcher (context-aware).
+- gionx ws select always opens workspace selection first.
 `)
 }
 
@@ -183,12 +185,13 @@ Options:
 
 func (c *CLI) printWSAddRepoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws add-repo [<workspace-id>]
+  gionx ws add-repo [--id <workspace-id>] [<workspace-id>]
 
 Add repositories from the repo pool to a workspace.
 
 Inputs:
   workspace-id       Existing active workspace ID (optional when running under workspaces/<id>/)
+  --id               Explicit workspace ID
 
 Behavior:
   - Select one or more repos from the existing bare repo pool.
@@ -199,7 +202,7 @@ Behavior:
 
 func (c *CLI) printWSGoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws go [--archived] [--ui] [--emit-cd] <id>
+  gionx ws go [--archived] [--id <id>] [--ui] [--emit-cd] [<id>]
 
 Resolve a workspace directory target:
 - active target: workspaces/<id>/
@@ -207,6 +210,7 @@ Resolve a workspace directory target:
 
 Options:
   --archived        Use archived workspace scope
+  --id              Explicit workspace ID
   --ui              Print human-readable Result section instead of shell snippet
   --emit-cd         Backward-compatible alias of default output
 `)
@@ -214,7 +218,7 @@ Options:
 
 func (c *CLI) printWSCloseUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws close <id>
+  gionx ws close [--id <id>] [<id>]
 
 Close (archive) a workspace:
 - inspect repo risk (live) and prompt if not clean
@@ -222,7 +226,7 @@ Close (archive) a workspace:
 - move workspaces/<id>/ to archive/<id>/ atomically
 - commit the archive change in GIONX_ROOT
 
-Use gionx ws list --select for interactive selection.
+If ID is omitted, current directory must resolve to an active workspace.
 `)
 }
 

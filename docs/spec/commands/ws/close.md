@@ -5,7 +5,7 @@ pending:
   - ws_list_select_entrypoint_doc_sync
 ---
 
-# `gionx ws close <id>`
+# `gionx ws close [--id <id>] [<id>]`
 
 ## Purpose
 
@@ -70,8 +70,9 @@ If the Git working tree has unrelated changes, this command must not include the
 
 ## Modes and selector behavior
 
-- This command is explicit-id mode only.
-- Interactive selection must use `gionx ws list --select` (active scope).
+- This command accepts explicit target by `--id` or positional `<id>`.
+- If no id is provided, resolve from current path under `workspaces/<id>/...`.
+- Interactive selection should use `gionx ws select` (or compatibility path `ws list --select`).
 - Selector and follow-up output should use section headings:
   - `Workspaces(active):`
   - `Risk:`

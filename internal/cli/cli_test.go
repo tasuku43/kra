@@ -74,14 +74,14 @@ func TestCLI_WS_NoArgs_ShowsWSUsage(t *testing.T) {
 	t.Setenv("GIONX_ROOT", "")
 
 	code := c.Run([]string{"ws"})
-	if code != exitUsage {
-		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d", code, exitError)
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout not empty: %q", out.String())
 	}
-	if !strings.Contains(err.String(), "launcher is removed") {
-		t.Fatalf("stderr missing launcher removal hint: %q", err.String())
+	if !strings.Contains(err.String(), "resolve GIONX_ROOT:") {
+		t.Fatalf("stderr missing root resolution error: %q", err.String())
 	}
 }
 
@@ -135,6 +135,34 @@ func TestCLI_WS_SelectFlagRejected(t *testing.T) {
 				t.Fatalf("stderr missing flag error: %q", err.String())
 			}
 		})
+	}
+}
+
+func TestCLI_WS_Select_UnsupportedAct(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "select", "--act", "unknown"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
+	}
+	if !strings.Contains(err.String(), "unsupported --act") {
+		t.Fatalf("stderr missing unsupported act error: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Select_ActScopeMismatch(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "select", "--archived", "--act", "go"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
+	}
+	if !strings.Contains(err.String(), "cannot be used with --archived") {
+		t.Fatalf("stderr missing scope mismatch: %q", err.String())
 	}
 }
 

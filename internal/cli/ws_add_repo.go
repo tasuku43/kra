@@ -60,12 +60,26 @@ type addRepoAppliedItem struct {
 }
 
 func (c *CLI) runWSAddRepo(args []string) int {
+	idFromFlag := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
 			c.printWSAddRepoUsage(c.Out)
 			return exitOK
+		case "--id":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--id requires a value")
+				c.printWSAddRepoUsage(c.Err)
+				return exitUsage
+			}
+			idFromFlag = strings.TrimSpace(args[1])
+			args = args[2:]
 		default:
+			if strings.HasPrefix(args[0], "--id=") {
+				idFromFlag = strings.TrimSpace(strings.TrimPrefix(args[0], "--id="))
+				args = args[1:]
+				continue
+			}
 			fmt.Fprintf(c.Err, "unknown flag for ws add-repo: %q\n", args[0])
 			c.printWSAddRepoUsage(c.Err)
 			return exitUsage
@@ -122,7 +136,16 @@ func (c *CLI) runWSAddRepo(args []string) int {
 
 	workspaceID := ""
 	var resolveErr error
-	workspaceID, resolveErr = resolveWorkspaceIDForAddRepo(root, wd, args)
+	resolveArgs := append([]string{}, args...)
+	if idFromFlag != "" {
+		if len(resolveArgs) > 0 {
+			fmt.Fprintln(c.Err, "--id and positional <workspace-id> cannot be used together")
+			c.printWSAddRepoUsage(c.Err)
+			return exitUsage
+		}
+		resolveArgs = []string{idFromFlag}
+	}
+	workspaceID, resolveErr = resolveWorkspaceIDForAddRepo(root, wd, resolveArgs)
 	if resolveErr != nil {
 		fmt.Fprintf(c.Err, "%v\n", resolveErr)
 		c.printWSAddRepoUsage(c.Err)

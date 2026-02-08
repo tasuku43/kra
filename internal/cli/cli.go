@@ -73,9 +73,7 @@ func (c *CLI) Run(args []string) int {
 
 func (c *CLI) runWS(args []string) int {
 	if len(args) == 0 {
-		fmt.Fprintln(c.Err, "`gionx ws` launcher is removed; use `gionx ws list --select`")
-		c.printWSUsage(c.Err)
-		return exitUsage
+		return c.runWSLauncher(nil)
 	}
 
 	if strings.HasPrefix(args[0], "-") {
@@ -100,6 +98,8 @@ func (c *CLI) runWS(args []string) int {
 		return c.runWSList(args[1:])
 	case "list":
 		return c.runWSList(args[1:])
+	case "select":
+		return c.runWSSelect(args[1:])
 	case "add-repo":
 		return c.runWSAddRepo(args[1:])
 	case "go":

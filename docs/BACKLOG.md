@@ -598,9 +598,10 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-020
   - Parallel: yes
 
-- [x] UX-WS-027: `ws list` as the only interactive selection entrypoint
-  - What: consolidate interactive selection to `ws list` (workspace -> action), remove `ws` fallback behavior,
-    and deprecate operation-level `--select` flags in favor of explicit `<id>` commands for non-interactive paths.
+- [x] UX-WS-027: `ws select` as primary interactive selection entrypoint
+  - What: consolidate interactive selection to `ws select` (workspace -> action; optional `--act` fixed action),
+    keep `ws` as context-aware launcher, and deprecate operation-level `--select` flags in favor of explicit
+    `<id>`/`--id` command paths.
   - Specs:
     - `docs/spec/commands/ws/list.md`
     - `docs/spec/commands/ws/select.md`
@@ -611,6 +612,18 @@ It does not replace per-item dependencies.
     - `docs/spec/commands/ws/reopen.md`
     - `docs/spec/commands/ws/purge.md`
   - Depends: UX-WS-022, UX-WS-023, UX-WS-026
+  - Serial: yes
+
+- [x] UX-WS-028: `ws select --act` and `--id` command normalization
+  - What: add `ws select --act <...>` fixed-action mode, keep `ws` as context-aware launcher, and normalize
+    explicit targeting via `--id` for operation commands while preserving cwd-based fallback where applicable.
+  - Specs:
+    - `docs/spec/commands/ws/select.md`
+    - `docs/spec/commands/ws/list.md`
+    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/close.md`
+    - `docs/spec/commands/ws/add-repo.md`
+  - Depends: UX-WS-027
   - Serial: yes
 
 ## Architecture Refactor (full layering migration)

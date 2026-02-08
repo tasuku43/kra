@@ -3,7 +3,7 @@ title: "`gionx ws` selection entrypoint policy"
 status: implemented
 ---
 
-# `gionx ws` / `gionx ws list --select`
+# `gionx ws` / `gionx ws select`
 
 ## Purpose
 
@@ -11,10 +11,10 @@ Unify interactive selection into a single entrypoint while keeping operation com
 
 ## Entry policy
 
-- `gionx ws` (no subcommand) is removed as launcher.
-- Interactive selection must start from:
-  - `gionx ws list --select`
-  - `gionx ws list --select --archived` (archived scope)
+- `gionx ws` is context-aware launcher.
+- `gionx ws select` always starts from workspace selection.
+- `gionx ws select --act <go|close|add-repo|reopen|purge>` skips action menu and executes fixed action.
+- `gionx ws list --select` remains compatibility path for selection-first flow.
 
 ## Selection flow
 
@@ -28,4 +28,5 @@ Unify interactive selection into a single entrypoint while keeping operation com
 
 - `ws go/close/reopen/purge` require explicit `<id>`.
 - Operation-level `--select` is not supported.
-- `ws add-repo` keeps direct/cwd resolution behavior and does not provide `--select`.
+- `ws add-repo` keeps direct/cwd resolution behavior and supports `--id`.
+- `ws close` supports `--id` and cwd resolution fallback.

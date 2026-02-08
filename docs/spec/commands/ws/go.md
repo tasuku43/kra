@@ -5,7 +5,7 @@ pending:
   - ws_list_select_entrypoint_doc_sync
 ---
 
-# `gionx ws go [--archived] [--ui] [--emit-cd] <id>`
+# `gionx ws go [--archived] [--id <id>] [--ui] [--emit-cd] [<id>]`
 
 ## Purpose
 
@@ -14,6 +14,7 @@ Jump to a workspace directory as a "start work" action.
 ## Inputs
 
 - `<id>` (required): workspace id for direct mode
+- `--id <id>` (optional): explicit workspace id flag (cannot be combined with positional `<id>`)
 - `--archived` (optional): target archived workspaces instead of active workspaces
 - `--ui` (optional): print human-readable `Result:` section
 - `--emit-cd` (optional): backward-compatible alias of default shell snippet output
@@ -22,7 +23,7 @@ Jump to a workspace directory as a "start work" action.
 
 ### Mode selection
 
-- This command is explicit-id mode only.
+- This command is explicit-id mode only (`--id` or positional `<id>`).
 - For interactive selection, use `gionx ws list --select`.
 
 ### Target path

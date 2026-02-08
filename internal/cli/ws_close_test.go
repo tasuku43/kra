@@ -317,7 +317,7 @@ func TestCLI_WS_Close_SelectorModeWithoutTTY_Errors(t *testing.T) {
 		if code != exitUsage {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 		}
-		if !strings.Contains(err.String(), "ws close requires <id>") {
+		if !strings.Contains(err.String(), "ws close requires --id <id> or active workspace context") {
 			t.Fatalf("stderr missing id requirement: %q", err.String())
 		}
 	}
