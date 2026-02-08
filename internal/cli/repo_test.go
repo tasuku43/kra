@@ -506,7 +506,7 @@ func TestCLI_RepoGC_BlockedByArchiveMetadataReference(t *testing.T) {
 		var err bytes.Buffer
 		c := New(&out, &err)
 		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-		if code := c.Run([]string{"ws", "add-repo", "WS1"}); code != exitOK {
+		if code := c.Run([]string{"ws", "--act", "add-repo", "WS1"}); code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
@@ -514,7 +514,7 @@ func TestCLI_RepoGC_BlockedByArchiveMetadataReference(t *testing.T) {
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "close", "WS1"}); code != exitOK {
+		if code := c.Run([]string{"ws", "--act", "close", "WS1"}); code != exitOK {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}

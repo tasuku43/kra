@@ -587,7 +587,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-022
   - Parallel: yes
 
-- [ ] UX-WS-026: AI entrypoint contract for operation-fixed commands
+- [x] UX-WS-026: AI entrypoint contract for operation-fixed commands
   - What: define strict non-interactive contract for agent-facing commands:
     required explicit target input, no prompt fallback, stable JSON output, explicit exit-code mapping.
   - Specs:

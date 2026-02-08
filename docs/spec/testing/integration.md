@@ -19,10 +19,10 @@ This ticket focuses on "drift" and partial failure scenarios across:
 Commands implemented through `MVP-042`:
 - `gionx init`
 - `gionx ws create`
-- `gionx ws add-repo`
-- `gionx ws close`
-- `gionx ws reopen`
-- `gionx ws purge`
+- `gionx ws --act add-repo`
+- `gionx ws --act close`
+- `gionx ws --act reopen`
+- `gionx ws --act purge`
 
 ## Done definition
 
@@ -128,3 +128,13 @@ This section maps the spec scenarios to concrete CLI integration tests.
 - `ws close` removes worktrees and archives atomically (FS + index + git)
 - `ws reopen` restores archived workspace and recreates worktrees (FS + index + git)
 - `ws purge` removes workspace snapshot + files with confirmations (FS + index)
+
+## Non-interactive contract tests (`UX-WS-026`)
+
+- JSON success envelope for:
+  - `ws --act go --format json`
+  - `ws --act close --format json`
+- JSON validation failures:
+  - `ws --act add-repo --format json` without required `--repo`/`--yes`
+- Exit code policy:
+  - JSON mode still returns non-zero exit on failures.

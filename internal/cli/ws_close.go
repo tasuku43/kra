@@ -25,11 +25,24 @@ var errNoActiveWorkspaces = errors.New("no active workspaces available")
 
 func (c *CLI) runWSClose(args []string) int {
 	directWorkspaceID := ""
+	outputFormat := "human"
+	force := false
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
 			c.printWSCloseUsage(c.Out)
 			return exitOK
+		case "--force":
+			force = true
+			args = args[1:]
+		case "--format":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printWSCloseUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(args[1])
+			args = args[2:]
 		case "--id":
 			if len(args) < 2 {
 				fmt.Fprintln(c.Err, "--id requires a value")
@@ -44,10 +57,22 @@ func (c *CLI) runWSClose(args []string) int {
 				args = args[1:]
 				continue
 			}
+			if strings.HasPrefix(args[0], "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(args[0], "--format="))
+				args = args[1:]
+				continue
+			}
 			fmt.Fprintf(c.Err, "unknown flag for ws close: %q\n", args[0])
 			c.printWSCloseUsage(c.Err)
 			return exitUsage
 		}
+	}
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printWSCloseUsage(c.Err)
+		return exitUsage
 	}
 
 	if len(args) > 1 {
@@ -124,6 +149,17 @@ func (c *CLI) runWSClose(args []string) int {
 			return exitUsage
 		}
 	} else {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "close",
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: "ws close requires --id <id> or positional <id> in --format json mode",
+				},
+			})
+			return exitUsage
+		}
 		fromCWD, ok := detectWorkspaceFromCWD(root, wd)
 		if !ok || fromCWD.Status != "active" {
 			fmt.Fprintln(c.Err, "ws close requires --id <id> or active workspace context")
@@ -131,6 +167,9 @@ func (c *CLI) runWSClose(args []string) int {
 			return exitUsage
 		}
 		directWorkspaceID = fromCWD.ID
+	}
+	if outputFormat == "json" {
+		return c.runWSCloseJSON(directWorkspaceID, force, wd, root, db, repoPoolPath)
 	}
 	shouldShiftCWD := isPathInside(filepath.Join(root, "workspaces", directWorkspaceID), wd)
 	if shouldShiftCWD {
@@ -202,6 +241,95 @@ func (c *CLI) runWSClose(args []string) int {
 		}
 	}
 	c.debugf("ws close completed archived=%v", archived)
+	return exitOK
+}
+
+func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root string, db *sql.DB, repoPoolPath string) int {
+	ctx := context.Background()
+	shouldShiftCWD := isPathInside(filepath.Join(root, "workspaces", workspaceID), wd)
+	if shouldShiftCWD {
+		if err := os.Chdir(root); err != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "close",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("shift process cwd to GIONX_ROOT: %v", err),
+				},
+			})
+			return exitError
+		}
+	}
+
+	riskItems, err := collectWorkspaceRiskDetails(ctx, db, root, []string{workspaceID})
+	if err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "close",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("inspect workspace risk: %v", err),
+			},
+		})
+		return exitError
+	}
+	if hasNonCleanRisk(riskItems) && !force {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "close",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "conflict",
+				Message: "risk confirmation required (pass --force to proceed in --format json mode)",
+			},
+		})
+		return exitError
+	}
+
+	if err := c.closeWorkspace(ctx, db, root, repoPoolPath, workspaceID); err != nil {
+		code := "internal_error"
+		msg := err.Error()
+		switch {
+		case strings.Contains(msg, "workspace not found"):
+			code = "workspace_not_found"
+		case strings.Contains(msg, "workspace is not active"):
+			code = "conflict"
+		}
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "close",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    code,
+				Message: msg,
+			},
+		})
+		return exitError
+	}
+	if shouldShiftCWD {
+		if err := emitShellActionCD(root); err != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "close",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("write shell action: %v", err),
+				},
+			})
+			return exitError
+		}
+	}
+	_ = writeCLIJSON(c.Out, cliJSONResponse{
+		OK:          true,
+		Action:      "close",
+		WorkspaceID: workspaceID,
+		Result: map[string]any{
+			"archived_path": filepath.Join(root, "archive", workspaceID),
+		},
+	})
 	return exitOK
 }
 

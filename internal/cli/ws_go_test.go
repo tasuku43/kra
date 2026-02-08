@@ -15,11 +15,11 @@ func TestCLI_WS_Go_Help_ShowsUsage(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "go", "--help"})
+	code := c.Run([]string{"ws", "--act", "go", "--help"})
 	if code != exitOK {
 		t.Fatalf("exit code = %d, want %d", code, exitOK)
 	}
-	if !strings.Contains(out.String(), "gionx ws go") {
+	if !strings.Contains(out.String(), "gionx ws --act go") {
 		t.Fatalf("stdout missing ws go usage: %q", out.String())
 	}
 	if err.Len() != 0 {
@@ -46,7 +46,7 @@ func TestCLI_WS_Go_DirectActive_WritesShellActionOnly(t *testing.T) {
 	c := New(&out, &err)
 	actionFile := filepath.Join(t.TempDir(), "action.sh")
 	t.Setenv(shellActionFileEnv, actionFile)
-	code := c.Run([]string{"ws", "go", "WS1"})
+	code := c.Run([]string{"ws", "--act", "go", "WS1"})
 	if code != exitOK {
 		t.Fatalf("ws go exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
@@ -83,7 +83,7 @@ func TestCLI_WS_Go_DirectArchived_WritesShellActionOnly(t *testing.T) {
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "WS1"})
+		code := c.Run([]string{"ws", "--act", "close", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
@@ -92,22 +92,12 @@ func TestCLI_WS_Go_DirectArchived_WritesShellActionOnly(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	actionFile := filepath.Join(t.TempDir(), "action.sh")
-	t.Setenv(shellActionFileEnv, actionFile)
-	code := c.Run([]string{"ws", "go", "--archived", "WS1"})
-	if code != exitOK {
-		t.Fatalf("ws go --archived exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	code := c.Run([]string{"ws", "--act", "go", "--archived", "WS1"})
+	if code != exitUsage {
+		t.Fatalf("ws go --archived exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 	}
-	if out.String() != "" {
-		t.Fatalf("stdout should be empty in non-ui mode: %q", out.String())
-	}
-	action, readErr := os.ReadFile(actionFile)
-	if readErr != nil {
-		t.Fatalf("ReadFile(action) error: %v", readErr)
-	}
-	want := filepath.Join(env.Root, "archive", "WS1")
-	if !strings.Contains(string(action), "cd ") || !strings.Contains(string(action), want) {
-		t.Fatalf("action file missing destination cd: %q", string(action))
+	if !strings.Contains(err.String(), "cannot be used with --archived") {
+		t.Fatalf("stderr missing archived scope rejection: %q", err.String())
 	}
 }
 
@@ -128,7 +118,7 @@ func TestCLI_WS_Go_UI_PrintsResultSection(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	code := c.Run([]string{"ws", "go", "--ui", "WS1"})
+	code := c.Run([]string{"ws", "--act", "go", "--ui", "WS1"})
 	if code != exitOK {
 		t.Fatalf("ws go --ui exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
@@ -145,7 +135,7 @@ func TestCLI_WS_Go_EmitCDFlag_IsUnknown(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	code := c.Run([]string{"ws", "go", "--emit-cd", "WS1"})
+	code := c.Run([]string{"ws", "--act", "go", "--emit-cd", "WS1"})
 	if code != exitUsage {
 		t.Fatalf("ws go --emit-cd exit code = %d, want %d", code, exitUsage)
 	}
@@ -171,12 +161,12 @@ func TestCLI_WS_Go_ArchivedScopeRejectsActiveWorkspace(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	code := c.Run([]string{"ws", "go", "--archived", "WS1"})
-	if code != exitError {
-		t.Fatalf("ws go --archived exit code = %d, want %d", code, exitError)
+	code := c.Run([]string{"ws", "--act", "go", "--archived", "WS1"})
+	if code != exitUsage {
+		t.Fatalf("ws go --archived exit code = %d, want %d", code, exitUsage)
 	}
-	if !strings.Contains(err.String(), "workspace is not archived") {
-		t.Fatalf("stderr missing scope mismatch: %q", err.String())
+	if !strings.Contains(err.String(), "cannot be used with --archived") {
+		t.Fatalf("stderr missing scope restriction: %q", err.String())
 	}
 }
 
@@ -200,11 +190,11 @@ func TestCLI_WS_Go_SelectorModeWithoutTTY_Errors(t *testing.T) {
 		c := New(&out, &err)
 		c.In = strings.NewReader("")
 
-		code := c.Run([]string{"ws", "go"})
+		code := c.Run([]string{"ws", "--act", "go"})
 		if code != exitUsage {
 			t.Fatalf("ws go exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 		}
-		if !strings.Contains(err.String(), "ws go requires --id <id> or positional <id>") {
+		if !strings.Contains(err.String(), "ws go requires --id <id> or positional <id>") && !strings.Contains(err.String(), "ws requires --id <id> or workspace context") {
 			t.Fatalf("stderr missing id requirement: %q", err.String())
 		}
 	}

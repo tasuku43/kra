@@ -203,7 +203,7 @@ func TestCLI_WS_List_DefaultScopeShowsActiveOnlyAndNoSelectionMarker(t *testing.
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "WS_ARCHIVED"})
+		code := c.Run([]string{"ws", "--act", "close", "WS_ARCHIVED"})
 		if code != exitOK {
 			t.Fatalf("ws close WS_ARCHIVED exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
@@ -260,7 +260,7 @@ func TestCLI_WS_List_ArchivedScopeShowsArchivedOnly(t *testing.T) {
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "WS_ARCHIVED"})
+		code := c.Run([]string{"ws", "--act", "close", "WS_ARCHIVED"})
 		if code != exitOK {
 			t.Fatalf("ws close WS_ARCHIVED exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}

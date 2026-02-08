@@ -1,9 +1,9 @@
 ---
-title: "`gionx ws add-repo`"
+title: "`gionx ws --act add-repo`"
 status: implemented
 ---
 
-# `gionx ws add-repo [--id <workspace-id>] [<workspace-id>]`
+# `gionx ws --act add-repo [--id <workspace-id>] [<workspace-id>] [--format human|json]`
 
 ## Purpose
 
@@ -16,7 +16,12 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
   - cannot be combined with positional `workspace-id`
   - if omitted, current working directory must be under `GIONX_ROOT/workspaces/<id>/`
   - otherwise the command fails fast
-- interactive selection is handled by `gionx ws select`.
+- interactive selection is handled by `gionx ws select --act add-repo`.
+- JSON mode (`--format json`) is non-interactive and accepts:
+  - `--repo <repo-key>` (repeatable, required)
+  - `--branch <name>` (optional, defaults to workspace id)
+  - `--base-ref <origin/branch>` (optional, defaults to detected default branch)
+  - `--yes` (required)
 
 ## Selection source
 
@@ -89,6 +94,12 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
   - print `Result:`
   - summary: `Added <n> / <m>`
   - per repo success lines
+
+## Non-interactive JSON contract
+
+- `--format json` enables machine-readable output.
+- In JSON mode, command must not prompt.
+- Missing required inputs (`--repo`, `--yes`) must fail with `error.code=invalid_argument` and non-zero exit.
 
 ## UI style (TTY)
 

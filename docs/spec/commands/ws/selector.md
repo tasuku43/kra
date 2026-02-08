@@ -193,7 +193,7 @@ Action menu ordering:
 
 Launcher and selector relationship:
 - launcher flow must delegate to existing action command flows to keep behavior parity.
-- direct operation commands (`ws go`, `ws close`, `ws add-repo`, `ws reopen`, `ws purge`) remain available.
+- direct edit operations are routed by `ws --act <action>`.
 - operation-level `--select` is not supported.
 
 ## Selection cardinality

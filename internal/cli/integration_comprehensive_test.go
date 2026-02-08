@@ -49,7 +49,7 @@ func TestCLI_WS_AddRepo_BaseRefNotFound_FailsWithoutMutatingState(t *testing.T) 
 		var err bytes.Buffer
 		c := New(&out, &err)
 		c.In = strings.NewReader(addRepoSelectionInput("origin/does-not-exist", "WS1/test"))
-		code := c.Run([]string{"ws", "add-repo", "WS1"})
+		code := c.Run([]string{"ws", "--act", "add-repo", "WS1"})
 		if code != exitError {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
 		}
@@ -179,7 +179,7 @@ func TestCLI_WS_Close_WithStagedChanges_FailsBeforeMutatingWorkspace(t *testing.
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "WS1"})
+		code := c.Run([]string{"ws", "--act", "close", "WS1"})
 		if code != exitError {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
 		}
@@ -215,7 +215,7 @@ func TestCLI_WS_Reopen_WithStagedChanges_FailsBeforeMutatingWorkspace(t *testing
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "WS1"})
+		code := c.Run([]string{"ws", "--act", "close", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
@@ -235,7 +235,7 @@ func TestCLI_WS_Reopen_WithStagedChanges_FailsBeforeMutatingWorkspace(t *testing
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "reopen", "WS1"})
+		code := c.Run([]string{"ws", "--act", "reopen", "WS1"})
 		if code != exitError {
 			t.Fatalf("ws reopen exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
 		}
@@ -282,7 +282,7 @@ func TestCLI_WS_Purge_WithStagedChanges_FailsBeforeDeletingWorkspace(t *testing.
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "purge", "--no-prompt", "--force", "WS1"})
+		code := c.Run([]string{"ws", "--act", "purge", "--no-prompt", "--force", "WS1"})
 		if code != exitError {
 			t.Fatalf("ws purge exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
 		}

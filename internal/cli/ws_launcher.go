@@ -58,6 +58,7 @@ func (c *CLI) runWSLauncherWithSelectMode(args []string, forceSelect bool) int {
 	var archivedScope bool
 	fixedAction := ""
 	workspaceID := ""
+parseFlags:
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "--archived":
@@ -90,6 +91,9 @@ func (c *CLI) runWSLauncherWithSelectMode(args []string, forceSelect bool) int {
 				args = args[1:]
 				continue
 			}
+			if fixedAction != "" {
+				break parseFlags
+			}
 			fmt.Fprintf(c.Err, "unknown flag for ws: %q\n", args[0])
 			c.printWSUsage(c.Err)
 			return exitUsage
@@ -117,7 +121,8 @@ func (c *CLI) runWSLauncherWithSelectMode(args []string, forceSelect bool) int {
 			return exitUsage
 		}
 	}
-	if len(args) > 0 {
+	actionArgs := append([]string{}, args...)
+	if fixedAction == "" && len(actionArgs) > 0 {
 		fmt.Fprintf(c.Err, "unexpected args for ws: %q\n", strings.Join(args, " "))
 		c.printWSUsage(c.Err)
 		return exitUsage
@@ -135,6 +140,9 @@ func (c *CLI) runWSLauncherWithSelectMode(args []string, forceSelect bool) int {
 	}
 	if err := c.ensureDebugLog(root, "ws-launcher"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
+	}
+	if fixedAction != "" && !forceSelect {
+		return c.runWSFixedActionDirect(fixedAction, workspaceID, archivedScope, wd, root, actionArgs)
 	}
 
 	scope := appws.ScopeActive
@@ -196,6 +204,88 @@ func (c *CLI) runWSLauncherWithSelectMode(args []string, forceSelect bool) int {
 		return c.runWSPurge([]string{target.ID})
 	default:
 		return exitError
+	}
+}
+
+func runWSActionHasIDArg(actionArgs []string) bool {
+	for i := 0; i < len(actionArgs); i++ {
+		arg := strings.TrimSpace(actionArgs[i])
+		if arg == "--id" {
+			return true
+		}
+		if strings.HasPrefix(arg, "--id=") {
+			return true
+		}
+	}
+	return false
+}
+
+func runWSActionHasPositional(actionArgs []string) bool {
+	for _, arg := range actionArgs {
+		if !strings.HasPrefix(strings.TrimSpace(arg), "-") {
+			return true
+		}
+	}
+	return false
+}
+
+func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archivedScope bool, wd string, root string, actionArgs []string) int {
+	switch action {
+	case "go", "add-repo", "close":
+		if archivedScope {
+			c.printWSUsage(c.Err)
+			return exitUsage
+		}
+	case "reopen", "purge":
+		archivedScope = true
+	default:
+		c.printWSUsage(c.Err)
+		return exitUsage
+	}
+
+	if workspaceID == "" {
+		if fromCWD, ok := detectWorkspaceFromCWD(root, wd); ok {
+			workspaceID = fromCWD.ID
+		}
+	}
+
+	opArgs := append([]string{}, actionArgs...)
+	switch action {
+	case "go", "add-repo", "close":
+		if workspaceID != "" && !runWSActionHasIDArg(opArgs) && !runWSActionHasPositional(opArgs) {
+			opArgs = append([]string{"--id", workspaceID}, opArgs...)
+		}
+	case "reopen", "purge":
+		if workspaceID != "" && !runWSActionHasPositional(opArgs) {
+			opArgs = append([]string{workspaceID}, opArgs...)
+		}
+	}
+
+	switch action {
+	case "go":
+		if archivedScope {
+			hasArchived := false
+			for _, arg := range opArgs {
+				if strings.TrimSpace(arg) == "--archived" {
+					hasArchived = true
+					break
+				}
+			}
+			if !hasArchived {
+				opArgs = append([]string{"--archived"}, opArgs...)
+			}
+		}
+		return c.runWSGo(opArgs)
+	case "add-repo":
+		return c.runWSAddRepo(opArgs)
+	case "close":
+		return c.runWSClose(opArgs)
+	case "reopen":
+		return c.runWSReopen(opArgs)
+	case "purge":
+		return c.runWSPurge(opArgs)
+	default:
+		return exitUsage
 	}
 }
 

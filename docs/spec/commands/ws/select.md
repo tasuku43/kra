@@ -14,12 +14,8 @@ Unify interactive selection into a single entrypoint while keeping operation com
 - Human facade (interactive):
   - `gionx ws`
   - `gionx ws select`
-- Agent facade (operation-fixed):
-  - `gionx ws go`
-  - `gionx ws close`
-  - `gionx ws add-repo`
-  - `gionx ws reopen`
-  - `gionx ws purge`
+- Non-interactive execution path (operation-fixed):
+  - `gionx ws --act <go|add-repo|close|reopen|purge> ...`
 - Both facades must converge to the same operation core behavior for each action.
 - Parent-shell side effects (for example `cd`) are applied only through action-file protocol.
 
@@ -29,6 +25,8 @@ Unify interactive selection into a single entrypoint while keeping operation com
 - `gionx ws --id <id>` resolves launcher target explicitly by id.
 - `gionx ws select` always starts from workspace selection.
 - `gionx ws select --act <go|close|add-repo|reopen|purge>` skips action menu and executes fixed action.
+- `gionx ws select --act reopen|purge` implicitly switches to archived scope.
+- `gionx ws select --archived --act go|add-repo|close` must fail with usage error.
 - `gionx ws` must not auto-fallback to workspace list selection when current path cannot resolve workspace.
   unresolved invocation should fail and instruct users to run `gionx ws select`.
 - `gionx ws` must resolve target workspace by either:
@@ -43,10 +41,9 @@ Unify interactive selection into a single entrypoint while keeping operation com
   - archived scope: `reopen`, `purge`
 - Stage 3: dispatch to operation command with explicit `<id>`.
 
-## Operation command policy
+## Action routing policy
 
-- `ws go/close/reopen/purge` require explicit `<id>`.
-- Operation-level `--select` is not supported.
-- `ws add-repo` keeps direct/cwd resolution behavior and supports `--id`.
-- `ws close` supports `--id` and cwd resolution fallback.
-- Agent/non-interactive usage should prefer explicit `--id` and must not rely on interactive selectors.
+- Edit operations for existing workspace resources are routed by `--act`.
+- Read-only commands remain subcommands (`ws list`, `ws ls`) and resource creation remains `ws create`.
+- `ws go|close|add-repo|reopen|purge` subcommands are not part of supported entrypoints.
+- Non-interactive usage should prefer explicit `--id` and must not rely on interactive selectors.

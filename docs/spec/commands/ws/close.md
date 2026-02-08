@@ -1,9 +1,9 @@
 ---
-title: "`gionx ws close`"
+title: "`gionx ws --act close`"
 status: implemented
 ---
 
-# `gionx ws close [--id <id>] [<id>]`
+# `gionx ws --act close [--id <id>] [--force] [--format human|json] [<id>]`
 
 ## Purpose
 
@@ -79,7 +79,7 @@ If the Git working tree has unrelated changes, this command must not include the
 
 - This command accepts explicit target by `--id` or positional `<id>`.
 - If no id is provided, resolve from current path under `workspaces/<id>/...`.
-- Interactive selection should use `gionx ws select`.
+- Interactive selection should use `gionx ws select --act close`.
 - Selector and follow-up output should use section headings:
   - `Workspaces(active):`
   - `Risk:`
@@ -103,6 +103,12 @@ If the Git working tree has unrelated changes, this command must not include the
   confirmation there before execution.
 - If risk confirmation is declined/canceled, abort without side effects.
 - Risk label semantics and severity follow `commands/ws/selector.md`.
+
+### Non-interactive JSON safety gate
+
+- `--format json` enables non-interactive execution contract.
+- In JSON mode, cwd fallback is not allowed; target must be explicit (`--id` or positional id).
+- If non-clean risk exists, execution requires `--force`; otherwise command returns non-zero with JSON error.
 
 ### Commit strictness (non-repo files)
 

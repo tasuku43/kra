@@ -1,9 +1,9 @@
 ---
-title: "`gionx ws go`"
+title: "`gionx ws --act go`"
 status: implemented
 ---
 
-# `gionx ws go [--archived] [--id <id>] [--ui] [<id>]`
+# `gionx ws --act go [--archived] [--id <id>] [--ui] [--format human|json] [<id>]`
 
 ## Purpose
 
@@ -20,8 +20,9 @@ Jump to a workspace directory as a "start work" action.
 
 ### Mode selection
 
-- This command is explicit-id mode only (`--id` or positional `<id>`).
-- For interactive selection, use `gionx ws select`.
+- Action is routed via `ws --act go`.
+- This command path is explicit-id mode only (`--id` or positional `<id>`).
+- For interactive selection, use `gionx ws select --act go`.
 
 ### Target path
 
@@ -49,6 +50,17 @@ Jump to a workspace directory as a "start work" action.
 - invalid mixed selection (more than one selected in selector mode)
 - target directory does not exist
 - non-TTY invocation in selector mode
+
+## Non-interactive JSON contract
+
+- `--format json` enables machine-readable output.
+- In JSON mode, success and failure responses share envelope fields:
+  - `ok` (bool)
+  - `action` (`go`)
+  - `workspace_id`
+  - `result` (success only)
+  - `error.code` and `error.message` (failure only)
+- Failure keeps non-zero exit code (usage/internal/business failure mapping is preserved).
 
 ## Logical work-state behavior
 

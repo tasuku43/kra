@@ -61,11 +61,51 @@ type addRepoAppliedItem struct {
 
 func (c *CLI) runWSAddRepo(args []string) int {
 	idFromFlag := ""
+	outputFormat := "human"
+	forceApply := false
+	repoKeysFromFlag := make([]string, 0, 4)
+	branchFromFlag := ""
+	baseRefFromFlag := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
 			c.printWSAddRepoUsage(c.Out)
 			return exitOK
+		case "--format":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printWSAddRepoUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(args[1])
+			args = args[2:]
+		case "--repo":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--repo requires a value")
+				c.printWSAddRepoUsage(c.Err)
+				return exitUsage
+			}
+			repoKeysFromFlag = append(repoKeysFromFlag, strings.TrimSpace(args[1]))
+			args = args[2:]
+		case "--branch":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--branch requires a value")
+				c.printWSAddRepoUsage(c.Err)
+				return exitUsage
+			}
+			branchFromFlag = strings.TrimSpace(args[1])
+			args = args[2:]
+		case "--base-ref":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--base-ref requires a value")
+				c.printWSAddRepoUsage(c.Err)
+				return exitUsage
+			}
+			baseRefFromFlag = strings.TrimSpace(args[1])
+			args = args[2:]
+		case "--yes":
+			forceApply = true
+			args = args[1:]
 		case "--id":
 			if len(args) < 2 {
 				fmt.Fprintln(c.Err, "--id requires a value")
@@ -80,10 +120,42 @@ func (c *CLI) runWSAddRepo(args []string) int {
 				args = args[1:]
 				continue
 			}
+			if strings.HasPrefix(args[0], "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(args[0], "--format="))
+				args = args[1:]
+				continue
+			}
+			if strings.HasPrefix(args[0], "--repo=") {
+				repoKeysFromFlag = append(repoKeysFromFlag, strings.TrimSpace(strings.TrimPrefix(args[0], "--repo=")))
+				args = args[1:]
+				continue
+			}
+			if strings.HasPrefix(args[0], "--branch=") {
+				branchFromFlag = strings.TrimSpace(strings.TrimPrefix(args[0], "--branch="))
+				args = args[1:]
+				continue
+			}
+			if strings.HasPrefix(args[0], "--base-ref=") {
+				baseRefFromFlag = strings.TrimSpace(strings.TrimPrefix(args[0], "--base-ref="))
+				args = args[1:]
+				continue
+			}
 			fmt.Fprintf(c.Err, "unknown flag for ws add-repo: %q\n", args[0])
 			c.printWSAddRepoUsage(c.Err)
 			return exitUsage
 		}
+	}
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printWSAddRepoUsage(c.Err)
+		return exitUsage
+	}
+	if outputFormat == "human" && (len(repoKeysFromFlag) > 0 || branchFromFlag != "" || baseRefFromFlag != "" || forceApply) {
+		fmt.Fprintln(c.Err, "--repo/--branch/--base-ref/--yes are only supported with --format json")
+		c.printWSAddRepoUsage(c.Err)
+		return exitUsage
 	}
 	if len(args) > 1 {
 		fmt.Fprintf(c.Err, "unexpected args for ws add-repo: %q\n", strings.Join(args[1:], " "))
@@ -147,9 +219,23 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	}
 	workspaceID, resolveErr = resolveWorkspaceIDForAddRepo(root, wd, resolveArgs)
 	if resolveErr != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "add-repo",
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: resolveErr.Error(),
+				},
+			})
+			return exitUsage
+		}
 		fmt.Fprintf(c.Err, "%v\n", resolveErr)
 		c.printWSAddRepoUsage(c.Err)
 		return exitUsage
+	}
+	if outputFormat == "json" {
+		return c.runWSAddRepoJSON(workspaceID, repoPoolPath, db, repoKeysFromFlag, baseRefFromFlag, branchFromFlag, forceApply)
 	}
 	c.debugf("run ws add-repo workspace=%s cwd=%s", workspaceID, wd)
 
@@ -301,6 +387,281 @@ func (c *CLI) runWSAddRepo(args []string) int {
 
 	printAddRepoResult(c.Out, applied, useColorOut)
 	c.debugf("ws add-repo completed workspace=%s added=%d", workspaceID, len(applied))
+	return exitOK
+}
+
+func (c *CLI) runWSAddRepoJSON(workspaceID string, repoPoolPath string, db *sql.DB, repoKeys []string, baseRefInput string, branchInput string, yes bool) int {
+	ctx := context.Background()
+	if len(repoKeys) == 0 {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "invalid_argument",
+				Message: "--repo is required in --format json mode",
+			},
+		})
+		return exitUsage
+	}
+	if !yes {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "invalid_argument",
+				Message: "--yes is required in --format json mode",
+			},
+		})
+		return exitUsage
+	}
+
+	if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID); err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("load workspace: %v", err),
+			},
+		})
+		return exitError
+	} else if !ok {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "workspace_not_found",
+				Message: fmt.Sprintf("workspace not found: %s", workspaceID),
+			},
+		})
+		return exitError
+	} else if status != "active" {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "conflict",
+				Message: fmt.Sprintf("workspace is not active (status=%s): %s", status, workspaceID),
+			},
+		})
+		return exitError
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("get working dir: %v", err),
+			},
+		})
+		return exitError
+	}
+	root, err := paths.ResolveExistingRoot(wd)
+	if err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("resolve GIONX_ROOT: %v", err),
+			},
+		})
+		return exitError
+	}
+
+	releaseLock, err := acquireWorkspaceAddRepoLock(root, workspaceID)
+	if err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "conflict",
+				Message: err.Error(),
+			},
+		})
+		return exitError
+	}
+	defer releaseLock()
+
+	candidates, err := listAddRepoPoolCandidates(ctx, db, repoPoolPath, workspaceID, time.Now(), c.debugf)
+	if err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("list repo pool candidates: %v", err),
+			},
+		})
+		return exitError
+	}
+	byRepoKey := make(map[string]addRepoPoolCandidate, len(candidates))
+	for _, cand := range candidates {
+		byRepoKey[cand.RepoKey] = cand
+	}
+	plan := make([]addRepoPlanItem, 0, len(repoKeys))
+	seen := map[string]bool{}
+	for _, repoKey := range repoKeys {
+		repoKey = strings.TrimSpace(repoKey)
+		if repoKey == "" || seen[repoKey] {
+			continue
+		}
+		seen[repoKey] = true
+		cand, ok := byRepoKey[repoKey]
+		if !ok {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "add-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: fmt.Sprintf("repo not available in pool for workspace: %s", repoKey),
+				},
+			})
+			return exitUsage
+		}
+		defaultBaseRef, err := detectDefaultBaseRefFromBare(ctx, cand.BarePath)
+		if err != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "add-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("detect default base_ref for %s: %v", cand.RepoKey, err),
+				},
+			})
+			return exitError
+		}
+		baseRefUsed, err := resolveBaseRefInput(baseRefInput, defaultBaseRef)
+		if err != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "add-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: fmt.Sprintf("invalid base_ref (must be origin/<branch>): %q", baseRefInput),
+				},
+			})
+			return exitUsage
+		}
+		branch := resolveBranchInput(branchInput, workspaceID)
+		if err := gitutil.CheckRefFormat(ctx, "refs/heads/"+branch); err != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "add-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: fmt.Sprintf("invalid branch name for %s: %v", cand.RepoKey, err),
+				},
+			})
+			return exitUsage
+		}
+		plan = append(plan, addRepoPlanItem{
+			Candidate:      cand,
+			BaseRefInput:   baseRefInput,
+			DefaultBaseRef: defaultBaseRef,
+			BaseRefUsed:    baseRefUsed,
+			Branch:         branch,
+		})
+	}
+
+	if err := preflightAddRepoPlan(ctx, db, root, workspaceID, plan); err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "conflict",
+				Message: fmt.Sprintf("preflight add-repo: %v", err),
+			},
+		})
+		return exitError
+	}
+	applied, err := applyAddRepoPlanAllOrNothing(ctx, db, workspaceID, plan, c.debugf)
+	if err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("apply add-repo: %v", err),
+			},
+		})
+		return exitError
+	}
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	nowUnix := time.Now().Unix()
+	if err := upsertWorkspaceMetaReposRestore(wsPath, buildWorkspaceMetaReposRestore(applied), nowUnix); err != nil {
+		rollbackAddRepoApplied(ctx, db, workspaceID, applied, c.debugf)
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("update %s: %v", workspaceMetaFilename, err),
+			},
+		})
+		return exitError
+	}
+	now := time.Now()
+	day := localDayKey(now)
+	nowUnix = now.Unix()
+	for _, it := range applied {
+		if err := statestore.TouchRepoUpdatedAt(ctx, db, it.Plan.Candidate.RepoUID, nowUnix); err != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "add-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("touch repo updated_at: %v", err),
+				},
+			})
+			return exitError
+		}
+		if err := statestore.IncrementRepoUsageDaily(ctx, db, it.Plan.Candidate.RepoUID, day, nowUnix); err != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "add-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("update repo usage: %v", err),
+				},
+			})
+			return exitError
+		}
+	}
+	repos := make([]string, 0, len(applied))
+	for _, it := range applied {
+		repos = append(repos, it.Plan.Candidate.RepoKey)
+	}
+	_ = writeCLIJSON(c.Out, cliJSONResponse{
+		OK:          true,
+		Action:      "add-repo",
+		WorkspaceID: workspaceID,
+		Result: map[string]any{
+			"added": len(applied),
+			"repos": repos,
+		},
+	})
 	return exitOK
 }
 

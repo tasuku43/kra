@@ -116,11 +116,11 @@ func TestCLI_WS_SelectFlagRejected(t *testing.T) {
 		name string
 		args []string
 	}{
-		{name: "go", args: []string{"ws", "go", "--select", "WS-1"}},
-		{name: "close", args: []string{"ws", "close", "--select", "WS-1"}},
-		{name: "add-repo", args: []string{"ws", "add-repo", "--select", "WS-1"}},
-		{name: "reopen", args: []string{"ws", "reopen", "--select", "WS-1"}},
-		{name: "purge", args: []string{"ws", "purge", "--select", "WS-1"}},
+		{name: "go", args: []string{"ws", "--act", "go", "--select", "WS-1"}},
+		{name: "close", args: []string{"ws", "--act", "close", "--select", "WS-1"}},
+		{name: "add-repo", args: []string{"ws", "--act", "add-repo", "--select", "WS-1"}},
+		{name: "reopen", args: []string{"ws", "--act", "reopen", "--select", "WS-1"}},
+		{name: "purge", args: []string{"ws", "--act", "purge", "--select", "WS-1"}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -663,7 +663,7 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 		_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 		c.In = strings.NewReader(addRepoSelectionInput("", "MVP-020/test"))
 
-		code := c.Run([]string{"ws", "add-repo", "MVP-020"})
+		code := c.Run([]string{"ws", "--act", "add-repo", "MVP-020"})
 		if code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}

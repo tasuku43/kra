@@ -98,16 +98,9 @@ func (c *CLI) runWS(args []string) int {
 		return c.runWSList(args[1:])
 	case "select":
 		return c.runWSSelect(args[1:])
-	case "add-repo":
-		return c.runWSAddRepo(args[1:])
-	case "go":
-		return c.runWSGo(args[1:])
-	case "close":
-		return c.runWSClose(args[1:])
-	case "reopen":
-		return c.runWSReopen(args[1:])
-	case "purge":
-		return c.runWSPurge(args[1:])
+	case "add-repo", "go", "close", "reopen", "purge":
+		c.printWSUsage(c.Err)
+		return exitUsage
 	default:
 		fmt.Fprintf(c.Err, "unknown command: %q\n", strings.Join(append([]string{"ws"}, args[0]), " "))
 		c.printWSUsage(c.Err)

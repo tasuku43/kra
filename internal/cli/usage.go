@@ -73,7 +73,7 @@ Initialize GIONX_ROOT (current directory by default, or $GIONX_ROOT if set).
 
 func (c *CLI) printWSUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws [--archived] [--id <id>] [--act <go|close|add-repo|reopen|purge>]
+  gionx ws [--id <id>] [--act <action>] [action-args...]
   gionx ws select [--archived] [--act <go|close|add-repo|reopen|purge>]
   gionx ws <subcommand> [args]
 
@@ -82,20 +82,19 @@ Subcommands:
   select            Select workspace (then action or fixed action)
   ls                Alias of list
   list              List workspaces
-  add-repo          Add repo to workspace
-  go                Navigate to workspace path
-  close             Close workspace
-  reopen            Reopen workspace
-  purge             Purge workspace
   help              Show this help
 
 Run:
   gionx ws <subcommand> --help
 
 Notes:
-- gionx ws opens action launcher for explicit target (--id) or current workspace context.
-- gionx ws does not fall back to workspace list when unresolved.
+- edit actions for existing workspaces are routed by --act.
+- active actions: go, add-repo, close
+- archived actions: reopen, purge (applies archived scope automatically)
+- gionx ws opens action launcher when --act is omitted.
+- gionx ws resolves workspace from --id or current workspace context.
 - gionx ws select always opens workspace selection first.
+- invalid --act/scope combinations fail with usage.
 `)
 }
 
@@ -185,7 +184,8 @@ Options:
 
 func (c *CLI) printWSAddRepoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws add-repo [--id <workspace-id>] [<workspace-id>]
+  gionx ws --act add-repo [--id <workspace-id>] [<workspace-id>] [--format human|json]
+  gionx ws --act add-repo --format json --id <workspace-id> --repo <repo-key> [--repo <repo-key> ...] [--branch <name>] [--base-ref <origin/branch>] [--yes]
 
 Add repositories from the repo pool to a workspace.
 
@@ -202,7 +202,7 @@ Behavior:
 
 func (c *CLI) printWSGoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws go [--archived] [--id <id>] [--ui] [<id>]
+  gionx ws --act go [--archived] [--id <id>] [--ui] [--format human|json] [<id>]
 
 Resolve a workspace directory target:
 - active target: workspaces/<id>/
@@ -217,7 +217,7 @@ Options:
 
 func (c *CLI) printWSCloseUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws close [--id <id>] [<id>]
+  gionx ws --act close [--id <id>] [--force] [--format human|json] [<id>]
 
 Close (archive) a workspace:
 - inspect repo risk (live) and prompt if not clean
@@ -231,7 +231,7 @@ If ID is omitted, current directory must resolve to an active workspace.
 
 func (c *CLI) printWSReopenUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws reopen <id>
+  gionx ws --act reopen <id>
 
 Reopen an archived workspace:
 - move archive/<id>/ to workspaces/<id>/ atomically
@@ -244,7 +244,7 @@ Use gionx ws select --archived for interactive selection.
 
 func (c *CLI) printWSPurgeUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws purge [--no-prompt --force] <id>
+  gionx ws --act purge [--no-prompt --force] <id>
 
 Purge (permanently delete) a workspace:
 - always asks confirmation in interactive mode

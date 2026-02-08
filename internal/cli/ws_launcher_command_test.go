@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -42,12 +43,21 @@ func TestCLI_WS_Launcher_WithIDAndFixedAction(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
+	actionFile := filepath.Join(t.TempDir(), "action.sh")
+	t.Setenv(shellActionFileEnv, actionFile)
 	code := c.Run([]string{"ws", "--id", "WS1", "--act", "go"})
 	if code != exitOK {
 		t.Fatalf("ws --id --act go exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
+	if out.String() != "" {
+		t.Fatalf("stdout should be empty for ws --act go default mode: %q", out.String())
+	}
+	action, readErr := os.ReadFile(actionFile)
+	if readErr != nil {
+		t.Fatalf("ReadFile(action) error: %v", readErr)
+	}
 	want := filepath.Join(env.Root, "workspaces", "WS1")
-	if !strings.Contains(out.String(), "Result:") || !strings.Contains(out.String(), "Destination: "+want) {
-		t.Fatalf("stdout missing destination result: %q", out.String())
+	if !strings.Contains(string(action), "cd ") || !strings.Contains(string(action), want) {
+		t.Fatalf("action file missing destination: %q", string(action))
 	}
 }
