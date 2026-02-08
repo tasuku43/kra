@@ -537,7 +537,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-019, UX-CORE-002, ARCH-001
   - Serial: yes (foundation)
 
-- [ ] UX-WS-021: `ws` unified launcher flow (single-select)
+- [x] UX-WS-021: `ws` unified launcher flow (single-select)
   - What: implement human launcher with single-select workspace resolution and action selection.
     For operation commands, add shared `--select` option to select workspace first, then run command.
   - Specs:
@@ -548,7 +548,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-020
   - Serial: yes
 
-- [ ] UX-WS-022: Context-aware `ws` launcher behavior
+- [x] UX-WS-022: Context-aware `ws` launcher behavior
   - What: make `gionx ws` context-aware:
     outside workspace -> select workspace first;
     inside workspace -> skip workspace selection and open action menu for current workspace.
@@ -560,7 +560,7 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-021
   - Serial: yes
 
-- [ ] UX-WS-023: In-workspace action menu policy (`add-repo` first, then `close`, no `go`)
+- [x] UX-WS-023: In-workspace action menu policy (`add-repo` first, then `close`, no `go`)
   - What: when current workspace is auto-selected, present action choices in fixed order:
     `add-repo` -> `close`; exclude `go`.
   - Specs:
@@ -598,9 +598,24 @@ It does not replace per-item dependencies.
   - Depends: UX-WS-020
   - Parallel: yes
 
+- [ ] UX-WS-027: `ws list` as the only interactive selection entrypoint
+  - What: consolidate interactive selection to `ws list` (workspace -> action), remove `ws` fallback behavior,
+    and deprecate operation-level `--select` flags in favor of explicit `<id>` commands for non-interactive paths.
+  - Specs:
+    - `docs/spec/commands/ws/list.md`
+    - `docs/spec/commands/ws/select.md`
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/close.md`
+    - `docs/spec/commands/ws/add-repo.md`
+    - `docs/spec/commands/ws/reopen.md`
+    - `docs/spec/commands/ws/purge.md`
+  - Depends: UX-WS-022, UX-WS-023, UX-WS-026
+  - Serial: yes
+
 ## Architecture Refactor (full layering migration)
 
-- [ ] ARCH-001: Layered architecture spec and migration policy
+- [x] ARCH-001: Layered architecture spec and migration policy
   - What: define target package structure (`cli/app/domain/infra/ui`), dependency direction, and migration rules.
   - Specs:
     - `docs/spec/concepts/architecture.md`
@@ -608,14 +623,14 @@ It does not replace per-item dependencies.
   - Depends: -
   - Serial: yes
 
-- [ ] ARCH-002: Package skeleton + dependency guard tests
+- [x] ARCH-002: Package skeleton + dependency guard tests
   - What: add package skeleton and guard tests preventing new direct infra usage from `cli`.
   - Specs:
     - `docs/spec/concepts/architecture.md`
   - Depends: ARCH-001
   - Serial: yes
 
-- [ ] ARCH-003: WS use case interfaces in `internal/app/ws`
+- [x] ARCH-003: WS use case interfaces in `internal/app/ws`
   - What: define request/response contracts for launcher and operation commands (`go/close/add-repo/reopen/purge`).
   - Specs:
     - `docs/spec/concepts/architecture.md`
@@ -623,7 +638,7 @@ It does not replace per-item dependencies.
   - Depends: ARCH-002
   - Serial: yes
 
-- [ ] ARCH-004: Migrate `ws` launcher + `ws go` to app layer
+- [x] ARCH-004: Migrate `ws` launcher + `ws go` to app layer
   - What: route launcher and go through shared app use case path.
   - Specs:
     - `docs/spec/concepts/architecture.md`
@@ -632,7 +647,7 @@ It does not replace per-item dependencies.
   - Depends: ARCH-003
   - Serial: yes
 
-- [ ] ARCH-005: Migrate `ws close/add-repo/reopen/purge` to app layer
+- [x] ARCH-005: Migrate `ws close/add-repo/reopen/purge` to app layer
   - What: route all WS operations through app layer, keeping existing behavior and safety gates.
   - Specs:
     - `docs/spec/concepts/architecture.md`
@@ -643,7 +658,7 @@ It does not replace per-item dependencies.
   - Depends: ARCH-004
   - Serial: yes
 
-- [ ] ARCH-006: Migrate `init/context` to app layer
+- [x] ARCH-006: Migrate `init/context` to app layer
   - What: move root/context orchestration out of cli handlers into app use cases.
   - Specs:
     - `docs/spec/concepts/architecture.md`
@@ -652,7 +667,7 @@ It does not replace per-item dependencies.
   - Depends: ARCH-002
   - Parallel: yes
 
-- [ ] ARCH-007: Migrate `repo` command family to app layer
+- [x] ARCH-007: Migrate `repo` command family to app layer
   - What: move repo add/discover/remove/gc orchestration into app use cases.
   - Specs:
     - `docs/spec/concepts/architecture.md`
@@ -663,7 +678,7 @@ It does not replace per-item dependencies.
   - Depends: ARCH-002
   - Parallel: yes
 
-- [ ] ARCH-008: Migrate shell integration to app-aware action protocol adapter
+- [x] ARCH-008: Migrate shell integration to app-aware action protocol adapter
   - What: isolate shell action protocol interaction as infra/ui adapter with app-level action emission.
   - Specs:
     - `docs/spec/concepts/architecture.md`
