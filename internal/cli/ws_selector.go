@@ -393,12 +393,12 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 		idText := colorizeRiskID(idPlain, it.Risk, useColor)
 		prefix := idText + "  "
 		if !single {
-			mark := " "
+			mark := "○"
 			if selected[sourceIdx] {
-				mark = "x"
+				mark = "●"
 			}
-			prefixPlain = fmt.Sprintf("[%s] %s  ", mark, idPlain)
-			prefix = fmt.Sprintf("[%s] %s  ", mark, idText)
+			prefixPlain = fmt.Sprintf("%s %s  ", mark, idPlain)
+			prefix = fmt.Sprintf("%s %s  ", mark, idText)
 		}
 		bodyRaw := prefix
 		if showDesc {

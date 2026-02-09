@@ -321,7 +321,7 @@ func TestRenderSelectorFooterLine_DropsHintsDeterministically(t *testing.T) {
 	}
 }
 
-func TestRenderWorkspaceSelectorLinesWithOptions_SingleModeHidesCheckboxAndSelectedSummary(t *testing.T) {
+func TestRenderWorkspaceSelectorLinesWithOptions_SingleModeHidesSelectionMarkerAndSelectedSummary(t *testing.T) {
 	lines := renderWorkspaceSelectorLinesWithOptions(
 		"active",
 		"",
@@ -341,14 +341,43 @@ func TestRenderWorkspaceSelectorLinesWithOptions_SingleModeHidesCheckboxAndSelec
 		120,
 	)
 	joined := strings.Join(lines, "\n")
-	if strings.Contains(joined, "[ ]") || strings.Contains(joined, "[x]") {
-		t.Fatalf("single mode should hide checkbox markers: %q", joined)
+	if strings.Contains(joined, "○ ") || strings.Contains(joined, "● ") {
+		t.Fatalf("single mode should hide selection markers: %q", joined)
 	}
 	if strings.Contains(joined, "selected:") {
 		t.Fatalf("single mode footer should not show selected summary: %q", joined)
 	}
 	if !strings.Contains(joined, "enter go") {
 		t.Fatalf("single mode footer should keep enter action hint: %q", joined)
+	}
+}
+
+func TestRenderWorkspaceSelectorLinesWithOptions_MultiModeUsesCircleSelectionMarker(t *testing.T) {
+	lines := renderWorkspaceSelectorLinesWithOptions(
+		"active",
+		"",
+		"add",
+		[]workspaceSelectorCandidate{
+			{ID: "WS1", Title: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
+			{ID: "WS2", Title: "beta", Risk: workspacerisk.WorkspaceRiskClean},
+		},
+		map[int]bool{1: true},
+		0,
+		"",
+		selectorMessageLevelMuted,
+		"",
+		true,
+		true,
+		false,
+		false,
+		120,
+	)
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "○ WS1") {
+		t.Fatalf("multi mode should render unselected marker, got %q", joined)
+	}
+	if !strings.Contains(joined, "● WS2") {
+		t.Fatalf("multi mode should render selected marker, got %q", joined)
 	}
 }
 
