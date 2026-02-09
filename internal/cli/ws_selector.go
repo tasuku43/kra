@@ -371,6 +371,7 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 	maxCols := termWidth - 1
 	footerRaw := renderSelectorFooterLine(selectedCount, len(candidates), action, single, maxCols)
 	footer := styleMuted(footerRaw, useColor)
+	compactTitle := !showDesc
 
 	bodyLines := make([]string, 0, len(candidates))
 	if totalVisible == 0 {
@@ -391,6 +392,10 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 		prefixPlain := idPlain + "  "
 
 		idText := colorizeRiskID(idPlain, it.Risk, useColor)
+		if compactTitle {
+			// Repo selection keeps IDs visually stable: plain/bold without risk hue.
+			idText = styleBold(idPlain, useColor)
+		}
 		prefix := idText + "  "
 		if !single {
 			mark := "○"
@@ -398,7 +403,11 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 				mark = "●"
 			}
 			prefixPlain = fmt.Sprintf("%s %s  ", mark, idPlain)
-			prefix = fmt.Sprintf("%s %s  ", mark, idText)
+			markerText := mark
+			if useColor && selected[sourceIdx] {
+				markerText = styleSuccess(mark, true)
+			}
+			prefix = fmt.Sprintf("%s %s  ", markerText, idText)
 		}
 		bodyRaw := prefix
 		if showDesc {
@@ -438,7 +447,9 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 
 	lines := make([]string, 0, len(candidates)+7)
 	lines = append(lines, titleLine)
-	lines = append(lines, "")
+	if !compactTitle {
+		lines = append(lines, "")
+	}
 	lines = append(lines, bodyLines...)
 	lines = append(lines, "")
 	availableFilterCols := maxCols - displayWidth(uiIndent+"filter: ") - 1

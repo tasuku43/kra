@@ -381,6 +381,59 @@ func TestRenderWorkspaceSelectorLinesWithOptions_MultiModeUsesCircleSelectionMar
 	}
 }
 
+func TestRenderWorkspaceSelectorLinesWithOptions_RepoModeCompactsHeaderSpacing(t *testing.T) {
+	lines := renderWorkspaceSelectorLinesWithOptions(
+		"active",
+		"Repos(pool):",
+		"add",
+		[]workspaceSelectorCandidate{
+			{ID: "example-org/helmfiles", Risk: workspacerisk.WorkspaceRiskUnknown},
+		},
+		map[int]bool{},
+		0,
+		"",
+		selectorMessageLevelMuted,
+		"",
+		false,
+		true,
+		false,
+		false,
+		120,
+	)
+	joined := strings.Join(lines, "\n")
+	if strings.Contains(joined, "Repos(pool):\n\n") {
+		t.Fatalf("repo mode should not keep blank line after title: %q", joined)
+	}
+	if !strings.Contains(joined, "Repos(pool):\n> ○ ") {
+		t.Fatalf("repo mode should render row right after title: %q", joined)
+	}
+}
+
+func TestRenderWorkspaceSelectorLinesWithOptions_RepoModeSelectedMarkerUsesSuccessColor(t *testing.T) {
+	lines := renderWorkspaceSelectorLinesWithOptions(
+		"active",
+		"Repos(pool):",
+		"add",
+		[]workspaceSelectorCandidate{
+			{ID: "example-org/helmfiles", Risk: workspacerisk.WorkspaceRiskUnknown},
+		},
+		map[int]bool{0: true},
+		0,
+		"",
+		selectorMessageLevelMuted,
+		"",
+		false,
+		true,
+		false,
+		true,
+		120,
+	)
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, ansiGreen+"●"+ansiReset) {
+		t.Fatalf("repo mode selected marker should use success token, got %q", joined)
+	}
+}
+
 func TestWorkspaceSelectorModel_SingleModeEnterSelectsCurrent(t *testing.T) {
 	m := newWorkspaceSelectorModelWithOptionsAndMode(
 		[]workspaceSelectorCandidate{
