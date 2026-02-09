@@ -8,18 +8,23 @@
 
 When starting a new session, do this first:
 
-- Read `docs/START_HERE.md` (session checklist + doc map)
-- Then follow the critical path in `docs/BACKLOG.md`
+- Read `docs/backlog/README.md`
 - For each backlog item, open the linked spec files and implement spec-first
 
 ## Autonomous Execution Policy
 
-When working from `docs/BACKLOG.md`:
+When working from `docs/backlog/README.md`:
 
 - Once you start a backlog item, continue implementing until it satisfies the project's "done" definition
   (code + tests + spec `status: implemented`). Do not pause mid-item even if it takes 10-20 minutes.
 - Only stop if you hit a spec ambiguity that must be resolved via spec changes before implementation.
   Prefer detecting and resolving ambiguity before you touch code (spec-first).
+
+## Backlog Management
+
+- Backlog is managed under `docs/backlog/` by epic/prefix (`docs/backlog/*.md`).
+- Always start from `docs/backlog/README.md` (index + file status).
+- Keep `docs/backlog/README.md` `File Status` in sync when ticket checkboxes change in any backlog file.
 
 ## Git Commit Scope Policy (no unrelated changes)
 
@@ -99,7 +104,7 @@ At the end of a work session (or after completing a backlog item), always output
   not know what other sessions have completed.
 
 How to decide "next":
-- Treat `docs/BACKLOG.md` as the source of truth for items + dependencies.
+- Treat `docs/backlog/README.md` and linked `docs/backlog/*.md` files as the source of truth for items + dependencies.
 - If you are not sure whether an item is already complete, check whether its linked spec frontmatter is
   `status: implemented` and whether the code/tests exist. If still uncertain, phrase the recommendation
   conditionally.
