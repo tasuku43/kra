@@ -3,6 +3,7 @@ package cli
 import (
 	"bufio"
 	"context"
+	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -127,48 +128,36 @@ func (c *CLI) runWSCreate(args []string) int {
 		return exitUsage
 	}
 
-	dbPath, err := paths.StateDBPathForRoot(root)
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve state db path: %v\n", err)
-		return exitError
-	}
-	repoPoolPath, err := paths.DefaultRepoPoolPath()
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve repo pool path: %v\n", err)
-		return exitError
-	}
-
-	db, err := statestore.Open(ctx, dbPath)
-	if err != nil {
-		fmt.Fprintf(c.Err, "open state store: %v\n", err)
-		return exitError
-	}
-	defer func() { _ = db.Close() }()
-
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		fmt.Fprintf(c.Err, "initialize settings: %v\n", err)
-		return exitError
-	}
 	if err := c.touchStateRegistry(root); err != nil {
 		fmt.Fprintf(c.Err, "update root registry: %v\n", err)
 		return exitError
 	}
 
-	if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, id); err != nil {
-		fmt.Fprintf(c.Err, "load workspace: %v\n", err)
-		return exitError
-	} else if ok {
-		switch status {
-		case "active":
-			fmt.Fprintf(c.Err, "workspace already exists and is active: %s\n", id)
-			return exitError
-		case "archived":
-			fmt.Fprintf(c.Err, "workspace already exists and is archived: %s\nrun: gionx ws --act reopen %s\n", id, id)
-			return exitError
-		default:
-			fmt.Fprintf(c.Err, "workspace already exists with unknown status %q: %s\n", status, id)
-			return exitError
+	indexAvailable := false
+	var dbPath string
+	var repoPoolPath string
+	var dbErr error
+	var db *sql.DB
+	dbPath, dbErr = paths.StateDBPathForRoot(root)
+	if dbErr == nil {
+		repoPoolPath, dbErr = paths.DefaultRepoPoolPath()
+	}
+	if dbErr == nil {
+		openedDB, openErr := statestore.Open(ctx, dbPath)
+		if openErr == nil {
+			if ensureErr := statestore.EnsureSettings(ctx, openedDB, root, repoPoolPath); ensureErr == nil {
+				indexAvailable = true
+				db = openedDB
+				defer func() { _ = db.Close() }()
+			} else {
+				c.debugf("ws create: skip state index (initialize settings failed): %v", ensureErr)
+				_ = openedDB.Close()
+			}
+		} else {
+			c.debugf("ws create: skip state index (open failed): %v", openErr)
 		}
+	} else {
+		c.debugf("ws create: skip state index (resolve paths failed): %v", dbErr)
 	}
 
 	if jiraTicketURL == "" && !noPrompt {
@@ -181,11 +170,19 @@ func (c *CLI) runWSCreate(args []string) int {
 	}
 
 	wsPath := filepath.Join(root, "workspaces", id)
+	archivedPath := filepath.Join(root, "archive", id)
 	if _, err := os.Stat(wsPath); err == nil {
 		fmt.Fprintf(c.Err, "workspace directory already exists: %s\n", wsPath)
 		return exitError
 	} else if err != nil && !os.IsNotExist(err) {
 		fmt.Fprintf(c.Err, "stat workspace dir: %v\n", err)
+		return exitError
+	}
+	if _, err := os.Stat(archivedPath); err == nil {
+		fmt.Fprintf(c.Err, "workspace already exists and is archived: %s\nrun: gionx ws --act reopen %s\n", id, id)
+		return exitError
+	} else if err != nil && !os.IsNotExist(err) {
+		fmt.Fprintf(c.Err, "stat archived workspace dir: %v\n", err)
 		return exitError
 	}
 
@@ -229,29 +226,30 @@ func (c *CLI) runWSCreate(args []string) int {
 		return exitError
 	}
 
-	if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{
-		ID:        id,
-		Title:     title,
-		SourceURL: sourceURL,
-		Now:       now,
-	}); err != nil {
-		cleanup()
-		var existsErr *statestore.WorkspaceAlreadyExistsError
-		if errors.As(err, &existsErr) {
-			switch existsErr.Status {
-			case "active":
-				fmt.Fprintf(c.Err, "workspace already exists and is active: %s\n", id)
-				return exitError
-			case "archived":
-				fmt.Fprintf(c.Err, "workspace already exists and is archived: %s\nrun: gionx ws --act reopen %s\n", id, id)
-				return exitError
-			default:
-				fmt.Fprintf(c.Err, "workspace already exists with unknown status %q: %s\n", existsErr.Status, id)
-				return exitError
+	if indexAvailable {
+		if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{
+			ID:        id,
+			Title:     title,
+			SourceURL: sourceURL,
+			Now:       now,
+		}); err != nil {
+			var existsErr *statestore.WorkspaceAlreadyExistsError
+			if errors.As(err, &existsErr) {
+				cleanup()
+				switch existsErr.Status {
+				case "active":
+					fmt.Fprintf(c.Err, "workspace already exists and is active: %s\n", id)
+					return exitError
+				case "archived":
+					fmt.Fprintf(c.Err, "workspace already exists and is archived: %s\nrun: gionx ws --act reopen %s\n", id, id)
+					return exitError
+				default:
+					fmt.Fprintf(c.Err, "workspace already exists with unknown status %q: %s\n", existsErr.Status, id)
+					return exitError
+				}
 			}
+			c.debugf("ws create: state index update skipped: %v", err)
 		}
-		fmt.Fprintf(c.Err, "create workspace in state store: %v\n", err)
-		return exitError
 	}
 
 	useColorOut := writerSupportsColor(c.Out)

@@ -123,6 +123,31 @@ LIMIT 1
 	}
 }
 
+func TestCLI_WS_Create_StateDBCorrupted_StillCreatesWorkspaceFromFS(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	dbPath := env.StateDBPath()
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		t.Fatalf("mkdir db dir: %v", err)
+	}
+	if err := os.WriteFile(dbPath, []byte("corrupted"), 0o644); err != nil {
+		t.Fatalf("write corrupted db: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"ws", "create", "--no-prompt", "MVP-020"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, errBuf.String())
+	}
+	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "MVP-020", workspaceMetaFilename)); err != nil {
+		t.Fatalf("workspace meta not created: %v", err)
+	}
+}
+
 func TestCLI_Init_UsesDifferentStateDBPerRoot(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 	setGitIdentity(t)
