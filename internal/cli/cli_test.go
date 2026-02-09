@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -10,8 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/tasuku43/gionx/internal/paths"
-	"github.com/tasuku43/gionx/internal/statestore"
 	"github.com/tasuku43/gionx/internal/testutil"
 )
 
@@ -409,52 +406,6 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 		t.Fatalf("workspace created/updated should match on create: created_at=%d updated_at=%d", meta.Workspace.CreatedAt, meta.Workspace.UpdatedAt)
 	}
 
-	ctx := context.Background()
-	dbPath, pathErr := paths.StateDBPathForRoot(root)
-	if pathErr != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
-	}
-	db, openErr := statestore.Open(ctx, dbPath)
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	var status string
-	var desc string
-	var gen int
-	qErr := db.QueryRowContext(ctx, "SELECT status, title, generation FROM workspaces WHERE id = ?", "MVP-020").Scan(&status, &desc, &gen)
-	if qErr != nil {
-		t.Fatalf("query workspaces: %v", qErr)
-	}
-	if status != "active" {
-		t.Fatalf("workspaces.status = %q, want %q", status, "active")
-	}
-	if desc != "hello world" {
-		t.Fatalf("workspaces.title = %q, want %q", desc, "hello world")
-	}
-	if gen != 1 {
-		t.Fatalf("workspaces.generation = %d, want %d", gen, 1)
-	}
-
-	var eventType string
-	var eventGen int
-	evErr := db.QueryRowContext(ctx, `
-SELECT event_type, workspace_generation
-FROM workspace_events
-WHERE workspace_id = ?
-ORDER BY id DESC
-LIMIT 1
-`, "MVP-020").Scan(&eventType, &eventGen)
-	if evErr != nil {
-		t.Fatalf("query workspace_events: %v", evErr)
-	}
-	if eventType != "created" {
-		t.Fatalf("workspace_events.event_type = %q, want %q", eventType, "created")
-	}
-	if eventGen != 1 {
-		t.Fatalf("workspace_events.workspace_generation = %d, want %d", eventGen, 1)
-	}
 }
 
 func TestCLI_WS_Create_ArchivedCollision_GuidesReopen(t *testing.T) {
@@ -473,30 +424,8 @@ func TestCLI_WS_Create_ArchivedCollision_GuidesReopen(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
 
-	ctx := context.Background()
-	dbPath, pathErr := paths.StateDBPathForRoot(root)
-	if pathErr != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
-	}
-	db, openErr := statestore.Open(ctx, dbPath)
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	repoPoolPath := filepath.Join(cacheHome, "gionx", "repo-pool")
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		t.Fatalf("EnsureSettings error: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-INSERT INTO workspaces (
-  id, generation, status, title, source_url,
-  created_at, updated_at,
-  archived_commit_sha, reopened_commit_sha
-)
-VALUES ('MVP-020', 1, 'archived', '', '', 1, 1, NULL, NULL)
-`); err != nil {
-		t.Fatalf("insert archived workspace: %v", err)
+	if err := os.MkdirAll(filepath.Join(root, "archive", "MVP-020"), 0o755); err != nil {
+		t.Fatalf("create archived workspace dir: %v", err)
 	}
 
 	var out bytes.Buffer
@@ -529,30 +458,8 @@ func TestCLI_WS_Create_ActiveCollision_Errors(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
 
-	ctx := context.Background()
-	dbPath, pathErr := paths.StateDBPathForRoot(root)
-	if pathErr != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
-	}
-	db, openErr := statestore.Open(ctx, dbPath)
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	repoPoolPath := filepath.Join(cacheHome, "gionx", "repo-pool")
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		t.Fatalf("EnsureSettings error: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-INSERT INTO workspaces (
-  id, generation, status, title, source_url,
-  created_at, updated_at,
-  archived_commit_sha, reopened_commit_sha
-)
-VALUES ('MVP-020', 1, 'active', '', '', 1, 1, NULL, NULL)
-`); err != nil {
-		t.Fatalf("insert active workspace: %v", err)
+	if err := os.MkdirAll(filepath.Join(root, "workspaces", "MVP-020"), 0o755); err != nil {
+		t.Fatalf("create active workspace dir: %v", err)
 	}
 
 	var out bytes.Buffer
@@ -648,49 +555,6 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 		if _, statErr := os.Stat(filepath.Join(worktreePath, ".git")); statErr != nil {
 			t.Fatalf("worktree .git missing: %v", statErr)
 		}
-	}
-
-	ctx := context.Background()
-	dbPath, pathErr := paths.StateDBPathForRoot(root)
-	if pathErr != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
-	}
-	db, openErr := statestore.Open(ctx, dbPath)
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	var repoKey string
-	var remoteURL string
-	if err := db.QueryRowContext(ctx, "SELECT repo_key, remote_url FROM repos WHERE repo_uid = ?", "github.com/tasuku43/sample").Scan(&repoKey, &remoteURL); err != nil {
-		t.Fatalf("query repos: %v", err)
-	}
-	if repoKey != "tasuku43/sample" {
-		t.Fatalf("repos.repo_key = %q, want %q", repoKey, "tasuku43/sample")
-	}
-	if remoteURL != repoSpec {
-		t.Fatalf("repos.remote_url = %q, want %q", remoteURL, repoSpec)
-	}
-
-	var alias string
-	var branch string
-	var baseRef string
-	if err := db.QueryRowContext(ctx, `
-SELECT alias, branch, base_ref
-FROM workspace_repos
-WHERE workspace_id = ? AND repo_uid = ?
-`, "MVP-020", "github.com/tasuku43/sample").Scan(&alias, &branch, &baseRef); err != nil {
-		t.Fatalf("query workspace_repos: %v", err)
-	}
-	if alias != "sample" {
-		t.Fatalf("workspace_repos.alias = %q, want %q", alias, "sample")
-	}
-	if branch != "MVP-020/test" {
-		t.Fatalf("workspace_repos.branch = %q, want %q", branch, "MVP-020/test")
-	}
-	if baseRef != "" {
-		t.Fatalf("workspace_repos.base_ref = %q, want empty", baseRef)
 	}
 
 	metaBytes, readErr := os.ReadFile(filepath.Join(root, "workspaces", "MVP-020", workspaceMetaFilename))

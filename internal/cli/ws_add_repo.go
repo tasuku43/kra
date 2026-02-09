@@ -188,25 +188,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		fmt.Fprintf(c.Err, "resolve repo pool path: %v\n", err)
 		return exitError
 	}
-
-	var db *sql.DB
-	if dbPath, err := paths.StateDBPathForRoot(root); err == nil {
-		if opened, err := statestore.Open(ctx, dbPath); err == nil {
-			if err := statestore.EnsureSettings(ctx, opened, root, repoPoolPath); err == nil {
-				db = opened
-				defer func(closedb *sql.DB) {
-					_ = closedb.Close()
-				}(opened)
-			} else {
-				_ = opened.Close()
-				c.debugf("ws add-repo: state store unavailable (initialize settings): %v", err)
-			}
-		} else {
-			c.debugf("ws add-repo: state store unavailable (open): %v", err)
-		}
-	} else {
-		c.debugf("ws add-repo: state store unavailable (resolve path): %v", err)
-	}
+	var db *sql.DB = nil
 
 	workspaceID := ""
 	var resolveErr error

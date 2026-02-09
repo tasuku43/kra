@@ -101,21 +101,11 @@ func (c *CLI) runWSClose(args []string) int {
 	c.debugf("run ws close args=%q", args)
 
 	ctx := context.Background()
-	var db *sql.DB
-	dbPath, dbPathErr := paths.StateDBPathForRoot(root)
 	repoPoolPath, poolErr := paths.DefaultRepoPoolPath()
-	if dbPathErr == nil && poolErr == nil {
-		if opened, err := statestore.Open(ctx, dbPath); err == nil {
-			if err := statestore.EnsureSettings(ctx, opened, root, repoPoolPath); err == nil {
-				db = opened
-				defer func() { _ = db.Close() }()
-			} else {
-				_ = opened.Close()
-				c.debugf("ws close: state store unavailable (ensure settings): %v", err)
-			}
-		} else {
-			c.debugf("ws close: state store unavailable (open): %v", err)
-		}
+	var db *sql.DB = nil
+	if poolErr != nil {
+		fmt.Fprintf(c.Err, "resolve repo pool path: %v\n", poolErr)
+		return exitError
 	}
 
 	if err := ensureRootGitWorktree(ctx, root); err != nil {

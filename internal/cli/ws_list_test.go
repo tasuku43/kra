@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/tasuku43/gion-core/workspacerisk"
 	"github.com/tasuku43/gionx/internal/paths"
-	"github.com/tasuku43/gionx/internal/statestore"
 	"github.com/tasuku43/gionx/internal/testutil"
 )
 
@@ -68,7 +66,7 @@ func TestCLI_WS_List_ImportsWorkspaceDirAndPrintsIt(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "list"})
+	code := c.Run([]string{"ws", "list", "--tree"})
 	if code != exitOK {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
@@ -76,24 +74,6 @@ func TestCLI_WS_List_ImportsWorkspaceDirAndPrintsIt(t *testing.T) {
 		t.Fatalf("stdout missing imported workspace: %q", out.String())
 	}
 
-	ctx := context.Background()
-	dbPath, pathErr := paths.StateDBPathForRoot(root)
-	if pathErr != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
-	}
-	db, openErr := statestore.Open(ctx, dbPath)
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	var count int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workspaces WHERE id = 'IMPORTED'").Scan(&count); err != nil {
-		t.Fatalf("query imported workspace: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("imported workspace row count = %d, want 1", count)
-	}
 }
 
 func TestCLI_WS_List_MarksMissingRepoWorktree(t *testing.T) {
@@ -107,73 +87,38 @@ func TestCLI_WS_List_MarksMissingRepoWorktree(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
 		t.Fatalf("create archive/: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "workspaces", "WS1"), 0o755); err != nil {
+	wsPath := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
 		t.Fatalf("create ws dir: %v", err)
+	}
+	meta := newWorkspaceMetaFileForCreate("WS1", "", "", 123)
+	meta.ReposRestore = []workspaceMetaRepoRestore{{
+		RepoUID:   "github.com/o/r",
+		RepoKey:   "o/r",
+		RemoteURL: "https://example.com/o/r.git",
+		Alias:     "r",
+		Branch:    "main",
+		BaseRef:   "origin/main",
+	}}
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
 	}
 
 	t.Setenv("GIONX_ROOT", root)
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
 
-	ctx := context.Background()
-	dbPath, pathErr := paths.StateDBPathForRoot(root)
-	if pathErr != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
-	}
-	db, openErr := statestore.Open(ctx, dbPath)
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	repoPoolPath := filepath.Join(cacheHome, "gionx", "repo-pool")
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		t.Fatalf("EnsureSettings error: %v", err)
-	}
-	if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{
-		ID:        "WS1",
-		Title:     "",
-		SourceURL: "",
-		Now:       123,
-	}); err != nil {
-		t.Fatalf("CreateWorkspace error: %v", err)
-	}
-
-	if _, err := db.ExecContext(ctx, `
-INSERT INTO repos (repo_uid, repo_key, remote_url, created_at, updated_at)
-VALUES ('github.com/o/r', 'o/r', 'https://example.com/o/r.git', 1, 1)
-`); err != nil {
-		t.Fatalf("insert repo: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-INSERT INTO workspace_repos (
-  workspace_id, repo_uid, repo_key, alias, branch, base_ref, repo_spec_input, missing_at, created_at, updated_at
-) VALUES (
-  'WS1', 'github.com/o/r', 'o/r', 'r', 'main', '', 'github.com/o/r', NULL, 1, 1
-)
-`); err != nil {
-		t.Fatalf("insert workspace_repo: %v", err)
-	}
-
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "list"})
+	code := c.Run([]string{"ws", "list", "--tree"})
 	if code != exitOK {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
 
-	var missingAt *int64
-	if qErr := db.QueryRowContext(ctx, `
-SELECT missing_at
-FROM workspace_repos
-WHERE workspace_id = 'WS1' AND repo_uid = 'github.com/o/r'
-`).Scan(&missingAt); qErr != nil {
-		t.Fatalf("query missing_at: %v", qErr)
-	}
-	if missingAt == nil || *missingAt == 0 {
-		t.Fatalf("missing_at not set: %v", missingAt)
+	if !strings.Contains(out.String(), "state:missing") {
+		t.Fatalf("stdout should include missing repo state: %q", out.String())
 	}
 }
 
@@ -434,40 +379,23 @@ func TestCLI_WS_List_ShowsLogicalWorkStateTodoAndInProgress(t *testing.T) {
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
 
-	ctx := context.Background()
-	dbPath, pathErr := paths.StateDBPathForRoot(root)
-	if pathErr != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
+	if err := os.MkdirAll(filepath.Join(root, "workspaces", "TODO"), 0o755); err != nil {
+		t.Fatalf("create TODO workspace dir: %v", err)
 	}
-	db, openErr := statestore.Open(ctx, dbPath)
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
+	if err := writeWorkspaceMetaFile(filepath.Join(root, "workspaces", "TODO"), newWorkspaceMetaFileForCreate("TODO", "", "", 100)); err != nil {
+		t.Fatalf("write TODO workspace meta: %v", err)
 	}
-	t.Cleanup(func() { _ = db.Close() })
-	repoPoolPath := filepath.Join(cacheHome, "gionx", "repo-pool")
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		t.Fatalf("EnsureSettings error: %v", err)
-	}
-	if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{ID: "TODO", Title: "", SourceURL: "", Now: 100}); err != nil {
-		t.Fatalf("CreateWorkspace TODO error: %v", err)
-	}
-	if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{ID: "WIP", Title: "", SourceURL: "", Now: 101}); err != nil {
-		t.Fatalf("CreateWorkspace WIP error: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-INSERT INTO repos (repo_uid, repo_key, remote_url, created_at, updated_at)
-VALUES ('github.com/o/r', 'o/r', 'https://example.com/o/r.git', 1, 1)
-`); err != nil {
-		t.Fatalf("insert repo: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-INSERT INTO workspace_repos (
-  workspace_id, repo_uid, repo_key, alias, branch, base_ref, repo_spec_input, missing_at, created_at, updated_at
-) VALUES (
-  'WIP', 'github.com/o/r', 'o/r', 'r', 'main', 'origin/main', 'github.com/o/r', NULL, 1, 1
-)
-`); err != nil {
-		t.Fatalf("insert workspace_repo: %v", err)
+	wipMeta := newWorkspaceMetaFileForCreate("WIP", "", "", 101)
+	wipMeta.ReposRestore = []workspaceMetaRepoRestore{{
+		RepoUID:   "github.com/o/r",
+		RepoKey:   "o/r",
+		RemoteURL: "https://example.com/o/r.git",
+		Alias:     "r",
+		Branch:    "main",
+		BaseRef:   "origin/main",
+	}}
+	if err := writeWorkspaceMetaFile(filepath.Join(root, "workspaces", "WIP"), wipMeta); err != nil {
+		t.Fatalf("write WIP workspace meta: %v", err)
 	}
 
 	var out bytes.Buffer

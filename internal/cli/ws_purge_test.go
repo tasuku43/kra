@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 	"testing"
 
 	"github.com/tasuku43/gion-core/workspacerisk"
-	"github.com/tasuku43/gionx/internal/statestore"
 	"github.com/tasuku43/gionx/internal/testutil"
 )
 
@@ -85,34 +83,6 @@ func TestCLI_WS_Purge_ArchivedWorkspace_DeletesPathsCommitsAndUpdatesDB(t *testi
 		t.Fatalf("commit subject = %q, want %q", subj, "purge: WS1")
 	}
 
-	ctx := context.Background()
-	db, err := statestore.Open(ctx, env.StateDBPath())
-	if err != nil {
-		t.Fatalf("Open(state db) error: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	var cnt int
-	if err := db.QueryRowContext(ctx, "SELECT COUNT(*) FROM workspaces WHERE id = ?", "WS1").Scan(&cnt); err != nil {
-		t.Fatalf("query workspace count: %v", err)
-	}
-	if cnt != 0 {
-		t.Fatalf("workspace row count = %d, want 0", cnt)
-	}
-
-	var eventType string
-	if err := db.QueryRowContext(ctx, `
-SELECT event_type
-FROM workspace_events
-WHERE workspace_id = ?
-ORDER BY id DESC
-LIMIT 1
-`, "WS1").Scan(&eventType); err != nil {
-		t.Fatalf("query last event: %v", err)
-	}
-	if eventType != "purged" {
-		t.Fatalf("last event_type = %q, want %q", eventType, "purged")
-	}
 }
 
 func TestCLI_WS_Purge_NoPromptWithoutForce_Refuses(t *testing.T) {

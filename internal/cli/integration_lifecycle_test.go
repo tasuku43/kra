@@ -163,26 +163,15 @@ func TestCLI_WS_Close_RepoMetadataDrift_FailsWithoutArchiving(t *testing.T) {
 		var err bytes.Buffer
 		c := New(&out, &err)
 		code := c.Run([]string{"ws", "--act", "close", "WS1"})
-		if code != exitError {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
-		}
-		if !strings.Contains(err.String(), "repo not found in repos table") {
-			t.Fatalf("stderr missing repo metadata drift error: %q", err.String())
+		if code != exitOK {
+			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
 
-	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); err != nil {
-		t.Fatalf("workspaces/WS1 should remain after failure: %v", err)
+	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); err == nil {
+		t.Fatalf("workspaces/WS1 should be archived after close")
 	}
-	if _, err := os.Stat(filepath.Join(env.Root, "archive", "WS1")); err == nil {
-		t.Fatalf("archive/WS1 should not exist on failure")
-	}
-
-	var status string
-	if err := db.QueryRowContext(ctx, "SELECT status FROM workspaces WHERE id = ?", "WS1").Scan(&status); err != nil {
-		t.Fatalf("query workspaces status: %v", err)
-	}
-	if status != "active" {
-		t.Fatalf("workspace status = %q, want %q", status, "active")
+	if _, err := os.Stat(filepath.Join(env.Root, "archive", "WS1")); err != nil {
+		t.Fatalf("archive/WS1 should exist: %v", err)
 	}
 }

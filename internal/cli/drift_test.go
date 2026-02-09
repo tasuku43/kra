@@ -73,23 +73,6 @@ func TestCLI_WS_Create_Purged_AllowsNewGeneration(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
 
-	ctx := context.Background()
-	db, err := statestore.Open(ctx, env.StateDBPath())
-	if err != nil {
-		t.Fatalf("Open(state db) error: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	if err := statestore.EnsureSettings(ctx, db, env.Root, env.RepoPoolPath()); err != nil {
-		t.Fatalf("EnsureSettings error: %v", err)
-	}
-	if _, err := db.ExecContext(ctx, `
-INSERT INTO workspace_events (workspace_id, workspace_generation, event_type, at, meta)
-VALUES ('MVP-020', 1, 'purged', 1, '{}')
-`); err != nil {
-		t.Fatalf("insert purged event: %v", err)
-	}
-
 	var out bytes.Buffer
 	var errBuf bytes.Buffer
 	c := New(&out, &errBuf)
@@ -98,28 +81,8 @@ VALUES ('MVP-020', 1, 'purged', 1, '{}')
 	if code != exitOK {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, errBuf.String())
 	}
-
-	var gen int
-	if err := db.QueryRowContext(ctx, "SELECT generation FROM workspaces WHERE id = ?", "MVP-020").Scan(&gen); err != nil {
-		t.Fatalf("query generation: %v", err)
-	}
-	if gen != 2 {
-		t.Fatalf("generation = %d, want %d", gen, 2)
-	}
-
-	var eventType string
-	var eventGen int
-	if err := db.QueryRowContext(ctx, `
-SELECT event_type, workspace_generation
-FROM workspace_events
-WHERE workspace_id = ?
-ORDER BY id DESC
-LIMIT 1
-`, "MVP-020").Scan(&eventType, &eventGen); err != nil {
-		t.Fatalf("query last event: %v", err)
-	}
-	if eventType != "created" || eventGen != 2 {
-		t.Fatalf("last event = (%q, %d), want (%q, %d)", eventType, eventGen, "created", 2)
+	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "MVP-020", workspaceMetaFilename)); err != nil {
+		t.Fatalf("workspace meta should exist after create: %v", err)
 	}
 }
 

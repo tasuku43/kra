@@ -3,7 +3,6 @@ package cli
 import (
 	"bufio"
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -15,7 +14,6 @@ import (
 	"github.com/tasuku43/gionx/internal/app/wscreate"
 	"github.com/tasuku43/gionx/internal/infra/appports"
 	"github.com/tasuku43/gionx/internal/infra/paths"
-	"github.com/tasuku43/gionx/internal/infra/statestore"
 )
 
 func (c *CLI) runWSCreate(args []string) int {
@@ -133,33 +131,6 @@ func (c *CLI) runWSCreate(args []string) int {
 		return exitError
 	}
 
-	indexAvailable := false
-	var dbPath string
-	var repoPoolPath string
-	var dbErr error
-	var db *sql.DB
-	dbPath, dbErr = paths.StateDBPathForRoot(root)
-	if dbErr == nil {
-		repoPoolPath, dbErr = paths.DefaultRepoPoolPath()
-	}
-	if dbErr == nil {
-		openedDB, openErr := statestore.Open(ctx, dbPath)
-		if openErr == nil {
-			if ensureErr := statestore.EnsureSettings(ctx, openedDB, root, repoPoolPath); ensureErr == nil {
-				indexAvailable = true
-				db = openedDB
-				defer func() { _ = db.Close() }()
-			} else {
-				c.debugf("ws create: skip state index (initialize settings failed): %v", ensureErr)
-				_ = openedDB.Close()
-			}
-		} else {
-			c.debugf("ws create: skip state index (open failed): %v", openErr)
-		}
-	} else {
-		c.debugf("ws create: skip state index (resolve paths failed): %v", dbErr)
-	}
-
 	if jiraTicketURL == "" && !noPrompt {
 		d, err := c.promptLine("title: ")
 		if err != nil {
@@ -224,32 +195,6 @@ func (c *CLI) runWSCreate(args []string) int {
 		cleanup()
 		fmt.Fprintf(c.Err, "write %s: %v\n", workspaceMetaFilename, err)
 		return exitError
-	}
-
-	if indexAvailable {
-		if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{
-			ID:        id,
-			Title:     title,
-			SourceURL: sourceURL,
-			Now:       now,
-		}); err != nil {
-			var existsErr *statestore.WorkspaceAlreadyExistsError
-			if errors.As(err, &existsErr) {
-				cleanup()
-				switch existsErr.Status {
-				case "active":
-					fmt.Fprintf(c.Err, "workspace already exists and is active: %s\n", id)
-					return exitError
-				case "archived":
-					fmt.Fprintf(c.Err, "workspace already exists and is archived: %s\nrun: gionx ws --act reopen %s\n", id, id)
-					return exitError
-				default:
-					fmt.Fprintf(c.Err, "workspace already exists with unknown status %q: %s\n", existsErr.Status, id)
-					return exitError
-				}
-			}
-			c.debugf("ws create: state index update skipped: %v", err)
-		}
 	}
 
 	useColorOut := writerSupportsColor(c.Out)

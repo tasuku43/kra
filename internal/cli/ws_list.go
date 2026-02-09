@@ -90,80 +90,10 @@ func (c *CLI) runWSList(args []string) int {
 }
 
 func buildWSListRows(ctx context.Context, root string, scope string, now int64) ([]wsListRow, bool, error) {
-	dbPath, err := paths.StateDBPathForRoot(root)
+	_ = now
+	rows, err := listRowsFromFilesystem(ctx, root, scope)
 	if err != nil {
-		return nil, false, fmt.Errorf("resolve state db path: %w", err)
-	}
-	repoPoolPath, err := paths.DefaultRepoPoolPath()
-	if err != nil {
-		return nil, false, fmt.Errorf("resolve repo pool path: %w", err)
-	}
-
-	db, err := statestore.Open(ctx, dbPath)
-	if err != nil {
-		rows, ferr := listRowsFromFilesystem(ctx, root, scope)
-		if ferr != nil {
-			return nil, true, fmt.Errorf("open state store: %v (fallback failed: %w)", err, ferr)
-		}
-		return rows, true, nil
-	}
-	defer func() { _ = db.Close() }()
-
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		rows, ferr := listRowsFromFilesystem(ctx, root, scope)
-		if ferr != nil {
-			return nil, true, fmt.Errorf("initialize settings: %v (fallback failed: %w)", err, ferr)
-		}
-		return rows, true, nil
-	}
-
-	if err := importWorkspaceDirs(ctx, db, root, now); err != nil {
-		rows, ferr := listRowsFromFilesystem(ctx, root, scope)
-		if ferr != nil {
-			return nil, true, fmt.Errorf("import workspace dirs: %v (fallback failed: %w)", err, ferr)
-		}
-		return rows, true, nil
-	}
-	if err := markMissingRepos(ctx, db, root, now); err != nil {
-		rows, ferr := listRowsFromFilesystem(ctx, root, scope)
-		if ferr != nil {
-			return nil, true, fmt.Errorf("mark missing repos: %v (fallback failed: %w)", err, ferr)
-		}
-		return rows, true, nil
-	}
-
-	items, err := statestore.ListWorkspaces(ctx, db)
-	if err != nil {
-		rows, ferr := listRowsFromFilesystem(ctx, root, scope)
-		if ferr != nil {
-			return nil, true, fmt.Errorf("list workspaces: %v (fallback failed: %w)", err, ferr)
-		}
-		return rows, true, nil
-	}
-
-	rows := make([]wsListRow, 0, len(items))
-	for _, it := range items {
-		if it.Status != scope {
-			continue
-		}
-		repos, err := statestore.ListWorkspaceRepos(ctx, db, it.ID)
-		if err != nil {
-			rows, ferr := listRowsFromFilesystem(ctx, root, scope)
-			if ferr != nil {
-				return nil, true, fmt.Errorf("list workspace repos: %v (fallback failed: %w)", err, ferr)
-			}
-			return rows, true, nil
-		}
-		rows = append(rows, wsListRow{
-			ID:        it.ID,
-			Status:    it.Status,
-			UpdatedAt: it.UpdatedAt,
-			RepoCount: it.RepoCount,
-			Risk:      computeWorkspaceRisk(ctx, root, it.ID, it.Status, repos),
-			WorkState: deriveLogicalWorkState(ctx, root, it.ID, it.Status, repos),
-			Title:     strings.TrimSpace(it.Title),
-			Repos:     repos,
-		})
+		return nil, false, err
 	}
 	return rows, false, nil
 }
@@ -443,72 +373,6 @@ func printWSListTreeLines(out io.Writer, repos []statestore.WorkspaceRepo, maxCo
 		}
 		fmt.Fprintln(out, line)
 	}
-}
-
-func importWorkspaceDirs(ctx context.Context, db *sql.DB, root string, now int64) error {
-	entries, err := os.ReadDir(filepath.Join(root, "workspaces"))
-	if err != nil {
-		return err
-	}
-
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
-		}
-		id := e.Name()
-		if err := validateWorkspaceID(id); err != nil {
-			continue
-		}
-		if _, ok, err := statestore.LookupWorkspaceStatus(ctx, db, id); err != nil {
-			return err
-		} else if ok {
-			continue
-		}
-
-		if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{
-			ID:        id,
-			Title:     "",
-			SourceURL: "",
-			Now:       now,
-		}); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func markMissingRepos(ctx context.Context, db *sql.DB, root string, now int64) error {
-	items, err := statestore.ListWorkspaces(ctx, db)
-	if err != nil {
-		return err
-	}
-
-	for _, it := range items {
-		if it.Status != "active" {
-			continue
-		}
-		repos, err := statestore.ListWorkspaceRepos(ctx, db, it.ID)
-		if err != nil {
-			return err
-		}
-
-		for _, r := range repos {
-			if r.MissingAt.Valid {
-				continue
-			}
-			p := filepath.Join(root, "workspaces", it.ID, "repos", r.Alias)
-			if _, err := os.Stat(p); err == nil {
-				continue
-			} else if err != nil && !os.IsNotExist(err) {
-				return err
-			}
-
-			if _, err := statestore.MarkWorkspaceRepoMissing(ctx, db, it.ID, r.RepoUID, now); err != nil {
-				return err
-			}
-		}
-	}
-	return nil
 }
 
 func computeWorkspaceRisk(ctx context.Context, root string, workspaceID string, status string, repos []statestore.WorkspaceRepo) workspacerisk.WorkspaceRisk {

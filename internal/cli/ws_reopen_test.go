@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -11,7 +10,6 @@ import (
 
 	"github.com/tasuku43/gion-core/repospec"
 	"github.com/tasuku43/gion-core/repostore"
-	"github.com/tasuku43/gionx/internal/statestore"
 	"github.com/tasuku43/gionx/internal/testutil"
 )
 
@@ -140,38 +138,6 @@ func TestCLI_WS_Reopen_RestoresWorkspaceRecreatesWorktreesCommitsAndUpdatesDB(t 
 		t.Fatalf("commit subject = %q, want %q", subj, "reopen: WS1")
 	}
 
-	ctx := context.Background()
-	db, err := statestore.Open(ctx, env.StateDBPath())
-	if err != nil {
-		t.Fatalf("Open(state db) error: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	var status string
-	var reopenedSHA *string
-	if err := db.QueryRowContext(ctx, "SELECT status, reopened_commit_sha FROM workspaces WHERE id = ?", "WS1").Scan(&status, &reopenedSHA); err != nil {
-		t.Fatalf("query workspaces: %v", err)
-	}
-	if status != "active" {
-		t.Fatalf("workspace status = %q, want %q", status, "active")
-	}
-	if reopenedSHA == nil || strings.TrimSpace(*reopenedSHA) == "" {
-		t.Fatalf("reopened_commit_sha not set: %v", reopenedSHA)
-	}
-
-	var eventType string
-	if err := db.QueryRowContext(ctx, `
-SELECT event_type
-FROM workspace_events
-WHERE workspace_id = ?
-ORDER BY id DESC
-LIMIT 1
-`, "WS1").Scan(&eventType); err != nil {
-		t.Fatalf("query last event: %v", err)
-	}
-	if eventType != "reopened" {
-		t.Fatalf("last event_type = %q, want %q", eventType, "reopened")
-	}
 }
 
 func TestCLI_WS_Reopen_RecreatesWorktreesWithoutWorkspaceRepoBindings(t *testing.T) {
@@ -253,16 +219,6 @@ func TestCLI_WS_Reopen_RecreatesWorktreesWithoutWorkspaceRepoBindings(t *testing
 		if code != exitOK {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
-	}
-
-	ctx := context.Background()
-	db, openErr := statestore.Open(ctx, env.StateDBPath())
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	if _, err := db.ExecContext(ctx, "DELETE FROM workspace_repos WHERE workspace_id = ?", "WS1"); err != nil {
-		t.Fatalf("delete workspace_repos: %v", err)
 	}
 
 	{
@@ -383,20 +339,6 @@ func TestCLI_WS_Reopen_ErrorsWhenBranchCheckedOutElsewhere(t *testing.T) {
 		}
 	}
 
-	ctx := context.Background()
-	db, err := statestore.Open(ctx, env.StateDBPath())
-	if err != nil {
-		t.Fatalf("Open(state db) error: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	var status string
-	if err := db.QueryRowContext(ctx, "SELECT status FROM workspaces WHERE id = ?", "WS1").Scan(&status); err != nil {
-		t.Fatalf("query workspaces: %v", err)
-	}
-	if status != "archived" {
-		t.Fatalf("workspace status = %q, want %q", status, "archived")
-	}
 }
 
 func TestCLI_WS_Reopen_SelectorModeWithoutTTY_Errors(t *testing.T) {

@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"os"
 	"os/exec"
@@ -11,7 +10,6 @@ import (
 	"testing"
 
 	"github.com/tasuku43/gion-core/workspacerisk"
-	"github.com/tasuku43/gionx/internal/statestore"
 	"github.com/tasuku43/gionx/internal/testutil"
 )
 
@@ -150,38 +148,6 @@ func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *te
 		t.Fatalf("commit subject = %q, want %q", subj, "archive: WS1")
 	}
 
-	ctx := context.Background()
-	db, err := statestore.Open(ctx, env.StateDBPath())
-	if err != nil {
-		t.Fatalf("Open(state db) error: %v", err)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	var status string
-	var archivedSHA *string
-	if err := db.QueryRowContext(ctx, "SELECT status, archived_commit_sha FROM workspaces WHERE id = ?", "WS1").Scan(&status, &archivedSHA); err != nil {
-		t.Fatalf("query workspaces: %v", err)
-	}
-	if status != "archived" {
-		t.Fatalf("workspace status = %q, want %q", status, "archived")
-	}
-	if archivedSHA == nil || strings.TrimSpace(*archivedSHA) == "" {
-		t.Fatalf("archived_commit_sha not set: %v", archivedSHA)
-	}
-
-	var eventType string
-	if err := db.QueryRowContext(ctx, `
-SELECT event_type
-FROM workspace_events
-WHERE workspace_id = ?
-ORDER BY id DESC
-LIMIT 1
-`, "WS1").Scan(&eventType); err != nil {
-		t.Fatalf("query last event: %v", err)
-	}
-	if eventType != "archived" {
-		t.Fatalf("last event_type = %q, want %q", eventType, "archived")
-	}
 }
 
 func TestCLI_WS_Close_DirtyRepo_PromptsAndCanAbort(t *testing.T) {
