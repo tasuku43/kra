@@ -46,7 +46,7 @@ Backlog is managed by epic/prefix under `docs/backlog/*.md`.
 - [x] `docs/backlog/UX-CORE.md` (`2/2` done)
 - [x] `docs/backlog/ARCH.md` (`10/10` done)
 - [x] `docs/backlog/INT-JIRA.md` (`1/1` done)
-- [x] `docs/backlog/POST-MVP.md` (`6/6` done)
+- [x] `docs/backlog/POST-MVP.md` (`7/7` done)
 
 Update this section whenever any ticket checkbox changes.
 

@@ -50,3 +50,12 @@ status: planned
     - `docs/spec/commands/context.md`
   - Depends: POST-MVP-001
   - Parallel: yes
+
+- [x] POST-MVP-007: remove `GIONX_ROOT` env-based root resolution
+  - What: remove environment-variable root override from runtime resolution and use context-first behavior.
+  - Specs:
+    - `docs/spec/commands/context.md`
+    - `docs/spec/concepts/layout.md`
+    - `docs/spec/commands/init.md`
+  - Depends: POST-MVP-001
+  - Serial: yes

@@ -7,19 +7,18 @@ status: implemented
 
 ## Purpose
 
-Manage the current `GIONX_ROOT` context when multiple roots exist.
+Manage the current root context when multiple roots exist.
 
 ## Resolution order
 
 `gionx` resolves root in this order:
 
-1. `GIONX_ROOT` environment variable (highest priority)
-2. current-context file (`XDG_DATA_HOME/gionx/current-context`)
-3. command-specific fallback (for commands that allow cwd-based discovery)
+1. current-context file (`XDG_DATA_HOME/gionx/current-context`)
+2. command-specific fallback (for commands that allow cwd-based discovery)
 
 Notes:
-- `GIONX_ROOT` behavior remains backward-compatible.
-- Context is a fallback only when `GIONX_ROOT` is unset.
+- Root resolution is context-first.
+- Environment variable based root override is not supported.
 
 ## Commands (MVP)
 
@@ -35,7 +34,6 @@ Notes:
 ## Error handling
 
 - If `current-context` points to a non-existent path, show a clear recovery hint.
-- If both env and context are set but differ, env wins (no warning in MVP).
 - Path writes must be atomic (temp + rename).
 
 ## Out of scope

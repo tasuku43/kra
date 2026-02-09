@@ -11,9 +11,9 @@ status: implemented
 
 ## Root detection (filesystem)
 
-When a command needs to operate on an existing root, `gionx` detects `GIONX_ROOT` by:
+When a command needs to operate on an existing root, `gionx` detects root by:
 
-1) If `$GIONX_ROOT` is set: use it (must look like a root).
+1) If `current-context` is set: use it (must look like a root).
 2) Otherwise: walk up from the current working directory and pick the nearest directory that looks like a root.
 
 A directory "looks like a root" when both of these exist and are directories:
