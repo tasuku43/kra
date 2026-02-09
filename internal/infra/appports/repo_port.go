@@ -1,13 +1,10 @@
 package appports
 
 import (
-	"context"
-	"database/sql"
 	"fmt"
 
 	"github.com/tasuku43/gionx/internal/gitutil"
 	"github.com/tasuku43/gionx/internal/paths"
-	"github.com/tasuku43/gionx/internal/statestore"
 )
 
 type RepoPort struct {
@@ -50,35 +47,12 @@ func (p *RepoPort) EnsureDebugLog(root string, tag string) error {
 	return nil
 }
 
-func (p *RepoPort) ResolveStateDBPath(root string) (string, error) {
-	dbPath, err := paths.StateDBPathForRoot(root)
-	if err != nil {
-		return "", fmt.Errorf("resolve state db path: %w", err)
-	}
-	return dbPath, nil
-}
-
 func (p *RepoPort) ResolveRepoPoolPath() (string, error) {
 	repoPoolPath, err := paths.DefaultRepoPoolPath()
 	if err != nil {
 		return "", fmt.Errorf("resolve repo pool path: %w", err)
 	}
 	return repoPoolPath, nil
-}
-
-func (p *RepoPort) OpenState(ctx context.Context, dbPath string) (*sql.DB, error) {
-	db, err := statestore.Open(ctx, dbPath)
-	if err != nil {
-		return nil, fmt.Errorf("open state store: %w", err)
-	}
-	return db, nil
-}
-
-func (p *RepoPort) EnsureSettings(ctx context.Context, db *sql.DB, root string, repoPoolPath string) error {
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		return fmt.Errorf("initialize settings: %w", err)
-	}
-	return nil
 }
 
 func (p *RepoPort) TouchRegistry(root string) error {

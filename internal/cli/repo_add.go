@@ -40,9 +40,6 @@ func (c *CLI) runRepoAdd(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	if session.DB != nil {
-		defer func() { _ = session.DB.Close() }()
-	}
 	c.debugf("run repo add count=%d", len(args))
 
 	requests := make([]repoPoolAddRequest, 0, len(args))
@@ -52,7 +49,7 @@ func (c *CLI) runRepoAdd(args []string) int {
 
 	useColorOut := writerSupportsColor(c.Out)
 	printRepoPoolSection(c.Out, requests)
-	outcomes := applyRepoPoolAddsWithProgress(ctx, session.DB, session.RepoPoolPath, requests, repoPoolAddDefaultWorkers, c.debugf, c.Out, useColorOut)
+	outcomes := applyRepoPoolAddsWithProgress(ctx, session.RepoPoolPath, requests, repoPoolAddDefaultWorkers, c.debugf, c.Out, useColorOut)
 	printRepoPoolAddResult(c.Out, outcomes, useColorOut)
 	if repoPoolAddHadFailure(outcomes) {
 		return exitError

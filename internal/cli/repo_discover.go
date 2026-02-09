@@ -10,7 +10,6 @@ import (
 	"github.com/tasuku43/gionx/internal/app/repocmd"
 	"github.com/tasuku43/gionx/internal/infra/appports"
 	"github.com/tasuku43/gionx/internal/infra/gitutil"
-	"github.com/tasuku43/gionx/internal/infra/statestore"
 	"github.com/tasuku43/gionx/internal/repodiscovery"
 )
 
@@ -98,9 +97,6 @@ func (c *CLI) runRepoDiscover(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	if session.DB != nil {
-		defer func() { _ = session.DB.Close() }()
-	}
 	c.debugf("run repo discover org=%s provider=%s", opts.Org, provider.Name())
 
 	if err := provider.CheckAuth(ctx); err != nil {
@@ -114,19 +110,10 @@ func (c *CLI) runRepoDiscover(args []string) int {
 		return exitError
 	}
 
-	var existingRepoUIDs []string
-	if session.DB != nil {
-		existingRepoUIDs, err = statestore.ListRepoUIDs(ctx, session.DB)
-		if err != nil {
-			fmt.Fprintf(c.Err, "list existing repos: %v\n", err)
-			return exitError
-		}
-	} else {
-		existingRepoUIDs, err = listRepoUIDsFromRepoPool(ctx, session.RepoPoolPath)
-		if err != nil {
-			fmt.Fprintf(c.Err, "list existing repos from pool: %v\n", err)
-			return exitError
-		}
+	existingRepoUIDs, err := listRepoUIDsFromRepoPool(ctx, session.RepoPoolPath)
+	if err != nil {
+		fmt.Fprintf(c.Err, "list existing repos from pool: %v\n", err)
+		return exitError
 	}
 	existingSet := map[string]bool{}
 	for _, repoUID := range existingRepoUIDs {
@@ -182,7 +169,7 @@ func (c *CLI) runRepoDiscover(args []string) int {
 		return exitError
 	}
 	useColorOut := writerSupportsColor(c.Out)
-	outcomes := applyRepoPoolAddsWithProgress(ctx, session.DB, session.RepoPoolPath, requests, repoPoolAddDefaultWorkers, c.debugf, c.Out, useColorOut)
+	outcomes := applyRepoPoolAddsWithProgress(ctx, session.RepoPoolPath, requests, repoPoolAddDefaultWorkers, c.debugf, c.Out, useColorOut)
 	printRepoPoolAddResult(c.Out, outcomes, useColorOut)
 	if repoPoolAddHadFailure(outcomes) {
 		return exitError

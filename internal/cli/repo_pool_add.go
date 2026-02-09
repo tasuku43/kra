@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"database/sql"
 	"fmt"
 	"io"
 	"os"
@@ -13,7 +12,6 @@ import (
 	"github.com/tasuku43/gion-core/repospec"
 	"github.com/tasuku43/gion-core/repostore"
 	"github.com/tasuku43/gionx/internal/infra/gitutil"
-	"github.com/tasuku43/gionx/internal/infra/statestore"
 )
 
 const repoPoolAddDefaultWorkers = 4
@@ -44,7 +42,7 @@ type repoPoolAddProgressEvent struct {
 	Reason  string
 }
 
-func applyRepoPoolAddsWithProgress(ctx context.Context, db *sql.DB, repoPoolPath string, requests []repoPoolAddRequest, workers int, debugf func(string, ...any), progressOut io.Writer, useColor bool) []repoPoolAddOutcome {
+func applyRepoPoolAddsWithProgress(ctx context.Context, repoPoolPath string, requests []repoPoolAddRequest, workers int, debugf func(string, ...any), progressOut io.Writer, useColor bool) []repoPoolAddOutcome {
 	if workers <= 0 {
 		workers = repoPoolAddDefaultWorkers
 	}
@@ -55,7 +53,7 @@ func applyRepoPoolAddsWithProgress(ctx context.Context, db *sql.DB, repoPoolPath
 		close(done)
 	}()
 
-	outcomes := applyRepoPoolAdds(ctx, db, repoPoolPath, requests, workers, debugf, func(ev repoPoolAddProgressEvent) {
+	outcomes := applyRepoPoolAdds(ctx, repoPoolPath, requests, workers, debugf, func(ev repoPoolAddProgressEvent) {
 		progressEvents <- ev
 	})
 	close(progressEvents)
@@ -63,7 +61,7 @@ func applyRepoPoolAddsWithProgress(ctx context.Context, db *sql.DB, repoPoolPath
 	return outcomes
 }
 
-func applyRepoPoolAdds(ctx context.Context, db *sql.DB, repoPoolPath string, requests []repoPoolAddRequest, workers int, debugf func(string, ...any), onProgress func(repoPoolAddProgressEvent)) []repoPoolAddOutcome {
+func applyRepoPoolAdds(ctx context.Context, repoPoolPath string, requests []repoPoolAddRequest, workers int, debugf func(string, ...any), onProgress func(repoPoolAddProgressEvent)) []repoPoolAddOutcome {
 	if workers <= 0 {
 		workers = repoPoolAddDefaultWorkers
 	}
@@ -82,7 +80,7 @@ func applyRepoPoolAdds(ctx context.Context, db *sql.DB, repoPoolPath string, req
 		go func() {
 			defer wg.Done()
 			for j := range jobs {
-				outcomes[j.index] = applyOneRepoPoolAdd(ctx, db, repoPoolPath, j.index, j.req, debugf, onProgress)
+				outcomes[j.index] = applyOneRepoPoolAdd(ctx, repoPoolPath, j.index, j.req, debugf, onProgress)
 			}
 		}()
 	}
@@ -94,7 +92,7 @@ func applyRepoPoolAdds(ctx context.Context, db *sql.DB, repoPoolPath string, req
 	return outcomes
 }
 
-func applyOneRepoPoolAdd(ctx context.Context, db *sql.DB, repoPoolPath string, reqIndex int, req repoPoolAddRequest, debugf func(string, ...any), onProgress func(repoPoolAddProgressEvent)) repoPoolAddOutcome {
+func applyOneRepoPoolAdd(ctx context.Context, repoPoolPath string, reqIndex int, req repoPoolAddRequest, debugf func(string, ...any), onProgress func(repoPoolAddProgressEvent)) repoPoolAddOutcome {
 	specInput := strings.TrimSpace(req.RepoSpecInput)
 	progressKey := resolveRepoPoolDisplayName(req)
 	if onProgress != nil {
@@ -128,21 +126,7 @@ func applyOneRepoPoolAdd(ctx context.Context, db *sql.DB, repoPoolPath string, r
 		return outcome
 	}
 	barePath := repostore.StorePath(repoPoolPath, spec)
-	if db != nil {
-		existingURL, ok, err := statestore.LookupRepoRemoteURL(ctx, db, repoUID)
-		if err != nil {
-			outcome.Success = false
-			outcome.Reason = err.Error()
-			emitRepoPoolDone(onProgress, reqIndex, outcome)
-			return outcome
-		}
-		if ok && strings.TrimSpace(existingURL) != specInput {
-			outcome.Success = false
-			outcome.Reason = fmt.Sprintf("remote_url mismatch (existing=%s)", existingURL)
-			emitRepoPoolDone(onProgress, reqIndex, outcome)
-			return outcome
-		}
-	} else if fi, err := os.Stat(barePath); err == nil && fi.IsDir() {
+	if fi, err := os.Stat(barePath); err == nil && fi.IsDir() {
 		existingURL, err := gitutil.RunBare(ctx, barePath, "config", "--get", "remote.origin.url")
 		if err == nil && strings.TrimSpace(existingURL) != "" && strings.TrimSpace(existingURL) != specInput {
 			outcome.Success = false
@@ -158,20 +142,6 @@ func applyOneRepoPoolAdd(ctx context.Context, db *sql.DB, repoPoolPath string, r
 		return outcome
 	}
 
-	if db != nil {
-		now := time.Now().Unix()
-		if err := statestore.EnsureRepo(ctx, db, statestore.EnsureRepoInput{
-			RepoUID:   repoUID,
-			RepoKey:   repoKey,
-			RemoteURL: specInput,
-			Now:       now,
-		}); err != nil {
-			outcome.Success = false
-			outcome.Reason = err.Error()
-			emitRepoPoolDone(onProgress, reqIndex, outcome)
-			return outcome
-		}
-	}
 	if debugf != nil {
 		debugf("repo pool upsert success repo_uid=%s bare_path=%s", repoUID, barePath)
 	}

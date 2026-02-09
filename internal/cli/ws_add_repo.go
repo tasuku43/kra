@@ -826,7 +826,8 @@ func listAddRepoPoolCandidates(ctx context.Context, db *sql.DB, root string, rep
 				Alias:     deriveAliasFromRepoKey(it.RepoKey),
 			})
 		}
-	} else {
+	}
+	if len(baseCandidates) == 0 {
 		items, err := scanRepoPoolCandidatesFromFilesystem(ctx, repoPoolPath, debugf)
 		if err != nil {
 			return nil, err
@@ -1417,6 +1418,15 @@ func applyAddRepoPlanAllOrNothing(ctx context.Context, db *sql.DB, workspaceID s
 		current.CreatedWorktree = true
 
 		if db != nil {
+			if err := statestore.EnsureRepo(ctx, db, statestore.EnsureRepoInput{
+				RepoUID:   p.Candidate.RepoUID,
+				RepoKey:   p.Candidate.RepoKey,
+				RemoteURL: p.Candidate.RemoteURL,
+				Now:       now,
+			}); err != nil {
+				rollbackAddRepoApplied(ctx, db, workspaceID, append(applied, current), debugf)
+				return nil, fmt.Errorf("ensure repo for %s: %w", p.Candidate.RepoKey, err)
+			}
 			if err := statestore.AddWorkspaceRepo(ctx, db, statestore.AddWorkspaceRepoInput{
 				WorkspaceID:   workspaceID,
 				RepoUID:       p.Candidate.RepoUID,

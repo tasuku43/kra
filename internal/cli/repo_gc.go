@@ -2,7 +2,6 @@ package cli
 
 import (
 	"context"
-	"database/sql"
 	"errors"
 	"fmt"
 	"io"
@@ -17,7 +16,6 @@ import (
 	"github.com/tasuku43/gionx/internal/infra/appports"
 	"github.com/tasuku43/gionx/internal/infra/gitutil"
 	"github.com/tasuku43/gionx/internal/infra/stateregistry"
-	"github.com/tasuku43/gionx/internal/infra/statestore"
 )
 
 type repoGCCandidate struct {
@@ -71,12 +69,9 @@ func (c *CLI) runRepoGC(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	if session.DB != nil {
-		defer func() { _ = session.DB.Close() }()
-	}
 	c.debugf("run repo gc args=%d", len(args))
 
-	candidates, err := buildRepoGCCandidates(ctx, session.Root, session.DB, session.RepoPoolPath, c.debugf)
+	candidates, err := buildRepoGCCandidates(ctx, session.Root, session.RepoPoolPath, c.debugf)
 	if err != nil {
 		fmt.Fprintf(c.Err, "build repo gc candidates: %v\n", err)
 		return exitError
@@ -180,7 +175,7 @@ func (c *CLI) runRepoGC(args []string) int {
 	return exitOK
 }
 
-func buildRepoGCCandidates(ctx context.Context, root string, currentDB *sql.DB, repoPoolPath string, debugf func(string, ...any)) ([]repoGCCandidate, error) {
+func buildRepoGCCandidates(ctx context.Context, root string, repoPoolPath string, debugf func(string, ...any)) ([]repoGCCandidate, error) {
 	poolRepos, err := listRepoPoolBareRepos(repoPoolPath)
 	if err != nil {
 		return nil, err
@@ -190,13 +185,6 @@ func buildRepoGCCandidates(ctx context.Context, root string, currentDB *sql.DB, 
 	}
 
 	currentRepoSet := map[string]bool{}
-	if currentDB != nil {
-		currentRepoUIDs, err := statestore.ListRepoUIDs(ctx, currentDB)
-		if err != nil {
-			return nil, fmt.Errorf("list current root repo_uids: %w", err)
-		}
-		currentRepoSet = toSet(currentRepoUIDs)
-	}
 
 	globalRefCount, currentRootRefCount, err := collectRegistryRepoRefCountsFromMetadata(root)
 	if err != nil {

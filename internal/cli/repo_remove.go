@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
-	"time"
 
 	"github.com/tasuku43/gionx/internal/app/repocmd"
 	"github.com/tasuku43/gionx/internal/infra/appports"
@@ -46,29 +45,12 @@ func (c *CLI) runRepoRemove(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	if session.DB != nil {
-		defer func() { _ = session.DB.Close() }()
-	}
 	c.debugf("run repo remove args=%d", len(args))
 
-	startDay := localDayKey(time.Now().AddDate(0, 0, -29))
-	var (
-		repos       []statestore.RootRepoCandidate
-		bareByRepo  map[string]string
-		fallbackErr error
-	)
-	if session.DB != nil {
-		repos, err = statestore.ListRootRepoCandidates(ctx, session.DB, startDay)
-		if err != nil {
-			fmt.Fprintf(c.Err, "list repos: %v\n", err)
-			return exitError
-		}
-	} else {
-		repos, bareByRepo, fallbackErr = listRootRepoCandidatesFromFilesystem(ctx, session.Root, session.RepoPoolPath)
-		if fallbackErr != nil {
-			fmt.Fprintf(c.Err, "list repos: %v\n", fallbackErr)
-			return exitError
-		}
+	repos, bareByRepo, fallbackErr := listRootRepoCandidatesFromFilesystem(ctx, session.Root, session.RepoPoolPath)
+	if fallbackErr != nil {
+		fmt.Fprintf(c.Err, "list repos: %v\n", fallbackErr)
+		return exitError
 	}
 	if len(repos) == 0 {
 		fmt.Fprintln(c.Err, "no repos registered in current root")
@@ -107,21 +89,14 @@ func (c *CLI) runRepoRemove(args []string) int {
 	}
 
 	printRepoRemoveSelection(c.Out, selected)
-	if session.DB != nil {
-		if err := statestore.DeleteReposByUIDs(ctx, session.DB, repoUIDs); err != nil {
+	for _, repoUID := range repoUIDs {
+		barePath := strings.TrimSpace(bareByRepo[repoUID])
+		if barePath == "" {
+			continue
+		}
+		if err := os.RemoveAll(barePath); err != nil {
 			fmt.Fprintf(c.Err, "remove repos: %v\n", err)
 			return exitError
-		}
-	} else {
-		for _, repoUID := range repoUIDs {
-			barePath := strings.TrimSpace(bareByRepo[repoUID])
-			if barePath == "" {
-				continue
-			}
-			if err := os.RemoveAll(barePath); err != nil {
-				fmt.Fprintf(c.Err, "remove repos: %v\n", err)
-				return exitError
-			}
 		}
 	}
 
@@ -179,7 +154,12 @@ func listWorkspaceRepoRefCountFromFilesystem(ctx context.Context, root string) (
 			if !ent.IsDir() {
 				continue
 			}
-			repos, err := listWorkspaceReposForClose(ctx, nil, root, ent.Name())
+			wsPath := filepath.Join(base, ent.Name())
+			meta, err := loadWorkspaceMetaFile(wsPath)
+			if err != nil {
+				continue
+			}
+			repos, err := listWorkspaceReposFromFilesystem(ctx, root, scope, ent.Name(), meta)
 			if err != nil {
 				continue
 			}

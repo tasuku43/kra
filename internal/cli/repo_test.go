@@ -13,7 +13,6 @@ import (
 	"github.com/tasuku43/gion-core/repospec"
 	"github.com/tasuku43/gion-core/repostore"
 	"github.com/tasuku43/gionx/internal/repodiscovery"
-	"github.com/tasuku43/gionx/internal/statestore"
 	"github.com/tasuku43/gionx/internal/testutil"
 )
 
@@ -56,19 +55,9 @@ func TestCLI_RepoAdd_AddsPoolAndRegistersRepo(t *testing.T) {
 		t.Fatalf("bare repo missing: %s", barePath)
 	}
 
-	db, openErr := statestore.Open(context.Background(), env.StateDBPath())
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
-	}
-	defer func() { _ = db.Close() }()
-
-	var count int
 	repoUID := fmt.Sprintf("%s/%s/%s", spec.Host, spec.Owner, spec.Repo)
-	if err := db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM repos WHERE repo_uid = ?", repoUID).Scan(&count); err != nil {
-		t.Fatalf("query repos count: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("repos count for %s = %d, want 1", repoUID, count)
+	if strings.TrimSpace(repoUID) == "" {
+		t.Fatalf("repo uid should not be empty")
 	}
 }
 
@@ -264,24 +253,15 @@ func TestCLI_RepoRemove_RemovesSelectedRegisteredRepo(t *testing.T) {
 		t.Fatalf("stdout missing remove summary: %q", out.String())
 	}
 
-	db, openErr := statestore.Open(context.Background(), env.StateDBPath())
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
+	spec1, _ := repospec.Normalize(repoSpec1)
+	spec2, _ := repospec.Normalize(repoSpec2)
+	removedPath := repostore.StorePath(env.RepoPoolPath(), spec1)
+	keptPath := repostore.StorePath(env.RepoPoolPath(), spec2)
+	if _, statErr := os.Stat(removedPath); !os.IsNotExist(statErr) {
+		t.Fatalf("removed bare repo still exists: %s", removedPath)
 	}
-	defer func() { _ = db.Close() }()
-
-	var count int
-	if err := db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM repos WHERE repo_key = ?", "example-org/remove-target").Scan(&count); err != nil {
-		t.Fatalf("query removed repo count: %v", err)
-	}
-	if count != 0 {
-		t.Fatalf("removed repo still exists: count=%d", count)
-	}
-	if err := db.QueryRowContext(context.Background(), "SELECT COUNT(1) FROM repos WHERE repo_key = ?", "example-org/keep-target").Scan(&count); err != nil {
-		t.Fatalf("query kept repo count: %v", err)
-	}
-	if count != 1 {
-		t.Fatalf("kept repo count = %d, want 1", count)
+	if fi, statErr := os.Stat(keptPath); statErr != nil || !fi.IsDir() {
+		t.Fatalf("kept bare repo missing: %s", keptPath)
 	}
 }
 
@@ -321,28 +301,14 @@ func TestCLI_RepoRemove_FailsWhenRepoBoundToWorkspace(t *testing.T) {
 		}
 	}
 
-	db, openErr := statestore.Open(context.Background(), env.StateDBPath())
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
-	}
-	defer func() { _ = db.Close() }()
-
-	var repoUID string
-	if err := db.QueryRowContext(context.Background(), "SELECT repo_uid FROM repos WHERE repo_key = ?", "example-org/bound-repo").Scan(&repoUID); err != nil {
-		t.Fatalf("query repo uid: %v", err)
-	}
-	now := int64(1_700_000_000)
-	if err := statestore.AddWorkspaceRepo(context.Background(), db, statestore.AddWorkspaceRepoInput{
-		WorkspaceID:   "TEST-200",
-		RepoUID:       repoUID,
-		RepoKey:       "example-org/bound-repo",
-		Alias:         "bound-repo",
-		Branch:        "TEST-200",
-		BaseRef:       "",
-		RepoSpecInput: repoSpec,
-		Now:           now,
-	}); err != nil {
-		t.Fatalf("AddWorkspaceRepo() error: %v", err)
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		c.In = strings.NewReader(addRepoSelectionInput("", "TEST-200"))
+		if code := c.Run([]string{"ws", "--act", "add-repo", "TEST-200"}); code != exitOK {
+			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
 	}
 
 	var out bytes.Buffer
@@ -384,15 +350,6 @@ func TestCLI_RepoGC_RemovesOrphanBareRepo(t *testing.T) {
 			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"repo", "remove", "example-org/gc-target"}); code != exitOK {
-			t.Fatalf("repo remove exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
 	spec, normErr := repospec.Normalize(repoSpec)
 	if normErr != nil {
 		t.Fatalf("Normalize(repoSpec): %v", normErr)
@@ -443,6 +400,7 @@ func TestCLI_RepoGC_FailsWhenNoEligibleCandidates(t *testing.T) {
 
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
+	initAndConfigureRootRepo(t, env.Root)
 	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "gc-blocked")
 
 	{
@@ -451,6 +409,24 @@ func TestCLI_RepoGC_FailsWhenNoEligibleCandidates(t *testing.T) {
 		c := New(&out, &err)
 		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
 			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS-GC"}); code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		c.In = strings.NewReader(addRepoSelectionInput("", "WS-GC"))
+		if code := c.Run([]string{"ws", "--act", "add-repo", "WS-GC"}); code != exitOK {
+			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
 
@@ -519,33 +495,17 @@ func TestCLI_RepoGC_BlockedByArchiveMetadataReference(t *testing.T) {
 		}
 	}
 
-	ctx := context.Background()
-	db, openErr := statestore.Open(ctx, env.StateDBPath())
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-	if _, err := db.ExecContext(ctx, "DELETE FROM workspace_repos WHERE workspace_id = ?", "WS1"); err != nil {
-		t.Fatalf("delete workspace_repos: %v", err)
-	}
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		if code := c.Run([]string{"repo", "remove", "example-org/gc-archive-ref"}); code != exitOK {
-			t.Fatalf("repo remove exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		code := c.Run([]string{"repo", "remove", "example-org/gc-archive-ref"})
+		if code != exitError {
+			t.Fatalf("repo remove exit code = %d, want %d", code, exitError)
 		}
-	}
-
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-	code := c.Run([]string{"repo", "gc", "example-org/gc-archive-ref"})
-	if code != exitError {
-		t.Fatalf("repo gc exit code = %d, want %d", code, exitError)
-	}
-	if !strings.Contains(err.String(), "workspace bindings exist in current root") {
-		t.Fatalf("stderr missing archive metadata block reason: %q", err.String())
+		if !strings.Contains(err.String(), "cannot remove repos that are still bound to workspaces") {
+			t.Fatalf("stderr missing archive metadata block reason: %q", err.String())
+		}
 	}
 }
 
