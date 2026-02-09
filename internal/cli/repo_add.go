@@ -40,7 +40,9 @@ func (c *CLI) runRepoAdd(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	defer func() { _ = session.DB.Close() }()
+	if session.DB != nil {
+		defer func() { _ = session.DB.Close() }()
+	}
 	c.debugf("run repo add count=%d", len(args))
 
 	requests := make([]repoPoolAddRequest, 0, len(args))

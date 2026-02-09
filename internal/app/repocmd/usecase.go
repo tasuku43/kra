@@ -54,25 +54,26 @@ func (s *Service) Run(ctx context.Context, req Request) (Session, error) {
 		}
 	}
 
-	dbPath, err := s.port.ResolveStateDBPath(root)
-	if err != nil {
-		return Session{}, err
-	}
 	repoPoolPath, err := s.port.ResolveRepoPoolPath()
 	if err != nil {
 		return Session{}, err
 	}
-	db, err := s.port.OpenState(ctx, dbPath)
-	if err != nil {
-		return Session{}, err
-	}
-	if err := s.port.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		_ = db.Close()
-		return Session{}, err
+
+	var db *sql.DB
+	if dbPath, err := s.port.ResolveStateDBPath(root); err == nil {
+		if opened, err := s.port.OpenState(ctx, dbPath); err == nil {
+			if err := s.port.EnsureSettings(ctx, opened, root, repoPoolPath); err == nil {
+				db = opened
+			} else {
+				_ = opened.Close()
+			}
+		}
 	}
 	if req.TouchRegistry {
 		if err := s.port.TouchRegistry(root); err != nil {
-			_ = db.Close()
+			if db != nil {
+				_ = db.Close()
+			}
 			return Session{}, err
 		}
 	}

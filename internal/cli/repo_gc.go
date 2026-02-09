@@ -71,7 +71,9 @@ func (c *CLI) runRepoGC(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	defer func() { _ = session.DB.Close() }()
+	if session.DB != nil {
+		defer func() { _ = session.DB.Close() }()
+	}
 	c.debugf("run repo gc args=%d", len(args))
 
 	candidates, err := buildRepoGCCandidates(ctx, session.Root, session.DB, session.RepoPoolPath, c.debugf)
@@ -187,11 +189,14 @@ func buildRepoGCCandidates(ctx context.Context, root string, currentDB *sql.DB, 
 		return nil, nil
 	}
 
-	currentRepoUIDs, err := statestore.ListRepoUIDs(ctx, currentDB)
-	if err != nil {
-		return nil, fmt.Errorf("list current root repo_uids: %w", err)
+	currentRepoSet := map[string]bool{}
+	if currentDB != nil {
+		currentRepoUIDs, err := statestore.ListRepoUIDs(ctx, currentDB)
+		if err != nil {
+			return nil, fmt.Errorf("list current root repo_uids: %w", err)
+		}
+		currentRepoSet = toSet(currentRepoUIDs)
 	}
-	currentRepoSet := toSet(currentRepoUIDs)
 
 	globalRefCount, currentRootRefCount, err := collectRegistryRepoRefCountsFromMetadata(root)
 	if err != nil {

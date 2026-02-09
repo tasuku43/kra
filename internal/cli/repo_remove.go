@@ -6,12 +6,14 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/tasuku43/gionx/internal/app/repocmd"
 	"github.com/tasuku43/gionx/internal/infra/appports"
+	"github.com/tasuku43/gionx/internal/infra/gitutil"
 	"github.com/tasuku43/gionx/internal/infra/statestore"
 )
 
@@ -44,14 +46,29 @@ func (c *CLI) runRepoRemove(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	defer func() { _ = session.DB.Close() }()
+	if session.DB != nil {
+		defer func() { _ = session.DB.Close() }()
+	}
 	c.debugf("run repo remove args=%d", len(args))
 
 	startDay := localDayKey(time.Now().AddDate(0, 0, -29))
-	repos, err := statestore.ListRootRepoCandidates(ctx, session.DB, startDay)
-	if err != nil {
-		fmt.Fprintf(c.Err, "list repos: %v\n", err)
-		return exitError
+	var (
+		repos       []statestore.RootRepoCandidate
+		bareByRepo  map[string]string
+		fallbackErr error
+	)
+	if session.DB != nil {
+		repos, err = statestore.ListRootRepoCandidates(ctx, session.DB, startDay)
+		if err != nil {
+			fmt.Fprintf(c.Err, "list repos: %v\n", err)
+			return exitError
+		}
+	} else {
+		repos, bareByRepo, fallbackErr = listRootRepoCandidatesFromFilesystem(ctx, session.Root, session.RepoPoolPath)
+		if fallbackErr != nil {
+			fmt.Fprintf(c.Err, "list repos: %v\n", fallbackErr)
+			return exitError
+		}
 	}
 	if len(repos) == 0 {
 		fmt.Fprintln(c.Err, "no repos registered in current root")
@@ -90,14 +107,88 @@ func (c *CLI) runRepoRemove(args []string) int {
 	}
 
 	printRepoRemoveSelection(c.Out, selected)
-	if err := statestore.DeleteReposByUIDs(ctx, session.DB, repoUIDs); err != nil {
-		fmt.Fprintf(c.Err, "remove repos: %v\n", err)
-		return exitError
+	if session.DB != nil {
+		if err := statestore.DeleteReposByUIDs(ctx, session.DB, repoUIDs); err != nil {
+			fmt.Fprintf(c.Err, "remove repos: %v\n", err)
+			return exitError
+		}
+	} else {
+		for _, repoUID := range repoUIDs {
+			barePath := strings.TrimSpace(bareByRepo[repoUID])
+			if barePath == "" {
+				continue
+			}
+			if err := os.RemoveAll(barePath); err != nil {
+				fmt.Fprintf(c.Err, "remove repos: %v\n", err)
+				return exitError
+			}
+		}
 	}
 
 	useColorOut := writerSupportsColor(c.Out)
 	printRepoRemoveResult(c.Out, selected, useColorOut)
 	return exitOK
+}
+
+func listRootRepoCandidatesFromFilesystem(ctx context.Context, root string, repoPoolPath string) ([]statestore.RootRepoCandidate, map[string]string, error) {
+	bareRepos, err := listRepoPoolBareRepos(repoPoolPath)
+	if err != nil {
+		return nil, nil, err
+	}
+	workspaceRefs, err := listWorkspaceRepoRefCountFromFilesystem(ctx, root)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	candidates := make([]statestore.RootRepoCandidate, 0, len(bareRepos))
+	bareByRepo := make(map[string]string, len(bareRepos))
+	seen := make(map[string]bool, len(bareRepos))
+	for _, barePath := range bareRepos {
+		remoteURL, _ := gitutil.RunBare(ctx, barePath, "config", "--get", "remote.origin.url")
+		repoUID, repoKey, ok := resolveRepoIdentityForGC(repoPoolPath, barePath, strings.TrimSpace(remoteURL))
+		if !ok || seen[repoUID] {
+			continue
+		}
+		seen[repoUID] = true
+		candidates = append(candidates, statestore.RootRepoCandidate{
+			RepoUID:           repoUID,
+			RepoKey:           repoKey,
+			RemoteURL:         strings.TrimSpace(remoteURL),
+			WorkspaceRefCount: workspaceRefs[repoUID],
+		})
+		bareByRepo[repoUID] = barePath
+	}
+	slices.SortFunc(candidates, func(a, b statestore.RootRepoCandidate) int {
+		return strings.Compare(a.RepoKey, b.RepoKey)
+	})
+	return candidates, bareByRepo, nil
+}
+
+func listWorkspaceRepoRefCountFromFilesystem(ctx context.Context, root string) (map[string]int, error) {
+	counts := map[string]int{}
+	for _, scope := range []string{"workspaces", "archive"} {
+		base := filepath.Join(root, scope)
+		entries, err := os.ReadDir(base)
+		if err != nil {
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			return nil, err
+		}
+		for _, ent := range entries {
+			if !ent.IsDir() {
+				continue
+			}
+			repos, err := listWorkspaceReposForClose(ctx, nil, root, ent.Name())
+			if err != nil {
+				continue
+			}
+			for _, r := range repos {
+				counts[r.RepoUID]++
+			}
+		}
+	}
+	return counts, nil
 }
 
 func selectReposForRemove(c *CLI, repos []statestore.RootRepoCandidate, args []string) ([]statestore.RootRepoCandidate, error) {

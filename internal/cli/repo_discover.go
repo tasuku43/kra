@@ -9,6 +9,7 @@ import (
 
 	"github.com/tasuku43/gionx/internal/app/repocmd"
 	"github.com/tasuku43/gionx/internal/infra/appports"
+	"github.com/tasuku43/gionx/internal/infra/gitutil"
 	"github.com/tasuku43/gionx/internal/infra/statestore"
 	"github.com/tasuku43/gionx/internal/repodiscovery"
 )
@@ -97,7 +98,9 @@ func (c *CLI) runRepoDiscover(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	defer func() { _ = session.DB.Close() }()
+	if session.DB != nil {
+		defer func() { _ = session.DB.Close() }()
+	}
 	c.debugf("run repo discover org=%s provider=%s", opts.Org, provider.Name())
 
 	if err := provider.CheckAuth(ctx); err != nil {
@@ -111,10 +114,19 @@ func (c *CLI) runRepoDiscover(args []string) int {
 		return exitError
 	}
 
-	existingRepoUIDs, err := statestore.ListRepoUIDs(ctx, session.DB)
-	if err != nil {
-		fmt.Fprintf(c.Err, "list existing repos: %v\n", err)
-		return exitError
+	var existingRepoUIDs []string
+	if session.DB != nil {
+		existingRepoUIDs, err = statestore.ListRepoUIDs(ctx, session.DB)
+		if err != nil {
+			fmt.Fprintf(c.Err, "list existing repos: %v\n", err)
+			return exitError
+		}
+	} else {
+		existingRepoUIDs, err = listRepoUIDsFromRepoPool(ctx, session.RepoPoolPath)
+		if err != nil {
+			fmt.Fprintf(c.Err, "list existing repos from pool: %v\n", err)
+			return exitError
+		}
 	}
 	existingSet := map[string]bool{}
 	for _, repoUID := range existingRepoUIDs {
@@ -176,4 +188,23 @@ func (c *CLI) runRepoDiscover(args []string) int {
 		return exitError
 	}
 	return exitOK
+}
+
+func listRepoUIDsFromRepoPool(ctx context.Context, repoPoolPath string) ([]string, error) {
+	bareRepos, err := listRepoPoolBareRepos(repoPoolPath)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(bareRepos))
+	out := make([]string, 0, len(bareRepos))
+	for _, barePath := range bareRepos {
+		remoteURL, _ := gitutil.RunBare(ctx, barePath, "config", "--get", "remote.origin.url")
+		repoUID, _, ok := resolveRepoIdentityForGC(repoPoolPath, barePath, strings.TrimSpace(remoteURL))
+		if !ok || seen[repoUID] {
+			continue
+		}
+		seen[repoUID] = true
+		out = append(out, repoUID)
+	}
+	return out, nil
 }

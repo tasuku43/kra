@@ -120,20 +120,6 @@ func applyOneRepoPoolAdd(ctx context.Context, db *sql.DB, repoPoolPath string, r
 	repoKey := fmt.Sprintf("%s/%s", spec.Owner, spec.Repo)
 	outcome.RepoKey = repoKey
 
-	existingURL, ok, err := statestore.LookupRepoRemoteURL(ctx, db, repoUID)
-	if err != nil {
-		outcome.Success = false
-		outcome.Reason = err.Error()
-		emitRepoPoolDone(onProgress, reqIndex, outcome)
-		return outcome
-	}
-	if ok && strings.TrimSpace(existingURL) != specInput {
-		outcome.Success = false
-		outcome.Reason = fmt.Sprintf("remote_url mismatch (existing=%s)", existingURL)
-		emitRepoPoolDone(onProgress, reqIndex, outcome)
-		return outcome
-	}
-
 	defaultBranch, err := gitutil.DefaultBranchFromRemote(ctx, specInput)
 	if err != nil {
 		outcome.Success = false
@@ -142,6 +128,29 @@ func applyOneRepoPoolAdd(ctx context.Context, db *sql.DB, repoPoolPath string, r
 		return outcome
 	}
 	barePath := repostore.StorePath(repoPoolPath, spec)
+	if db != nil {
+		existingURL, ok, err := statestore.LookupRepoRemoteURL(ctx, db, repoUID)
+		if err != nil {
+			outcome.Success = false
+			outcome.Reason = err.Error()
+			emitRepoPoolDone(onProgress, reqIndex, outcome)
+			return outcome
+		}
+		if ok && strings.TrimSpace(existingURL) != specInput {
+			outcome.Success = false
+			outcome.Reason = fmt.Sprintf("remote_url mismatch (existing=%s)", existingURL)
+			emitRepoPoolDone(onProgress, reqIndex, outcome)
+			return outcome
+		}
+	} else if fi, err := os.Stat(barePath); err == nil && fi.IsDir() {
+		existingURL, err := gitutil.RunBare(ctx, barePath, "config", "--get", "remote.origin.url")
+		if err == nil && strings.TrimSpace(existingURL) != "" && strings.TrimSpace(existingURL) != specInput {
+			outcome.Success = false
+			outcome.Reason = fmt.Sprintf("remote_url mismatch (existing=%s)", strings.TrimSpace(existingURL))
+			emitRepoPoolDone(onProgress, reqIndex, outcome)
+			return outcome
+		}
+	}
 	if _, err := gitutil.EnsureBareRepoFetched(ctx, specInput, barePath, defaultBranch); err != nil {
 		outcome.Success = false
 		outcome.Reason = err.Error()
@@ -149,17 +158,19 @@ func applyOneRepoPoolAdd(ctx context.Context, db *sql.DB, repoPoolPath string, r
 		return outcome
 	}
 
-	now := time.Now().Unix()
-	if err := statestore.EnsureRepo(ctx, db, statestore.EnsureRepoInput{
-		RepoUID:   repoUID,
-		RepoKey:   repoKey,
-		RemoteURL: specInput,
-		Now:       now,
-	}); err != nil {
-		outcome.Success = false
-		outcome.Reason = err.Error()
-		emitRepoPoolDone(onProgress, reqIndex, outcome)
-		return outcome
+	if db != nil {
+		now := time.Now().Unix()
+		if err := statestore.EnsureRepo(ctx, db, statestore.EnsureRepoInput{
+			RepoUID:   repoUID,
+			RepoKey:   repoKey,
+			RemoteURL: specInput,
+			Now:       now,
+		}); err != nil {
+			outcome.Success = false
+			outcome.Reason = err.Error()
+			emitRepoPoolDone(onProgress, reqIndex, outcome)
+			return outcome
+		}
 	}
 	if debugf != nil {
 		debugf("repo pool upsert success repo_uid=%s bare_path=%s", repoUID, barePath)
