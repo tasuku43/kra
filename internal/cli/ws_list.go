@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -62,58 +63,96 @@ func (c *CLI) runWSList(args []string) int {
 	c.debugf("run ws list tree=%t format=%s scope=%s", opts.tree, opts.format, opts.scope)
 
 	ctx := context.Background()
-	dbPath, err := paths.StateDBPathForRoot(root)
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve state db path: %v\n", err)
-		return exitError
-	}
-	repoPoolPath, err := paths.DefaultRepoPoolPath()
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve repo pool path: %v\n", err)
-		return exitError
-	}
-
-	db, err := statestore.Open(ctx, dbPath)
-	if err != nil {
-		fmt.Fprintf(c.Err, "open state store: %v\n", err)
-		return exitError
-	}
-	defer func() { _ = db.Close() }()
-
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		fmt.Fprintf(c.Err, "initialize settings: %v\n", err)
-		return exitError
-	}
 	if err := c.touchStateRegistry(root); err != nil {
 		fmt.Fprintf(c.Err, "update root registry: %v\n", err)
 		return exitError
 	}
 
 	now := time.Now().Unix()
-	if err := importWorkspaceDirs(ctx, db, root, now); err != nil {
-		fmt.Fprintf(c.Err, "import workspace dirs: %v\n", err)
-		return exitError
-	}
-	if err := markMissingRepos(ctx, db, root, now); err != nil {
-		fmt.Fprintf(c.Err, "mark missing repos: %v\n", err)
-		return exitError
-	}
-
-	items, err := statestore.ListWorkspaces(ctx, db)
+	rows, usedFSFallback, err := buildWSListRows(ctx, root, opts.scope, now)
 	if err != nil {
 		fmt.Fprintf(c.Err, "list workspaces: %v\n", err)
 		return exitError
 	}
+	if usedFSFallback {
+		c.debugf("ws list fallback to filesystem-only rows (state db unavailable)")
+	}
+
+	switch opts.format {
+	case "tsv":
+		printWSListTSV(c.Out, rows)
+	default:
+		useColorOut := writerSupportsColor(c.Out)
+		printWSListHuman(c.Out, rows, opts.scope, opts.tree, useColorOut)
+	}
+	c.debugf("ws list completed count=%d", len(rows))
+	return exitOK
+}
+
+func buildWSListRows(ctx context.Context, root string, scope string, now int64) ([]wsListRow, bool, error) {
+	dbPath, err := paths.StateDBPathForRoot(root)
+	if err != nil {
+		return nil, false, fmt.Errorf("resolve state db path: %w", err)
+	}
+	repoPoolPath, err := paths.DefaultRepoPoolPath()
+	if err != nil {
+		return nil, false, fmt.Errorf("resolve repo pool path: %w", err)
+	}
+
+	db, err := statestore.Open(ctx, dbPath)
+	if err != nil {
+		rows, ferr := listRowsFromFilesystem(ctx, root, scope)
+		if ferr != nil {
+			return nil, true, fmt.Errorf("open state store: %v (fallback failed: %w)", err, ferr)
+		}
+		return rows, true, nil
+	}
+	defer func() { _ = db.Close() }()
+
+	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
+		rows, ferr := listRowsFromFilesystem(ctx, root, scope)
+		if ferr != nil {
+			return nil, true, fmt.Errorf("initialize settings: %v (fallback failed: %w)", err, ferr)
+		}
+		return rows, true, nil
+	}
+
+	if err := importWorkspaceDirs(ctx, db, root, now); err != nil {
+		rows, ferr := listRowsFromFilesystem(ctx, root, scope)
+		if ferr != nil {
+			return nil, true, fmt.Errorf("import workspace dirs: %v (fallback failed: %w)", err, ferr)
+		}
+		return rows, true, nil
+	}
+	if err := markMissingRepos(ctx, db, root, now); err != nil {
+		rows, ferr := listRowsFromFilesystem(ctx, root, scope)
+		if ferr != nil {
+			return nil, true, fmt.Errorf("mark missing repos: %v (fallback failed: %w)", err, ferr)
+		}
+		return rows, true, nil
+	}
+
+	items, err := statestore.ListWorkspaces(ctx, db)
+	if err != nil {
+		rows, ferr := listRowsFromFilesystem(ctx, root, scope)
+		if ferr != nil {
+			return nil, true, fmt.Errorf("list workspaces: %v (fallback failed: %w)", err, ferr)
+		}
+		return rows, true, nil
+	}
 
 	rows := make([]wsListRow, 0, len(items))
 	for _, it := range items {
-		if it.Status != opts.scope {
+		if it.Status != scope {
 			continue
 		}
 		repos, err := statestore.ListWorkspaceRepos(ctx, db, it.ID)
 		if err != nil {
-			fmt.Fprintf(c.Err, "list workspace repos: %v\n", err)
-			return exitError
+			rows, ferr := listRowsFromFilesystem(ctx, root, scope)
+			if ferr != nil {
+				return nil, true, fmt.Errorf("list workspace repos: %v (fallback failed: %w)", err, ferr)
+			}
+			return rows, true, nil
 		}
 		rows = append(rows, wsListRow{
 			ID:        it.ID,
@@ -126,16 +165,134 @@ func (c *CLI) runWSList(args []string) int {
 			Repos:     repos,
 		})
 	}
+	return rows, false, nil
+}
 
-	switch opts.format {
-	case "tsv":
-		printWSListTSV(c.Out, rows)
-	default:
-		useColorOut := writerSupportsColor(c.Out)
-		printWSListHuman(c.Out, rows, opts.scope, opts.tree, useColorOut)
+func listRowsFromFilesystem(ctx context.Context, root string, scope string) ([]wsListRow, error) {
+	baseDir := filepath.Join(root, "workspaces")
+	if scope == "archived" {
+		baseDir = filepath.Join(root, "archive")
 	}
-	c.debugf("ws list completed count=%d", len(items))
-	return exitOK
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return nil, err
+	}
+
+	rows := make([]wsListRow, 0, len(entries))
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		id := strings.TrimSpace(e.Name())
+		if err := validateWorkspaceID(id); err != nil {
+			continue
+		}
+		wsPath := filepath.Join(baseDir, id)
+		meta, metaErr := loadWorkspaceMetaFile(wsPath)
+		title := ""
+		updatedAt := int64(0)
+		if metaErr == nil {
+			title = strings.TrimSpace(meta.Workspace.Title)
+			updatedAt = meta.Workspace.UpdatedAt
+		}
+		if updatedAt <= 0 {
+			fi, statErr := os.Stat(wsPath)
+			if statErr == nil {
+				updatedAt = fi.ModTime().Unix()
+			}
+		}
+		repos, err := listWorkspaceReposFromFilesystem(ctx, root, scope, id, meta)
+		if err != nil {
+			return nil, err
+		}
+		rows = append(rows, wsListRow{
+			ID:        id,
+			Status:    scope,
+			UpdatedAt: updatedAt,
+			RepoCount: len(repos),
+			Risk:      computeWorkspaceRisk(ctx, root, id, scope, repos),
+			WorkState: deriveLogicalWorkState(ctx, root, id, scope, repos),
+			Title:     title,
+			Repos:     repos,
+		})
+	}
+
+	slices.SortFunc(rows, func(a, b wsListRow) int {
+		if a.UpdatedAt != b.UpdatedAt {
+			if a.UpdatedAt > b.UpdatedAt {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(a.ID, b.ID)
+	})
+	return rows, nil
+}
+
+func listWorkspaceReposFromFilesystem(ctx context.Context, root string, scope string, workspaceID string, meta workspaceMetaFile) ([]statestore.WorkspaceRepo, error) {
+	wsBase := filepath.Join(root, "workspaces", workspaceID)
+	if scope == "archived" {
+		wsBase = filepath.Join(root, "archive", workspaceID)
+	}
+	reposDir := filepath.Join(wsBase, "repos")
+	entries, err := os.ReadDir(reposDir)
+	if err != nil && !os.IsNotExist(err) {
+		return nil, err
+	}
+
+	restoreByAlias := map[string]workspaceMetaRepoRestore{}
+	for _, r := range meta.ReposRestore {
+		alias := strings.TrimSpace(r.Alias)
+		if alias == "" {
+			continue
+		}
+		restoreByAlias[alias] = r
+	}
+
+	repos := make([]statestore.WorkspaceRepo, 0, len(entries)+len(restoreByAlias))
+	seen := map[string]bool{}
+	for _, e := range entries {
+		if !e.IsDir() {
+			continue
+		}
+		alias := strings.TrimSpace(e.Name())
+		if alias == "" {
+			continue
+		}
+		repoPath := filepath.Join(reposDir, alias)
+		branch := ""
+		if out, runErr := gitutil.Run(ctx, repoPath, "rev-parse", "--abbrev-ref", "HEAD"); runErr == nil {
+			branch = strings.TrimSpace(out)
+		}
+		restore := restoreByAlias[alias]
+		repos = append(repos, statestore.WorkspaceRepo{
+			RepoUID: strings.TrimSpace(restore.RepoUID),
+			Alias:   alias,
+			Branch:  firstNonEmpty(branch, strings.TrimSpace(restore.Branch)),
+			BaseRef: strings.TrimSpace(restore.BaseRef),
+		})
+		seen[alias] = true
+	}
+	for alias, restore := range restoreByAlias {
+		if seen[alias] {
+			continue
+		}
+		repos = append(repos, statestore.WorkspaceRepo{
+			RepoUID: strings.TrimSpace(restore.RepoUID),
+			Alias:   alias,
+			Branch:  strings.TrimSpace(restore.Branch),
+			BaseRef: strings.TrimSpace(restore.BaseRef),
+			MissingAt: sql.NullInt64{
+				Int64: 1,
+				Valid: scope == "active",
+			},
+		})
+	}
+
+	slices.SortFunc(repos, func(a, b statestore.WorkspaceRepo) int {
+		return strings.Compare(a.Alias, b.Alias)
+	})
+	return repos, nil
 }
 
 var errHelpRequested = fmt.Errorf("help requested")
@@ -464,6 +621,16 @@ func formatWorkspaceRisk(risk workspacerisk.WorkspaceRisk) string {
 	default:
 		return "clean"
 	}
+}
+
+func firstNonEmpty(values ...string) string {
+	for _, v := range values {
+		trimmed := strings.TrimSpace(v)
+		if trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func listTerminalWidth() int {

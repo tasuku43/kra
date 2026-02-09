@@ -177,6 +177,44 @@ WHERE workspace_id = 'WS1' AND repo_uid = 'github.com/o/r'
 	}
 }
 
+func TestCLI_WS_List_FallbackToFilesystem_WhenStateDBCorrupted(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+	if err := os.MkdirAll(filepath.Join(env.Root, "workspaces", "FS-ONLY"), 0o755); err != nil {
+		t.Fatalf("create workspace dir: %v", err)
+	}
+	meta := newWorkspaceMetaFileForCreate("FS-ONLY", "filesystem workspace", "", 1700000000)
+	if err := writeWorkspaceMetaFile(filepath.Join(env.Root, "workspaces", "FS-ONLY"), meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+
+	dbPath, err := paths.StateDBPathForRoot(env.Root)
+	if err != nil {
+		t.Fatalf("StateDBPathForRoot() error: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Dir(dbPath), 0o755); err != nil {
+		t.Fatalf("mkdir db dir: %v", err)
+	}
+	if err := os.WriteFile(dbPath, []byte("corrupted"), 0o644); err != nil {
+		t.Fatalf("write corrupted db: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	code := c.Run([]string{"ws", "list"})
+	if code != exitOK {
+		t.Fatalf("ws list exit code = %d, want %d (stderr=%q)", code, exitOK, errBuf.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "FS-ONLY") {
+		t.Fatalf("stdout missing FS workspace: %q", got)
+	}
+	if !strings.Contains(got, "filesystem workspace") {
+		t.Fatalf("stdout missing workspace title: %q", got)
+	}
+}
+
 func TestCLI_WS_List_DefaultScopeShowsActiveOnlyAndNoSelectionMarker(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
