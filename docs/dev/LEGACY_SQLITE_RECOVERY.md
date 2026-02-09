@@ -7,12 +7,12 @@ status: implemented
 
 ## 対象
 
-開発中の旧バージョンで `state.db` を生成済みの環境を、Filesystem-first運用へ切り替える手順。
+開発中の旧バージョンで SQLite 由来ファイルを生成済みの環境を、Filesystem-first運用へ切り替える手順。
 
 ## 方針
 
 - 真実は `GIONX_ROOT` 配下のディレクトリと `.gionx.meta.json`。
-- 旧 `state.db` は補助インデックス扱い。消してもワークスペース本体は消えない。
+- SQLite state store は廃止済み。旧 `state.db` が残っていても runtime は参照しない。
 - まずバックアップを作成し、段階的に切り替える。
 
 ## 手順
@@ -28,12 +28,16 @@ mkdir -p .gionx-recovery-backup
 cp -a workspaces archive .gionx-recovery-backup/
 ```
 
-3. 旧 `state.db` を退避する（存在する場合）
+3. 旧 SQLite ファイルを退避する（存在する場合）
 ```sh
-STATE_DB="$(find "${XDG_DATA_HOME:-$HOME/.local/share}/gionx/roots" -name state.db 2>/dev/null | head -n 1)"
-if [ -n "$STATE_DB" ]; then
+LEGACY_SQLITE_FILES="$(find "${XDG_DATA_HOME:-$HOME/.local/share}/gionx" -name '*.db' 2>/dev/null)"
+if [ -n "$LEGACY_SQLITE_FILES" ]; then
   mkdir -p .gionx-recovery-backup/legacy-index
-  cp -a "$STATE_DB" .gionx-recovery-backup/legacy-index/
+  while IFS= read -r f; do
+    [ -n "$f" ] && cp -a "$f" .gionx-recovery-backup/legacy-index/
+  done <<EOF
+$LEGACY_SQLITE_FILES
+EOF
 fi
 ```
 
@@ -47,10 +51,14 @@ gionx ws list
 gionx ws select --act go
 ```
 
-6. 問題なければ旧 `state.db` を削除（任意）
+6. 問題なければ旧 SQLite ファイルを削除（任意）
 ```sh
-if [ -n "$STATE_DB" ]; then
-  rm -f "$STATE_DB"
+if [ -n "$LEGACY_SQLITE_FILES" ]; then
+  while IFS= read -r f; do
+    [ -n "$f" ] && rm -f "$f"
+  done <<EOF
+$LEGACY_SQLITE_FILES
+EOF
 fi
 ```
 
