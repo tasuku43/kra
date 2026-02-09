@@ -117,7 +117,6 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if !m.confirming || m.canceled {
 			return m, nil
 		}
-		m.confirming = false
 		m.done = true
 		m.debugf("selector done (single confirm) selected=%v", m.selectedIDs())
 		return m, tea.Quit
