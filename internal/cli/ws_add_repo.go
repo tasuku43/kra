@@ -244,18 +244,36 @@ func (c *CLI) runWSAddRepo(args []string) int {
 			fmt.Fprintf(c.Err, "load workspace: %v\n", err)
 			return exitError
 		} else if !ok {
-			fmt.Fprintf(c.Err, "workspace not found: %s\n", workspaceID)
-			return exitError
+			existsFS, activeFS, fsErr := workspaceActiveOnFilesystem(root, workspaceID)
+			if fsErr != nil {
+				fmt.Fprintf(c.Err, "load workspace: %v\n", fsErr)
+				return exitError
+			}
+			if !existsFS {
+				fmt.Fprintf(c.Err, "workspace not found: %s\n", workspaceID)
+				return exitError
+			}
+			if !activeFS {
+				fmt.Fprintf(c.Err, "workspace is not active (status=archived): %s\n", workspaceID)
+				return exitError
+			}
+			c.debugf("ws add-repo: workspace not found in state store, fallback to filesystem: %s", workspaceID)
+			db = nil
 		} else if status != "active" {
 			fmt.Fprintf(c.Err, "workspace is not active (status=%s): %s\n", status, workspaceID)
 			return exitError
 		}
 	} else {
-		if fi, err := os.Stat(filepath.Join(root, "workspaces", workspaceID)); err != nil || !fi.IsDir() {
+		existsFS, activeFS, fsErr := workspaceActiveOnFilesystem(root, workspaceID)
+		if fsErr != nil {
+			fmt.Fprintf(c.Err, "load workspace: %v\n", fsErr)
+			return exitError
+		}
+		if !existsFS {
 			fmt.Fprintf(c.Err, "workspace not found: %s\n", workspaceID)
 			return exitError
 		}
-		if fi, err := os.Stat(filepath.Join(root, "archive", workspaceID)); err == nil && fi.IsDir() {
+		if !activeFS {
 			fmt.Fprintf(c.Err, "workspace is not active (status=archived): %s\n", workspaceID)
 			return exitError
 		}
@@ -443,16 +461,45 @@ func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath str
 			})
 			return exitError
 		} else if !ok {
-			_ = writeCLIJSON(c.Out, cliJSONResponse{
-				OK:          false,
-				Action:      "add-repo",
-				WorkspaceID: workspaceID,
-				Error: &cliJSONError{
-					Code:    "workspace_not_found",
-					Message: fmt.Sprintf("workspace not found: %s", workspaceID),
-				},
-			})
-			return exitError
+			existsFS, activeFS, fsErr := workspaceActiveOnFilesystem(root, workspaceID)
+			if fsErr != nil {
+				_ = writeCLIJSON(c.Out, cliJSONResponse{
+					OK:          false,
+					Action:      "add-repo",
+					WorkspaceID: workspaceID,
+					Error: &cliJSONError{
+						Code:    "internal_error",
+						Message: fmt.Sprintf("load workspace: %v", fsErr),
+					},
+				})
+				return exitError
+			}
+			if !existsFS {
+				_ = writeCLIJSON(c.Out, cliJSONResponse{
+					OK:          false,
+					Action:      "add-repo",
+					WorkspaceID: workspaceID,
+					Error: &cliJSONError{
+						Code:    "workspace_not_found",
+						Message: fmt.Sprintf("workspace not found: %s", workspaceID),
+					},
+				})
+				return exitError
+			}
+			if !activeFS {
+				_ = writeCLIJSON(c.Out, cliJSONResponse{
+					OK:          false,
+					Action:      "add-repo",
+					WorkspaceID: workspaceID,
+					Error: &cliJSONError{
+						Code:    "conflict",
+						Message: fmt.Sprintf("workspace is not active (status=archived): %s", workspaceID),
+					},
+				})
+				return exitError
+			}
+			c.debugf("ws add-repo(json): workspace not found in state store, fallback to filesystem: %s", workspaceID)
+			db = nil
 		} else if status != "active" {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
 				OK:          false,
@@ -466,7 +513,20 @@ func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath str
 			return exitError
 		}
 	} else {
-		if fi, err := os.Stat(filepath.Join(root, "workspaces", workspaceID)); err != nil || !fi.IsDir() {
+		existsFS, activeFS, fsErr := workspaceActiveOnFilesystem(root, workspaceID)
+		if fsErr != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "add-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("load workspace: %v", fsErr),
+				},
+			})
+			return exitError
+		}
+		if !existsFS {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
 				OK:          false,
 				Action:      "add-repo",
@@ -478,7 +538,7 @@ func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath str
 			})
 			return exitError
 		}
-		if fi, err := os.Stat(filepath.Join(root, "archive", workspaceID)); err == nil && fi.IsDir() {
+		if !activeFS {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
 				OK:          false,
 				Action:      "add-repo",
@@ -678,6 +738,27 @@ func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath str
 		},
 	})
 	return exitOK
+}
+
+func workspaceActiveOnFilesystem(root string, workspaceID string) (exists bool, active bool, err error) {
+	fi, err := os.Stat(filepath.Join(root, "workspaces", workspaceID))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			return false, false, nil
+		}
+		return false, false, err
+	}
+	if !fi.IsDir() {
+		return false, false, nil
+	}
+	afi, err := os.Stat(filepath.Join(root, "archive", workspaceID))
+	if err == nil && afi.IsDir() {
+		return true, false, nil
+	}
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		return false, false, err
+	}
+	return true, true, nil
 }
 
 func resolveWorkspaceIDForAddRepo(root string, cwd string, args []string) (string, error) {
