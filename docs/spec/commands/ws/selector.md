@@ -36,7 +36,7 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
 Each row should include at least:
 - selected marker
 - workspace `id`
-- summary text (for example description)
+- summary text (for example title)
 
 Header/footer should show:
 - command mode (`close`, `go`, `reopen`, `purge`)
@@ -89,16 +89,16 @@ Semantic color token policy:
 ## Row layout and alignment
 
 - Row information order is fixed:
-  - focus marker, selection marker, `id`, `description`
+  - focus marker, selection marker, `id`, `title`
 - Canonical row shape:
   - `> [ ] WS-101      login flow`
   - `  [x] WS-202      payment hotfix`
 - Single-select canonical row shape:
   - `> WS-101          login flow`
   - `  WS-202          payment hotfix`
-- For repo-pool selectors (`itemLabel=repo`), description column is omitted by default (no `(no description)` filler).
+- For repo-pool selectors (`itemLabel=repo`), title column is omitted by default (no `(no title)` filler).
 - `status` is not rendered per row. State context is provided by header `scope`.
-- The description column must be vertically aligned across rows (fixed description start column).
+- The title column must be vertically aligned across rows (fixed title start column).
 - Risk tags are not rendered in `Workspaces(...)` rows.
 - Risk hint in `Workspaces(...)` is color-only and applies to workspace id:
   - clean: default

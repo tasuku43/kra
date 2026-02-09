@@ -13,7 +13,7 @@ Create an empty workspace with scaffolding for notes/artifacts.
 
 - `id`: user-provided workspace ID
   - validation rules should follow `gion` (e.g. reject `/`)
-- `--no-prompt` (optional): do not prompt for `description` (store empty)
+- `--no-prompt` (optional): do not prompt for `title` (store empty)
 
 ## Behavior
 
@@ -23,8 +23,8 @@ Create an empty workspace with scaffolding for notes/artifacts.
   - `GIONX_ROOT/workspaces/<id>/artifacts/`
   - `GIONX_ROOT/workspaces/<id>/AGENTS.md` with a short description of the directory meaning
     - include a short explanation of `notes/` vs `artifacts/`
-- Prompt for `description` and store it in workspace metadata (`.gionx.meta.json`)
-  - if in a no-prompt mode, store an empty description
+- Prompt for `title` and store it in workspace metadata (`.gionx.meta.json`)
+  - if in a no-prompt mode, store an empty title
 - Workspace ID collisions:
   - if `<id>` already exists as `active`, return an error and reference the existing workspace
   - if `<id>` already exists as `archived`, guide the user to `gionx ws --act reopen <id>`
@@ -46,6 +46,6 @@ Create an empty workspace with scaffolding for notes/artifacts.
 - `ws create` must create `workspaces/<id>/.gionx.meta.json` as canonical workspace metadata.
 - Initial file content must include:
   - `schema_version`
-  - `workspace` object (`id`, `description`, `source_url`, `status=active`, timestamps)
+  - `workspace` object (`id`, `title`(stored as `description` for compatibility), `source_url`, `status=active`, timestamps)
   - `repos_restore` as an empty array
 - File write must be atomic (`temp + rename`).

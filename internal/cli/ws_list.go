@@ -426,7 +426,7 @@ func formatWorkspaceDescriptionWithLogicalState(workState string, description st
 	desc := strings.TrimSpace(description)
 	if workState == "" {
 		if desc == "" {
-			return "(no description)"
+			return "(no title)"
 		}
 		return desc
 	}

@@ -400,8 +400,8 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	if !strings.Contains(string(agentsBytes), "ID: MVP-020") {
 		t.Fatalf("AGENTS.md missing id: %q", string(agentsBytes))
 	}
-	if !strings.Contains(string(agentsBytes), "Description: hello world") {
-		t.Fatalf("AGENTS.md missing description: %q", string(agentsBytes))
+	if !strings.Contains(string(agentsBytes), "Title: hello world") {
+		t.Fatalf("AGENTS.md missing title: %q", string(agentsBytes))
 	}
 	metaBytes, statErr := os.ReadFile(filepath.Join(wsDir, workspaceMetaFilename))
 	if statErr != nil {
@@ -532,7 +532,7 @@ VALUES ('MVP-020', 1, 'archived', '', '', 1, 1, NULL, NULL)
 	if code != exitError {
 		t.Fatalf("exit code = %d, want %d", code, exitError)
 	}
-	if !strings.Contains(err.String(), "ws reopen") {
+	if !strings.Contains(err.String(), "ws --act reopen") {
 		t.Fatalf("stderr missing reopen guidance: %q", err.String())
 	}
 }

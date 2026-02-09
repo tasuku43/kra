@@ -404,7 +404,7 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 		if showDesc {
 			desc := strings.TrimSpace(it.Description)
 			if desc == "" {
-				desc = "(no description)"
+				desc = "(no title)"
 			}
 			availableDescCols := maxCols - displayWidth(prefixPlain) - 2 // include focus + space
 			if availableDescCols < 8 {

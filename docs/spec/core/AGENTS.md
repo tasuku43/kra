@@ -48,7 +48,7 @@ Include:
 Include:
 
 - Workspace ID: `<id>`
-- Description: (user-provided at creation time)
+- Title: (user-provided at creation time)
 - Notes:
   - where to write investigation notes
   - where to store artifacts

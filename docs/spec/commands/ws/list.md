@@ -27,13 +27,13 @@ List workspaces with status and risk, similar in spirit to `gion manifest ls`.
   - `id`
   - `risk` (color-only indicator; no textual tag)
   - `repo_count`
-  - `description`
-- Summary row order is fixed as `ID | risk | repos | description`.
+  - `title` (stored as `description` for compatibility)
+- Summary row order is fixed as `ID | risk | repos | title`.
 - Column alignment rules:
   - `ID`, `risk`, and `repos` columns use fixed widths computed from the visible row set.
-  - `description` starts at a stable column for all rows.
+  - `title` starts at a stable column for all rows.
 - Ellipsis policy:
-  - only `description` is truncated with `…` when terminal width is tight.
+  - only `title` is truncated with `…` when terminal width is tight.
   - row output width must not exceed the selected terminal width.
 - Header shows scope only:
   - default: `Workspaces(active):`
@@ -68,7 +68,7 @@ List workspaces with status and risk, similar in spirit to `gion manifest ls`.
 - `updated_at`
 - `repo_count`
 - `risk` (live)
-- `description`
+- `title` (stored as `description` for compatibility)
 
 ## Behavior (MVP)
 

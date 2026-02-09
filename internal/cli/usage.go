@@ -107,7 +107,7 @@ func (c *CLI) printWSCreateUsage(w io.Writer) {
 Create a workspace directory under GIONX_ROOT/workspaces/<id>/ and write .gionx.meta.json.
 
 Options:
-  --no-prompt        Do not prompt for description (store empty)
+  --no-prompt        Do not prompt for title (store empty)
 `)
 }
 

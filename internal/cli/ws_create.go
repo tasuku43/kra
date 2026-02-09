@@ -100,7 +100,7 @@ func (c *CLI) runWSCreate(args []string) int {
 			fmt.Fprintf(c.Err, "workspace already exists and is active: %s\n", id)
 			return exitError
 		case "archived":
-			fmt.Fprintf(c.Err, "workspace already exists and is archived: %s\nrun: gionx ws reopen %s\n", id, id)
+			fmt.Fprintf(c.Err, "workspace already exists and is archived: %s\nrun: gionx ws --act reopen %s\n", id, id)
 			return exitError
 		default:
 			fmt.Fprintf(c.Err, "workspace already exists with unknown status %q: %s\n", status, id)
@@ -110,9 +110,9 @@ func (c *CLI) runWSCreate(args []string) int {
 
 	description := ""
 	if !noPrompt {
-		d, err := c.promptLine("description: ")
+		d, err := c.promptLine("title: ")
 		if err != nil {
-			fmt.Fprintf(c.Err, "read description: %v\n", err)
+			fmt.Fprintf(c.Err, "read title: %v\n", err)
 			return exitError
 		}
 		description = d
@@ -181,7 +181,7 @@ func (c *CLI) runWSCreate(args []string) int {
 				fmt.Fprintf(c.Err, "workspace already exists and is active: %s\n", id)
 				return exitError
 			case "archived":
-				fmt.Fprintf(c.Err, "workspace already exists and is archived: %s\nrun: gionx ws reopen %s\n", id, id)
+				fmt.Fprintf(c.Err, "workspace already exists and is archived: %s\nrun: gionx ws --act reopen %s\n", id, id)
 				return exitError
 			default:
 				fmt.Fprintf(c.Err, "workspace already exists with unknown status %q: %s\n", existsErr.Status, id)
@@ -229,22 +229,22 @@ func validateWorkspaceID(id string) error {
 }
 
 func defaultWorkspaceAgentsContent(id string, description string) string {
-	desc := strings.TrimSpace(description)
-	if desc == "" {
-		desc = "(empty)"
+	title := strings.TrimSpace(description)
+	if title == "" {
+		title = "(empty)"
 	}
 	return fmt.Sprintf(`# workspace AGENTS guide
 
 ## Workspace
 
 - ID: %s
-- Description: %s
+- Title: %s
 
 ## Directory map
 
 - notes/: investigation notes, decisions, TODOs, links
 - artifacts/: files and evidence (screenshots, logs, dumps, PoCs)
-- repos/: git worktrees (NOT Git-tracked; added via gionx ws add-repo)
+- repos/: git worktrees (NOT Git-tracked; added via gionx ws --act add-repo)
 
 Notes vs artifacts:
 - notes/: write what you learned and decided
@@ -253,6 +253,6 @@ Notes vs artifacts:
 ## Closing
 
 When you are done, run:
-  gionx ws close %s
-`, id, desc, id)
+  gionx ws --act close %s
+`, id, title, id)
 }
