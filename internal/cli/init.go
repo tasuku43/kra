@@ -87,17 +87,17 @@ func (c *CLI) resolveInitRoot(rootFromFlag string) (string, error) {
 	}
 
 	if inFile, ok := c.In.(*os.File); ok && isatty.IsTerminal(inFile.Fd()) {
-		defaultRoot, err := defaultInitRootSuggestion()
+		defaultRootAbs, defaultRootLabel, err := defaultInitRootSuggestion()
 		if err != nil {
 			return "", err
 		}
-		line, err := c.promptLine(fmt.Sprintf("root path [%s]: ", defaultRoot))
+		line, err := c.promptLine(fmt.Sprintf("root path [%s]: ", defaultRootLabel))
 		if err != nil {
 			return "", err
 		}
 		selected := strings.TrimSpace(line)
 		if selected == "" {
-			selected = defaultRoot
+			selected = defaultRootAbs
 		}
 		return normalizeInitRoot(selected)
 	}
@@ -105,12 +105,12 @@ func (c *CLI) resolveInitRoot(rootFromFlag string) (string, error) {
 	return "", fmt.Errorf("non-interactive init requires --root")
 }
 
-func defaultInitRootSuggestion() (string, error) {
+func defaultInitRootSuggestion() (abs string, label string, err error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
-	return filepath.Join(home, "gionx"), nil
+	return filepath.Join(home, "gionx"), "~/gionx", nil
 }
 
 func normalizeInitRoot(rootRaw string) (string, error) {
