@@ -83,3 +83,11 @@ status: planned
     - `docs/dev/TESTING.md`
   - Depends: none
   - Parallel: yes
+
+- [ ] UX-CORE-010: Single-select confirm contrast cue
+  - What: during single-select confirm delay, dim non-selected rows with `text.muted` so final selection is clearer.
+  - Specs:
+    - `docs/spec/concepts/ui-selector.md`
+    - `docs/spec/concepts/ui-color.md`
+  - Depends: UX-CORE-003
+  - Parallel: yes
