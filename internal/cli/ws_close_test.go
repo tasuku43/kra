@@ -457,12 +457,25 @@ func TestCommitArchiveChange_AllowlistsNestedRootRelativePaths(t *testing.T) {
 	if err := os.MkdirAll(archiveDir, 0o755); err != nil {
 		t.Fatalf("mkdir archive dir: %v", err)
 	}
+	if err := os.WriteFile(filepath.Join(parent, ".gitignore"), []byte(".claude/settings.local.json\n"), 0o644); err != nil {
+		t.Fatalf("write .gitignore: %v", err)
+	}
 	metaPath := filepath.Join(archiveDir, workspaceMetaFilename)
 	if err := os.WriteFile(metaPath, []byte(`{"workspace":{"id":"DEMO-0000","status":"archived"}}`), 0o644); err != nil {
 		t.Fatalf("write meta: %v", err)
 	}
+	ignoredPath := filepath.Join(archiveDir, ".claude", "settings.local.json")
+	if err := os.MkdirAll(filepath.Dir(ignoredPath), 0o755); err != nil {
+		t.Fatalf("mkdir ignored dir: %v", err)
+	}
+	if err := os.WriteFile(ignoredPath, []byte("{\"local\":true}\n"), 0o644); err != nil {
+		t.Fatalf("write ignored settings: %v", err)
+	}
 
-	sha, err := commitArchiveChange(context.Background(), root, wsID, []string{workspaceMetaFilename})
+	sha, err := commitArchiveChange(context.Background(), root, wsID, []string{
+		workspaceMetaFilename,
+		".claude/settings.local.json",
+	})
 	if err != nil {
 		t.Fatalf("commitArchiveChange() error = %v, want nil", err)
 	}

@@ -8,6 +8,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -961,6 +962,14 @@ func commitArchiveChange(ctx context.Context, root string, workspaceID string, e
 		if _, ok := stagedSet[candidate]; ok {
 			continue
 		}
+		ignored, ignoreErr := isGitIgnoredRelativeToRoot(root, filepath.Join("archive", workspaceID, filepath.FromSlash(rel)))
+		if ignoreErr != nil {
+			resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
+			return "", ignoreErr
+		}
+		if ignored {
+			continue
+		}
 		resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
 		return "", fmt.Errorf("workspace contains files ignored by git; cannot archive commit: %s", rel)
 	}
@@ -975,4 +984,18 @@ func commitArchiveChange(ctx context.Context, root string, workspaceID string, e
 		return "", err
 	}
 	return strings.TrimSpace(sha), nil
+}
+
+func isGitIgnoredRelativeToRoot(root string, relPath string) (bool, error) {
+	relPath = filepath.ToSlash(filepath.Clean(relPath))
+	cmd := exec.Command("git", "check-ignore", "--quiet", "--", relPath)
+	cmd.Dir = root
+	if err := cmd.Run(); err != nil {
+		var exitErr *exec.ExitError
+		if errors.As(err, &exitErr) && exitErr.ExitCode() == 1 {
+			return false, nil
+		}
+		return false, fmt.Errorf("git check-ignore %s: %w", relPath, err)
+	}
+	return true, nil
 }
