@@ -12,7 +12,6 @@ type Result struct {
 
 type Port interface {
 	EnsureLayout(root string) error
-	EnsureState(ctx context.Context, root string) error
 	TouchRegistry(root string) error
 }
 
@@ -26,9 +25,6 @@ func NewService(port Port) *Service {
 
 func (s *Service) Run(ctx context.Context, req Request) (Result, error) {
 	if err := s.port.EnsureLayout(req.Root); err != nil {
-		return Result{}, err
-	}
-	if err := s.port.EnsureState(ctx, req.Root); err != nil {
 		return Result{}, err
 	}
 	if err := s.port.TouchRegistry(req.Root); err != nil {

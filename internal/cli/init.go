@@ -47,14 +47,6 @@ func (c *CLI) runInit(args []string) int {
 		switch {
 		case strings.HasPrefix(err.Error(), "init layout:"):
 			fmt.Fprintf(c.Err, "%v\n", err)
-		case strings.HasPrefix(err.Error(), "resolve state db path:"):
-			fmt.Fprintf(c.Err, "%v\n", err)
-		case strings.HasPrefix(err.Error(), "resolve repo pool path:"):
-			fmt.Fprintf(c.Err, "%v\n", err)
-		case strings.HasPrefix(err.Error(), "open state store:"):
-			fmt.Fprintf(c.Err, "%v\n", err)
-		case strings.HasPrefix(err.Error(), "initialize settings:"):
-			fmt.Fprintf(c.Err, "%v\n", err)
 		case strings.HasPrefix(err.Error(), "update root registry:"):
 			fmt.Fprintf(c.Err, "%v\n", err)
 		default:

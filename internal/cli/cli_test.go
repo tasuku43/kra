@@ -268,30 +268,6 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 		t.Fatalf("tracked files = %q, want only .gitignore and AGENTS.md", strings.TrimSpace(tracked))
 	}
 
-	ctx := context.Background()
-	dbPath, pathErr := paths.StateDBPathForRoot(root)
-	if pathErr != nil {
-		t.Fatalf("StateDBPathForRoot() error: %v", pathErr)
-	}
-	db, openErr := statestore.Open(ctx, dbPath)
-	if openErr != nil {
-		t.Fatalf("Open(state db) error: %v", openErr)
-	}
-	t.Cleanup(func() { _ = db.Close() })
-
-	var gotRoot string
-	var gotPool string
-	qErr := db.QueryRowContext(ctx, "SELECT root_path, repo_pool_path FROM settings WHERE id = 1").Scan(&gotRoot, &gotPool)
-	if qErr != nil {
-		t.Fatalf("query settings: %v", qErr)
-	}
-	if gotRoot != root {
-		t.Fatalf("settings.root_path = %q, want %q", gotRoot, root)
-	}
-	wantPool := filepath.Join(cacheHome, "gionx", "repo-pool")
-	if gotPool != wantPool {
-		t.Fatalf("settings.repo_pool_path = %q, want %q", gotPool, wantPool)
-	}
 }
 
 func TestCLI_Init_CreatesMissingGIONXRootDirectory(t *testing.T) {
