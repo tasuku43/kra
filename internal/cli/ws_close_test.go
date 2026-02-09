@@ -434,6 +434,43 @@ func TestEnsureRootGitWorktree_RejectsRootOutsideGitWorktree(t *testing.T) {
 	}
 }
 
+func TestCommitArchiveChange_AllowlistsNestedRootRelativePaths(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	parent := t.TempDir()
+	run := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = dir
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+	run(parent, "init", "-b", "main")
+	run(parent, "config", "user.email", "test@example.com")
+	run(parent, "config", "user.name", "test")
+
+	root := filepath.Join(parent, "tasuku-yamashita", "work")
+	wsID := "DEMO-0000"
+	archiveDir := filepath.Join(root, "archive", wsID)
+	if err := os.MkdirAll(archiveDir, 0o755); err != nil {
+		t.Fatalf("mkdir archive dir: %v", err)
+	}
+	metaPath := filepath.Join(archiveDir, workspaceMetaFilename)
+	if err := os.WriteFile(metaPath, []byte(`{"workspace":{"id":"DEMO-0000","status":"archived"}}`), 0o644); err != nil {
+		t.Fatalf("write meta: %v", err)
+	}
+
+	sha, err := commitArchiveChange(context.Background(), root, wsID, []string{workspaceMetaFilename})
+	if err != nil {
+		t.Fatalf("commitArchiveChange() error = %v, want nil", err)
+	}
+	if strings.TrimSpace(sha) == "" {
+		t.Fatalf("commitArchiveChange() sha is empty")
+	}
+}
+
 func mustGitOutput(t *testing.T, dir string, args ...string) string {
 	t.Helper()
 	cmd := exec.Command("git", args...)

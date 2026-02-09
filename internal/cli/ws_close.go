@@ -908,8 +908,16 @@ func resetArchiveStaging(ctx context.Context, root, archiveArg, workspacesArg st
 }
 
 func commitArchiveChange(ctx context.Context, root string, workspaceID string, expectedArchiveFiles []string) (string, error) {
-	archivePrefix := filepath.Join("archive", workspaceID) + string(filepath.Separator)
-	workspacesPrefix := filepath.Join("workspaces", workspaceID) + string(filepath.Separator)
+	archivePrefix, err := toGitTopLevelPath(ctx, root, filepath.Join("archive", workspaceID))
+	if err != nil {
+		return "", err
+	}
+	workspacesPrefix, err := toGitTopLevelPath(ctx, root, filepath.Join("workspaces", workspaceID))
+	if err != nil {
+		return "", err
+	}
+	archivePrefix += string(filepath.Separator)
+	workspacesPrefix += string(filepath.Separator)
 
 	archiveArg := filepath.ToSlash(filepath.Join("archive", workspaceID))
 	workspacesArg := filepath.ToSlash(filepath.Join("workspaces", workspaceID))
@@ -945,7 +953,11 @@ func commitArchiveChange(ctx context.Context, root string, workspaceID string, e
 	}
 
 	for _, rel := range expectedArchiveFiles {
-		candidate := filepath.Clean(filepath.Join("archive", workspaceID, filepath.FromSlash(rel)))
+		candidate, err := toGitTopLevelPath(ctx, root, filepath.Join("archive", workspaceID, filepath.FromSlash(rel)))
+		if err != nil {
+			resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
+			return "", err
+		}
 		if _, ok := stagedSet[candidate]; ok {
 			continue
 		}

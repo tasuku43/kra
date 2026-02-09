@@ -192,9 +192,18 @@ func ensureGitInit(root string) (bool, error) {
 
 func commitInitFiles(root string) error {
 	const commitMessage = "init: add gionx bootstrap files"
+	ctx := context.Background()
+	allowGitignore, err := toGitTopLevelPath(ctx, root, gitignoreFilename)
+	if err != nil {
+		return err
+	}
+	allowAgents, err := toGitTopLevelPath(ctx, root, rootAgentsFilename)
+	if err != nil {
+		return err
+	}
 	allowlist := map[string]struct{}{
-		gitignoreFilename:  {},
-		rootAgentsFilename: {},
+		allowGitignore: {},
+		allowAgents:    {},
 	}
 
 	addCmd := exec.Command("git", "add", "--", gitignoreFilename, rootAgentsFilename)

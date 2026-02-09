@@ -298,8 +298,16 @@ func baseBranchFromBaseRef(baseRef string) string {
 }
 
 func commitReopenChange(ctx context.Context, root string, workspaceID string) (string, error) {
-	workspacesPrefix := filepath.Join("workspaces", workspaceID) + string(filepath.Separator)
-	archivePrefix := filepath.Join("archive", workspaceID) + string(filepath.Separator)
+	workspacesPrefix, err := toGitTopLevelPath(ctx, root, filepath.Join("workspaces", workspaceID))
+	if err != nil {
+		return "", err
+	}
+	archivePrefix, err := toGitTopLevelPath(ctx, root, filepath.Join("archive", workspaceID))
+	if err != nil {
+		return "", err
+	}
+	workspacesPrefix += string(filepath.Separator)
+	archivePrefix += string(filepath.Separator)
 
 	workspacesArg := filepath.ToSlash(filepath.Join("workspaces", workspaceID))
 	archiveArg := filepath.ToSlash(filepath.Join("archive", workspaceID))
