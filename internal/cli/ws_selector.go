@@ -18,10 +18,8 @@ import (
 
 var errSelectorCanceled = errors.New("selector canceled")
 
-const selectorCaretBlinkInterval = 500 * time.Millisecond
 const selectorSingleConfirmDelay = 200 * time.Millisecond
 
-type selectorCaretBlinkMsg struct{}
 type selectorConfirmDoneMsg struct{}
 type selectorMessageLevel string
 
@@ -51,7 +49,6 @@ type workspaceSelectorModel struct {
 	message       string
 	msgLevel      selectorMessageLevel
 	filter        string
-	showCaret     bool
 	canceled      bool
 	done          bool
 	single        bool
@@ -90,14 +87,13 @@ func newWorkspaceSelectorModelWithOptionsAndMode(candidates []workspaceSelectorC
 		useColor:      useColor,
 		debugf:        debugf,
 		msgLevel:      selectorMessageLevelMuted,
-		showCaret:     true,
 		single:        single,
 		reducedMotion: isReducedMotionEnabled(),
 	}
 }
 
 func (m workspaceSelectorModel) Init() tea.Cmd {
-	return selectorCaretBlinkCmd()
+	return nil
 }
 
 func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -107,12 +103,6 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.width = msg.Width
 		}
 		return m, nil
-	case selectorCaretBlinkMsg:
-		if m.done || m.canceled {
-			return m, nil
-		}
-		m.showCaret = !m.showCaret
-		return m, selectorCaretBlinkCmd()
 	case selectorConfirmDoneMsg:
 		if !m.confirming || m.canceled {
 			return m, nil
@@ -216,14 +206,8 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m workspaceSelectorModel) View() string {
-	lines := renderWorkspaceSelectorLinesWithOptions(m.status, m.title, m.action, m.candidates, m.selected, m.cursor, m.message, m.msgLevel, m.filter, m.showDesc, m.showCaret, m.single, m.confirming, m.useColor, m.width)
+	lines := renderWorkspaceSelectorLinesWithOptions(m.status, m.title, m.action, m.candidates, m.selected, m.cursor, m.message, m.msgLevel, m.filter, m.showDesc, false, m.single, m.confirming, m.useColor, m.width)
 	return strings.Join(lines, "\n")
-}
-
-func selectorCaretBlinkCmd() tea.Cmd {
-	return tea.Tick(selectorCaretBlinkInterval, func(time.Time) tea.Msg {
-		return selectorCaretBlinkMsg{}
-	})
 }
 
 func selectorSingleConfirmCmd() tea.Cmd {
@@ -491,17 +475,7 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 		availableFilterCols = 1
 	}
 	filterBody := truncateDisplay(filterLabel, availableFilterCols)
-	caret := " "
-	if showCaret {
-		caret = "|"
-	}
-	if useColor {
-		base := styleMuted(fmt.Sprintf("%sfilter: %s", uiIndent, filterBody), true)
-		caretStyled := styleBold(styleTokenize(caret, tokenFocus, true), true)
-		lines = append(lines, base+caretStyled)
-	} else {
-		lines = append(lines, fmt.Sprintf("%sfilter: %s%s", uiIndent, filterBody, caret))
-	}
+	lines = append(lines, fmt.Sprintf("%sfilter: %s", uiIndent, filterBody))
 	lines = append(lines, footer)
 
 	if strings.TrimSpace(message) == "" {

@@ -30,25 +30,6 @@ func TestWorkspaceSelectorModel_SpaceTogglesSelection(t *testing.T) {
 	}
 }
 
-func TestWorkspaceSelectorModel_BlinkTogglesCaretVisibility(t *testing.T) {
-	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", "proceed", false, nil)
-	if !m.showCaret {
-		t.Fatalf("initial caret visibility should be true")
-	}
-
-	updated, cmd := m.Update(selectorCaretBlinkMsg{})
-	next, ok := updated.(workspaceSelectorModel)
-	if !ok {
-		t.Fatalf("unexpected model type: %T", updated)
-	}
-	if next.showCaret {
-		t.Fatalf("caret visibility should toggle to false")
-	}
-	if cmd == nil {
-		t.Fatalf("blink should schedule next tick")
-	}
-}
-
 func TestWorkspaceSelectorModel_EnterRequiresSelection(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", "proceed", false, nil)
 
@@ -231,8 +212,8 @@ func TestRenderWorkspaceSelectorLines_AlwaysShowsFilterLine(t *testing.T) {
 	if !strings.Contains(joined, "filter:") {
 		t.Fatalf("expected filter line to be shown, got %q", joined)
 	}
-	if !strings.Contains(joined, "filter: |") {
-		t.Fatalf("expected filter caret to be shown, got %q", joined)
+	if strings.Contains(joined, "filter: |") {
+		t.Fatalf("filter line should not render synthetic caret, got %q", joined)
 	}
 }
 

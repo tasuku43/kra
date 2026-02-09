@@ -3,6 +3,6 @@ Action:
 > ○ add-repo    (no title)
   ○ close       (no title)
 
-  filter: |
+  filter: 
   ↑↓ move  enter run  type filter  esc cancel
 
