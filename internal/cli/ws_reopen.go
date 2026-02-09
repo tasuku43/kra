@@ -68,27 +68,27 @@ func (c *CLI) runWSReopen(args []string) int {
 	c.debugf("run ws reopen args=%q", args)
 
 	ctx := context.Background()
-	dbPath, err := paths.StateDBPathForRoot(root)
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve state db path: %v\n", err)
-		return exitError
-	}
 	repoPoolPath, err := paths.DefaultRepoPoolPath()
 	if err != nil {
 		fmt.Fprintf(c.Err, "resolve repo pool path: %v\n", err)
 		return exitError
 	}
 
-	db, err := statestore.Open(ctx, dbPath)
-	if err != nil {
-		fmt.Fprintf(c.Err, "open state store: %v\n", err)
-		return exitError
-	}
-	defer func() { _ = db.Close() }()
-
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		fmt.Fprintf(c.Err, "initialize settings: %v\n", err)
-		return exitError
+	var db *sql.DB
+	if dbPath, err := paths.StateDBPathForRoot(root); err == nil {
+		if opened, err := statestore.Open(ctx, dbPath); err == nil {
+			if err := statestore.EnsureSettings(ctx, opened, root, repoPoolPath); err == nil {
+				db = opened
+				defer func() { _ = db.Close() }()
+			} else {
+				_ = opened.Close()
+				c.debugf("ws reopen: state store unavailable (initialize settings): %v", err)
+			}
+		} else {
+			c.debugf("ws reopen: state store unavailable (open): %v", err)
+		}
+	} else {
+		c.debugf("ws reopen: state store unavailable (resolve path): %v", err)
 	}
 
 	if err := ensureRootGitWorktree(ctx, root); err != nil {
@@ -144,12 +144,14 @@ func (c *CLI) runWSReopen(args []string) int {
 }
 
 func (c *CLI) reopenWorkspace(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string) error {
-	if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID); err != nil {
-		return fmt.Errorf("load workspace: %w", err)
-	} else if !ok {
-		return fmt.Errorf("workspace not found: %s", workspaceID)
-	} else if status != "archived" {
-		return fmt.Errorf("workspace is not archived (status=%s): %s", status, workspaceID)
+	if db != nil {
+		if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID); err != nil {
+			return fmt.Errorf("load workspace: %w", err)
+		} else if !ok {
+			return fmt.Errorf("workspace not found: %s", workspaceID)
+		} else if status != "archived" {
+			return fmt.Errorf("workspace is not archived (status=%s): %s", status, workspaceID)
+		}
 	}
 
 	archivePath := filepath.Join(root, "archive", workspaceID)
@@ -194,13 +196,15 @@ func (c *CLI) reopenWorkspace(ctx context.Context, db *sql.DB, root string, repo
 		return fmt.Errorf("commit reopen change: %w", err)
 	}
 
-	now := time.Now().Unix()
-	if err := statestore.ReopenWorkspace(ctx, db, statestore.ReopenWorkspaceInput{
-		ID:                workspaceID,
-		ReopenedCommitSHA: sha,
-		Now:               now,
-	}); err != nil {
-		return fmt.Errorf("update state store: %w", err)
+	if db != nil {
+		now := time.Now().Unix()
+		if err := statestore.ReopenWorkspace(ctx, db, statestore.ReopenWorkspaceInput{
+			ID:                workspaceID,
+			ReopenedCommitSHA: sha,
+			Now:               now,
+		}); err != nil {
+			return fmt.Errorf("update state store: %w", err)
+		}
 	}
 
 	return nil

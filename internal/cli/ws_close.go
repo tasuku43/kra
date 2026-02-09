@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/tasuku43/gion-core/repospec"
-	"github.com/tasuku43/gion-core/repostore"
 	"github.com/tasuku43/gion-core/workspacerisk"
 	"github.com/tasuku43/gionx/internal/infra/gitutil"
 	"github.com/tasuku43/gionx/internal/infra/paths"
@@ -102,27 +101,21 @@ func (c *CLI) runWSClose(args []string) int {
 	c.debugf("run ws close args=%q", args)
 
 	ctx := context.Background()
-	dbPath, err := paths.StateDBPathForRoot(root)
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve state db path: %v\n", err)
-		return exitError
-	}
-	repoPoolPath, err := paths.DefaultRepoPoolPath()
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve repo pool path: %v\n", err)
-		return exitError
-	}
-
-	db, err := statestore.Open(ctx, dbPath)
-	if err != nil {
-		fmt.Fprintf(c.Err, "open state store: %v\n", err)
-		return exitError
-	}
-	defer func() { _ = db.Close() }()
-
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		fmt.Fprintf(c.Err, "initialize settings: %v\n", err)
-		return exitError
+	var db *sql.DB
+	dbPath, dbPathErr := paths.StateDBPathForRoot(root)
+	repoPoolPath, poolErr := paths.DefaultRepoPoolPath()
+	if dbPathErr == nil && poolErr == nil {
+		if opened, err := statestore.Open(ctx, dbPath); err == nil {
+			if err := statestore.EnsureSettings(ctx, opened, root, repoPoolPath); err == nil {
+				db = opened
+				defer func() { _ = db.Close() }()
+			} else {
+				_ = opened.Close()
+				c.debugf("ws close: state store unavailable (ensure settings): %v", err)
+			}
+		} else {
+			c.debugf("ws close: state store unavailable (open): %v", err)
+		}
 	}
 
 	if err := ensureRootGitWorktree(ctx, root); err != nil {
@@ -359,42 +352,25 @@ func isPathInside(base string, target string) bool {
 	return true
 }
 
-func listActiveCloseCandidates(ctx context.Context, db *sql.DB, root string) ([]workspaceSelectorCandidate, error) {
-	items, err := statestore.ListWorkspaces(ctx, db)
-	if err != nil {
-		return nil, err
-	}
-
-	out := make([]workspaceSelectorCandidate, 0, len(items))
-	for _, it := range items {
-		if it.Status != "active" {
-			continue
-		}
-		repos, err := statestore.ListWorkspaceRepos(ctx, db, it.ID)
-		if err != nil {
-			return nil, err
-		}
-		risk, _ := inspectWorkspaceRepoRisk(ctx, root, it.ID, repos)
-		out = append(out, workspaceSelectorCandidate{
-			ID:    it.ID,
-			Title: strings.TrimSpace(it.Title),
-			Risk:  risk,
-		})
-	}
-	return out, nil
-}
-
 func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string) error {
-	if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID); err != nil {
-		return fmt.Errorf("load workspace: %w", err)
-	} else if !ok {
-		return fmt.Errorf("workspace not found: %s", workspaceID)
-	} else if status != "active" {
-		return fmt.Errorf("workspace is not active (status=%s): %s", status, workspaceID)
+	if db != nil {
+		if status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID); err != nil {
+			return fmt.Errorf("load workspace: %w", err)
+		} else if !ok {
+			return fmt.Errorf("workspace not found: %s", workspaceID)
+		} else if status != "active" {
+			return fmt.Errorf("workspace is not active (status=%s): %s", status, workspaceID)
+		}
 	}
-
 	wsPath := filepath.Join(root, "workspaces", workspaceID)
 	if fi, err := os.Stat(wsPath); err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			archivePath := filepath.Join(root, "archive", workspaceID)
+			if afi, aerr := os.Stat(archivePath); aerr == nil && afi.IsDir() {
+				return fmt.Errorf("workspace is not active (status=archived): %s", workspaceID)
+			}
+			return fmt.Errorf("workspace not found: %s", workspaceID)
+		}
 		return fmt.Errorf("stat workspace dir: %w", err)
 	} else if !fi.IsDir() {
 		return fmt.Errorf("workspace path is not a directory: %s", wsPath)
@@ -406,7 +382,7 @@ func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoP
 		return fmt.Errorf("stat archive dir: %w", err)
 	}
 
-	repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+	repos, err := listWorkspaceReposForClose(ctx, db, root, workspaceID)
 	if err != nil {
 		return fmt.Errorf("list workspace repos: %w", err)
 	}
@@ -443,13 +419,15 @@ func (c *CLI) closeWorkspace(ctx context.Context, db *sql.DB, root string, repoP
 		return fmt.Errorf("commit archive change: %w", err)
 	}
 
-	now := time.Now().Unix()
-	if err := statestore.ArchiveWorkspace(ctx, db, statestore.ArchiveWorkspaceInput{
-		ID:                workspaceID,
-		ArchivedCommitSHA: sha,
-		Now:               now,
-	}); err != nil {
-		return fmt.Errorf("update state store: %w", err)
+	if db != nil {
+		now := time.Now().Unix()
+		if err := statestore.ArchiveWorkspace(ctx, db, statestore.ArchiveWorkspaceInput{
+			ID:                workspaceID,
+			ArchivedCommitSHA: sha,
+			Now:               now,
+		}); err != nil {
+			return fmt.Errorf("update state store: %w", err)
+		}
 	}
 
 	return nil
@@ -467,12 +445,29 @@ func buildWorkspaceMetaForClose(ctx context.Context, db *sql.DB, root string, re
 	}
 	entries := make([]workspaceMetaRepoRestore, 0, len(repos))
 	for _, r := range repos {
-		remoteURL, ok, err := statestore.LookupRepoRemoteURL(ctx, db, r.RepoUID)
-		if err != nil {
-			return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("lookup repo remote url: %w", err)
+		remoteURL := ""
+		if db != nil {
+			u, ok, err := statestore.LookupRepoRemoteURL(ctx, db, r.RepoUID)
+			if err != nil {
+				return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("lookup repo remote url: %w", err)
+			}
+			if !ok {
+				return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("repo not found in repos table: %s", r.RepoUID)
+			}
+			remoteURL = u
+		} else {
+			worktreePath := filepath.Join(root, "workspaces", workspaceID, "repos", r.Alias)
+			if out, err := gitutil.Run(ctx, worktreePath, "remote", "get-url", "origin"); err == nil {
+				remoteURL = strings.TrimSpace(out)
+			}
 		}
-		if !ok {
-			return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("repo not found in repos table: %s", r.RepoUID)
+		if remoteURL == "" {
+			if prev, ok := existingByAlias[r.Alias]; ok {
+				remoteURL = strings.TrimSpace(prev.RemoteURL)
+			}
+		}
+		if remoteURL == "" {
+			return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("resolve remote url: alias=%s", r.Alias)
 		}
 		spec, err := repospec.Normalize(remoteURL)
 		if err != nil {
@@ -487,10 +482,17 @@ func buildWorkspaceMetaForClose(ctx context.Context, db *sql.DB, root string, re
 			}
 		}
 		if baseRef == "" {
-			barePath := repostore.StorePath(repoPoolPath, spec)
-			baseRef, err = detectDefaultBaseRefFromBare(ctx, barePath)
-			if err != nil {
-				return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("detect default base_ref for %s: %w", spec.RepoKey, err)
+			if db != nil {
+				barePath := resolveBarePathFromSpec(repoPoolPath, spec)
+				baseRef, err = detectDefaultBaseRefFromBare(ctx, barePath)
+				if err != nil {
+					return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("detect default base_ref for %s: %w", spec.RepoKey, err)
+				}
+			} else {
+				baseRef = detectOriginHeadBaseRef(ctx, worktreePath)
+				if baseRef == "" {
+					return workspaceMetaFile{}, workspaceMetaFile{}, fmt.Errorf("detect default base_ref for %s", spec.RepoKey)
+				}
 			}
 		}
 
@@ -566,7 +568,7 @@ type workspaceRiskDetail struct {
 func collectWorkspaceRiskDetails(ctx context.Context, db *sql.DB, root string, workspaceIDs []string) ([]workspaceRiskDetail, error) {
 	out := make([]workspaceRiskDetail, 0, len(workspaceIDs))
 	for _, workspaceID := range workspaceIDs {
-		repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+		repos, err := listWorkspaceReposForClose(ctx, db, root, workspaceID)
 		if err != nil {
 			return nil, fmt.Errorf("list workspace repos for %s: %w", workspaceID, err)
 		}
@@ -751,18 +753,27 @@ func removeWorkspaceWorktrees(ctx context.Context, db *sql.DB, root string, repo
 			return err
 		}
 
-		remoteURL, ok, err := statestore.LookupRepoRemoteURL(ctx, db, r.RepoUID)
-		if err != nil {
-			return err
+		barePath := ""
+		if db != nil {
+			remoteURL, ok, err := statestore.LookupRepoRemoteURL(ctx, db, r.RepoUID)
+			if err != nil {
+				return err
+			}
+			if !ok {
+				return fmt.Errorf("repo not found in repos table: %s", r.RepoUID)
+			}
+			spec, err := repospec.Normalize(remoteURL)
+			if err != nil {
+				return fmt.Errorf("normalize repo remote url: %w", err)
+			}
+			barePath = resolveBarePathFromSpec(repoPoolPath, spec)
+		} else {
+			var err error
+			barePath, err = resolveBarePathFromWorktreeGitdir(worktreePath)
+			if err != nil {
+				return err
+			}
 		}
-		if !ok {
-			return fmt.Errorf("repo not found in repos table: %s", r.RepoUID)
-		}
-		spec, err := repospec.Normalize(remoteURL)
-		if err != nil {
-			return fmt.Errorf("normalize repo remote url: %w", err)
-		}
-		barePath := repostore.StorePath(repoPoolPath, spec)
 
 		if _, err := os.Stat(barePath); err == nil {
 			_, err := gitutil.RunBare(ctx, barePath, "worktree", "remove", "--force", worktreePath)
@@ -789,6 +800,39 @@ func removeWorkspaceWorktrees(ctx context.Context, db *sql.DB, root string, repo
 		_ = os.Remove(reposDir)
 	}
 	return nil
+}
+
+func listWorkspaceReposForClose(ctx context.Context, db *sql.DB, root string, workspaceID string) ([]statestore.WorkspaceRepo, error) {
+	if db != nil {
+		return statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+	}
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	meta, _ := loadWorkspaceMetaFile(wsPath)
+	return listWorkspaceReposFromFilesystem(ctx, root, "active", workspaceID, meta)
+}
+
+func resolveBarePathFromSpec(repoPoolPath string, spec repospec.Spec) string {
+	return filepath.Join(repoPoolPath, spec.Host, spec.Owner, spec.Repo+".git")
+}
+
+func resolveBarePathFromWorktreeGitdir(worktreePath string) (string, error) {
+	gitFile := filepath.Join(worktreePath, ".git")
+	b, err := os.ReadFile(gitFile)
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", gitFile, err)
+	}
+	line := strings.TrimSpace(string(b))
+	const pfx = "gitdir:"
+	if !strings.HasPrefix(strings.ToLower(line), pfx) {
+		return "", fmt.Errorf("unexpected .git format: %s", gitFile)
+	}
+	dir := strings.TrimSpace(line[len(pfx):])
+	if !filepath.IsAbs(dir) {
+		dir = filepath.Clean(filepath.Join(worktreePath, dir))
+	}
+	// <bare>/worktrees/<name>
+	bare := filepath.Dir(filepath.Dir(dir))
+	return bare, nil
 }
 
 func ensureRootGitWorktree(ctx context.Context, root string) error {

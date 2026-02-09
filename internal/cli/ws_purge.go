@@ -83,27 +83,27 @@ func (c *CLI) runWSPurge(args []string) int {
 	c.debugf("run ws purge args=%q noPrompt=%t force=%t", args, noPrompt, force)
 
 	ctx := context.Background()
-	dbPath, err := paths.StateDBPathForRoot(root)
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve state db path: %v\n", err)
-		return exitError
-	}
 	repoPoolPath, err := paths.DefaultRepoPoolPath()
 	if err != nil {
 		fmt.Fprintf(c.Err, "resolve repo pool path: %v\n", err)
 		return exitError
 	}
 
-	db, err := statestore.Open(ctx, dbPath)
-	if err != nil {
-		fmt.Fprintf(c.Err, "open state store: %v\n", err)
-		return exitError
-	}
-	defer func() { _ = db.Close() }()
-
-	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
-		fmt.Fprintf(c.Err, "initialize settings: %v\n", err)
-		return exitError
+	var db *sql.DB
+	if dbPath, err := paths.StateDBPathForRoot(root); err == nil {
+		if opened, err := statestore.Open(ctx, dbPath); err == nil {
+			if err := statestore.EnsureSettings(ctx, opened, root, repoPoolPath); err == nil {
+				db = opened
+				defer func() { _ = db.Close() }()
+			} else {
+				_ = opened.Close()
+				c.debugf("ws purge: state store unavailable (initialize settings): %v", err)
+			}
+		} else {
+			c.debugf("ws purge: state store unavailable (open): %v", err)
+		}
+	} else {
+		c.debugf("ws purge: state store unavailable (resolve path): %v", err)
 	}
 
 	if err := ensureRootGitWorktree(ctx, root); err != nil {
@@ -209,12 +209,34 @@ func (c *CLI) runWSPurge(args []string) int {
 }
 
 func collectPurgeWorkspaceMeta(ctx context.Context, db *sql.DB, root string, workspaceID string) (purgeWorkspaceMeta, error) {
-	status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID)
-	if err != nil {
-		return purgeWorkspaceMeta{}, fmt.Errorf("load workspace: %w", err)
-	}
-	if !ok {
-		return purgeWorkspaceMeta{}, fmt.Errorf("workspace not found: %s", workspaceID)
+	status := ""
+	if db != nil {
+		s, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID)
+		if err != nil {
+			return purgeWorkspaceMeta{}, fmt.Errorf("load workspace: %w", err)
+		}
+		if !ok {
+			return purgeWorkspaceMeta{}, fmt.Errorf("workspace not found: %s", workspaceID)
+		}
+		status = s
+	} else {
+		activePath := filepath.Join(root, "workspaces", workspaceID)
+		archivePath := filepath.Join(root, "archive", workspaceID)
+		if fi, err := os.Stat(activePath); err == nil && fi.IsDir() {
+			status = "active"
+		} else if err != nil && !os.IsNotExist(err) {
+			return purgeWorkspaceMeta{}, fmt.Errorf("stat workspace dir: %w", err)
+		}
+		if status == "" {
+			if fi, err := os.Stat(archivePath); err == nil && fi.IsDir() {
+				status = "archived"
+			} else if err != nil && !os.IsNotExist(err) {
+				return purgeWorkspaceMeta{}, fmt.Errorf("stat archive dir: %w", err)
+			}
+		}
+		if status == "" {
+			return purgeWorkspaceMeta{}, fmt.Errorf("workspace not found: %s", workspaceID)
+		}
 	}
 	if status != "active" && status != "archived" {
 		return purgeWorkspaceMeta{}, fmt.Errorf("workspace cannot be purged (status=%s): %s", status, workspaceID)
@@ -225,7 +247,13 @@ func collectPurgeWorkspaceMeta(ctx context.Context, db *sql.DB, root string, wor
 		return meta, nil
 	}
 
-	repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+	var repos []statestore.WorkspaceRepo
+	var err error
+	if db != nil {
+		repos, err = statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+	} else {
+		repos, err = listWorkspaceReposForClose(ctx, nil, root, workspaceID)
+	}
 	if err != nil {
 		return purgeWorkspaceMeta{}, fmt.Errorf("list workspace repos: %w", err)
 	}
@@ -268,18 +296,44 @@ func printPurgeRiskSection(out io.Writer, selectedIDs []string, riskMeta map[str
 }
 
 func (c *CLI) purgeWorkspace(ctx context.Context, db *sql.DB, root string, repoPoolPath string, workspaceID string) error {
-	status, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID)
-	if err != nil {
-		return fmt.Errorf("load workspace: %w", err)
-	}
-	if !ok {
-		return fmt.Errorf("workspace not found: %s", workspaceID)
+	status := ""
+	if db != nil {
+		s, ok, err := statestore.LookupWorkspaceStatus(ctx, db, workspaceID)
+		if err != nil {
+			return fmt.Errorf("load workspace: %w", err)
+		}
+		if !ok {
+			return fmt.Errorf("workspace not found: %s", workspaceID)
+		}
+		status = s
+	} else {
+		if fi, err := os.Stat(filepath.Join(root, "workspaces", workspaceID)); err == nil && fi.IsDir() {
+			status = "active"
+		} else if err != nil && !os.IsNotExist(err) {
+			return fmt.Errorf("stat workspace dir: %w", err)
+		}
+		if status == "" {
+			if fi, err := os.Stat(filepath.Join(root, "archive", workspaceID)); err == nil && fi.IsDir() {
+				status = "archived"
+			} else if err != nil && !os.IsNotExist(err) {
+				return fmt.Errorf("stat archive dir: %w", err)
+			}
+		}
+		if status == "" {
+			return fmt.Errorf("workspace not found: %s", workspaceID)
+		}
 	}
 	if status != "active" && status != "archived" {
 		return fmt.Errorf("workspace cannot be purged (status=%s): %s", status, workspaceID)
 	}
 
-	repos, err := statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+	var repos []statestore.WorkspaceRepo
+	var err error
+	if db != nil {
+		repos, err = statestore.ListWorkspaceRepos(ctx, db, workspaceID)
+	} else {
+		repos, err = listWorkspaceReposForClose(ctx, nil, root, workspaceID)
+	}
 	if err != nil {
 		return fmt.Errorf("list workspace repos: %w", err)
 	}
@@ -300,12 +354,14 @@ func (c *CLI) purgeWorkspace(ctx context.Context, db *sql.DB, root string, repoP
 		return fmt.Errorf("commit purge change: %w", err)
 	}
 
-	now := time.Now().Unix()
-	if err := statestore.PurgeWorkspace(ctx, db, statestore.PurgeWorkspaceInput{
-		ID:  workspaceID,
-		Now: now,
-	}); err != nil {
-		return fmt.Errorf("update state store: %w", err)
+	if db != nil {
+		now := time.Now().Unix()
+		if err := statestore.PurgeWorkspace(ctx, db, statestore.PurgeWorkspaceInput{
+			ID:  workspaceID,
+			Now: now,
+		}); err != nil {
+			return fmt.Errorf("update state store: %w", err)
+		}
 	}
 	return nil
 }
