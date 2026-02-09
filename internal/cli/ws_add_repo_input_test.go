@@ -94,7 +94,7 @@ func TestPrintAddRepoPlan_ShowsConciseTree(t *testing.T) {
 
 	for _, want := range []string{
 		"Plan:",
-		"add 2 repos to workspace TEST-010",
+		"add 2 repos (worktrees) to workspace TEST-010",
 		"repos:",
 		"├─ tasuku43/gionx",
 		"└─ tasuku43/gion-core",

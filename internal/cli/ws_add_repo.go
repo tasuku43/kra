@@ -1262,7 +1262,7 @@ func printAddRepoPlan(out io.Writer, workspaceID string, plan []addRepoPlanItem,
 
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, styleBold("Plan:", useColor))
-	fmt.Fprintf(out, "%s%s add %d repos to workspace %s\n", uiIndent, bullet, len(plan), workspaceID)
+	fmt.Fprintf(out, "%s%s add %d repos (worktrees) to workspace %s\n", uiIndent, bullet, len(plan), workspaceID)
 	if len(plan) == 0 {
 		return
 	}
