@@ -93,7 +93,7 @@ func newWorkspaceSelectorModelWithOptionsAndMode(candidates []workspaceSelectorC
 }
 
 func (m workspaceSelectorModel) Init() tea.Cmd {
-	return nil
+	return selectorShowCursorCmd()
 }
 
 func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -207,13 +207,37 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m workspaceSelectorModel) View() string {
 	lines := renderWorkspaceSelectorLinesWithOptions(m.status, m.title, m.action, m.candidates, m.selected, m.cursor, m.message, m.msgLevel, m.filter, m.showDesc, false, m.single, m.confirming, m.useColor, m.width)
-	return strings.Join(lines, "\n")
+	view := strings.Join(lines, "\n")
+	if m.done || m.canceled {
+		return view
+	}
+
+	termWidth := m.width
+	if termWidth < 24 {
+		termWidth = 24
+	}
+	maxCols := termWidth - 1
+	availableFilterCols := maxCols - displayWidth(uiIndent+"filter: ") - 1
+	if availableFilterCols < 1 {
+		availableFilterCols = 1
+	}
+	filterBody := truncateDisplay(m.filter, availableFilterCols)
+	filterCol := displayWidth(uiIndent+"filter: "+filterBody) + 1
+	// filter line is always 2 lines above the terminal cursor:
+	// no-message case ends with an empty line, message case ends with message line.
+	return view + fmt.Sprintf("\x1b[2A\r\x1b[%dC", filterCol)
 }
 
 func selectorSingleConfirmCmd() tea.Cmd {
 	return tea.Tick(selectorSingleConfirmDelay, func(time.Time) tea.Msg {
 		return selectorConfirmDoneMsg{}
 	})
+}
+
+func selectorShowCursorCmd() tea.Cmd {
+	return func() tea.Msg {
+		return tea.ShowCursor()
+	}
 }
 
 func (m *workspaceSelectorModel) toggleCurrentSelection() {
