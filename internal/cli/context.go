@@ -112,7 +112,7 @@ func (c *CLI) runContextList(args []string) int {
 		}
 		prefix := "○"
 		if isCurrent {
-			prefix = styleSuccess("●", useColorOut)
+			prefix = styleAccent("●", useColorOut)
 		}
 		title := name
 		if isCurrent {
@@ -120,7 +120,7 @@ func (c *CLI) runContextList(args []string) int {
 		}
 		currentLabel := ""
 		if isCurrent {
-			currentLabel = " " + styleSuccess("[current]", useColorOut)
+			currentLabel = " " + styleAccent("[current]", useColorOut)
 		}
 		fmt.Fprintf(c.Out, "%s%s %s%s\n", uiIndent, prefix, title, currentLabel)
 		fmt.Fprintf(c.Out, "%s├─ %s%s\n", uiIndent, styleMuted("path: ", useColorOut), e.RootPath)

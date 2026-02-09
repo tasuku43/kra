@@ -409,7 +409,7 @@ func TestRenderWorkspaceSelectorLinesWithOptions_RepoModeCompactsHeaderSpacing(t
 	}
 }
 
-func TestRenderWorkspaceSelectorLinesWithOptions_RepoModeSelectedMarkerUsesSuccessColor(t *testing.T) {
+func TestRenderWorkspaceSelectorLinesWithOptions_RepoModeSelectedMarkerUsesAccentColor(t *testing.T) {
 	lines := renderWorkspaceSelectorLinesWithOptions(
 		"active",
 		"Repos(pool):",
@@ -429,8 +429,8 @@ func TestRenderWorkspaceSelectorLinesWithOptions_RepoModeSelectedMarkerUsesSucce
 		120,
 	)
 	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, ansiGreen+"●"+ansiReset) {
-		t.Fatalf("repo mode selected marker should use success token, got %q", joined)
+	if !strings.Contains(joined, ansiAccent+"●"+ansiReset) {
+		t.Fatalf("repo mode selected marker should use accent token, got %q", joined)
 	}
 }
 

@@ -405,7 +405,7 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 			prefixPlain = fmt.Sprintf("%s %s  ", mark, idPlain)
 			markerText := mark
 			if useColor && selected[sourceIdx] {
-				markerText = styleSuccess(mark, true)
+				markerText = styleAccent(mark, true)
 			}
 			prefix = fmt.Sprintf("%s %s  ", markerText, idText)
 		}
