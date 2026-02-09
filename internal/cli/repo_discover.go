@@ -137,8 +137,8 @@ func (c *CLI) runRepoDiscover(args []string) int {
 	repoByKey := make(map[string]repodiscovery.Repo, len(candidates))
 	for _, cand := range candidates {
 		selectorCandidates = append(selectorCandidates, workspaceSelectorCandidate{
-			ID:          cand.RepoKey,
-			Description: "",
+			ID:    cand.RepoKey,
+			Title: "",
 		})
 		repoByKey[cand.RepoKey] = cand
 	}

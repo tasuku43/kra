@@ -18,10 +18,10 @@ func (e *WorkspaceAlreadyExistsError) Error() string {
 }
 
 type CreateWorkspaceInput struct {
-	ID          string
-	Description string
-	SourceURL   string
-	Now         int64
+	ID        string
+	Title     string
+	SourceURL string
+	Now       int64
 }
 
 // LookupWorkspaceStatus returns the current snapshot status for the workspace ID.
@@ -75,12 +75,12 @@ func CreateWorkspace(ctx context.Context, db *sql.DB, in CreateWorkspaceInput) (
 
 	if _, err := tx.ExecContext(ctx, `
 INSERT INTO workspaces (
-  id, generation, status, description, source_url,
+  id, generation, status, title, source_url,
   created_at, updated_at,
   archived_commit_sha, reopened_commit_sha
 )
 VALUES (?, ?, 'active', ?, ?, ?, ?, NULL, NULL)
-`, in.ID, gen, in.Description, in.SourceURL, in.Now, in.Now); err != nil {
+`, in.ID, gen, in.Title, in.SourceURL, in.Now, in.Now); err != nil {
 		return 0, fmt.Errorf("insert workspace: %w", err)
 	}
 

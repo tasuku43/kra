@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
   id TEXT PRIMARY KEY,
   generation INTEGER NOT NULL,
   status TEXT NOT NULL CHECK (status IN ('active', 'archived')),
-  description TEXT NOT NULL,
+  title TEXT NOT NULL,
   source_url TEXT NOT NULL,
   created_at INTEGER NOT NULL,
   updated_at INTEGER NOT NULL,

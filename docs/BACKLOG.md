@@ -389,7 +389,7 @@ It does not replace per-item dependencies.
   - Parallel: yes
 
 - [x] UX-WS-009: `ws list` row layout hardening
-  - What: lock default summary row order to `ID | risk | repos | description` with stable column alignment and
+  - What: lock default summary row order to `ID | risk | repos | title` with stable column alignment and
     ellipsis policy.
   - Specs:
     - `docs/spec/commands/ws/list.md`
@@ -464,7 +464,7 @@ It does not replace per-item dependencies.
   - Parallel: yes
 
 - [x] UX-WS-017: `ws list` archived color semantic alignment
-  - What: align `ws list` archived color description to shared semantic token rule (`text.muted`).
+  - What: align `ws list` archived color title to shared semantic token rule (`text.muted`).
   - Specs:
     - `docs/spec/commands/ws/list.md`
     - `docs/spec/concepts/ui-color.md`

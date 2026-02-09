@@ -103,7 +103,7 @@ func TestCLI_WS_List_ArchivedWorkspace_DoesNotMarkRepoMissing(t *testing.T) {
 
 	if _, err := db.ExecContext(ctx, `
 INSERT INTO workspaces (
-  id, generation, status, description, source_url,
+  id, generation, status, title, source_url,
   created_at, updated_at,
   archived_commit_sha, reopened_commit_sha
 )

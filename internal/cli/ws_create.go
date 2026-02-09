@@ -108,14 +108,14 @@ func (c *CLI) runWSCreate(args []string) int {
 		}
 	}
 
-	description := ""
+	title := ""
 	if !noPrompt {
 		d, err := c.promptLine("title: ")
 		if err != nil {
 			fmt.Fprintf(c.Err, "read title: %v\n", err)
 			return exitError
 		}
-		description = d
+		title = d
 	}
 
 	wsPath := filepath.Join(root, "workspaces", id)
@@ -153,14 +153,14 @@ func (c *CLI) runWSCreate(args []string) int {
 		fmt.Fprintf(c.Err, "create artifacts/: %v\n", err)
 		return exitError
 	}
-	if err := os.WriteFile(filepath.Join(wsPath, "AGENTS.md"), []byte(defaultWorkspaceAgentsContent(id, description)), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(wsPath, "AGENTS.md"), []byte(defaultWorkspaceAgentsContent(id, title)), 0o644); err != nil {
 		cleanup()
 		fmt.Fprintf(c.Err, "write AGENTS.md: %v\n", err)
 		return exitError
 	}
 
 	now := time.Now().Unix()
-	meta := newWorkspaceMetaFileForCreate(id, description, now)
+	meta := newWorkspaceMetaFileForCreate(id, title, now)
 	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
 		cleanup()
 		fmt.Fprintf(c.Err, "write %s: %v\n", workspaceMetaFilename, err)
@@ -168,10 +168,10 @@ func (c *CLI) runWSCreate(args []string) int {
 	}
 
 	if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{
-		ID:          id,
-		Description: description,
-		SourceURL:   "",
-		Now:         now,
+		ID:        id,
+		Title:     title,
+		SourceURL: "",
+		Now:       now,
 	}); err != nil {
 		cleanup()
 		var existsErr *statestore.WorkspaceAlreadyExistsError
@@ -228,10 +228,10 @@ func validateWorkspaceID(id string) error {
 	return nil
 }
 
-func defaultWorkspaceAgentsContent(id string, description string) string {
-	title := strings.TrimSpace(description)
-	if title == "" {
-		title = "(empty)"
+func defaultWorkspaceAgentsContent(id string, title string) string {
+	trimmedTitle := strings.TrimSpace(title)
+	if trimmedTitle == "" {
+		trimmedTitle = "(empty)"
 	}
 	return fmt.Sprintf(`# workspace AGENTS guide
 
@@ -254,5 +254,5 @@ Notes vs artifacts:
 
 When you are done, run:
   gionx ws --act close %s
-`, id, title, id)
+`, id, trimmedTitle, id)
 }

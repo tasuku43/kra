@@ -21,7 +21,7 @@ Create an empty workspace with scaffolding for notes/artifacts.
 - Create:
   - `GIONX_ROOT/workspaces/<id>/notes/`
   - `GIONX_ROOT/workspaces/<id>/artifacts/`
-  - `GIONX_ROOT/workspaces/<id>/AGENTS.md` with a short description of the directory meaning
+  - `GIONX_ROOT/workspaces/<id>/AGENTS.md` with a short title of the directory meaning
     - include a short explanation of `notes/` vs `artifacts/`
 - Prompt for `title` and store it in workspace metadata (`.gionx.meta.json`)
   - if in a no-prompt mode, store an empty title
@@ -46,6 +46,6 @@ Create an empty workspace with scaffolding for notes/artifacts.
 - `ws create` must create `workspaces/<id>/.gionx.meta.json` as canonical workspace metadata.
 - Initial file content must include:
   - `schema_version`
-  - `workspace` object (`id`, `title`(stored as `description` for compatibility), `source_url`, `status=active`, timestamps)
+  - `workspace` object (`id`, `title`(stored as `title` for compatibility), `source_url`, `status=active`, timestamps)
   - `repos_restore` as an empty array
 - File write must be atomic (`temp + rename`).

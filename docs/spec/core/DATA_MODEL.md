@@ -19,7 +19,7 @@ Metadata schema (v1):
 - `schema_version`
 - `workspace`
   - `id`
-  - `description`
+  - `title`
   - `source_url`
   - `status` (`active` / `archived`)
   - `created_at`

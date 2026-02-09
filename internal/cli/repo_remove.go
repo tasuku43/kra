@@ -106,8 +106,8 @@ func selectReposForRemove(c *CLI, repos []statestore.RootRepoCandidate, args []s
 	for _, it := range repos {
 		byKey[it.RepoKey] = it
 		selectorCandidates = append(selectorCandidates, workspaceSelectorCandidate{
-			ID:          it.RepoKey,
-			Description: "",
+			ID:    it.RepoKey,
+			Title: "",
 		})
 	}
 

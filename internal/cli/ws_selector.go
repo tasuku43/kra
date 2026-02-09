@@ -29,9 +29,9 @@ const (
 )
 
 type workspaceSelectorCandidate struct {
-	ID          string
-	Description string
-	Risk        workspacerisk.WorkspaceRisk
+	ID    string
+	Title string
+	Risk  workspacerisk.WorkspaceRisk
 }
 
 type workspaceSelectorModel struct {
@@ -402,7 +402,7 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 		}
 		bodyRaw := prefix
 		if showDesc {
-			desc := strings.TrimSpace(it.Description)
+			desc := strings.TrimSpace(it.Title)
 			if desc == "" {
 				desc = "(no title)"
 			}
@@ -546,7 +546,7 @@ func filteredCandidateIndices(candidates []workspaceSelectorCandidate, filter st
 			continue
 		}
 		id := strings.ToLower(c.ID)
-		desc := strings.ToLower(c.Description)
+		desc := strings.ToLower(c.Title)
 		if strings.Contains(id, query) || strings.Contains(desc, query) {
 			out = append(out, i)
 		}

@@ -131,10 +131,10 @@ func TestCLI_WS_List_MarksMissingRepoWorktree(t *testing.T) {
 		t.Fatalf("EnsureSettings error: %v", err)
 	}
 	if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{
-		ID:          "WS1",
-		Description: "",
-		SourceURL:   "",
-		Now:         123,
+		ID:        "WS1",
+		Title:     "",
+		SourceURL: "",
+		Now:       123,
 	}); err != nil {
 		t.Fatalf("CreateWorkspace error: %v", err)
 	}
@@ -313,39 +313,39 @@ func TestCLI_WS_List_SummaryDoesNotShowTextualRiskTags(t *testing.T) {
 	}
 }
 
-func TestRenderWSListSummaryRow_AlignsDescriptionColumn(t *testing.T) {
+func TestRenderWSListSummaryRow_AlignsTitleColumn(t *testing.T) {
 	rowA := wsListRow{
-		ID:          "WS_A",
-		RepoCount:   1,
-		Risk:        workspacerisk.WorkspaceRiskClean,
-		Description: "first description",
+		ID:        "WS_A",
+		RepoCount: 1,
+		Risk:      workspacerisk.WorkspaceRiskClean,
+		Title:     "first title",
 	}
 	rowB := wsListRow{
-		ID:          "WORKSPACE-B-LONG",
-		RepoCount:   12,
-		Risk:        workspacerisk.WorkspaceRiskDiverged,
-		Description: "second description",
+		ID:        "WORKSPACE-B-LONG",
+		RepoCount: 12,
+		Risk:      workspacerisk.WorkspaceRiskDiverged,
+		Title:     "second title",
 	}
 
 	lineA := renderWSListSummaryRow(rowA, 16, 10, 8, 120, false)
 	lineB := renderWSListSummaryRow(rowB, 16, 10, 8, 120, false)
 
-	colA := strings.Index(lineA, "first description")
-	colB := strings.Index(lineB, "second description")
+	colA := strings.Index(lineA, "first title")
+	colB := strings.Index(lineB, "second title")
 	if colA <= 0 || colB <= 0 {
-		t.Fatalf("description columns not found: lineA=%q lineB=%q", lineA, lineB)
+		t.Fatalf("title columns not found: lineA=%q lineB=%q", lineA, lineB)
 	}
 	if colA != colB {
-		t.Fatalf("description start columns differ: got %d and %d", colA, colB)
+		t.Fatalf("title start columns differ: got %d and %d", colA, colB)
 	}
 }
 
-func TestRenderWSListSummaryRow_TruncatesDescriptionWithEllipsis(t *testing.T) {
+func TestRenderWSListSummaryRow_TruncatesTitleWithEllipsis(t *testing.T) {
 	row := wsListRow{
-		ID:          "WS1",
-		RepoCount:   1,
-		Risk:        workspacerisk.WorkspaceRiskClean,
-		Description: "abcdefghijklmnopqrstuvwxyz",
+		ID:        "WS1",
+		RepoCount: 1,
+		Risk:      workspacerisk.WorkspaceRiskClean,
+		Title:     "abcdefghijklmnopqrstuvwxyz",
 	}
 
 	line := renderWSListSummaryRow(row, 10, 10, 8, 44, false)
@@ -359,10 +359,10 @@ func TestRenderWSListSummaryRow_TruncatesDescriptionWithEllipsis(t *testing.T) {
 
 func TestRenderWSListSummaryRow_FixedColumnOrderContract(t *testing.T) {
 	row := wsListRow{
-		ID:          "WS1",
-		RepoCount:   7,
-		Risk:        workspacerisk.WorkspaceRiskClean,
-		Description: "desc",
+		ID:        "WS1",
+		RepoCount: 7,
+		Risk:      workspacerisk.WorkspaceRiskClean,
+		Title:     "desc",
 	}
 	line := renderWSListSummaryRow(row, 10, 1, 8, 120, false)
 	idIdx := strings.Index(line, "WS1")
@@ -373,7 +373,7 @@ func TestRenderWSListSummaryRow_FixedColumnOrderContract(t *testing.T) {
 		t.Fatalf("summary row missing required tokens: %q", line)
 	}
 	if !(idIdx < riskIdx && riskIdx < repoIdx && repoIdx < descIdx) {
-		t.Fatalf("summary row must keep ID|risk|repos|description order: %q", line)
+		t.Fatalf("summary row must keep ID|risk|repos|title order: %q", line)
 	}
 }
 
@@ -410,10 +410,10 @@ func TestCLI_WS_List_ShowsLogicalWorkStateTodoAndInProgress(t *testing.T) {
 	if err := statestore.EnsureSettings(ctx, db, root, repoPoolPath); err != nil {
 		t.Fatalf("EnsureSettings error: %v", err)
 	}
-	if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{ID: "TODO", Description: "", SourceURL: "", Now: 100}); err != nil {
+	if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{ID: "TODO", Title: "", SourceURL: "", Now: 100}); err != nil {
 		t.Fatalf("CreateWorkspace TODO error: %v", err)
 	}
-	if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{ID: "WIP", Description: "", SourceURL: "", Now: 101}); err != nil {
+	if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{ID: "WIP", Title: "", SourceURL: "", Now: 101}); err != nil {
 		t.Fatalf("CreateWorkspace WIP error: %v", err)
 	}
 	if _, err := db.ExecContext(ctx, `
@@ -470,7 +470,7 @@ func TestCLI_WS_List_TSVIncludesWorkStateColumn(t *testing.T) {
 		t.Fatalf("ws list --format tsv exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
 	got := out.String()
-	if !strings.HasPrefix(got, "id\tstatus\tupdated_at\trepo_count\trisk\twork_state\tdescription\n") {
+	if !strings.HasPrefix(got, "id\tstatus\tupdated_at\trepo_count\trisk\twork_state\ttitle\n") {
 		t.Fatalf("tsv header missing work_state: %q", got)
 	}
 	if !strings.Contains(got, "\ttodo\t") {

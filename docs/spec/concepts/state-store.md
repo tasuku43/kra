@@ -18,7 +18,7 @@ status: implemented
 Workspace metadata file (`.gionx.meta.json`) must contain:
 
 - workspace identity and lifecycle status (`active` / `archived`)
-- user-facing fields (`description`, `source_url`)
+- user-facing fields (`title`, `source_url`)
 - reopen restore payload (`repos_restore`)
 - timestamps (`created_at`, `updated_at`)
 

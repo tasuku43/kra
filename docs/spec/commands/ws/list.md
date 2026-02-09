@@ -27,7 +27,7 @@ List workspaces with status and risk, similar in spirit to `gion manifest ls`.
   - `id`
   - `risk` (color-only indicator; no textual tag)
   - `repo_count`
-  - `title` (stored as `description` for compatibility)
+  - `title` (stored as `title` for compatibility)
 - Summary row order is fixed as `ID | risk | repos | title`.
 - Column alignment rules:
   - `ID`, `risk`, and `repos` columns use fixed widths computed from the visible row set.
@@ -68,7 +68,7 @@ List workspaces with status and risk, similar in spirit to `gion manifest ls`.
 - `updated_at`
 - `repo_count`
 - `risk` (live)
-- `title` (stored as `description` for compatibility)
+- `title` (stored as `title` for compatibility)
 
 ## Behavior (MVP)
 

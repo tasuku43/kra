@@ -7,11 +7,11 @@ import (
 )
 
 type WorkspaceListItem struct {
-	ID          string
-	Status      string
-	UpdatedAt   int64
-	RepoCount   int
-	Description string
+	ID        string
+	Status    string
+	UpdatedAt int64
+	RepoCount int
+	Title     string
 }
 
 func ListWorkspaces(ctx context.Context, db *sql.DB) ([]WorkspaceListItem, error) {
@@ -20,7 +20,7 @@ SELECT
   w.id,
   w.status,
   w.updated_at,
-  w.description,
+  w.title,
   COALESCE(rc.cnt, 0) AS repo_count
 FROM workspaces w
 LEFT JOIN (
@@ -38,7 +38,7 @@ ORDER BY w.id ASC
 	var out []WorkspaceListItem
 	for rows.Next() {
 		var it WorkspaceListItem
-		if err := rows.Scan(&it.ID, &it.Status, &it.UpdatedAt, &it.Description, &it.RepoCount); err != nil {
+		if err := rows.Scan(&it.ID, &it.Status, &it.UpdatedAt, &it.Title, &it.RepoCount); err != nil {
 			return nil, fmt.Errorf("scan workspace: %w", err)
 		}
 		out = append(out, it)

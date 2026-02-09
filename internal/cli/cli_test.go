@@ -417,8 +417,8 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	if meta.Workspace.ID != "MVP-020" {
 		t.Fatalf("workspace.id = %q, want %q", meta.Workspace.ID, "MVP-020")
 	}
-	if meta.Workspace.Description != "hello world" {
-		t.Fatalf("workspace.description = %q, want %q", meta.Workspace.Description, "hello world")
+	if meta.Workspace.Title != "hello world" {
+		t.Fatalf("workspace.title = %q, want %q", meta.Workspace.Title, "hello world")
 	}
 	if meta.Workspace.Status != "active" {
 		t.Fatalf("workspace.status = %q, want %q", meta.Workspace.Status, "active")
@@ -447,7 +447,7 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	var status string
 	var desc string
 	var gen int
-	qErr := db.QueryRowContext(ctx, "SELECT status, description, generation FROM workspaces WHERE id = ?", "MVP-020").Scan(&status, &desc, &gen)
+	qErr := db.QueryRowContext(ctx, "SELECT status, title, generation FROM workspaces WHERE id = ?", "MVP-020").Scan(&status, &desc, &gen)
 	if qErr != nil {
 		t.Fatalf("query workspaces: %v", qErr)
 	}
@@ -455,7 +455,7 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 		t.Fatalf("workspaces.status = %q, want %q", status, "active")
 	}
 	if desc != "hello world" {
-		t.Fatalf("workspaces.description = %q, want %q", desc, "hello world")
+		t.Fatalf("workspaces.title = %q, want %q", desc, "hello world")
 	}
 	if gen != 1 {
 		t.Fatalf("workspaces.generation = %d, want %d", gen, 1)
@@ -514,7 +514,7 @@ func TestCLI_WS_Create_ArchivedCollision_GuidesReopen(t *testing.T) {
 	}
 	if _, err := db.ExecContext(ctx, `
 INSERT INTO workspaces (
-  id, generation, status, description, source_url,
+  id, generation, status, title, source_url,
   created_at, updated_at,
   archived_commit_sha, reopened_commit_sha
 )
@@ -570,7 +570,7 @@ func TestCLI_WS_Create_ActiveCollision_Errors(t *testing.T) {
 	}
 	if _, err := db.ExecContext(ctx, `
 INSERT INTO workspaces (
-  id, generation, status, description, source_url,
+  id, generation, status, title, source_url,
   created_at, updated_at,
   archived_commit_sha, reopened_commit_sha
 )

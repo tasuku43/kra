@@ -376,9 +376,9 @@ func listActiveCloseCandidates(ctx context.Context, db *sql.DB, root string) ([]
 		}
 		risk, _ := inspectWorkspaceRepoRisk(ctx, root, it.ID, repos)
 		out = append(out, workspaceSelectorCandidate{
-			ID:          it.ID,
-			Description: strings.TrimSpace(it.Description),
-			Risk:        risk,
+			ID:    it.ID,
+			Title: strings.TrimSpace(it.Title),
+			Risk:  risk,
 		})
 	}
 	return out, nil

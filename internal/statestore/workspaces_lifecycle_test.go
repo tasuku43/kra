@@ -19,10 +19,10 @@ func TestArchiveAndReopenWorkspace_UpdatesSnapshotAndEvents(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	if _, err := CreateWorkspace(ctx, db, CreateWorkspaceInput{
-		ID:          "WS1",
-		Description: "",
-		SourceURL:   "",
-		Now:         100,
+		ID:        "WS1",
+		Title:     "",
+		SourceURL: "",
+		Now:       100,
 	}); err != nil {
 		t.Fatalf("CreateWorkspace() error: %v", err)
 	}
@@ -81,10 +81,10 @@ func TestReopenWorkspace_FailsWhenWorkspaceNotArchived(t *testing.T) {
 	t.Cleanup(func() { _ = db.Close() })
 
 	if _, err := CreateWorkspace(ctx, db, CreateWorkspaceInput{
-		ID:          "WS1",
-		Description: "",
-		SourceURL:   "",
-		Now:         100,
+		ID:        "WS1",
+		Title:     "",
+		SourceURL: "",
+		Now:       100,
 	}); err != nil {
 		t.Fatalf("CreateWorkspace() error: %v", err)
 	}

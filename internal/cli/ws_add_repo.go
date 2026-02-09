@@ -860,8 +860,8 @@ func (c *CLI) promptAddRepoPoolSelection(candidates []addRepoPoolCandidate) ([]a
 		candidateByID := make(map[string]addRepoPoolCandidate, len(candidates))
 		for _, it := range candidates {
 			selectorCandidates = append(selectorCandidates, workspaceSelectorCandidate{
-				ID:          it.RepoKey,
-				Description: "",
+				ID:    it.RepoKey,
+				Title: "",
 			})
 			candidateByID[it.RepoKey] = it
 		}

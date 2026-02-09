@@ -80,8 +80,8 @@ func TestWorkspaceSelectorModel_FullWidthSpaceTogglesSelection(t *testing.T) {
 
 func TestWorkspaceSelectorModel_FilterPersistsAfterToggle(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{
-		{ID: "WS1", Description: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
-		{ID: "WS2", Description: "beta", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS1", Title: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS2", Title: "beta", Risk: workspacerisk.WorkspaceRiskClean},
 	}, "active", "proceed", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("b")})
@@ -144,8 +144,8 @@ func TestWorkspaceSelectorModel_FilterClearsByDeleteOneRuneAtATime(t *testing.T)
 
 func TestWorkspaceSelectorModel_LetterAIsFilterInput(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{
-		{ID: "WS1", Description: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
-		{ID: "WS2", Description: "beta", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS1", Title: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS2", Title: "beta", Risk: workspacerisk.WorkspaceRiskClean},
 	}, "active", "proceed", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("a")})
@@ -185,9 +185,9 @@ func TestWorkspaceSelectorModel_SpaceDoesNotAppendFilter(t *testing.T) {
 
 func TestWorkspaceSelectorModel_FilterNarrowingResetsCursorIntoRange(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{
-		{ID: "WS1", Description: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
-		{ID: "WS2", Description: "beta", Risk: workspacerisk.WorkspaceRiskClean},
-		{ID: "WS3", Description: "gamma", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS1", Title: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS2", Title: "beta", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "WS3", Title: "gamma", Risk: workspacerisk.WorkspaceRiskClean},
 	}, "active", "proceed", false, nil)
 
 	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyDown})
@@ -218,7 +218,7 @@ func TestRenderWorkspaceSelectorLines_AlwaysShowsFilterLine(t *testing.T) {
 	lines := renderWorkspaceSelectorLines(
 		"active",
 		"proceed",
-		[]workspaceSelectorCandidate{{ID: "WS1", Description: "d", Risk: workspacerisk.WorkspaceRiskClean}},
+		[]workspaceSelectorCandidate{{ID: "WS1", Title: "d", Risk: workspacerisk.WorkspaceRiskClean}},
 		map[int]bool{},
 		0,
 		"",
@@ -240,7 +240,7 @@ func TestRenderWorkspaceSelectorLines_UsesActionLabelInFooter(t *testing.T) {
 	lines := renderWorkspaceSelectorLines(
 		"active",
 		"close",
-		[]workspaceSelectorCandidate{{ID: "WS1", Description: "d", Risk: workspacerisk.WorkspaceRiskClean}},
+		[]workspaceSelectorCandidate{{ID: "WS1", Title: "d", Risk: workspacerisk.WorkspaceRiskClean}},
 		map[int]bool{},
 		0,
 		"",
@@ -260,7 +260,7 @@ func TestRenderWorkspaceSelectorLines_MessageIsIndented(t *testing.T) {
 		"active",
 		"",
 		"close",
-		[]workspaceSelectorCandidate{{ID: "WS1", Description: "d", Risk: workspacerisk.WorkspaceRiskClean}},
+		[]workspaceSelectorCandidate{{ID: "WS1", Title: "d", Risk: workspacerisk.WorkspaceRiskClean}},
 		map[int]bool{},
 		0,
 		"at least one workspace must be selected",
@@ -283,7 +283,7 @@ func TestRenderWorkspaceSelectorLines_ErrorMessageUsesErrorToken(t *testing.T) {
 		"active",
 		"",
 		"close",
-		[]workspaceSelectorCandidate{{ID: "WS1", Description: "d", Risk: workspacerisk.WorkspaceRiskClean}},
+		[]workspaceSelectorCandidate{{ID: "WS1", Title: "d", Risk: workspacerisk.WorkspaceRiskClean}},
 		map[int]bool{},
 		0,
 		"at least one workspace must be selected",
@@ -327,7 +327,7 @@ func TestRenderWorkspaceSelectorLinesWithOptions_SingleModeHidesCheckboxAndSelec
 		"",
 		"go",
 		[]workspaceSelectorCandidate{
-			{ID: "WS1", Description: "desc", Risk: workspacerisk.WorkspaceRiskClean},
+			{ID: "WS1", Title: "desc", Risk: workspacerisk.WorkspaceRiskClean},
 		},
 		map[int]bool{},
 		0,

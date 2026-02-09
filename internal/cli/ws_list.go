@@ -24,14 +24,14 @@ type wsListOptions struct {
 }
 
 type wsListRow struct {
-	ID          string
-	Status      string
-	UpdatedAt   int64
-	RepoCount   int
-	Risk        workspacerisk.WorkspaceRisk
-	WorkState   string
-	Description string
-	Repos       []statestore.WorkspaceRepo
+	ID        string
+	Status    string
+	UpdatedAt int64
+	RepoCount int
+	Risk      workspacerisk.WorkspaceRisk
+	WorkState string
+	Title     string
+	Repos     []statestore.WorkspaceRepo
 }
 
 func (c *CLI) runWSList(args []string) int {
@@ -116,14 +116,14 @@ func (c *CLI) runWSList(args []string) int {
 			return exitError
 		}
 		rows = append(rows, wsListRow{
-			ID:          it.ID,
-			Status:      it.Status,
-			UpdatedAt:   it.UpdatedAt,
-			RepoCount:   it.RepoCount,
-			Risk:        computeWorkspaceRisk(ctx, root, it.ID, it.Status, repos),
-			WorkState:   deriveLogicalWorkState(ctx, root, it.ID, it.Status, repos),
-			Description: strings.TrimSpace(it.Description),
-			Repos:       repos,
+			ID:        it.ID,
+			Status:    it.Status,
+			UpdatedAt: it.UpdatedAt,
+			RepoCount: it.RepoCount,
+			Risk:      computeWorkspaceRisk(ctx, root, it.ID, it.Status, repos),
+			WorkState: deriveLogicalWorkState(ctx, root, it.ID, it.Status, repos),
+			Title:     strings.TrimSpace(it.Title),
+			Repos:     repos,
 		})
 	}
 
@@ -185,7 +185,7 @@ func parseWSListOptions(args []string) (wsListOptions, error) {
 }
 
 func printWSListTSV(out io.Writer, rows []wsListRow) {
-	fmt.Fprintln(out, "id\tstatus\tupdated_at\trepo_count\trisk\twork_state\tdescription")
+	fmt.Fprintln(out, "id\tstatus\tupdated_at\trepo_count\trisk\twork_state\ttitle")
 	for _, row := range rows {
 		fmt.Fprintf(
 			out,
@@ -196,7 +196,7 @@ func printWSListTSV(out io.Writer, rows []wsListRow) {
 			row.RepoCount,
 			formatWorkspaceRisk(row.Risk),
 			row.WorkState,
-			row.Description,
+			row.Title,
 		)
 	}
 }
@@ -248,7 +248,7 @@ func renderWSListSummaryRow(row wsListRow, idWidth int, riskWidth int, repoWidth
 	idPlain := fmt.Sprintf("%-*s", idWidth, truncateDisplay(row.ID, idWidth))
 	riskPlain := fmt.Sprintf("%-*s", riskWidth, renderWorkspaceRiskIndicator(row.Risk, false))
 	repoPlain := fmt.Sprintf("%-*s", repoWidth, fmt.Sprintf("repos:%d", row.RepoCount))
-	desc := formatWorkspaceDescriptionWithLogicalState(row.WorkState, row.Description)
+	desc := formatWorkspaceTitleWithLogicalState(row.WorkState, row.Title)
 
 	prefixPlain := fmt.Sprintf("%s%s  %s  %s  ", uiIndent, idPlain, riskPlain, repoPlain)
 	availableDescCols := maxCols - displayWidth(prefixPlain)
@@ -309,10 +309,10 @@ func importWorkspaceDirs(ctx context.Context, db *sql.DB, root string, now int64
 		}
 
 		if _, err := statestore.CreateWorkspace(ctx, db, statestore.CreateWorkspaceInput{
-			ID:          id,
-			Description: "",
-			SourceURL:   "",
-			Now:         now,
+			ID:        id,
+			Title:     "",
+			SourceURL: "",
+			Now:       now,
 		}); err != nil {
 			return err
 		}
@@ -422,8 +422,8 @@ func detectOriginHeadBaseRef(ctx context.Context, worktreePath string) string {
 	return "origin/" + branch
 }
 
-func formatWorkspaceDescriptionWithLogicalState(workState string, description string) string {
-	desc := strings.TrimSpace(description)
+func formatWorkspaceTitleWithLogicalState(workState string, title string) string {
+	desc := strings.TrimSpace(title)
 	if workState == "" {
 		if desc == "" {
 			return "(no title)"

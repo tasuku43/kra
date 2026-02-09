@@ -503,8 +503,8 @@ func selectRepoGCCandidates(c *CLI, candidates []repoGCCandidate, args []string)
 			byKey[it.RepoKey] = it
 		}
 		selectorCandidates = append(selectorCandidates, workspaceSelectorCandidate{
-			ID:          it.RepoKey,
-			Description: "",
+			ID:    it.RepoKey,
+			Title: "",
 		})
 	}
 

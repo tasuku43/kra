@@ -22,7 +22,7 @@ This file is canonical and stored in:
   "schema_version": 1,
   "workspace": {
     "id": "MVP-001",
-    "description": "",
+    "title": "",
     "source_url": "",
     "status": "active",
     "created_at": 1730000000,

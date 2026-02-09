@@ -18,12 +18,12 @@ type workspaceMetaFile struct {
 }
 
 type workspaceMetaWorkspace struct {
-	ID          string `json:"id"`
-	Description string `json:"description"`
-	SourceURL   string `json:"source_url"`
-	Status      string `json:"status"`
-	CreatedAt   int64  `json:"created_at"`
-	UpdatedAt   int64  `json:"updated_at"`
+	ID        string `json:"id"`
+	Title     string `json:"title"`
+	SourceURL string `json:"source_url"`
+	Status    string `json:"status"`
+	CreatedAt int64  `json:"created_at"`
+	UpdatedAt int64  `json:"updated_at"`
 }
 
 type workspaceMetaRepoRestore struct {
@@ -35,16 +35,16 @@ type workspaceMetaRepoRestore struct {
 	BaseRef   string `json:"base_ref"`
 }
 
-func newWorkspaceMetaFileForCreate(id string, description string, now int64) workspaceMetaFile {
+func newWorkspaceMetaFileForCreate(id string, title string, now int64) workspaceMetaFile {
 	return workspaceMetaFile{
 		SchemaVersion: 1,
 		Workspace: workspaceMetaWorkspace{
-			ID:          id,
-			Description: description,
-			SourceURL:   "",
-			Status:      "active",
-			CreatedAt:   now,
-			UpdatedAt:   now,
+			ID:        id,
+			Title:     title,
+			SourceURL: "",
+			Status:    "active",
+			CreatedAt: now,
+			UpdatedAt: now,
 		},
 		ReposRestore: make([]workspaceMetaRepoRestore, 0),
 	}

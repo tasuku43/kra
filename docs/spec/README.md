@@ -13,7 +13,7 @@ Implementation should reference these specs. When behavior changes, update the s
 - Required: `title`, `status`.
 - Optional: `pending` (YAML array of short tokens/ids for unimplemented pieces). If `pending` is non-empty,
   treat the spec as needing work even when `status: implemented`.
-- Additional optional fields (e.g., `description`, `since`) are allowed.
+- Additional optional fields (e.g., `title`, `since`) are allowed.
 - Use YAML frontmatter at the top of each spec.
 
 ### `status` values

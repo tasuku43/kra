@@ -360,18 +360,18 @@ func listWorkspaceCandidatesByStatus(ctx context.Context, db *sql.DB, root strin
 		if it.Status != status {
 			continue
 		}
-		description := strings.TrimSpace(it.Description)
+		title := strings.TrimSpace(it.Title)
 		if status == "active" {
 			repos, err := statestore.ListWorkspaceRepos(ctx, db, it.ID)
 			if err != nil {
 				return nil, err
 			}
 			workState := deriveLogicalWorkState(ctx, root, it.ID, it.Status, repos)
-			description = formatWorkspaceDescriptionWithLogicalState(workState, description)
+			title = formatWorkspaceTitleWithLogicalState(workState, title)
 		}
 		out = append(out, workspaceSelectorCandidate{
-			ID:          it.ID,
-			Description: description,
+			ID:    it.ID,
+			Title: title,
 		})
 	}
 	return out, nil
