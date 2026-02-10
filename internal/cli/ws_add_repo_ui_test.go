@@ -197,7 +197,7 @@ func TestRenderAddRepoInputsProgress_NonTTY_NoEscapeAndStableLineCount(t *testin
 		{RepoKey: "tasuku43/gionx", BaseRef: "origin/main"},
 	}
 	var out bytes.Buffer
-	rendered := renderAddRepoInputsProgress(&out, "TEST-010", rows, 0, false, 99, false, true, true)
+	rendered := renderAddRepoInputsProgress(&out, "TEST-010", rows, 0, false, 99, true, true)
 	if rendered == 0 {
 		t.Fatal("expected rendered line count > 0")
 	}
@@ -215,7 +215,7 @@ func TestRenderAddRepoInputsProgress_NonTTY_AfterPrompt_CanKeepPendingBranch(t *
 		{RepoKey: "tasuku43/gionx", BaseRef: "origin/main"},
 	}
 	var out bytes.Buffer
-	_ = renderAddRepoInputsProgress(&out, "TEST-010", rows, 0, false, 99, true, true, true)
+	_ = renderAddRepoInputsProgress(&out, "TEST-010", rows, 0, false, 99, true, true)
 	got := out.String()
 	if !strings.Contains(got, "base_ref: origin/main") || !strings.Contains(got, "branch: TEST-010") {
 		t.Fatalf("unexpected render output:\n%s", got)
@@ -227,7 +227,7 @@ func TestRenderAddRepoInputsProgress_NonTTY_AfterPrompt_HidesPendingBranchAndKee
 		{RepoKey: "tasuku43/gionx", BaseRef: "origin/main"},
 	}
 	var out bytes.Buffer
-	_ = renderAddRepoInputsProgress(&out, "TEST-010", rows, 0, false, 99, true, false, true)
+	_ = renderAddRepoInputsProgress(&out, "TEST-010", rows, 0, false, 99, false, true)
 	got := out.String()
 	if strings.Contains(got, "branch: TEST-010") {
 		t.Fatalf("after prompt render should not duplicate pending branch line:\n%s", got)

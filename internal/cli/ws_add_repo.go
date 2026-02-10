@@ -300,13 +300,13 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		progress[i] = addRepoInputProgress{RepoKey: cand.RepoKey}
 	}
 	c.debugf("add-repo inputs render stage=initial active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t keep_base_ref_open=%t", 0, 0, false, true, true)
-	renderedInputLines := renderAddRepoInputsProgress(c.Err, workspaceID, progress, 0, useColorErr, 0, false, true, true)
+	renderedInputLines := renderAddRepoInputsProgress(c.Err, workspaceID, progress, 0, useColorErr, 0, true, true)
 
 	plan := make([]addRepoPlanItem, 0, len(selected))
 	for i, cand := range selected {
 		if i > 0 {
 			c.debugf("add-repo inputs render stage=next-repo active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t keep_base_ref_open=%t", i, renderedInputLines, false, true, true)
-			renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, false, true, true)
+			renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, true, true)
 		}
 		defaultBaseRef, err := detectDefaultBaseRefFromBare(ctx, cand.BarePath)
 		if err != nil {
@@ -330,7 +330,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		}
 		progress[i].BaseRef = baseRefUsed
 		c.debugf("add-repo inputs render stage=after-base-ref active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t keep_base_ref_open=%t", i, renderedInputLines, true, false, true)
-		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, true, false, true)
+		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, false, true)
 
 		branchDisplayDefault := workspaceID
 		branchInput, _, err := c.promptAddRepoEditableInput(addRepoInputDetailPromptPrefix(useColorErr), "branch", branchDisplayDefault, useColorErr)
@@ -346,7 +346,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		}
 		progress[i].Branch = branch
 		c.debugf("add-repo inputs render stage=after-branch active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t keep_base_ref_open=%t", i, renderedInputLines, true, false, false)
-		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, true, false, false)
+		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, false, false)
 
 		plan = append(plan, addRepoPlanItem{
 			Candidate:      cand,
@@ -1288,13 +1288,9 @@ func renderAddRepoApplyPrompt(useColor bool) string {
 	return fmt.Sprintf("%s%s apply this plan? %s: ", uiIndent, bullet, guide)
 }
 
-func renderAddRepoInputsProgress(out io.Writer, workspaceID string, rows []addRepoInputProgress, activeIndex int, useColor bool, prevLines int, promptJustClosed bool, showPendingBranch bool, keepBaseRefOpen bool) int {
+func renderAddRepoInputsProgress(out io.Writer, workspaceID string, rows []addRepoInputProgress, activeIndex int, useColor bool, prevLines int, showPendingBranch bool, keepBaseRefOpen bool) int {
 	lines := buildAddRepoInputsLinesWithPendingOption(workspaceID, rows, activeIndex, useColor, showPendingBranch, keepBaseRefOpen)
 	oldRows := prevLines
-	if promptJustClosed && oldRows > 0 {
-		// Inline prompt leaves one additional row that must be included in redraw span.
-		oldRows++
-	}
 	if writerIsTTY(out) && oldRows > 0 {
 		moveUp := oldRows
 		fmt.Fprintf(out, "\x1b[%dA", moveUp)
