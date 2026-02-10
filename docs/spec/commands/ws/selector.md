@@ -17,6 +17,13 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
 - `Enter`: proceed with current selection.
 - `Esc` or `Ctrl+C`: cancel without side effects.
 - Text input is always treated as filter query input (no dedicated filter mode).
+- Filter matching is fuzzy ordered-subsequence (aligned with `gion`):
+  - query characters must appear in order, but do not need to be contiguous.
+  - spaces in query are ignored.
+  - matching is case-insensitive.
+  - examples:
+    - `example-org/helmfiles` matches query `cs`.
+    - `example-org/helmfiles` matches query `c s`.
 - `Backspace` / `Delete`: remove one rune from filter query.
 - Filter text must persist after selection toggle; it is cleared only when the user explicitly deletes it.
 - Single-select mode (`ws --act go`) uses cursor + Enter confirmation:

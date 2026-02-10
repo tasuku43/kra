@@ -87,6 +87,23 @@ func TestWorkspaceSelectorModel_FilterPersistsAfterToggle(t *testing.T) {
 	}
 }
 
+func TestFilteredCandidateIndices_UsesFuzzyMatch(t *testing.T) {
+	candidates := []workspaceSelectorCandidate{
+		{ID: "example-org/helmfiles", Title: "platform", Risk: workspacerisk.WorkspaceRiskClean},
+		{ID: "tasuku43/gionx", Title: "command line tool", Risk: workspacerisk.WorkspaceRiskClean},
+	}
+
+	got := filteredCandidateIndices(candidates, "cs")
+	if len(got) != 1 || got[0] != 0 {
+		t.Fatalf("filteredCandidateIndices should fuzzy-match id: got=%v", got)
+	}
+
+	got = filteredCandidateIndices(candidates, "d l t")
+	if len(got) != 1 || got[0] != 1 {
+		t.Fatalf("filteredCandidateIndices should fuzzy-match title with whitespace-insensitive query: got=%v", got)
+	}
+}
+
 func TestWorkspaceSelectorModel_FilterClearsByDeleteOneRuneAtATime(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", "proceed", false, nil)
 

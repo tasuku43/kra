@@ -634,16 +634,9 @@ func renderSelectorFooterLine(selectedCount int, total int, action string, singl
 }
 
 func filteredCandidateIndices(candidates []workspaceSelectorCandidate, filter string) []int {
-	query := strings.ToLower(filter)
 	out := make([]int, 0, len(candidates))
 	for i, c := range candidates {
-		if query == "" {
-			out = append(out, i)
-			continue
-		}
-		id := strings.ToLower(c.ID)
-		desc := strings.ToLower(c.Title)
-		if strings.Contains(id, query) || strings.Contains(desc, query) {
+		if fuzzyFilterMatch(c.ID, filter) || fuzzyFilterMatch(c.Title, filter) {
 			out = append(out, i)
 		}
 	}

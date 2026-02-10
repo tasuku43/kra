@@ -1076,13 +1076,12 @@ func (c *CLI) promptAddRepoPoolSelectionFallback(candidates []addRepoPoolCandida
 }
 
 func filterAddRepoPoolCandidates(candidates []addRepoPoolCandidate, filter string) []addRepoPoolCandidate {
-	filter = strings.ToLower(strings.TrimSpace(filter))
-	if filter == "" {
+	if strings.TrimSpace(filter) == "" {
 		return slices.Clone(candidates)
 	}
 	out := make([]addRepoPoolCandidate, 0, len(candidates))
 	for _, it := range candidates {
-		if strings.Contains(strings.ToLower(it.RepoKey), filter) {
+		if fuzzyFilterMatch(it.RepoKey, filter) {
 			out = append(out, it)
 		}
 	}

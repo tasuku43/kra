@@ -33,6 +33,11 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
   2. `repos.updated_at` descending
   3. `repo_key` ascending
 - Candidate filter target is `repo_key` only.
+- Candidate filter matching is fuzzy ordered-subsequence (aligned with selector behavior):
+  - query characters must appear in order, but do not need to be contiguous.
+  - spaces in query are ignored.
+  - matching is case-insensitive.
+  - example: `example-org/helmfiles` matches query `cs`.
 
 ## Behavior (MVP)
 
