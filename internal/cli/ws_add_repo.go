@@ -299,14 +299,14 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	for i, cand := range selected {
 		progress[i] = addRepoInputProgress{RepoKey: cand.RepoKey}
 	}
-	c.debugf("add-repo inputs render stage=initial active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t", 0, 0, false, true)
-	renderedInputLines := renderAddRepoInputsProgress(c.Err, workspaceID, progress, 0, useColorErr, 0, false, true)
+	c.debugf("add-repo inputs render stage=initial active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t keep_base_ref_open=%t", 0, 0, false, true, true)
+	renderedInputLines := renderAddRepoInputsProgress(c.Err, workspaceID, progress, 0, useColorErr, 0, false, true, true)
 
 	plan := make([]addRepoPlanItem, 0, len(selected))
 	for i, cand := range selected {
 		if i > 0 {
-			c.debugf("add-repo inputs render stage=next-repo active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t", i, renderedInputLines, false, true)
-			renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, false, true)
+			c.debugf("add-repo inputs render stage=next-repo active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t keep_base_ref_open=%t", i, renderedInputLines, false, true, true)
+			renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, false, true, true)
 		}
 		defaultBaseRef, err := detectDefaultBaseRefFromBare(ctx, cand.BarePath)
 		if err != nil {
@@ -329,8 +329,8 @@ func (c *CLI) runWSAddRepo(args []string) int {
 			baseRefRecord = baseRefUsed
 		}
 		progress[i].BaseRef = baseRefUsed
-		c.debugf("add-repo inputs render stage=after-base-ref active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t", i, renderedInputLines, true, true)
-		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, true, true)
+		c.debugf("add-repo inputs render stage=after-base-ref active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t keep_base_ref_open=%t", i, renderedInputLines, true, false, true)
+		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, true, false, true)
 
 		branchDisplayDefault := workspaceID
 		branchInput, _, err := c.promptAddRepoEditableInput(addRepoInputDetailPromptPrefix(useColorErr), "branch", branchDisplayDefault, useColorErr)
@@ -345,8 +345,8 @@ func (c *CLI) runWSAddRepo(args []string) int {
 			return exitError
 		}
 		progress[i].Branch = branch
-		c.debugf("add-repo inputs render stage=after-branch active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t", i, renderedInputLines, true, false)
-		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, true, false)
+		c.debugf("add-repo inputs render stage=after-branch active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t keep_base_ref_open=%t", i, renderedInputLines, true, false, false)
+		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, true, false, false)
 
 		plan = append(plan, addRepoPlanItem{
 			Candidate:      cand,
@@ -1288,8 +1288,8 @@ func renderAddRepoApplyPrompt(useColor bool) string {
 	return fmt.Sprintf("%s%s apply this plan? %s: ", uiIndent, bullet, guide)
 }
 
-func renderAddRepoInputsProgress(out io.Writer, workspaceID string, rows []addRepoInputProgress, activeIndex int, useColor bool, prevLines int, promptJustClosed bool, showPendingBranch bool) int {
-	lines := buildAddRepoInputsLinesWithPendingOption(workspaceID, rows, activeIndex, useColor, showPendingBranch)
+func renderAddRepoInputsProgress(out io.Writer, workspaceID string, rows []addRepoInputProgress, activeIndex int, useColor bool, prevLines int, promptJustClosed bool, showPendingBranch bool, keepBaseRefOpen bool) int {
+	lines := buildAddRepoInputsLinesWithPendingOption(workspaceID, rows, activeIndex, useColor, showPendingBranch, keepBaseRefOpen)
 	oldRows := prevLines
 	if promptJustClosed && oldRows > 0 {
 		// Inline prompt leaves one additional row that must be included in redraw span.
@@ -1323,10 +1323,10 @@ func renderAddRepoInputsProgress(out io.Writer, workspaceID string, rows []addRe
 }
 
 func buildAddRepoInputsLines(workspaceID string, rows []addRepoInputProgress, activeIndex int, useColor bool) []string {
-	return buildAddRepoInputsLinesWithPendingOption(workspaceID, rows, activeIndex, useColor, true)
+	return buildAddRepoInputsLinesWithPendingOption(workspaceID, rows, activeIndex, useColor, true, true)
 }
 
-func buildAddRepoInputsLinesWithPendingOption(workspaceID string, rows []addRepoInputProgress, activeIndex int, useColor bool, showPendingBranch bool) []string {
+func buildAddRepoInputsLinesWithPendingOption(workspaceID string, rows []addRepoInputProgress, activeIndex int, useColor bool, showPendingBranch bool, keepBaseRefOpen bool) []string {
 	bullet := styleMuted("•", useColor)
 	labelWorkspace := styleAccent("workspace", useColor)
 	labelRepos := styleAccent("repos", useColor)
@@ -1365,13 +1365,14 @@ func buildAddRepoInputsLinesWithPendingOption(workspaceID string, rows []addRepo
 			continue
 		}
 		branchPending := showPendingBranch && i == activeIndex && hasBase && !hasBranch
+		baseRefOpen := keepBaseRefOpen && i == activeIndex && hasBase && !hasBranch
 		stem := "│  "
 		if i == displayCount-1 {
 			stem = "   "
 		}
 		if hasBase {
 			connector := "└─ "
-			if hasBranch || branchPending {
+			if hasBranch || baseRefOpen || branchPending {
 				connector = "├─ "
 			}
 			body = append(body, fmt.Sprintf("%s%s%s%s: %s", uiIndent+uiIndent, styleMuted(stem, useColor), styleMuted(connector, useColor), labelBaseRef, row.BaseRef))
