@@ -358,7 +358,14 @@ func TestRenderWorkspaceSelectorLines_MessageIsIndented(t *testing.T) {
 		false,
 		120,
 	)
-	msg := lines[len(lines)-1]
+	msg := ""
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.TrimSpace(lines[i]) == "" {
+			continue
+		}
+		msg = lines[i]
+		break
+	}
 	if !strings.HasPrefix(msg, uiIndent) {
 		t.Fatalf("message should start with shared indent %q, got %q", uiIndent, msg)
 	}
@@ -382,7 +389,14 @@ func TestRenderWorkspaceSelectorLines_ErrorMessageUsesErrorToken(t *testing.T) {
 		true,
 		120,
 	)
-	msg := lines[len(lines)-1]
+	msg := ""
+	for i := len(lines) - 1; i >= 0; i-- {
+		if strings.TrimSpace(lines[i]) == "" {
+			continue
+		}
+		msg = lines[i]
+		break
+	}
 	if !strings.Contains(msg, ansiError) {
 		t.Fatalf("error message should include error color token, got %q", msg)
 	}

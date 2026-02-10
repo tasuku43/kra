@@ -576,28 +576,24 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 		bodyLines = append(bodyLines, line)
 	}
 
-	lines := make([]string, 0, len(candidates)+7)
-	lines = append(lines, titleLine)
-	if !compactTitle {
-		lines = append(lines, "")
-	}
-	lines = append(lines, bodyLines...)
-	lines = append(lines, "")
+	sectionBody := make([]string, 0, len(bodyLines)+4)
+	sectionBody = append(sectionBody, bodyLines...)
+	sectionBody = append(sectionBody, "")
 	if useColor {
 		prefix := styleMuted(fmt.Sprintf("%sfilter: ", uiIndent), true)
-		lines = append(lines, prefix+filterView)
+		sectionBody = append(sectionBody, prefix+filterView)
 	} else {
 		availableFilterCols := maxCols - displayWidth(uiIndent+"filter: ") - 1
 		if availableFilterCols < 1 {
 			availableFilterCols = 1
 		}
 		filterBody := truncateDisplay(filterView, availableFilterCols)
-		lines = append(lines, fmt.Sprintf("%sfilter: %s", uiIndent, filterBody))
+		sectionBody = append(sectionBody, fmt.Sprintf("%sfilter: %s", uiIndent, filterBody))
 	}
-	lines = append(lines, footer)
+	sectionBody = append(sectionBody, footer)
 
 	if strings.TrimSpace(message) == "" {
-		lines = append(lines, "")
+		sectionBody = append(sectionBody, "")
 	} else {
 		msgCols := maxCols - displayWidth(uiIndent)
 		if msgCols < 1 {
@@ -605,14 +601,19 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 		}
 		msgLine := uiIndent + truncateDisplay(message, msgCols)
 		if useColor && msgLevel == selectorMessageLevelError {
-			lines = append(lines, styleError(msgLine, true))
+			sectionBody = append(sectionBody, styleError(msgLine, true))
 		} else if useColor {
-			lines = append(lines, styleMuted(msgLine, true))
+			sectionBody = append(sectionBody, styleMuted(msgLine, true))
 		} else {
-			lines = append(lines, msgLine)
+			sectionBody = append(sectionBody, msgLine)
 		}
 	}
 
+	lines := make([]string, 0, len(candidates)+8)
+	lines = appendSectionLines(lines, titleLine, sectionBody, sectionRenderOptions{
+		blankAfterHeading: !compactTitle,
+		trailingBlank:     true,
+	})
 	return lines
 }
 

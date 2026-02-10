@@ -363,7 +363,6 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	}
 
 	printAddRepoPlan(c.Out, workspaceID, plan, useColorOut)
-	fmt.Fprintln(c.Out)
 	line, err := c.promptLine(renderAddRepoApplyPrompt(useColorErr))
 	if err != nil {
 		fmt.Fprintf(c.Err, "read confirmation: %v\n", err)
@@ -1264,20 +1263,24 @@ func printAddRepoPlan(out io.Writer, workspaceID string, plan []addRepoPlanItem,
 		return styleMuted(connector, useColor)
 	}
 
-	fmt.Fprintln(out)
-	fmt.Fprintln(out, styleBold("Plan:", useColor))
-	fmt.Fprintf(out, "%s%s add %d repos (worktrees) to workspace %s\n", uiIndent, bullet, len(plan), workspaceID)
-	if len(plan) == 0 {
-		return
+	body := []string{
+		fmt.Sprintf("%s%s add %d repos (worktrees) to workspace %s", uiIndent, bullet, len(plan), workspaceID),
 	}
-	fmt.Fprintf(out, "%s%s %s:\n", uiIndent, bullet, reposLabel)
+	if len(plan) > 0 {
+		body = append(body, fmt.Sprintf("%s%s %s:", uiIndent, bullet, reposLabel))
+	}
 	for i, p := range plan {
 		connector := "├─ "
 		if i == len(plan)-1 {
 			connector = "└─ "
 		}
-		fmt.Fprintf(out, "%s%s%s\n", uiIndent+uiIndent, connectorMuted(connector), p.Candidate.RepoKey)
+		body = append(body, fmt.Sprintf("%s%s%s", uiIndent+uiIndent, connectorMuted(connector), p.Candidate.RepoKey))
 	}
+	fmt.Fprintln(out)
+	printSection(out, styleBold("Plan:", useColor), body, sectionRenderOptions{
+		blankAfterHeading: false,
+		trailingBlank:     true,
+	})
 }
 
 func renderAddRepoApplyPrompt(useColor bool) string {
@@ -1313,13 +1316,15 @@ func buildAddRepoInputsLinesWithPendingOption(workspaceID string, rows []addRepo
 	labelBaseRef := styleAccent("base_ref", useColor)
 	labelBranch := styleAccent("branch", useColor)
 
-	lines := []string{
-		styleBold("Inputs:", useColor),
+	body := []string{
 		fmt.Sprintf("%s%s %s: %s", uiIndent, bullet, labelWorkspace, workspaceID),
 		fmt.Sprintf("%s%s %s:", uiIndent, bullet, labelRepos),
 	}
 	if len(rows) == 0 {
-		return lines
+		return appendSectionLines(nil, styleBold("Inputs:", useColor), body, sectionRenderOptions{
+			blankAfterHeading: false,
+			trailingBlank:     true,
+		})
 	}
 	displayCount := activeIndex + 1
 	if displayCount < 1 {
@@ -1335,7 +1340,7 @@ func buildAddRepoInputsLinesWithPendingOption(workspaceID string, rows []addRepo
 		if i == displayCount-1 {
 			repoConnector = "└─ "
 		}
-		lines = append(lines, fmt.Sprintf("%s%s%s", uiIndent+uiIndent, styleMuted(repoConnector, useColor), row.RepoKey))
+		body = append(body, fmt.Sprintf("%s%s%s", uiIndent+uiIndent, styleMuted(repoConnector, useColor), row.RepoKey))
 
 		hasBase := strings.TrimSpace(row.BaseRef) != ""
 		hasBranch := strings.TrimSpace(row.Branch) != ""
@@ -1352,15 +1357,18 @@ func buildAddRepoInputsLinesWithPendingOption(workspaceID string, rows []addRepo
 			if hasBranch || branchPending {
 				connector = "├─ "
 			}
-			lines = append(lines, fmt.Sprintf("%s%s%s%s: %s", uiIndent+uiIndent, styleMuted(stem, useColor), styleMuted(connector, useColor), labelBaseRef, row.BaseRef))
+			body = append(body, fmt.Sprintf("%s%s%s%s: %s", uiIndent+uiIndent, styleMuted(stem, useColor), styleMuted(connector, useColor), labelBaseRef, row.BaseRef))
 		}
 		if hasBranch {
-			lines = append(lines, fmt.Sprintf("%s%s%s%s: %s", uiIndent+uiIndent, styleMuted(stem, useColor), styleMuted("└─ ", useColor), labelBranch, row.Branch))
+			body = append(body, fmt.Sprintf("%s%s%s%s: %s", uiIndent+uiIndent, styleMuted(stem, useColor), styleMuted("└─ ", useColor), labelBranch, row.Branch))
 		} else if branchPending {
-			lines = append(lines, fmt.Sprintf("%s%s%s%s: %s", uiIndent+uiIndent, styleMuted(stem, useColor), styleMuted("└─ ", useColor), labelBranch, workspaceID))
+			body = append(body, fmt.Sprintf("%s%s%s%s: %s", uiIndent+uiIndent, styleMuted(stem, useColor), styleMuted("└─ ", useColor), labelBranch, workspaceID))
 		}
 	}
-	return lines
+	return appendSectionLines(nil, styleBold("Inputs:", useColor), body, sectionRenderOptions{
+		blankAfterHeading: false,
+		trailingBlank:     true,
+	})
 }
 
 func renderAddRepoInputPrompt(prefix string, label string, defaultValue string, useColor bool) string {

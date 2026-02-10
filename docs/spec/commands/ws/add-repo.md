@@ -52,6 +52,7 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
   - section spacing:
     - keep one blank line before `Inputs:`
     - no blank line between `Inputs:` heading and first body line
+    - end `Inputs:` section with exactly one trailing blank line
   - for each selected repo, show a tree row and prompt inline under that repo
   - Inputs section is redrawn incrementally while values are fixed:
     - after base_ref only: repo node has only `base_ref` detail
@@ -81,7 +82,7 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 4. Plan and confirmation
   - print `Plan:` as concise summary (selected repo list)
   - `target path` is not shown in default output
-  - keep one blank line before `Plan:` and one blank line before the final confirmation prompt
+  - keep one blank line before `Plan:` and one trailing blank line after `Plan:` before the final confirmation prompt
   - final prompt:
     - `apply this plan? [Enter=yes / n=no]: `
 
@@ -99,6 +100,7 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
   - print `Result:`
   - summary: `Added <n> / <m>`
   - per repo success lines
+  - end `Result:` section with exactly one trailing blank line
 
 ## Non-interactive JSON contract
 
@@ -109,6 +111,7 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 ## UI style (TTY)
 
 - Follow shared section flow: `Repos(pool):` -> `Inputs:` -> `Plan:` -> `Result:`.
+- Each section block follows the shared section atom contract (heading/body/trailing blank).
 - Use shared style tokens:
   - `muted`: bullets/tree connectors
   - `accent`: field labels (`workspace`, `repos`, `alias`, `base_ref`, `branch`)

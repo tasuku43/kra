@@ -93,3 +93,13 @@ status: planned
     - `docs/spec/concepts/ui-color.md`
   - Depends: UX-CORE-003
   - Parallel: yes
+
+- [x] UX-CORE-011: Shared section block spacing atom
+  - What: unify section rendering (`Workspaces`, `Repos(pool)`, `Inputs`, `Plan`, `Result`, etc.) by reusing one
+    section-block atom so each section ends with exactly one trailing blank line.
+  - Specs:
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/commands/ws/add-repo.md`
+    - `docs/spec/commands/ws/list.md`
+  - Depends: UX-CORE-004
+  - Parallel: yes

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 
 	"github.com/mattn/go-isatty"
 )
@@ -161,9 +162,41 @@ func renderResultTitle(useColor bool) string {
 }
 
 func printResultSection(out io.Writer, useColor bool, lines ...string) {
-	fmt.Fprintln(out)
-	fmt.Fprintln(out, renderResultTitle(useColor))
+	body := make([]string, 0, len(lines))
 	for _, line := range lines {
-		fmt.Fprintf(out, "%s%s\n", uiIndent, line)
+		body = append(body, fmt.Sprintf("%s%s", uiIndent, line))
+	}
+	fmt.Fprintln(out)
+	printSection(out, renderResultTitle(useColor), body, sectionRenderOptions{
+		blankAfterHeading: false,
+		trailingBlank:     true,
+	})
+}
+
+type sectionRenderOptions struct {
+	blankAfterHeading bool
+	trailingBlank     bool
+}
+
+func appendSectionLines(lines []string, heading string, body []string, opts sectionRenderOptions) []string {
+	section := make([]string, 0, 2+len(body))
+	section = append(section, heading)
+	if opts.blankAfterHeading {
+		section = append(section, "")
+	}
+	section = append(section, body...)
+	if opts.trailingBlank {
+		for len(section) > 0 && strings.TrimSpace(section[len(section)-1]) == "" {
+			section = section[:len(section)-1]
+		}
+		section = append(section, "")
+	}
+	return append(lines, section...)
+}
+
+func printSection(out io.Writer, heading string, body []string, opts sectionRenderOptions) {
+	lines := appendSectionLines(nil, heading, body, opts)
+	for _, line := range lines {
+		fmt.Fprintln(out, line)
 	}
 }

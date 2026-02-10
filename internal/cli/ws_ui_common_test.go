@@ -64,7 +64,7 @@ func TestPrintResultSection_UsesSharedIndent(t *testing.T) {
 	printResultSection(&out, false, "line-1", "line-2")
 
 	got := out.String()
-	want := "\nResult:\n" + uiIndent + "line-1\n" + uiIndent + "line-2\n"
+	want := "\nResult:\n" + uiIndent + "line-1\n" + uiIndent + "line-2\n\n"
 	if got != want {
 		t.Fatalf("unexpected result section:\n--- got ---\n%q\n--- want ---\n%q", got, want)
 	}

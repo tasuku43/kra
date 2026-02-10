@@ -35,6 +35,7 @@ List workspaces with status and summary fields, similar in spirit to `gion manif
 - Header shows scope only:
   - default: `Workspaces(active):`
   - `--archived`: `Workspaces(archived):`
+- `Workspaces(...)` section follows shared section atom contract and ends with exactly one trailing blank line.
 - `status` is represented by scope, not repeated per row.
 - Summary output should follow the same shared row rendering semantics as selector flows
   (`commands/ws/selector.md`), while remaining non-interactive.

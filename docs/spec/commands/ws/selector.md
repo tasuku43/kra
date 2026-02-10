@@ -66,6 +66,7 @@ Section body indentation must be controlled by shared global constants (no per-c
 - Section spacing:
   - `Workspaces(...)` and `Risk:` have one blank line after heading.
   - `Result:` has no blank line after heading.
+  - every section block ends with exactly one trailing blank line.
 - Selector footer/status lines (for example `selected: n/m` and key hints) are part of section body and must use
   the same two-space indentation.
 - Selector inline message lines (validation/error/help) must also use the same two-space indentation.
@@ -137,6 +138,7 @@ Required shared modules (logical units):
 - `RepoTreeRenderer`: indented supplemental renderer for repo tree details
 - `RiskBadgeRenderer`: canonical risk badge formatter for `Risk:` section
 - `SectionTitleRenderer`: section heading renderer (`Workspaces(...)`, `Risk`, `Result`)
+- `SectionBlockRenderer`: canonical section assembler (heading/body/trailing-blank contract)
 - `StatusLabelRenderer`: canonical status label formatter (`active`, `archived`)
 - `SelectorFrameRenderer`: footer and key-hint renderer
 
