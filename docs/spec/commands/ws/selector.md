@@ -105,6 +105,8 @@ Semantic color token policy:
   - `> ○ WS-101      login flow`
   - `  ● WS-202      payment hotfix`
 - For repo-pool selectors (`itemLabel=repo`), title column is omitted by default (no `(no title)` filler).
+- Workspace selectors use metadata title as summary text and must not derive dynamic logical work-state
+  labels (`todo` / `in-progress`) from per-repo runtime inspection.
 - `status` is not rendered per row. State context is provided by header `scope`.
 - The title column must be vertically aligned across rows (fixed title start column).
 - Risk tags are not rendered in `Workspaces(...)` rows.

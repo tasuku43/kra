@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	appws "github.com/tasuku43/gionx/internal/app/ws"
 	"github.com/tasuku43/gionx/internal/infra/paths"
@@ -347,20 +348,29 @@ func (a *cliWSLauncherAdapter) ResolveByID(ctx context.Context, id string) (appw
 
 func (c *CLI) selectWorkspaceIDByStatus(root string, status string, action string) (string, error) {
 	ctx := context.Background()
+	c.debugf("ws launcher load candidates status=%s action=%s", status, action)
+	start := time.Now()
 	candidates, err := listWorkspaceCandidatesByStatus(ctx, root, status)
+	elapsedMs := time.Since(start).Milliseconds()
 	if err != nil {
+		c.debugf("ws launcher load candidates failed status=%s action=%s elapsed_ms=%d err=%v", status, action, elapsedMs, err)
 		return "", err
 	}
+	c.debugf("ws launcher load candidates done status=%s action=%s count=%d elapsed_ms=%d", status, action, len(candidates), elapsedMs)
 	if len(candidates) == 0 {
 		if status == "archived" {
 			return "", errNoArchivedWorkspaces
 		}
 		return "", errNoActiveWorkspaces
 	}
+	selectStart := time.Now()
 	ids, err := c.promptWorkspaceSelectorSingle(status, action, candidates)
+	selectElapsedMs := time.Since(selectStart).Milliseconds()
 	if err != nil {
+		c.debugf("ws launcher prompt selector failed status=%s action=%s elapsed_ms=%d err=%v", status, action, selectElapsedMs, err)
 		return "", err
 	}
+	c.debugf("ws launcher prompt selector done status=%s action=%s elapsed_ms=%d selected=%v", status, action, selectElapsedMs, ids)
 	return ids[0], nil
 }
 
