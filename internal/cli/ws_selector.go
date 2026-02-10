@@ -10,6 +10,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-isatty"
@@ -49,6 +50,7 @@ type workspaceSelectorModel struct {
 	message       string
 	msgLevel      selectorMessageLevel
 	filter        string
+	filterInput   textinput.Model
 	canceled      bool
 	done          bool
 	single        bool
@@ -74,6 +76,7 @@ func newWorkspaceSelectorModelWithOptionsAndMode(candidates []workspaceSelectorC
 	if strings.TrimSpace(itemLabel) == "" {
 		itemLabel = "workspace"
 	}
+	filterInput := newCLITextInput()
 	return workspaceSelectorModel{
 		candidates:    candidates,
 		selected:      make(map[int]bool, len(candidates)),
@@ -89,11 +92,12 @@ func newWorkspaceSelectorModelWithOptionsAndMode(candidates []workspaceSelectorC
 		msgLevel:      selectorMessageLevelMuted,
 		single:        single,
 		reducedMotion: isReducedMotionEnabled(),
+		filterInput:   filterInput,
 	}
 }
 
 func (m workspaceSelectorModel) Init() tea.Cmd {
-	return selectorShowCursorCmd()
+	return textinput.Blink
 }
 
 func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -123,7 +127,7 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, tea.Quit
 		case tea.KeyBackspace, tea.KeyDelete:
 			if m.filter != "" {
-				m.filter = trimLastRune(m.filter)
+				m.setFilter(trimLastRune(m.filter))
 				m.ensureCursorInFilteredRange()
 				m.clearMessage()
 				return m, nil
@@ -193,51 +197,63 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			default:
 				if isFilterAppendableRune(r) {
-					m.filter += string(r)
+					m.setFilter(m.filter + string(r))
 					m.ensureCursorInFilteredRange()
 					m.clearMessage()
 					return m, nil
 				}
 			}
 		}
+		var cmd tea.Cmd
+		m.filterInput, cmd = m.filterInput.Update(msg)
+		if next := m.filterInput.Value(); next != m.filter {
+			m.filter = next
+			m.filterInput.CursorEnd()
+			m.ensureCursorInFilteredRange()
+			m.clearMessage()
+		}
+		return m, cmd
 	}
 
-	return m, nil
+	var cmd tea.Cmd
+	m.filterInput, cmd = m.filterInput.Update(msg)
+	if next := m.filterInput.Value(); next != m.filter {
+		m.filter = next
+		m.filterInput.CursorEnd()
+		m.ensureCursorInFilteredRange()
+		m.clearMessage()
+	}
+	return m, cmd
 }
 
 func (m workspaceSelectorModel) View() string {
-	lines := renderWorkspaceSelectorLinesWithOptions(m.status, m.title, m.action, m.candidates, m.selected, m.cursor, m.message, m.msgLevel, m.filter, m.showDesc, false, m.single, m.confirming, m.useColor, m.width)
-	view := strings.Join(lines, "\n")
-	if m.done || m.canceled {
-		return view
-	}
-
-	termWidth := m.width
-	if termWidth < 24 {
-		termWidth = 24
-	}
-	maxCols := termWidth - 1
-	availableFilterCols := maxCols - displayWidth(uiIndent+"filter: ") - 1
-	if availableFilterCols < 1 {
-		availableFilterCols = 1
-	}
-	filterBody := truncateDisplay(m.filter, availableFilterCols)
-	filterCol := displayWidth(uiIndent+"filter: "+filterBody) + 1
-	// filter line is always 2 lines above the terminal cursor:
-	// no-message case ends with an empty line, message case ends with message line.
-	return view + fmt.Sprintf("\x1b[2A\r\x1b[%dC", filterCol)
+	filterInput := m.filterInput
+	filterInput.Width = selectorFilterWidth(m.width)
+	lines := renderWorkspaceSelectorLinesWithFilterView(
+		m.status,
+		m.title,
+		m.action,
+		m.candidates,
+		m.selected,
+		m.cursor,
+		m.message,
+		m.msgLevel,
+		m.filter,
+		filterInput.View(),
+		m.showDesc,
+		false,
+		m.single,
+		m.confirming,
+		m.useColor,
+		m.width,
+	)
+	return strings.Join(lines, "\n")
 }
 
 func selectorSingleConfirmCmd() tea.Cmd {
 	return tea.Tick(selectorSingleConfirmDelay, func(time.Time) tea.Msg {
 		return selectorConfirmDoneMsg{}
 	})
-}
-
-func selectorShowCursorCmd() tea.Cmd {
-	return func() tea.Msg {
-		return tea.ShowCursor()
-	}
 }
 
 func (m *workspaceSelectorModel) toggleCurrentSelection() {
@@ -261,6 +277,12 @@ func (m *workspaceSelectorModel) clearMessage() {
 func (m *workspaceSelectorModel) setErrorMessage(message string) {
 	m.message = message
 	m.msgLevel = selectorMessageLevelError
+}
+
+func (m *workspaceSelectorModel) setFilter(filter string) {
+	m.filter = filter
+	m.filterInput.SetValue(filter)
+	m.filterInput.CursorEnd()
 }
 
 func (m *workspaceSelectorModel) ensureCursorInFilteredRange() {
@@ -376,6 +398,10 @@ func renderWorkspaceSelectorLines(status string, action string, candidates []wor
 }
 
 func renderWorkspaceSelectorLinesWithOptions(status string, title string, action string, candidates []workspaceSelectorCandidate, selected map[int]bool, cursor int, message string, msgLevel selectorMessageLevel, filter string, showDesc bool, showCaret bool, single bool, confirming bool, useColor bool, termWidth int) []string {
+	return renderWorkspaceSelectorLinesWithFilterView(status, title, action, candidates, selected, cursor, message, msgLevel, filter, filter, showDesc, showCaret, single, confirming, useColor, termWidth)
+}
+
+func renderWorkspaceSelectorLinesWithFilterView(status string, title string, action string, candidates []workspaceSelectorCandidate, selected map[int]bool, cursor int, message string, msgLevel selectorMessageLevel, filter string, filterView string, showDesc bool, showCaret bool, single bool, confirming bool, useColor bool, termWidth int) []string {
 	idWidth := len("workspace")
 	for _, it := range candidates {
 		if n := len(it.ID); n > idWidth {
@@ -400,7 +426,6 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 	}
 	visible := filteredCandidateIndices(candidates, filter)
 	totalVisible := len(visible)
-	filterLabel := filter
 
 	titleLine := renderWorkspacesTitle(status, useColor)
 	if strings.TrimSpace(title) != "" {
@@ -494,12 +519,17 @@ func renderWorkspaceSelectorLinesWithOptions(status string, title string, action
 	}
 	lines = append(lines, bodyLines...)
 	lines = append(lines, "")
-	availableFilterCols := maxCols - displayWidth(uiIndent+"filter: ") - 1
-	if availableFilterCols < 1 {
-		availableFilterCols = 1
+	if useColor {
+		prefix := styleMuted(fmt.Sprintf("%sfilter: ", uiIndent), true)
+		lines = append(lines, prefix+filterView)
+	} else {
+		availableFilterCols := maxCols - displayWidth(uiIndent+"filter: ") - 1
+		if availableFilterCols < 1 {
+			availableFilterCols = 1
+		}
+		filterBody := truncateDisplay(filterView, availableFilterCols)
+		lines = append(lines, fmt.Sprintf("%sfilter: %s", uiIndent, filterBody))
 	}
-	filterBody := truncateDisplay(filterLabel, availableFilterCols)
-	lines = append(lines, fmt.Sprintf("%sfilter: %s", uiIndent, filterBody))
 	lines = append(lines, footer)
 
 	if strings.TrimSpace(message) == "" {
@@ -529,6 +559,18 @@ func isReducedMotionEnabled() bool {
 	default:
 		return false
 	}
+}
+
+func selectorFilterWidth(termWidth int) int {
+	if termWidth < 24 {
+		termWidth = 24
+	}
+	maxCols := termWidth - 1
+	availableFilterCols := maxCols - displayWidth(uiIndent+"filter: ") - 1
+	if availableFilterCols < 1 {
+		availableFilterCols = 1
+	}
+	return availableFilterCols
 }
 
 func renderSelectorFooterLine(selectedCount int, total int, action string, single bool, maxCols int) string {

@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/mattn/go-isatty"
 	"github.com/tasuku43/gionx/internal/app/wscreate"
 	"github.com/tasuku43/gionx/internal/infra/appports"
 	"github.com/tasuku43/gionx/internal/infra/paths"
@@ -210,6 +211,12 @@ func (c *CLI) runWSCreate(args []string) int {
 }
 
 func (c *CLI) promptLine(prompt string) (string, error) {
+	inFile, inOK := c.In.(*os.File)
+	errFile, errOK := c.Err.(*os.File)
+	if inOK && errOK && isatty.IsTerminal(inFile.Fd()) && isatty.IsTerminal(errFile.Fd()) {
+		return runInlineTextInput(inFile, c.Err, prompt)
+	}
+
 	if prompt != "" {
 		fmt.Fprint(c.Err, prompt)
 	}
