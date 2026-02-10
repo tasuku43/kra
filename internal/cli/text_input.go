@@ -91,7 +91,6 @@ func runInlineTextInputWithInitial(in io.Reader, out io.Writer, prompt string, i
 	if err != nil {
 		return "", false, err
 	}
-	_, _ = fmt.Fprintln(out)
 	next, ok := finalModel.(inlineTextInputModel)
 	if !ok {
 		return "", false, fmt.Errorf("unexpected inline input model type")
