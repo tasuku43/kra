@@ -118,3 +118,11 @@ func TestPrintAddRepoPlan_ShowsConciseTree(t *testing.T) {
 		}
 	}
 }
+
+func TestRenderAddRepoApplyPrompt_UsesBulletedPlanAlignment(t *testing.T) {
+	got := renderAddRepoApplyPrompt(false)
+	want := "  • apply this plan? [Enter=yes / n=no]: "
+	if got != want {
+		t.Fatalf("renderAddRepoApplyPrompt() = %q, want %q", got, want)
+	}
+}

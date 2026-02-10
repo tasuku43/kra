@@ -359,7 +359,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 
 	printAddRepoPlan(c.Out, workspaceID, plan, useColorOut)
 	fmt.Fprintln(c.Out)
-	line, err := c.promptLine(fmt.Sprintf("%s%s", uiIndent, styleAccent("apply this plan? [Enter=yes / n=no]: ", useColorErr)))
+	line, err := c.promptLine(renderAddRepoApplyPrompt(useColorErr))
 	if err != nil {
 		fmt.Fprintf(c.Err, "read confirmation: %v\n", err)
 		return exitError
@@ -1273,6 +1273,12 @@ func printAddRepoPlan(out io.Writer, workspaceID string, plan []addRepoPlanItem,
 		}
 		fmt.Fprintf(out, "%s%s%s\n", uiIndent+uiIndent, connectorMuted(connector), p.Candidate.RepoKey)
 	}
+}
+
+func renderAddRepoApplyPrompt(useColor bool) string {
+	bullet := styleMuted("•", useColor)
+	guide := styleMuted("[Enter=yes / n=no]", useColor)
+	return fmt.Sprintf("%s%s apply this plan? %s: ", uiIndent, bullet, guide)
 }
 
 func renderAddRepoInputsProgress(out io.Writer, workspaceID string, rows []addRepoInputProgress, activeIndex int, useColor bool, prevLines int, afterPrompt bool) int {
