@@ -50,7 +50,6 @@ integration:
   jira:
     defaults:
       space: SRE
-      project: APP
       type: sprint # sprint | jql
 ```
 
