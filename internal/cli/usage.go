@@ -13,6 +13,7 @@ Commands:
   init              Initialize GIONX_ROOT
   context           Context commands
   repo              Repository pool commands
+  template          Workspace template commands
   shell             Shell integration commands
   ws                Workspace commands
   version           Print version
@@ -68,6 +69,27 @@ Examples:
 `)
 }
 
+func (c *CLI) printTemplateUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx template <subcommand> [args]
+
+Subcommands:
+  validate          Validate workspace templates under current root
+  help              Show this help
+`)
+}
+
+func (c *CLI) printTemplateValidateUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx template validate [--name <template>]
+
+Validate templates under <current-root>/templates.
+
+Options:
+  --name            Validate only one template (default: validate all templates)
+`)
+}
+
 func (c *CLI) printInitUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   gionx init [--root <path>] [--context <name>]
@@ -119,13 +141,14 @@ Notes:
 
 func (c *CLI) printWSCreateUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  gionx ws create [--no-prompt] <id>
-  gionx ws create --jira <ticket-url>
+  gionx ws create [--no-prompt] [--template <name>] <id>
+  gionx ws create --jira <ticket-url> [--template <name>]
 
-Create a workspace directory under GIONX_ROOT/workspaces/<id>/ and write .gionx.meta.json.
+Create a workspace directory from template and write .gionx.meta.json.
 
 Options:
   --no-prompt        Do not prompt for title (store empty)
+  --template         Template name under <current-root>/templates (default: default)
   --jira             Resolve workspace id/title from Jira issue URL (env auth required)
 `)
 }

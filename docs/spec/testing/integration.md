@@ -18,6 +18,7 @@ This ticket focuses on "drift" and partial failure scenarios across:
 
 Commands implemented through `MVP-042`:
 - `gionx init`
+- `gionx template validate`
 - `gionx ws create`
 - `gionx ws --act add-repo`
 - `gionx ws --act close`
@@ -69,6 +70,21 @@ This section maps the spec scenarios to concrete CLI integration tests.
   - `internal/cli/ws_create_jira_test.go`: `TestCLI_WS_Create_Jira_404_FailsFastWithoutStateMutation`
 - Jira strict flag conflict (`--jira` with `--id/--title`) usage error:
   - `internal/cli/ws_create_jira_test.go`: `TestCLI_WS_Create_Jira_ConflictWithIDOrTitle_FailsUsage`
+- default template missing should fail without workspace dir mutation:
+  - `internal/cli/ws_create_template_test.go`: `TestCLI_WSCreate_DefaultTemplateMissing_Fails`
+- reserved-path template should fail before workspace dir creation:
+  - `internal/cli/ws_create_template_test.go`: `TestCLI_WSCreate_TemplateReservedPath_FailsBeforeCreate`
+- `--template` should apply selected template content:
+  - `internal/cli/ws_create_template_test.go`: `TestCLI_WSCreate_TemplateOption_CopiesSelectedTemplate`
+
+### `template validate`
+
+- validate all templates and aggregate violations:
+  - `internal/cli/template_validate_test.go`: `TestCLI_TemplateValidate_AllTemplates_CollectsViolations`
+- single template validation success:
+  - `internal/cli/template_validate_test.go`: `TestCLI_TemplateValidate_Name_Success`
+- missing named template shows available list:
+  - `internal/cli/template_validate_test.go`: `TestCLI_TemplateValidate_Name_NotFound_ShowsAvailable`
 
 ### `ws import jira`
 
@@ -162,6 +178,14 @@ This section maps the spec scenarios to concrete CLI integration tests.
 - missing Jira env vars should fail without mutating FS/state
 - Jira issue fetch errors (e.g. 404/auth) should fail without mutating FS/state
 - `--jira` + `--id/--title` should fail with usage
+- missing `default` template should fail
+- template validation violations should fail before workspace creation
+
+### `template validate`
+
+- validate all templates under root
+- `--name` validates one template
+- one or more violations should return non-zero
 
 ### `ws add-repo`
 

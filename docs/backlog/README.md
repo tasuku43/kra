@@ -38,6 +38,7 @@ Backlog is managed by epic/prefix under `docs/backlog/*.md`.
 - `docs/backlog/CTX-ROOT.md`: context and root management
 - `docs/backlog/DOC-QUALITY.md`: documentation and quality hardening
 - `docs/backlog/AGENT.md`: agent execution visibility
+- `docs/backlog/TEMPLATE-WS.md`: workspace template lifecycle and validation
 
 ## File Status
 
@@ -51,6 +52,7 @@ Backlog is managed by epic/prefix under `docs/backlog/*.md`.
 - [x] `docs/backlog/CTX-ROOT.md` (`4/4` done)
 - [x] `docs/backlog/DOC-QUALITY.md` (`5/5` done)
 - [ ] `docs/backlog/AGENT.md` (`0/1` done)
+- [x] `docs/backlog/TEMPLATE-WS.md` (`4/4` done)
 
 Update this section whenever any ticket checkbox changes.
 

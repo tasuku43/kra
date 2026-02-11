@@ -184,7 +184,7 @@ func (c *CLI) runWSImportJira(args []string) int {
 	if shouldApply {
 		createdCount := 0
 		for _, in := range createInputs {
-			if _, err := c.createWorkspaceAtRoot(root, in.ID, in.Title, in.SourceURL); err != nil {
+			if _, err := c.createWorkspaceAtRoot(root, in.ID, in.Title, in.SourceURL, defaultWorkspaceTemplateName); err != nil {
 				markWSImportJiraCreateItemAsFailed(&plan, in, classifyWSImportJiraCreateFailureReason(err), err.Error())
 				plan.Summary.Failed++
 				continue

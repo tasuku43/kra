@@ -42,6 +42,12 @@ func (e Env) EnsureRootLayout(t *testing.T) {
 	t.Helper()
 	mustMkdirAll(t, filepath.Join(e.Root, "workspaces"))
 	mustMkdirAll(t, filepath.Join(e.Root, "archive"))
+	mustMkdirAll(t, filepath.Join(e.Root, "templates", "default", "notes"))
+	mustMkdirAll(t, filepath.Join(e.Root, "templates", "default", "artifacts"))
+	agentsPath := filepath.Join(e.Root, "templates", "default", "AGENTS.md")
+	if err := os.WriteFile(agentsPath, []byte("# test template\n"), 0o644); err != nil {
+		t.Fatalf("write %q: %v", agentsPath, err)
+	}
 }
 
 func mustMkdirAll(t *testing.T, path string) {

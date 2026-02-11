@@ -32,6 +32,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `concepts/state-store.md`: Optional/rebuildable root index and registry
   - `concepts/fs-source-of-truth.md`: FS=SoT and index-store downgrade policy (planned)
   - `concepts/workspace-meta-json.md`: `.gionx.meta.json` schema and atomic update rules (planned)
+  - `concepts/workspace-template.md`: root-local workspace template model and validation
   - `concepts/ui-color.md`: CLI/TUI semantic color token policy
   - `concepts/architecture.md`: Layered architecture (`cli/app/domain/infra/ui`) and migration rules
   - `concepts/workspace-lifecycle.md`: Workspace lifecycle state machine and transition policy
@@ -43,6 +44,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/repo/discover.md`: `gionx repo discover`
   - `commands/repo/remove.md`: `gionx repo remove`
   - `commands/repo/gc.md`: `gionx repo gc`
+  - `commands/template/validate.md`: `gionx template validate`
   - `commands/shell/init.md`: `gionx shell init`
   - `commands/state/registry.md`: `gionx state` foundation (registry)
   - `commands/ws/selector.md`: Shared inline selector UI for workspace actions

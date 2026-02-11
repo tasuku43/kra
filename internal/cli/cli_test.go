@@ -250,6 +250,15 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(root, "AGENTS.md")); statErr != nil {
 		t.Fatalf("AGENTS.md not created: %v", statErr)
 	}
+	if _, statErr := os.Stat(filepath.Join(root, "templates", "default", "notes")); statErr != nil {
+		t.Fatalf("default template notes/ not created: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "templates", "default", "artifacts")); statErr != nil {
+		t.Fatalf("default template artifacts/ not created: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, "templates", "default", "AGENTS.md")); statErr != nil {
+		t.Fatalf("default template AGENTS.md not created: %v", statErr)
+	}
 	b, statErr := os.ReadFile(filepath.Join(root, ".gitignore"))
 	if statErr != nil {
 		t.Fatalf(".gitignore not created: %v", statErr)
@@ -264,9 +273,19 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if strings.TrimSpace(commitCount) != "1" {
 		t.Fatalf("init commit count = %q, want %q", strings.TrimSpace(commitCount), "1")
 	}
-	tracked := runGit(t, root, "ls-files")
-	if strings.TrimSpace(tracked) != ".gitignore\nAGENTS.md" && strings.TrimSpace(tracked) != "AGENTS.md\n.gitignore" {
-		t.Fatalf("tracked files = %q, want only .gitignore and AGENTS.md", strings.TrimSpace(tracked))
+	tracked := strings.Fields(runGit(t, root, "ls-files"))
+	wantTracked := map[string]bool{
+		".gitignore":                  true,
+		"AGENTS.md":                   true,
+		"templates/default/AGENTS.md": true,
+	}
+	if len(tracked) != len(wantTracked) {
+		t.Fatalf("tracked file count = %d, want %d (files=%q)", len(tracked), len(wantTracked), strings.Join(tracked, ", "))
+	}
+	for _, p := range tracked {
+		if !wantTracked[p] {
+			t.Fatalf("tracked unexpected file: %s (all=%q)", p, strings.Join(tracked, ", "))
+		}
 	}
 	contextRoot, ok, contextErr := paths.ReadCurrentContext()
 	if contextErr != nil {
@@ -383,6 +402,19 @@ func setGitIdentity(t *testing.T) {
 	t.Setenv("GIT_COMMITTER_EMAIL", "gionx-test@example.com")
 }
 
+func seedDefaultTemplate(t *testing.T, root string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Join(root, "templates", "default", "notes"), 0o755); err != nil {
+		t.Fatalf("create default template notes/: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "templates", "default", "artifacts"), 0o755); err != nil {
+		t.Fatalf("create default template artifacts/: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "templates", "default", "AGENTS.md"), []byte("workspace guide\n"), 0o644); err != nil {
+		t.Fatalf("write default template AGENTS.md: %v", err)
+	}
+}
+
 func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	root := t.TempDir()
 	dataHome := filepath.Join(t.TempDir(), "xdg-data")
@@ -394,6 +426,7 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
 		t.Fatalf("create archive/: %v", err)
 	}
+	seedDefaultTemplate(t, root)
 
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
@@ -428,11 +461,8 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	if statErr != nil {
 		t.Fatalf("AGENTS.md not created: %v", statErr)
 	}
-	if !strings.Contains(string(agentsBytes), "ID: MVP-020") {
-		t.Fatalf("AGENTS.md missing id: %q", string(agentsBytes))
-	}
-	if !strings.Contains(string(agentsBytes), "Title: hello world") {
-		t.Fatalf("AGENTS.md missing title: %q", string(agentsBytes))
+	if strings.TrimSpace(string(agentsBytes)) != "workspace guide" {
+		t.Fatalf("AGENTS.md mismatch: %q", string(agentsBytes))
 	}
 	metaBytes, statErr := os.ReadFile(filepath.Join(wsDir, workspaceMetaFilename))
 	if statErr != nil {
@@ -477,6 +507,7 @@ func TestCLI_WS_Create_ArchivedCollision_GuidesReopen(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
 		t.Fatalf("create archive/: %v", err)
 	}
+	seedDefaultTemplate(t, root)
 
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
@@ -513,6 +544,7 @@ func TestCLI_WS_Create_ActiveCollision_Errors(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
 		t.Fatalf("create archive/: %v", err)
 	}
+	seedDefaultTemplate(t, root)
 
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
@@ -584,6 +616,7 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
 		t.Fatalf("create archive/: %v", err)
 	}
+	seedDefaultTemplate(t, root)
 
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)
@@ -699,6 +732,7 @@ func TestCLI_WS_AddRepo_DBUnavailable_FallsBackToFilesystem(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
 		t.Fatalf("create archive/: %v", err)
 	}
+	seedDefaultTemplate(t, root)
 
 	t.Setenv("XDG_DATA_HOME", dataHome)
 	t.Setenv("XDG_CACHE_HOME", cacheHome)

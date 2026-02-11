@@ -206,6 +206,9 @@ func ensureInitLayout(root string) error {
 	if err := ensureRootGitignore(root); err != nil {
 		return err
 	}
+	if err := ensureDefaultWorkspaceTemplate(root); err != nil {
+		return err
+	}
 	if didGitInit {
 		if err := commitInitFiles(root); err != nil {
 			return err
@@ -299,12 +302,25 @@ func commitInitFiles(root string) error {
 	if err != nil {
 		return err
 	}
+	defaultTemplateAgentsRel := filepath.Join(workspaceTemplatesDirName, defaultWorkspaceTemplateName, rootAgentsFilename)
 	allowlist := map[string]struct{}{
 		allowGitignore: {},
 		allowAgents:    {},
 	}
 
-	addCmd := exec.Command("git", "add", "--", gitignoreFilename, rootAgentsFilename)
+	addArgs := []string{"add", "--", gitignoreFilename, rootAgentsFilename}
+	if _, statErr := os.Stat(filepath.Join(root, defaultTemplateAgentsRel)); statErr == nil {
+		allowTemplateAgents, allowErr := toGitTopLevelPath(ctx, root, defaultTemplateAgentsRel)
+		if allowErr != nil {
+			return allowErr
+		}
+		allowlist[allowTemplateAgents] = struct{}{}
+		addArgs = append(addArgs, filepath.ToSlash(defaultTemplateAgentsRel))
+	} else if statErr != nil && !os.IsNotExist(statErr) {
+		return fmt.Errorf("stat default template AGENTS.md: %w", statErr)
+	}
+
+	addCmd := exec.Command("git", addArgs...)
 	addCmd.Dir = root
 	addOutput, err := addCmd.CombinedOutput()
 	if err != nil {
@@ -386,5 +402,53 @@ Notes vs artifacts:
 
 - Track: everything except workspaces/**/repos/**
 - Ignore: workspaces/**/repos/**
+`
+}
+
+func ensureDefaultWorkspaceTemplate(root string) error {
+	templatesDir := workspaceTemplatesPath(root)
+	if err := os.MkdirAll(templatesDir, 0o755); err != nil {
+		return fmt.Errorf("create templates/: %w", err)
+	}
+
+	defaultPath := workspaceTemplatePath(root, defaultWorkspaceTemplateName)
+	if info, err := os.Stat(defaultPath); err == nil {
+		if !info.IsDir() {
+			return fmt.Errorf("default template path is not a directory: %s", defaultPath)
+		}
+		return nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("stat default template: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Join(defaultPath, "notes"), 0o755); err != nil {
+		return fmt.Errorf("create default template notes/: %w", err)
+	}
+	if err := os.MkdirAll(filepath.Join(defaultPath, "artifacts"), 0o755); err != nil {
+		return fmt.Errorf("create default template artifacts/: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(defaultPath, rootAgentsFilename), []byte(defaultWorkspaceTemplateAgentsContent()), 0o644); err != nil {
+		return fmt.Errorf("write default template AGENTS.md: %w", err)
+	}
+	return nil
+}
+
+func defaultWorkspaceTemplateAgentsContent() string {
+	return `# workspace AGENTS guide
+
+## Directory map
+
+- notes/: investigation notes, decisions, TODOs, links
+- artifacts/: files and evidence (screenshots, logs, dumps, PoCs)
+- repos/: git worktrees (NOT Git-tracked; added via gionx ws --act add-repo)
+
+Notes vs artifacts:
+- notes/: write what you learned and decided
+- artifacts/: store evidence files you may need later
+
+## Closing
+
+When you are done, run:
+  gionx ws --act close <workspace-id>
 `
 }

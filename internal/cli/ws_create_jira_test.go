@@ -137,3 +137,39 @@ func TestCLI_WS_Create_Jira_404_FailsFastWithoutStateMutation(t *testing.T) {
 	}
 
 }
+
+func TestCLI_WS_Create_Jira_WithTemplateOption_AppliesTemplate(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	customTemplate := filepath.Join(env.Root, "templates", "custom")
+	if err := os.MkdirAll(customTemplate, 0o755); err != nil {
+		t.Fatalf("mkdir custom template: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(customTemplate, "CUSTOM.md"), []byte("custom\n"), 0o644); err != nil {
+		t.Fatalf("write CUSTOM.md: %v", err)
+	}
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"key":"PROJ-200","fields":{"summary":"Template test"}}`))
+	}))
+	t.Cleanup(server.Close)
+
+	t.Setenv("GIONX_JIRA_BASE_URL", server.URL)
+	t.Setenv("GIONX_JIRA_EMAIL", "dev@example.com")
+	t.Setenv("GIONX_JIRA_API_TOKEN", "token-123")
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"ws", "create", "--jira", "https://jira.example.com/browse/PROJ-200", "--template", "custom"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, errBuf.String())
+	}
+
+	wsPath := filepath.Join(env.Root, "workspaces", "PROJ-200")
+	if _, err := os.Stat(filepath.Join(wsPath, "CUSTOM.md")); err != nil {
+		t.Fatalf("workspace missing template file: %v", err)
+	}
+}

@@ -5,10 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 )
 
-func (c *CLI) createWorkspaceAtRoot(root string, id string, title string, sourceURL string) (string, error) {
+func (c *CLI) createWorkspaceAtRoot(root string, id string, title string, sourceURL string, templateName string) (string, error) {
 	wsPath := filepath.Join(root, "workspaces", id)
 	archivedPath := filepath.Join(root, "archive", id)
 
@@ -21,6 +22,21 @@ func (c *CLI) createWorkspaceAtRoot(root string, id string, title string, source
 		return "", fmt.Errorf("workspace already exists and is archived: %s\nrun: gionx ws --act reopen %s", id, id)
 	} else if err != nil && !os.IsNotExist(err) {
 		return "", fmt.Errorf("stat archived workspace dir: %w", err)
+	}
+
+	if strings.TrimSpace(templateName) == "" {
+		templateName = defaultWorkspaceTemplateName
+	}
+	tmpl, err := resolveWorkspaceTemplate(root, templateName)
+	if err != nil {
+		return "", err
+	}
+	violations, err := validateWorkspaceTemplate(tmpl)
+	if err != nil {
+		return "", err
+	}
+	if len(violations) > 0 {
+		return "", fmt.Errorf("template validation failed:\n%s", renderWorkspaceTemplateViolations(violations))
 	}
 
 	createdDir := false
@@ -37,17 +53,9 @@ func (c *CLI) createWorkspaceAtRoot(root string, id string, title string, source
 		}
 	}
 
-	if err := os.Mkdir(filepath.Join(wsPath, "notes"), 0o755); err != nil {
+	if err := copyWorkspaceTemplate(tmpl, wsPath); err != nil {
 		cleanup()
-		return "", fmt.Errorf("create notes/: %w", err)
-	}
-	if err := os.Mkdir(filepath.Join(wsPath, "artifacts"), 0o755); err != nil {
-		cleanup()
-		return "", fmt.Errorf("create artifacts/: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(wsPath, "AGENTS.md"), []byte(defaultWorkspaceAgentsContent(id, title)), 0o644); err != nil {
-		cleanup()
-		return "", fmt.Errorf("write AGENTS.md: %w", err)
+		return "", fmt.Errorf("copy template %q: %w", tmpl.Name, err)
 	}
 
 	now := time.Now().Unix()

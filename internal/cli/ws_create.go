@@ -20,6 +20,7 @@ func (c *CLI) runWSCreate(args []string) int {
 	var jiraTicketURL string
 	var idFlag string
 	var titleFlag string
+	templateName := defaultWorkspaceTemplateName
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -51,6 +52,14 @@ func (c *CLI) runWSCreate(args []string) int {
 				return exitUsage
 			}
 			titleFlag = args[1]
+			args = args[2:]
+		case "--template":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--template requires a value")
+				c.printWSCreateUsage(c.Err)
+				return exitUsage
+			}
+			templateName = strings.TrimSpace(args[1])
 			args = args[2:]
 		default:
 			fmt.Fprintf(c.Err, "unknown flag for ws create: %q\n", args[0])
@@ -124,6 +133,10 @@ func (c *CLI) runWSCreate(args []string) int {
 		fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
 		return exitUsage
 	}
+	if err := validateWorkspaceTemplateName(templateName); err != nil {
+		fmt.Fprintln(c.Err, err.Error())
+		return exitUsage
+	}
 
 	if err := c.touchStateRegistry(root); err != nil {
 		fmt.Fprintf(c.Err, "update root registry: %v\n", err)
@@ -139,7 +152,7 @@ func (c *CLI) runWSCreate(args []string) int {
 		title = d
 	}
 
-	wsPath, err := c.createWorkspaceAtRoot(root, id, title, sourceURL)
+	wsPath, err := c.createWorkspaceAtRoot(root, id, title, sourceURL, templateName)
 	if err != nil {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
@@ -185,33 +198,4 @@ func validateWorkspaceID(id string) error {
 		return fmt.Errorf("must not contain path separators")
 	}
 	return nil
-}
-
-func defaultWorkspaceAgentsContent(id string, title string) string {
-	trimmedTitle := strings.TrimSpace(title)
-	if trimmedTitle == "" {
-		trimmedTitle = "(empty)"
-	}
-	return fmt.Sprintf(`# workspace AGENTS guide
-
-## Workspace
-
-- ID: %s
-- Title: %s
-
-## Directory map
-
-- notes/: investigation notes, decisions, TODOs, links
-- artifacts/: files and evidence (screenshots, logs, dumps, PoCs)
-- repos/: git worktrees (NOT Git-tracked; added via gionx ws --act add-repo)
-
-Notes vs artifacts:
-- notes/: write what you learned and decided
-- artifacts/: store evidence files you may need later
-
-## Closing
-
-When you are done, run:
-  gionx ws --act close %s
-`, id, trimmedTitle, id)
 }

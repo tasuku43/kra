@@ -32,6 +32,8 @@ At the workspace level, we separate "text-first" logs from "file-first" artifact
 ```
 GIONX_ROOT/
   AGENTS.md
+  templates/
+    <name>/        # workspace template root copied by ws create
   workspaces/
     <id>/
       AGENTS.md
@@ -46,6 +48,7 @@ GIONX_ROOT/
 
 Notes:
 - Workspace IDs are user-provided. The validation rules should follow `gion` (e.g. reject `/`).
+- Template names follow the same validation rules as workspace IDs.
 - Repo aliases are derived from the repo URL tail (e.g. `.../sugoroku.git` -> `sugoroku`).
 
 ## Git tracking policy
