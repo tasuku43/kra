@@ -21,8 +21,8 @@ This command is for workspace creation (0..N), not for actions on existing works
 
 - `--sprint` and `--jql` are mutually exclusive.
 - If both are omitted, resolve mode from config:
-  - `<current-root>/.gionx/config.yaml` -> `integration.jira.default_type`
-  - `~/.gionx/config.yaml` -> `integration.jira.default_type`
+  - `<current-root>/.gionx/config.yaml` -> `integration.jira.defaults.type`
+  - `~/.gionx/config.yaml` -> `integration.jira.defaults.type`
   - fallback `sprint`
 - `--space` is the primary scope key option for sprint mode.
 - `--project` is an alias of `--space` (same behavior).
@@ -52,7 +52,7 @@ This command is for workspace creation (0..N), not for actions on existing works
 - `--space`/`--project` scope is always included:
   - `project = <space-key>`.
 - If `--space`/`--project` is omitted:
-  - read `integration.jira.default_space` or `integration.jira.default_project` from config.
+  - read `integration.jira.defaults.space` or `integration.jira.defaults.project` from config.
   - if both keys are active at the same time, fail with a clear config error.
 - If value is omitted (`--sprint` only):
   - in prompt mode, list `Active + Future` sprints under `--space/--project` and ask selection.

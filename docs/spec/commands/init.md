@@ -40,7 +40,7 @@ Initialize a gionx root and filesystem-first runtime metadata.
   - do not overwrite existing `templates/default/` content
 - Ensure `<root>/.gionx/config.yaml` exists on first init
   - create default content:
-    - `workspace.default_template = default`
+    - `workspace.defaults.template = default`
     - include comment header about config precedence/order
   - do not overwrite existing file content
 - Create `<root>/AGENTS.md` with a default "how to use gionx" guidance (for the no-template MVP)

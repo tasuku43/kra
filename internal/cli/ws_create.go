@@ -185,7 +185,7 @@ func (c *CLI) resolveWSCreateTemplateName(root string, templateNameFlag string) 
 	if err != nil {
 		return "", err
 	}
-	if templateName := strings.TrimSpace(cfg.Workspace.DefaultTemplate); templateName != "" {
+	if templateName := strings.TrimSpace(cfg.Workspace.Defaults.Template); templateName != "" {
 		return templateName, nil
 	}
 	return defaultWorkspaceTemplateName, nil

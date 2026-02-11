@@ -470,13 +470,15 @@ func defaultRootConfigContent() string {
 # Empty string values are treated as unset.
 
 workspace:
-  default_template: default
+  defaults:
+    template: default
 
 integration:
   jira:
-    # default_space: SRE
-    # default_project: APP
-    # default_type: sprint # sprint | jql
+    # defaults:
+    #   space: SRE
+    #   project: APP
+    #   type: sprint # sprint | jql
 `
 }
 

@@ -348,7 +348,7 @@ func applyWSImportJiraConfigDefaults(opts wsImportJiraOpts, cfg config.Config) (
 		if strings.TrimSpace(resolved.spaceKey) != "" {
 			resolved.sprintSet = true
 		} else {
-			mode := strings.ToLower(strings.TrimSpace(cfg.Integration.Jira.DefaultType))
+			mode := strings.ToLower(strings.TrimSpace(cfg.Integration.Jira.Defaults.Type))
 			if mode == "" {
 				mode = config.JiraTypeSprint
 			}
@@ -358,7 +358,7 @@ func applyWSImportJiraConfigDefaults(opts wsImportJiraOpts, cfg config.Config) (
 			case config.JiraTypeJQL:
 				resolved.jqlSet = true
 			default:
-				return wsImportJiraOpts{}, fmt.Errorf("integration.jira.default_type must be one of: sprint, jql")
+				return wsImportJiraOpts{}, fmt.Errorf("integration.jira.defaults.type must be one of: sprint, jql")
 			}
 		}
 	}
@@ -366,12 +366,12 @@ func applyWSImportJiraConfigDefaults(opts wsImportJiraOpts, cfg config.Config) (
 	if resolved.sprintSet {
 		if strings.TrimSpace(resolved.spaceKey) == "" {
 			switch {
-			case cfg.Integration.Jira.DefaultSpace != "" && cfg.Integration.Jira.DefaultProject != "":
-				return wsImportJiraOpts{}, fmt.Errorf("integration.jira.default_space and integration.jira.default_project cannot be combined")
-			case cfg.Integration.Jira.DefaultSpace != "":
-				resolved.spaceKey = cfg.Integration.Jira.DefaultSpace
-			case cfg.Integration.Jira.DefaultProject != "":
-				resolved.spaceKey = cfg.Integration.Jira.DefaultProject
+			case cfg.Integration.Jira.Defaults.Space != "" && cfg.Integration.Jira.Defaults.Project != "":
+				return wsImportJiraOpts{}, fmt.Errorf("integration.jira.defaults.space and integration.jira.defaults.project cannot be combined")
+			case cfg.Integration.Jira.Defaults.Space != "":
+				resolved.spaceKey = cfg.Integration.Jira.Defaults.Space
+			case cfg.Integration.Jira.Defaults.Project != "":
+				resolved.spaceKey = cfg.Integration.Jira.Defaults.Project
 			}
 		}
 		if strings.TrimSpace(resolved.spaceKey) == "" {

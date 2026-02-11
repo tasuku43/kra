@@ -108,7 +108,7 @@ func TestCLI_WSCreate_UsesRootConfigDefaultTemplateWhenTemplateOmitted(t *testin
 	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
 		t.Fatalf("mkdir root config dir: %v", err)
 	}
-	if err := os.WriteFile(rootConfigPath, []byte("workspace:\n  default_template: custom\n"), 0o644); err != nil {
+	if err := os.WriteFile(rootConfigPath, []byte("workspace:\n  defaults:\n    template: custom\n"), 0o644); err != nil {
 		t.Fatalf("write root config: %v", err)
 	}
 
@@ -134,7 +134,7 @@ func TestCLI_WSCreate_TemplateFlagOverridesConfigDefault(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
 		t.Fatalf("mkdir root config dir: %v", err)
 	}
-	if err := os.WriteFile(rootConfigPath, []byte("workspace:\n  default_template: default\n"), 0o644); err != nil {
+	if err := os.WriteFile(rootConfigPath, []byte("workspace:\n  defaults:\n    template: default\n"), 0o644); err != nil {
 		t.Fatalf("write root config: %v", err)
 	}
 
@@ -168,7 +168,7 @@ func TestCLI_WSCreate_UsesGlobalConfigDefaultTemplateWhenRootConfigMissing(t *te
 	if err := os.MkdirAll(filepath.Dir(globalConfigPath), 0o755); err != nil {
 		t.Fatalf("mkdir global config dir: %v", err)
 	}
-	if err := os.WriteFile(globalConfigPath, []byte("workspace:\n  default_template: custom\n"), 0o644); err != nil {
+	if err := os.WriteFile(globalConfigPath, []byte("workspace:\n  defaults:\n    template: custom\n"), 0o644); err != nil {
 		t.Fatalf("write global config: %v", err)
 	}
 

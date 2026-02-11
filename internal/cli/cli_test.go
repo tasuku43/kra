@@ -259,7 +259,7 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if statErr != nil {
 		t.Fatalf("root config not created: %v", statErr)
 	}
-	if !strings.Contains(string(rootConfigBytes), "workspace:") || !strings.Contains(string(rootConfigBytes), "default_template: default") {
+	if !strings.Contains(string(rootConfigBytes), "workspace:") || !strings.Contains(string(rootConfigBytes), "template: default") {
 		t.Fatalf("root config content mismatch: %q", string(rootConfigBytes))
 	}
 	b, statErr := os.ReadFile(filepath.Join(root, ".gitignore"))
@@ -351,7 +351,7 @@ func TestCLI_Init_DoesNotOverwriteRootConfig(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
 		t.Fatalf("create root config dir: %v", err)
 	}
-	const custom = "workspace:\n  default_template: custom\n"
+	const custom = "workspace:\n  defaults:\n    template: custom\n"
 	if err := os.WriteFile(rootConfigPath, []byte(custom), 0o644); err != nil {
 		t.Fatalf("write custom root config: %v", err)
 	}

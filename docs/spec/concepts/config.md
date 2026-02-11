@@ -43,25 +43,27 @@ For string values, empty/whitespace-only values are treated as "unset".
 
 ```yaml
 workspace:
-  default_template: default
+  defaults:
+    template: default
 
 integration:
   jira:
-    default_space: SRE
-    default_project: APP
-    default_type: sprint # sprint | jql
+    defaults:
+      space: SRE
+      project: APP
+      type: sprint # sprint | jql
 ```
 
 Notes:
-- `integration.jira.default_space` and `integration.jira.default_project` are aliases for the same scope concept.
+- `integration.jira.defaults.space` and `integration.jira.defaults.project` are aliases for the same scope concept.
 - Only one of them may be active at a time.
 
 ## Validation rules
 
-- `integration.jira.default_type` must be one of:
+- `integration.jira.defaults.type` must be one of:
   - `sprint`
   - `jql`
-- `integration.jira.default_space` and `integration.jira.default_project` must not be combined.
+- `integration.jira.defaults.space` and `integration.jira.defaults.project` must not be combined.
 - Invalid config must fail command execution with a clear path + reason.
 
 ## Error handling

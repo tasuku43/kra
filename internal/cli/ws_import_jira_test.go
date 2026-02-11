@@ -121,7 +121,7 @@ func TestCLI_WS_Import_Jira_DefaultTypeJQL_PromptsForJQL(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
 		t.Fatalf("mkdir root config dir: %v", err)
 	}
-	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  jira:\n    default_type: jql\n"), 0o644); err != nil {
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  jira:\n    defaults:\n      type: jql\n"), 0o644); err != nil {
 		t.Fatalf("write root config: %v", err)
 	}
 
@@ -169,7 +169,7 @@ func TestCLI_WS_Import_Jira_UsesConfigDefaultSpaceForSprint(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
 		t.Fatalf("mkdir root config dir: %v", err)
 	}
-	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  jira:\n    default_space: DEMO\n"), 0o644); err != nil {
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  jira:\n    defaults:\n      space: DEMO\n"), 0o644); err != nil {
 		t.Fatalf("write root config: %v", err)
 	}
 
@@ -209,7 +209,7 @@ func TestCLI_WS_Import_Jira_ConfigConflictFails(t *testing.T) {
 	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
 		t.Fatalf("mkdir root config dir: %v", err)
 	}
-	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  jira:\n    default_space: A\n    default_project: B\n"), 0o644); err != nil {
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  jira:\n    defaults:\n      space: A\n      project: B\n"), 0o644); err != nil {
 		t.Fatalf("write root config: %v", err)
 	}
 

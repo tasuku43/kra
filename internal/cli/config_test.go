@@ -20,11 +20,13 @@ func TestCLI_LoadMergedConfig_GlobalAndRootPrecedence(t *testing.T) {
 	}
 	if err := os.WriteFile(globalPath, []byte(`
 workspace:
-  default_template: global
+  defaults:
+    template: global
 integration:
   jira:
-    default_space: global-space
-    default_type: sprint
+    defaults:
+      space: global-space
+      type: sprint
 `), 0o644); err != nil {
 		t.Fatalf("write global config: %v", err)
 	}
@@ -35,10 +37,12 @@ integration:
 	}
 	if err := os.WriteFile(rootPath, []byte(`
 workspace:
-  default_template: root
+  defaults:
+    template: root
 integration:
   jira:
-    default_type: jql
+    defaults:
+      type: jql
 `), 0o644); err != nil {
 		t.Fatalf("write root config: %v", err)
 	}
@@ -48,14 +52,14 @@ integration:
 	if err != nil {
 		t.Fatalf("loadMergedConfig() error = %v", err)
 	}
-	if cfg.Workspace.DefaultTemplate != "root" {
-		t.Fatalf("workspace.default_template = %q, want %q", cfg.Workspace.DefaultTemplate, "root")
+	if cfg.Workspace.Defaults.Template != "root" {
+		t.Fatalf("workspace.defaults.template = %q, want %q", cfg.Workspace.Defaults.Template, "root")
 	}
-	if cfg.Integration.Jira.DefaultSpace != "GLOBAL-SPACE" {
-		t.Fatalf("integration.jira.default_space = %q, want %q", cfg.Integration.Jira.DefaultSpace, "GLOBAL-SPACE")
+	if cfg.Integration.Jira.Defaults.Space != "GLOBAL-SPACE" {
+		t.Fatalf("integration.jira.defaults.space = %q, want %q", cfg.Integration.Jira.Defaults.Space, "GLOBAL-SPACE")
 	}
-	if cfg.Integration.Jira.DefaultType != config.JiraTypeJQL {
-		t.Fatalf("integration.jira.default_type = %q, want %q", cfg.Integration.Jira.DefaultType, config.JiraTypeJQL)
+	if cfg.Integration.Jira.Defaults.Type != config.JiraTypeJQL {
+		t.Fatalf("integration.jira.defaults.type = %q, want %q", cfg.Integration.Jira.Defaults.Type, config.JiraTypeJQL)
 	}
 }
 
@@ -70,7 +74,8 @@ func TestCLI_LoadMergedConfig_ConflictingScopeFails(t *testing.T) {
 	if err := os.WriteFile(globalPath, []byte(`
 integration:
   jira:
-    default_space: team
+    defaults:
+      space: team
 `), 0o644); err != nil {
 		t.Fatalf("write global config: %v", err)
 	}
@@ -82,7 +87,8 @@ integration:
 	if err := os.WriteFile(rootPath, []byte(`
 integration:
   jira:
-    default_project: app
+    defaults:
+      project: app
 `), 0o644); err != nil {
 		t.Fatalf("write root config: %v", err)
 	}

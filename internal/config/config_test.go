@@ -21,11 +21,13 @@ func TestLoadFile_NormalizeAndValidate(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte(`
 workspace:
-  default_template: "  custom "
+  defaults:
+    template: "  custom "
 integration:
   jira:
-    default_space: " abc "
-    default_type: " JQL "
+    defaults:
+      space: " abc "
+      type: " JQL "
 `), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -34,14 +36,14 @@ integration:
 	if err != nil {
 		t.Fatalf("LoadFile() error = %v", err)
 	}
-	if cfg.Workspace.DefaultTemplate != "custom" {
-		t.Fatalf("workspace.default_template = %q, want %q", cfg.Workspace.DefaultTemplate, "custom")
+	if cfg.Workspace.Defaults.Template != "custom" {
+		t.Fatalf("workspace.defaults.template = %q, want %q", cfg.Workspace.Defaults.Template, "custom")
 	}
-	if cfg.Integration.Jira.DefaultSpace != "ABC" {
-		t.Fatalf("integration.jira.default_space = %q, want %q", cfg.Integration.Jira.DefaultSpace, "ABC")
+	if cfg.Integration.Jira.Defaults.Space != "ABC" {
+		t.Fatalf("integration.jira.defaults.space = %q, want %q", cfg.Integration.Jira.Defaults.Space, "ABC")
 	}
-	if cfg.Integration.Jira.DefaultType != JiraTypeJQL {
-		t.Fatalf("integration.jira.default_type = %q, want %q", cfg.Integration.Jira.DefaultType, JiraTypeJQL)
+	if cfg.Integration.Jira.Defaults.Type != JiraTypeJQL {
+		t.Fatalf("integration.jira.defaults.type = %q, want %q", cfg.Integration.Jira.Defaults.Type, JiraTypeJQL)
 	}
 }
 
@@ -50,7 +52,8 @@ func TestLoadFile_InvalidTypeFails(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`
 integration:
   jira:
-    default_type: board
+    defaults:
+      type: board
 `), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -59,8 +62,8 @@ integration:
 	if err == nil {
 		t.Fatalf("LoadFile() error = nil, want non-nil")
 	}
-	if !strings.Contains(err.Error(), "integration.jira.default_type") {
-		t.Fatalf("error = %q, want default_type hint", err)
+	if !strings.Contains(err.Error(), "integration.jira.defaults.type") {
+		t.Fatalf("error = %q, want defaults.type hint", err)
 	}
 }
 
@@ -69,8 +72,9 @@ func TestLoadFile_SpaceProjectConflictFails(t *testing.T) {
 	if err := os.WriteFile(path, []byte(`
 integration:
   jira:
-    default_space: SRE
-    default_project: APP
+    defaults:
+      space: SRE
+      project: APP
 `), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -86,32 +90,36 @@ integration:
 
 func TestMerge_RootOverridesGlobal(t *testing.T) {
 	global := Config{
-		Workspace: WorkspaceConfig{DefaultTemplate: "default"},
+		Workspace: WorkspaceConfig{Defaults: WorkspaceDefaults{Template: "default"}},
 		Integration: IntegrationConfig{
 			Jira: JiraConfig{
-				DefaultSpace: "TEAM",
-				DefaultType:  JiraTypeSprint,
+				Defaults: JiraDefaults{
+					Space: "TEAM",
+					Type:  JiraTypeSprint,
+				},
 			},
 		},
 	}
 	root := Config{
-		Workspace: WorkspaceConfig{DefaultTemplate: "custom"},
+		Workspace: WorkspaceConfig{Defaults: WorkspaceDefaults{Template: "custom"}},
 		Integration: IntegrationConfig{
 			Jira: JiraConfig{
-				DefaultProject: "APP",
-				DefaultType:    JiraTypeJQL,
+				Defaults: JiraDefaults{
+					Project: "APP",
+					Type:    JiraTypeJQL,
+				},
 			},
 		},
 	}
 
 	got := Merge(global, root)
-	if got.Workspace.DefaultTemplate != "custom" {
-		t.Fatalf("workspace.default_template = %q, want %q", got.Workspace.DefaultTemplate, "custom")
+	if got.Workspace.Defaults.Template != "custom" {
+		t.Fatalf("workspace.defaults.template = %q, want %q", got.Workspace.Defaults.Template, "custom")
 	}
-	if got.Integration.Jira.DefaultProject != "APP" {
-		t.Fatalf("integration.jira.default_project = %q, want %q", got.Integration.Jira.DefaultProject, "APP")
+	if got.Integration.Jira.Defaults.Project != "APP" {
+		t.Fatalf("integration.jira.defaults.project = %q, want %q", got.Integration.Jira.Defaults.Project, "APP")
 	}
-	if got.Integration.Jira.DefaultType != JiraTypeJQL {
-		t.Fatalf("integration.jira.default_type = %q, want %q", got.Integration.Jira.DefaultType, JiraTypeJQL)
+	if got.Integration.Jira.Defaults.Type != JiraTypeJQL {
+		t.Fatalf("integration.jira.defaults.type = %q, want %q", got.Integration.Jira.Defaults.Type, JiraTypeJQL)
 	}
 }

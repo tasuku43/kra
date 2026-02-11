@@ -20,7 +20,11 @@ type Config struct {
 }
 
 type WorkspaceConfig struct {
-	DefaultTemplate string `yaml:"default_template"`
+	Defaults WorkspaceDefaults `yaml:"defaults"`
+}
+
+type WorkspaceDefaults struct {
+	Template string `yaml:"template"`
 }
 
 type IntegrationConfig struct {
@@ -28,9 +32,13 @@ type IntegrationConfig struct {
 }
 
 type JiraConfig struct {
-	DefaultSpace   string `yaml:"default_space"`
-	DefaultProject string `yaml:"default_project"`
-	DefaultType    string `yaml:"default_type"`
+	Defaults JiraDefaults `yaml:"defaults"`
+}
+
+type JiraDefaults struct {
+	Space   string `yaml:"space"`
+	Project string `yaml:"project"`
+	Type    string `yaml:"type"`
 }
 
 func LoadFile(path string) (Config, error) {
@@ -57,21 +65,21 @@ func LoadFile(path string) (Config, error) {
 }
 
 func (c *Config) Normalize() {
-	c.Workspace.DefaultTemplate = strings.TrimSpace(c.Workspace.DefaultTemplate)
-	c.Integration.Jira.DefaultSpace = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.DefaultSpace))
-	c.Integration.Jira.DefaultProject = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.DefaultProject))
-	c.Integration.Jira.DefaultType = strings.ToLower(strings.TrimSpace(c.Integration.Jira.DefaultType))
+	c.Workspace.Defaults.Template = strings.TrimSpace(c.Workspace.Defaults.Template)
+	c.Integration.Jira.Defaults.Space = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.Defaults.Space))
+	c.Integration.Jira.Defaults.Project = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.Defaults.Project))
+	c.Integration.Jira.Defaults.Type = strings.ToLower(strings.TrimSpace(c.Integration.Jira.Defaults.Type))
 }
 
 func (c Config) Validate() error {
 	issues := make([]string, 0, 2)
-	if c.Integration.Jira.DefaultType != "" &&
-		c.Integration.Jira.DefaultType != JiraTypeSprint &&
-		c.Integration.Jira.DefaultType != JiraTypeJQL {
-		issues = append(issues, "integration.jira.default_type must be one of: sprint, jql")
+	if c.Integration.Jira.Defaults.Type != "" &&
+		c.Integration.Jira.Defaults.Type != JiraTypeSprint &&
+		c.Integration.Jira.Defaults.Type != JiraTypeJQL {
+		issues = append(issues, "integration.jira.defaults.type must be one of: sprint, jql")
 	}
-	if c.Integration.Jira.DefaultSpace != "" && c.Integration.Jira.DefaultProject != "" {
-		issues = append(issues, "integration.jira.default_space and integration.jira.default_project cannot be combined")
+	if c.Integration.Jira.Defaults.Space != "" && c.Integration.Jira.Defaults.Project != "" {
+		issues = append(issues, "integration.jira.defaults.space and integration.jira.defaults.project cannot be combined")
 	}
 	if len(issues) == 0 {
 		return nil
@@ -84,17 +92,17 @@ func Merge(global Config, root Config) Config {
 	root.Normalize()
 
 	out := global
-	if root.Workspace.DefaultTemplate != "" {
-		out.Workspace.DefaultTemplate = root.Workspace.DefaultTemplate
+	if root.Workspace.Defaults.Template != "" {
+		out.Workspace.Defaults.Template = root.Workspace.Defaults.Template
 	}
-	if root.Integration.Jira.DefaultSpace != "" {
-		out.Integration.Jira.DefaultSpace = root.Integration.Jira.DefaultSpace
+	if root.Integration.Jira.Defaults.Space != "" {
+		out.Integration.Jira.Defaults.Space = root.Integration.Jira.Defaults.Space
 	}
-	if root.Integration.Jira.DefaultProject != "" {
-		out.Integration.Jira.DefaultProject = root.Integration.Jira.DefaultProject
+	if root.Integration.Jira.Defaults.Project != "" {
+		out.Integration.Jira.Defaults.Project = root.Integration.Jira.Defaults.Project
 	}
-	if root.Integration.Jira.DefaultType != "" {
-		out.Integration.Jira.DefaultType = root.Integration.Jira.DefaultType
+	if root.Integration.Jira.Defaults.Type != "" {
+		out.Integration.Jira.Defaults.Type = root.Integration.Jira.Defaults.Type
 	}
 	out.Normalize()
 	return out
