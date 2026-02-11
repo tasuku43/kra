@@ -49,7 +49,8 @@ func TestCLI_WS_Import_Jira_Help_ShowsUsage(t *testing.T) {
 	}
 }
 
-func TestCLI_WS_Import_Jira_RequiresMode(t *testing.T) {
+func TestCLI_WS_Import_Jira_DefaultModeRequiresSpaceWhenNoConfig(t *testing.T) {
+	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
@@ -58,8 +59,8 @@ func TestCLI_WS_Import_Jira_RequiresMode(t *testing.T) {
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d", code, exitUsage)
 	}
-	if !strings.Contains(err.String(), "one of --sprint or --jql is required") {
-		t.Fatalf("stderr missing required mode error: %q", err.String())
+	if !strings.Contains(err.String(), "--sprint requires --space (or --project)") {
+		t.Fatalf("stderr missing default sprint scope error: %q", err.String())
 	}
 	if out.Len() != 0 {
 		t.Fatalf("stdout not empty: %q", out.String())
@@ -84,6 +85,7 @@ func TestCLI_WS_Import_Jira_RejectsSprintAndJQLCombination(t *testing.T) {
 }
 
 func TestCLI_WS_Import_Jira_RequiresSpaceWithSprint(t *testing.T) {
+	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
@@ -108,6 +110,121 @@ func TestCLI_WS_Import_Jira_RejectsSpaceAndProjectTogether(t *testing.T) {
 	}
 	if !strings.Contains(err.String(), "--space and --project cannot be combined") {
 		t.Fatalf("stderr missing mutual exclusion error: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Import_Jira_DefaultTypeJQL_PromptsForJQL(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	rootConfigPath := filepath.Join(env.Root, ".gionx", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
+		t.Fatalf("mkdir root config dir: %v", err)
+	}
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  jira:\n    default_type: jql\n"), 0o644); err != nil {
+		t.Fatalf("write root config: %v", err)
+	}
+
+	var gotJQL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rest/api/3/search/jql" {
+			t.Fatalf("request path = %q, want /rest/api/3/search/jql", r.URL.Path)
+		}
+		gotJQL = r.URL.Query().Get("jql")
+		_, _ = w.Write([]byte(`{"issues":[{"key":"PROJ-401","fields":{"summary":"Default mode jql"}}]}`))
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("GIONX_JIRA_BASE_URL", server.URL)
+	t.Setenv("GIONX_JIRA_EMAIL", "dev@example.com")
+	t.Setenv("GIONX_JIRA_API_TOKEN", "token-123")
+
+	var in bytes.Buffer
+	in.WriteString("assignee=currentUser()\n")
+	in.WriteString("n\n")
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	c.In = &in
+
+	code := c.Run([]string{"ws", "import", "jira"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), err.String())
+	}
+	if gotJQL != "assignee=currentUser()" {
+		t.Fatalf("jql = %q, want %q", gotJQL, "assignee=currentUser()")
+	}
+	if !strings.Contains(out.String(), "mode=jql jql=assignee=currentUser()") {
+		t.Fatalf("stdout missing default jql source line: %q", out.String())
+	}
+	if !strings.Contains(err.String(), "jql: ") {
+		t.Fatalf("stderr missing jql prompt: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Import_Jira_UsesConfigDefaultSpaceForSprint(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	rootConfigPath := filepath.Join(env.Root, ".gionx", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
+		t.Fatalf("mkdir root config dir: %v", err)
+	}
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  jira:\n    default_space: DEMO\n"), 0o644); err != nil {
+		t.Fatalf("write root config: %v", err)
+	}
+
+	var gotJQL string
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rest/api/3/search/jql" {
+			t.Fatalf("request path = %q, want /rest/api/3/search/jql", r.URL.Path)
+		}
+		gotJQL = r.URL.Query().Get("jql")
+		_, _ = w.Write([]byte(`{"issues":[{"key":"PROJ-402","fields":{"summary":"Default space"}}]}`))
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("GIONX_JIRA_BASE_URL", server.URL)
+	t.Setenv("GIONX_JIRA_EMAIL", "dev@example.com")
+	t.Setenv("GIONX_JIRA_API_TOKEN", "token-123")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "import", "jira", "--sprint", "55", "--no-prompt"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), err.String())
+	}
+	if !strings.Contains(gotJQL, "project = DEMO") || !strings.Contains(gotJQL, "sprint = 55") {
+		t.Fatalf("jql = %q, want project+sprint filters", gotJQL)
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Import_Jira_ConfigConflictFails(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	rootConfigPath := filepath.Join(env.Root, ".gionx", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
+		t.Fatalf("mkdir root config dir: %v", err)
+	}
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  jira:\n    default_space: A\n    default_project: B\n"), 0o644); err != nil {
+		t.Fatalf("write root config: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "import", "jira", "--sprint", "55", "--no-prompt"})
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d", code, exitError)
+	}
+	if !strings.Contains(err.String(), "cannot be combined") {
+		t.Fatalf("stderr missing config conflict detail: %q", err.String())
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout not empty: %q", out.String())
 	}
 }
 

@@ -35,7 +35,7 @@ status: planned
   - Depends: CONFIG-002
   - Serial: yes
 
-- [ ] CONFIG-004: `ws create` default template from config
+- [x] CONFIG-004: `ws create` default template from config
   - What: when `--template` is omitted, resolve default template from config
     precedence before fallback `default`.
   - Specs:
@@ -44,7 +44,7 @@ status: planned
   - Depends: CONFIG-002, CONFIG-003
   - Serial: yes
 
-- [ ] CONFIG-005: `ws import jira` defaults from config
+- [x] CONFIG-005: `ws import jira` defaults from config
   - What: resolve Jira import defaults (`space/project/type`) from config and
     keep CLI flags as highest precedence.
   - Specs:

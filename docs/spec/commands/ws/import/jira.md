@@ -12,6 +12,7 @@ This command is for workspace creation (0..N), not for actions on existing works
 
 ## Command forms
 
+- `gionx ws import jira [--sprint [<id|name>] [--space <key>|--project <key>] | --jql [<expr>]] [--limit <n>] [--apply] [--no-prompt] [--json]`
 - `gionx ws import jira --sprint [<id|name>] --space <key> [--limit <n>] [--apply] [--no-prompt] [--json]`
 - `gionx ws import jira --sprint [<id|name>] --project <key> [--limit <n>] [--apply] [--no-prompt] [--json]`
 - `gionx ws import jira --jql "<expr>" [--limit <n>] [--apply] [--no-prompt] [--json]`
@@ -19,10 +20,13 @@ This command is for workspace creation (0..N), not for actions on existing works
 ## Input rules
 
 - `--sprint` and `--jql` are mutually exclusive.
-- One of `--sprint` or `--jql` is required.
+- If both are omitted, resolve mode from config:
+  - `<current-root>/.gionx/config.yaml` -> `integration.jira.default_type`
+  - `~/.gionx/config.yaml` -> `integration.jira.default_type`
+  - fallback `sprint`
 - `--space` is the primary scope key option for sprint mode.
 - `--project` is an alias of `--space` (same behavior).
-- `--space`/`--project` is required with `--sprint`.
+- `--space`/`--project` is required with sprint mode after config resolution.
 - `--space` and `--project` must not be combined.
 - `--board` is not supported with `--sprint`.
 - `--limit` default is `30` and valid range is `1..200`.
@@ -32,6 +36,7 @@ This command is for workspace creation (0..N), not for actions on existing works
 
 ## Resolution rules
 
+- Config precedence is `CLI flag > root config > global config > command default`.
 - Default import filter:
   - `assignee = currentUser()`
   - `statusCategory != Done`
@@ -46,6 +51,9 @@ This command is for workspace creation (0..N), not for actions on existing works
   - build JQL with `sprint = "<name>"`.
 - `--space`/`--project` scope is always included:
   - `project = <space-key>`.
+- If `--space`/`--project` is omitted:
+  - read `integration.jira.default_space` or `integration.jira.default_project` from config.
+  - if both keys are active at the same time, fail with a clear config error.
 - If value is omitted (`--sprint` only):
   - in prompt mode, list `Active + Future` sprints under `--space/--project` and ask selection.
   - when TTY is available, use shared interactive selector UI.
@@ -56,6 +64,9 @@ This command is for workspace creation (0..N), not for actions on existing works
 ### Kanban/non-sprint usage
 
 - For teams not using sprint mode, `--jql` is required.
+- If mode is JQL and `<expr>` is omitted:
+  - prompt mode asks for JQL input (`jql: `).
+  - `--no-prompt` fails with usage guidance.
 - If sprint candidates are unavailable, guide user to `--jql "<expr>"`.
 
 ## Plan/apply flow

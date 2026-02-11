@@ -15,6 +15,7 @@ import (
 
 	"github.com/mattn/go-isatty"
 	"github.com/tasuku43/gionx/internal/app/wsimport"
+	"github.com/tasuku43/gionx/internal/config"
 	"github.com/tasuku43/gionx/internal/infra/appports"
 	"github.com/tasuku43/gionx/internal/infra/paths"
 )
@@ -28,6 +29,7 @@ const (
 type wsImportJiraOpts struct {
 	sprintValue string
 	sprintSet   bool
+	jqlSet      bool
 	jql         string
 	board       string
 	spaceKey    string
@@ -112,6 +114,18 @@ func (c *CLI) runWSImportJira(args []string) int {
 	}
 	c.debugf("run ws import jira args=%q", args)
 
+	cfg, err := c.loadMergedConfig(root)
+	if err != nil {
+		fmt.Fprintf(c.Err, "load config: %v\n", err)
+		return exitError
+	}
+	opts, err = applyWSImportJiraConfigDefaults(opts, cfg)
+	if err != nil {
+		fmt.Fprintln(c.Err, err.Error())
+		c.printWSImportJiraUsage(c.Err)
+		return exitUsage
+	}
+
 	ctx := context.Background()
 	svc := wsimport.NewService(appports.NewWSImportJiraPort())
 	jql := ""
@@ -133,6 +147,19 @@ func (c *CLI) runWSImportJira(args []string) int {
 		source.Sprint = sprintDisplayValue
 	} else {
 		jql = strings.TrimSpace(opts.jql)
+		if jql == "" {
+			prompted, promptErr := c.promptLine("jql: ")
+			if promptErr != nil {
+				fmt.Fprintf(c.Err, "read jql: %v\n", promptErr)
+				return exitError
+			}
+			jql = strings.TrimSpace(prompted)
+			if jql == "" {
+				fmt.Fprintln(c.Err, "jql is required")
+				c.printWSImportJiraUsage(c.Err)
+				return exitUsage
+			}
+		}
 		source.JQL = jql
 	}
 	c.debugf("ws import jira: resolved mode=%s jql=%q", source.Mode, jql)
@@ -238,11 +265,13 @@ func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
 			}
 			rest = rest[1:]
 		case "--jql":
-			if len(rest) < 2 {
-				return wsImportJiraOpts{}, fmt.Errorf("--jql requires a value")
+			opts.jqlSet = true
+			if len(rest) > 1 && !strings.HasPrefix(rest[1], "-") {
+				opts.jql = strings.TrimSpace(rest[1])
+				rest = rest[2:]
+				continue
 			}
-			opts.jql = strings.TrimSpace(rest[1])
-			rest = rest[2:]
+			rest = rest[1:]
 		case "--board":
 			if len(rest) < 2 {
 				return wsImportJiraOpts{}, fmt.Errorf("--board requires a value")
@@ -294,11 +323,8 @@ func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
 	if len(rest) > 0 {
 		return wsImportJiraOpts{}, fmt.Errorf("unexpected args for ws import jira: %q", strings.Join(rest, " "))
 	}
-	if opts.sprintSet && opts.jql != "" {
+	if opts.sprintSet && opts.jqlSet {
 		return wsImportJiraOpts{}, fmt.Errorf("--sprint and --jql cannot be combined")
-	}
-	if !opts.sprintSet && opts.jql == "" {
-		return wsImportJiraOpts{}, fmt.Errorf("one of --sprint or --jql is required")
 	}
 	if !opts.sprintSet && opts.board != "" {
 		return wsImportJiraOpts{}, fmt.Errorf("--board is only valid with --sprint")
@@ -309,22 +335,58 @@ func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
 	if !opts.sprintSet && opts.spaceKey != "" {
 		return wsImportJiraOpts{}, fmt.Errorf("--space/--project is only valid with --sprint")
 	}
-	if opts.sprintSet && strings.TrimSpace(opts.spaceKey) == "" {
-		return wsImportJiraOpts{}, fmt.Errorf("--sprint requires --space (or --project)")
-	}
 	if opts.limit < wsImportJiraMinLimit || opts.limit > wsImportJiraMaxLimit {
 		return wsImportJiraOpts{}, fmt.Errorf("--limit must be in range %d..%d", wsImportJiraMinLimit, wsImportJiraMaxLimit)
 	}
-	if opts.sprintSet && strings.TrimSpace(opts.sprintValue) == "" {
-		if opts.noPrompt {
-			return wsImportJiraOpts{}, fmt.Errorf("--no-prompt requires --sprint <id|name> or --jql")
-		}
-	}
-	if opts.jql != "" && strings.TrimSpace(opts.jql) == "" {
-		return wsImportJiraOpts{}, fmt.Errorf("--jql requires a non-empty value")
-	}
 
 	return opts, nil
+}
+
+func applyWSImportJiraConfigDefaults(opts wsImportJiraOpts, cfg config.Config) (wsImportJiraOpts, error) {
+	resolved := opts
+	if !resolved.sprintSet && !resolved.jqlSet {
+		if strings.TrimSpace(resolved.spaceKey) != "" {
+			resolved.sprintSet = true
+		} else {
+			mode := strings.ToLower(strings.TrimSpace(cfg.Integration.Jira.DefaultType))
+			if mode == "" {
+				mode = config.JiraTypeSprint
+			}
+			switch mode {
+			case config.JiraTypeSprint:
+				resolved.sprintSet = true
+			case config.JiraTypeJQL:
+				resolved.jqlSet = true
+			default:
+				return wsImportJiraOpts{}, fmt.Errorf("integration.jira.default_type must be one of: sprint, jql")
+			}
+		}
+	}
+
+	if resolved.sprintSet {
+		if strings.TrimSpace(resolved.spaceKey) == "" {
+			switch {
+			case cfg.Integration.Jira.DefaultSpace != "" && cfg.Integration.Jira.DefaultProject != "":
+				return wsImportJiraOpts{}, fmt.Errorf("integration.jira.default_space and integration.jira.default_project cannot be combined")
+			case cfg.Integration.Jira.DefaultSpace != "":
+				resolved.spaceKey = cfg.Integration.Jira.DefaultSpace
+			case cfg.Integration.Jira.DefaultProject != "":
+				resolved.spaceKey = cfg.Integration.Jira.DefaultProject
+			}
+		}
+		if strings.TrimSpace(resolved.spaceKey) == "" {
+			return wsImportJiraOpts{}, fmt.Errorf("--sprint requires --space (or --project)")
+		}
+		if resolved.noPrompt && strings.TrimSpace(resolved.sprintValue) == "" {
+			return wsImportJiraOpts{}, fmt.Errorf("--no-prompt requires --sprint <id|name> or --jql <expr>")
+		}
+		return resolved, nil
+	}
+
+	if resolved.noPrompt && strings.TrimSpace(resolved.jql) == "" {
+		return wsImportJiraOpts{}, fmt.Errorf("--no-prompt requires --jql <expr> or --sprint <id|name>")
+	}
+	return resolved, nil
 }
 
 func buildWSImportJiraPlan(source wsImportJiraSource, limit int, root string, inputs []wsimport.WorkspaceInput) (wsImportJiraPlan, []wsimport.WorkspaceInput) {

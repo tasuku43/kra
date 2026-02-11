@@ -14,7 +14,10 @@ Create a workspace from a root-local template.
 - `id`: user-provided workspace ID
   - validation rules should follow `gion` (e.g. reject `/`)
 - `--template <name>` (optional): template name under `<current-root>/templates`
-  - if omitted, use `default`
+  - if omitted, resolve in this order:
+    1. `<current-root>/.gionx/config.yaml` -> `workspace.default_template`
+    2. `~/.gionx/config.yaml` -> `workspace.default_template`
+    3. fallback `default`
 - `--no-prompt` (optional): do not prompt for `title` (store empty)
 - `--jira <ticket-url>` (optional): resolve `id` and `title` from Jira issue
   - `id = issueKey`
@@ -30,6 +33,7 @@ Create a workspace from a root-local template.
 ## Behavior
 
 - Resolve current root with existing root policy (context/nearest root).
+- Config precedence is `CLI flag > root config > global config > command default`.
 - Resolve template from `<current-root>/templates/<name>`.
 - Template must pass shared validation before any workspace directory is created.
   - reserved top-level paths are forbidden:

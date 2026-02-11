@@ -20,7 +20,7 @@ func (c *CLI) runWSCreate(args []string) int {
 	var jiraTicketURL string
 	var idFlag string
 	var titleFlag string
-	templateName := defaultWorkspaceTemplateName
+	templateNameFlag := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -59,7 +59,7 @@ func (c *CLI) runWSCreate(args []string) int {
 				c.printWSCreateUsage(c.Err)
 				return exitUsage
 			}
-			templateName = strings.TrimSpace(args[1])
+			templateNameFlag = strings.TrimSpace(args[1])
 			args = args[2:]
 		default:
 			fmt.Fprintf(c.Err, "unknown flag for ws create: %q\n", args[0])
@@ -110,6 +110,12 @@ func (c *CLI) runWSCreate(args []string) int {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
 	c.debugf("run ws create noPrompt=%t jira=%t", noPrompt, jiraTicketURL != "")
+
+	templateName, err := c.resolveWSCreateTemplateName(root, templateNameFlag)
+	if err != nil {
+		fmt.Fprintf(c.Err, "resolve template: %v\n", err)
+		return exitError
+	}
 
 	ctx := context.Background()
 	id := ""
@@ -168,6 +174,21 @@ func (c *CLI) runWSCreate(args []string) int {
 	)
 	c.debugf("ws create completed id=%s path=%s", id, wsPath)
 	return exitOK
+}
+
+func (c *CLI) resolveWSCreateTemplateName(root string, templateNameFlag string) (string, error) {
+	if templateName := strings.TrimSpace(templateNameFlag); templateName != "" {
+		return templateName, nil
+	}
+
+	cfg, err := c.loadMergedConfig(root)
+	if err != nil {
+		return "", err
+	}
+	if templateName := strings.TrimSpace(cfg.Workspace.DefaultTemplate); templateName != "" {
+		return templateName, nil
+	}
+	return defaultWorkspaceTemplateName, nil
 }
 
 func (c *CLI) promptLine(prompt string) (string, error) {
