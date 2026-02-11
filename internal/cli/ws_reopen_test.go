@@ -14,6 +14,7 @@ import (
 )
 
 func TestCLI_WS_Reopen_Help_ShowsUsage(t *testing.T) {
+	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)

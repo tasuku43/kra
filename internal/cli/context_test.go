@@ -30,8 +30,7 @@ func TestCLI_Context_Help(t *testing.T) {
 }
 
 func TestCLI_Context_UseAndCurrent(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	t.Setenv("XDG_DATA_HOME", dataHome)
+	setGionxHomeForTest(t)
 
 	root := t.TempDir()
 	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
@@ -67,8 +66,7 @@ func TestCLI_Context_UseAndCurrent(t *testing.T) {
 }
 
 func TestCLI_Context_ListShowsRegistryEntries(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	t.Setenv("XDG_DATA_HOME", dataHome)
+	setGionxHomeForTest(t)
 
 	rootA := t.TempDir()
 	rootB := t.TempDir()
@@ -102,8 +100,7 @@ func TestCLI_Context_ListShowsRegistryEntries(t *testing.T) {
 }
 
 func TestCLI_Context_ListMarksCurrentContext(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	t.Setenv("XDG_DATA_HOME", dataHome)
+	setGionxHomeForTest(t)
 
 	root := t.TempDir()
 	otherRoot := t.TempDir()
@@ -133,8 +130,7 @@ func TestCLI_Context_ListMarksCurrentContext(t *testing.T) {
 }
 
 func TestCLI_Context_CurrentFailsWhenContextMissing(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	t.Setenv("XDG_DATA_HOME", dataHome)
+	setGionxHomeForTest(t)
 
 	missing := filepath.Join(t.TempDir(), "missing-root")
 	if err := paths.WriteCurrentContext(missing); err != nil {
@@ -154,8 +150,7 @@ func TestCLI_Context_CurrentFailsWhenContextMissing(t *testing.T) {
 }
 
 func TestCLI_Context_UseWithoutNameRequiresTTY(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	t.Setenv("XDG_DATA_HOME", dataHome)
+	setGionxHomeForTest(t)
 
 	root := t.TempDir()
 	if err := stateregistry.SetContextName(root, "sre", time.Unix(100, 0)); err != nil {
@@ -178,8 +173,7 @@ func TestCLI_Context_UseWithoutNameRequiresTTY(t *testing.T) {
 }
 
 func TestCLI_Context_Rename(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	t.Setenv("XDG_DATA_HOME", dataHome)
+	setGionxHomeForTest(t)
 
 	root := t.TempDir()
 	if err := stateregistry.SetContextName(root, "old", time.Unix(100, 0)); err != nil {
@@ -202,8 +196,7 @@ func TestCLI_Context_Rename(t *testing.T) {
 }
 
 func TestCLI_Context_RemoveProtectsCurrent(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	t.Setenv("XDG_DATA_HOME", dataHome)
+	setGionxHomeForTest(t)
 
 	root := t.TempDir()
 	if err := stateregistry.SetContextName(root, "sre", time.Unix(100, 0)); err != nil {
@@ -226,8 +219,7 @@ func TestCLI_Context_RemoveProtectsCurrent(t *testing.T) {
 }
 
 func TestCLI_Context_Remove(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	t.Setenv("XDG_DATA_HOME", dataHome)
+	setGionxHomeForTest(t)
 
 	root := t.TempDir()
 	other := t.TempDir()

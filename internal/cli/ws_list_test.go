@@ -44,8 +44,6 @@ func TestCLI_WS_List_SelectFlagRejected(t *testing.T) {
 
 func TestCLI_WS_List_ImportsWorkspaceDirAndPrintsIt(t *testing.T) {
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
 
 	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
 		t.Fatalf("create workspaces/: %v", err)
@@ -57,8 +55,7 @@ func TestCLI_WS_List_ImportsWorkspaceDirAndPrintsIt(t *testing.T) {
 		t.Fatalf("create imported ws dir: %v", err)
 	}
 
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 	if err := paths.WriteCurrentContext(root); err != nil {
 		t.Fatalf("WriteCurrentContext() error: %v", err)
 	}
@@ -79,8 +76,6 @@ func TestCLI_WS_List_ImportsWorkspaceDirAndPrintsIt(t *testing.T) {
 
 func TestCLI_WS_List_MarksMissingRepoWorktree(t *testing.T) {
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
 
 	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
 		t.Fatalf("create workspaces/: %v", err)
@@ -105,8 +100,7 @@ func TestCLI_WS_List_MarksMissingRepoWorktree(t *testing.T) {
 		t.Fatalf("write workspace meta: %v", err)
 	}
 
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 	if err := paths.WriteCurrentContext(root); err != nil {
 		t.Fatalf("WriteCurrentContext() error: %v", err)
 	}

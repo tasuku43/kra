@@ -10,32 +10,28 @@ import (
 
 type Env struct {
 	Root      string
-	DataHome  string
-	CacheHome string
+	GionxHome string
 }
 
 func NewEnv(t *testing.T) Env {
 	t.Helper()
 
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
+	gionxHome := filepath.Join(t.TempDir(), ".gionx")
 
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	t.Setenv("GIONX_HOME", gionxHome)
 	if err := paths.WriteCurrentContext(root); err != nil {
 		t.Fatalf("WriteCurrentContext(%q): %v", root, err)
 	}
 
 	return Env{
 		Root:      root,
-		DataHome:  dataHome,
-		CacheHome: cacheHome,
+		GionxHome: gionxHome,
 	}
 }
 
 func (e Env) RepoPoolPath() string {
-	return filepath.Join(e.CacheHome, "gionx", "repo-pool")
+	return filepath.Join(e.GionxHome, "repo-pool")
 }
 
 func (e Env) EnsureRootLayout(t *testing.T) {

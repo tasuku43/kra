@@ -11,6 +11,7 @@ import (
 )
 
 func TestCLI_WS_Go_Help_ShowsUsage(t *testing.T) {
+	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
@@ -132,6 +133,7 @@ func TestCLI_WS_Go_UI_PrintsResultSection(t *testing.T) {
 }
 
 func TestCLI_WS_Go_EmitCDFlag_IsUnknown(t *testing.T) {
+	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)

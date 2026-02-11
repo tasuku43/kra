@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 
@@ -13,10 +12,7 @@ import (
 
 func TestCLI_StateRegistry_InitCreatesEntry(t *testing.T) {
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -47,10 +43,7 @@ func TestCLI_StateRegistry_InitCreatesEntry(t *testing.T) {
 
 func TestCLI_StateRegistry_WSCreateUpdatesLastUsed(t *testing.T) {
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 
 	{
 		var out bytes.Buffer
@@ -96,10 +89,7 @@ func TestCLI_StateRegistry_WSCreateUpdatesLastUsed(t *testing.T) {
 
 func TestCLI_StateRegistry_WSMalformedRegistryFails(t *testing.T) {
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 
 	{
 		var out bytes.Buffer

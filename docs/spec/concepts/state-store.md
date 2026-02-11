@@ -26,7 +26,7 @@ Commands must not require SQL-only rows for lifecycle correctness.
 
 ## Root registry
 
-`gionx` maintains `XDG_DATA_HOME/gionx/registry.json` for known-root discovery.
+`gionx` maintains `~/.gionx/state/root-registry.json` for known-root discovery.
 
 - entry fields:
   - `root_path` (absolute canonical path, unique)
@@ -37,13 +37,14 @@ Commands must not require SQL-only rows for lifecycle correctness.
 
 ## Locations (defaults)
 
-- Root registry (data): `~/.local/share/gionx/registry.json`
-- Repo pool (cache): `~/.cache/gionx/repo-pool/`
+- Global config: `~/.gionx/config.yaml`
+- Current context pointer: `~/.gionx/state/current-context`
+- Root registry: `~/.gionx/state/root-registry.json`
+- Repo pool: `~/.gionx/repo-pool/`
 
-XDG environment variables may override these defaults:
+Environment override:
 
-- `$XDG_DATA_HOME` (default: `~/.local/share`)
-- `$XDG_CACHE_HOME` (default: `~/.cache`)
+- `$GIONX_HOME` (default: `~/.gionx`)
 
 ## Legacy compatibility
 

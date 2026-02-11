@@ -20,7 +20,7 @@ Register repositories into the shared bare repo pool and the current root index.
 `gionx repo add` resolves root in this order:
 
 1. `GIONX_ROOT`
-2. current context (`XDG_DATA_HOME/gionx/current-context`)
+2. current context (`~/.gionx/state/current-context`)
 3. walk-up discovery from cwd
 
 ## Inputs

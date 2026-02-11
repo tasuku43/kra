@@ -8,56 +8,54 @@ import (
 	"strings"
 )
 
-// DefaultRepoPoolPath returns the default location for the bare repo pool,
-// following XDG conventions.
+const gionxHomeEnv = "GIONX_HOME"
+
+// DefaultRepoPoolPath returns the default location for the bare repo pool.
 func DefaultRepoPoolPath() (string, error) {
-	xdgCacheHome, err := XDGCacheHome()
+	home, err := GionxHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(xdgCacheHome, "gionx", "repo-pool"), nil
+	return filepath.Join(home, "repo-pool"), nil
 }
 
 // RegistryPath returns the global registry metadata path.
 func RegistryPath() (string, error) {
-	xdgDataHome, err := XDGDataHome()
+	home, err := GionxHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(xdgDataHome, "gionx", "registry.json"), nil
+	return filepath.Join(home, "state", "root-registry.json"), nil
 }
 
 // CurrentContextPath returns the active context pointer file path.
 func CurrentContextPath() (string, error) {
-	xdgDataHome, err := XDGDataHome()
+	home, err := GionxHomeDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(xdgDataHome, "gionx", "current-context"), nil
+	return filepath.Join(home, "state", "current-context"), nil
 }
 
-// XDGDataHome resolves $XDG_DATA_HOME or falls back to ~/.local/share.
-func XDGDataHome() (string, error) {
-	if v := os.Getenv("XDG_DATA_HOME"); v != "" {
+// ConfigPath returns the global config path.
+func ConfigPath() (string, error) {
+	home, err := GionxHomeDir()
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(home, "config.yaml"), nil
+}
+
+// GionxHomeDir resolves $GIONX_HOME or falls back to ~/.gionx.
+func GionxHomeDir() (string, error) {
+	if v := strings.TrimSpace(os.Getenv(gionxHomeEnv)); v != "" {
 		return cleanAbs(v)
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return "", fmt.Errorf("resolve home dir for XDG_DATA_HOME fallback: %w", err)
+		return "", fmt.Errorf("resolve home dir for %s fallback: %w", gionxHomeEnv, err)
 	}
-	return filepath.Join(home, ".local", "share"), nil
-}
-
-// XDGCacheHome resolves $XDG_CACHE_HOME or falls back to ~/.cache.
-func XDGCacheHome() (string, error) {
-	if v := os.Getenv("XDG_CACHE_HOME"); v != "" {
-		return cleanAbs(v)
-	}
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home dir for XDG_CACHE_HOME fallback: %w", err)
-	}
-	return filepath.Join(home, ".cache"), nil
+	return filepath.Join(home, ".gionx"), nil
 }
 
 // ResolveExistingRoot resolves the current root.

@@ -20,7 +20,7 @@ Discover repositories from provider API and bulk-add selected repos into the sha
 `gionx repo discover` resolves root in this order:
 
 1. `GIONX_ROOT`
-2. current context (`XDG_DATA_HOME/gionx/current-context`)
+2. current context (`~/.gionx/state/current-context`)
 3. walk-up discovery from cwd
 
 ## Provider model

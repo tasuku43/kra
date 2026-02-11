@@ -48,7 +48,7 @@ Initialize a gionx root and filesystem-first runtime metadata.
 - Write `.gitignore` such that `workspaces/**/repos/**` is ignored
 - Touch root registry metadata for this root.
 - Register/refresh context binding (`name -> root`) in root registry.
-- Update global current context (`current-context`) to this root on success.
+- Update global current context (`~/.gionx/state/current-context`) to this root on success.
 
 ## Notes
 

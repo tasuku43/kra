@@ -18,7 +18,7 @@ Provide a stable foundation for root discovery and cross-root metadata scan.
 ## Scope (foundation only)
 
 - Define a registry file managed by `gionx`:
-  - location: `XDG_DATA_HOME/gionx/registry.json`
+  - location: `~/.gionx/state/root-registry.json`
   - format: JSON
 - Each entry tracks one known root:
   - `root_path` (absolute, canonical path)

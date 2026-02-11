@@ -123,6 +123,7 @@ func TestCLI_Init_IgnoresLegacyRepoPoolDrift(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
 	root := t.TempDir()
+	setGionxHomeForTest(t)
 	t.Setenv("XDG_DATA_HOME", filepath.Join(t.TempDir(), "xdg-data"))
 	t.Setenv("XDG_CACHE_HOME", filepath.Join(t.TempDir(), "xdg-cache"))
 

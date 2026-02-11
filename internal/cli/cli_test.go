@@ -68,7 +68,7 @@ func TestCLI_WS_NoArgs_ShowsWSUsage(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	t.Setenv("XDG_DATA_HOME", filepath.Join(t.TempDir(), "xdg-data"))
+	setGionxHomeForTest(t)
 
 	code := c.Run([]string{"ws"})
 	if code != exitError {
@@ -84,16 +84,13 @@ func TestCLI_WS_NoArgs_ShowsWSUsage(t *testing.T) {
 
 func TestCLI_WS_ListAlias_LS_DelegatesToList(t *testing.T) {
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
 	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
 		t.Fatalf("create workspaces/: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
 		t.Fatalf("create archive/: %v", err)
 	}
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 	if err := paths.WriteCurrentContext(root); err != nil {
 		t.Fatalf("WriteCurrentContext() error: %v", err)
 	}
@@ -123,6 +120,7 @@ func TestCLI_WS_SelectFlagRejected(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
+			prepareCurrentRootForTest(t)
 			var out bytes.Buffer
 			var err bytes.Buffer
 			c := New(&out, &err)
@@ -217,11 +215,8 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	setGitIdentity(t)
 
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
 
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 	if err := paths.WriteCurrentContext(root); err != nil {
 		t.Fatalf("WriteCurrentContext() error: %v", err)
 	}
@@ -305,11 +300,8 @@ func TestCLI_Init_CreatesMissingGIONXRootDirectory(t *testing.T) {
 
 	parent := t.TempDir()
 	root := filepath.Join(parent, "new-gionx-root")
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
 
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -338,8 +330,7 @@ func TestCLI_Init_CreatesMissingGIONXRootDirectory(t *testing.T) {
 }
 
 func TestCLI_Init_NonTTYWithoutRootOrEnv_Fails(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", filepath.Join(t.TempDir(), "xdg-data"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(t.TempDir(), "xdg-cache"))
+	setGionxHomeForTest(t)
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -362,8 +353,7 @@ func TestCLI_Init_WithRootFlag_NonTTY_SucceedsAndUpdatesCurrentContext(t *testin
 	setGitIdentity(t)
 
 	root := filepath.Join(t.TempDir(), "explicit-root")
-	t.Setenv("XDG_DATA_HOME", filepath.Join(t.TempDir(), "xdg-data"))
-	t.Setenv("XDG_CACHE_HOME", filepath.Join(t.TempDir(), "xdg-cache"))
+	setGionxHomeForTest(t)
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -417,8 +407,6 @@ func seedDefaultTemplate(t *testing.T, root string) {
 
 func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
 
 	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
 		t.Fatalf("create workspaces/: %v", err)
@@ -428,8 +416,7 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	}
 	seedDefaultTemplate(t, root)
 
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 	if err := paths.WriteCurrentContext(root); err != nil {
 		t.Fatalf("WriteCurrentContext() error: %v", err)
 	}
@@ -498,8 +485,6 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 
 func TestCLI_WS_Create_ArchivedCollision_GuidesReopen(t *testing.T) {
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
 
 	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
 		t.Fatalf("create workspaces/: %v", err)
@@ -509,8 +494,7 @@ func TestCLI_WS_Create_ArchivedCollision_GuidesReopen(t *testing.T) {
 	}
 	seedDefaultTemplate(t, root)
 
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 	if err := paths.WriteCurrentContext(root); err != nil {
 		t.Fatalf("WriteCurrentContext() error: %v", err)
 	}
@@ -535,8 +519,6 @@ func TestCLI_WS_Create_ArchivedCollision_GuidesReopen(t *testing.T) {
 
 func TestCLI_WS_Create_ActiveCollision_Errors(t *testing.T) {
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
 
 	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
 		t.Fatalf("create workspaces/: %v", err)
@@ -546,8 +528,7 @@ func TestCLI_WS_Create_ActiveCollision_Errors(t *testing.T) {
 	}
 	seedDefaultTemplate(t, root)
 
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 	if err := paths.WriteCurrentContext(root); err != nil {
 		t.Fatalf("WriteCurrentContext() error: %v", err)
 	}
@@ -607,8 +588,7 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 	repoSpec := "file://" + remoteBare
 
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
+	gionxHome := setGionxHomeForTest(t)
 
 	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
 		t.Fatalf("create workspaces/: %v", err)
@@ -618,12 +598,10 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 	}
 	seedDefaultTemplate(t, root)
 
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
 	if err := paths.WriteCurrentContext(root); err != nil {
 		t.Fatalf("WriteCurrentContext() error: %v", err)
 	}
-	env := testutil.Env{Root: root, DataHome: dataHome, CacheHome: cacheHome}
+	env := testutil.Env{Root: root, GionxHome: gionxHome}
 
 	{
 		var out bytes.Buffer
@@ -723,8 +701,7 @@ func TestCLI_WS_AddRepo_DBUnavailable_FallsBackToFilesystem(t *testing.T) {
 	repoSpec := "file://" + remoteBare
 
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
+	gionxHome := setGionxHomeForTest(t)
 
 	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
 		t.Fatalf("create workspaces/: %v", err)
@@ -734,12 +711,10 @@ func TestCLI_WS_AddRepo_DBUnavailable_FallsBackToFilesystem(t *testing.T) {
 	}
 	seedDefaultTemplate(t, root)
 
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
 	if err := paths.WriteCurrentContext(root); err != nil {
 		t.Fatalf("WriteCurrentContext() error: %v", err)
 	}
-	env := testutil.Env{Root: root, DataHome: dataHome, CacheHome: cacheHome}
+	env := testutil.Env{Root: root, GionxHome: gionxHome}
 
 	{
 		var out bytes.Buffer

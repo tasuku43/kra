@@ -13,7 +13,7 @@ Manage named contexts (`name -> path`) and current selection.
 
 `gionx` resolves root in this order:
 
-1. current-context file (`XDG_DATA_HOME/gionx/current-context`)
+1. current-context file (`~/.gionx/state/current-context`)
 2. command-specific fallback (for commands that allow cwd-based discovery)
 
 Notes:

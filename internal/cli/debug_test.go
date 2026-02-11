@@ -29,8 +29,6 @@ func TestCLI_GlobalDebugFlag_BeforeHelp(t *testing.T) {
 
 func TestCLI_WSList_Debug_WritesLogUnderGIONXRoot(t *testing.T) {
 	root := t.TempDir()
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
 
 	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
 		t.Fatalf("create workspaces/: %v", err)
@@ -39,8 +37,7 @@ func TestCLI_WSList_Debug_WritesLogUnderGIONXRoot(t *testing.T) {
 		t.Fatalf("create archive/: %v", err)
 	}
 
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+	setGionxHomeForTest(t)
 	if err := paths.WriteCurrentContext(root); err != nil {
 		t.Fatalf("WriteCurrentContext() error: %v", err)
 	}

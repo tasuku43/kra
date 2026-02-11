@@ -17,7 +17,7 @@ It does not delete physical bare repositories from the shared repo pool.
 `gionx repo remove` resolves root in this order:
 
 1. `GIONX_ROOT`
-2. current context (`XDG_DATA_HOME/gionx/current-context`)
+2. current context (`~/.gionx/state/current-context`)
 3. walk-up discovery from cwd
 
 ## Selection behavior

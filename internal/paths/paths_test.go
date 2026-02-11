@@ -7,62 +7,60 @@ import (
 	"testing"
 )
 
-func TestDefaultRepoPoolPath_UsesXDGDefaults(t *testing.T) {
+func TestDefaultRepoPoolPath_UsesGionxHomeDefault(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("XDG_CACHE_HOME", "")
+	t.Setenv("GIONX_HOME", "")
 
 	got, err := DefaultRepoPoolPath()
 	if err != nil {
 		t.Fatalf("DefaultRepoPoolPath() err = %v", err)
 	}
-	want := filepath.Join(home, ".cache", "gionx", "repo-pool")
+	want := filepath.Join(home, ".gionx", "repo-pool")
 	if got != want {
 		t.Fatalf("DefaultRepoPoolPath() = %q, want %q", got, want)
 	}
 }
 
-func TestRegistryPath_UsesXDGDefaults(t *testing.T) {
+func TestRegistryPath_UsesGionxHomeDefault(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("GIONX_HOME", "")
 
 	got, err := RegistryPath()
 	if err != nil {
 		t.Fatalf("RegistryPath() err = %v", err)
 	}
-	want := filepath.Join(home, ".local", "share", "gionx", "registry.json")
+	want := filepath.Join(home, ".gionx", "state", "root-registry.json")
 	if got != want {
 		t.Fatalf("RegistryPath() = %q, want %q", got, want)
 	}
 }
 
-func TestCurrentContextPath_UsesXDGDefaults(t *testing.T) {
+func TestCurrentContextPath_UsesGionxHomeDefault(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
-	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("GIONX_HOME", "")
 
 	got, err := CurrentContextPath()
 	if err != nil {
 		t.Fatalf("CurrentContextPath() err = %v", err)
 	}
-	want := filepath.Join(home, ".local", "share", "gionx", "current-context")
+	want := filepath.Join(home, ".gionx", "state", "current-context")
 	if got != want {
 		t.Fatalf("CurrentContextPath() = %q, want %q", got, want)
 	}
 }
 
-func TestPaths_UsesXDGOverrides(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	cacheHome := filepath.Join(t.TempDir(), "xdg-cache")
-	t.Setenv("XDG_DATA_HOME", dataHome)
-	t.Setenv("XDG_CACHE_HOME", cacheHome)
+func TestPaths_UsesGionxHomeOverride(t *testing.T) {
+	gionxHome := filepath.Join(t.TempDir(), ".gionx")
+	t.Setenv("GIONX_HOME", gionxHome)
 
 	gotPool, err := DefaultRepoPoolPath()
 	if err != nil {
 		t.Fatalf("DefaultRepoPoolPath() err = %v", err)
 	}
-	if gotPool != filepath.Join(cacheHome, "gionx", "repo-pool") {
+	if gotPool != filepath.Join(gionxHome, "repo-pool") {
 		t.Fatalf("repo pool path = %q", gotPool)
 	}
 
@@ -70,7 +68,7 @@ func TestPaths_UsesXDGOverrides(t *testing.T) {
 	if err != nil {
 		t.Fatalf("RegistryPath() err = %v", err)
 	}
-	if gotRegistry != filepath.Join(dataHome, "gionx", "registry.json") {
+	if gotRegistry != filepath.Join(gionxHome, "state", "root-registry.json") {
 		t.Fatalf("registry path = %q", gotRegistry)
 	}
 }
@@ -101,8 +99,7 @@ func TestFindRoot_NotFound(t *testing.T) {
 }
 
 func TestResolveExistingRoot_UsesCurrentContext(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("GIONX_HOME", filepath.Join(t.TempDir(), ".gionx"))
 
 	root := t.TempDir()
 	mustMkdirAll(t, filepath.Join(root, "workspaces"))
@@ -122,8 +119,7 @@ func TestResolveExistingRoot_UsesCurrentContext(t *testing.T) {
 }
 
 func TestResolveExistingRoot_CurrentContextMissingPathErrors(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("GIONX_HOME", filepath.Join(t.TempDir(), ".gionx"))
 
 	missingRoot := filepath.Join(t.TempDir(), "missing-root")
 	if err := WriteCurrentContext(missingRoot); err != nil {
@@ -140,8 +136,7 @@ func TestResolveExistingRoot_CurrentContextMissingPathErrors(t *testing.T) {
 }
 
 func TestWriteAndReadCurrentContext(t *testing.T) {
-	dataHome := filepath.Join(t.TempDir(), "xdg-data")
-	t.Setenv("XDG_DATA_HOME", dataHome)
+	t.Setenv("GIONX_HOME", filepath.Join(t.TempDir(), ".gionx"))
 
 	root := t.TempDir()
 	if err := WriteCurrentContext(root); err != nil {

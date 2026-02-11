@@ -13,6 +13,7 @@ import (
 )
 
 func TestCLI_WS_Purge_Help_ShowsUsage(t *testing.T) {
+	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
@@ -245,6 +246,7 @@ func TestCLI_WS_Purge_SelectorModeWithoutTTY_Errors(t *testing.T) {
 }
 
 func TestCLI_WS_Purge_NoPromptForce_WithoutID_Refuses(t *testing.T) {
+	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
