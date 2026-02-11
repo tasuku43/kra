@@ -27,7 +27,7 @@ status: planned
   - Depends: CONFIG-001
   - Serial: yes
 
-- [ ] CONFIG-003: `init` root-config bootstrap
+- [x] CONFIG-003: `init` root-config bootstrap
   - What: generate `<root>/.gionx/config.yaml` on first init without overwrite.
   - Specs:
     - `docs/spec/commands/init.md`

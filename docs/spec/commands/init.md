@@ -38,11 +38,16 @@ Initialize a gionx root and filesystem-first runtime metadata.
     - `<root>/templates/default/artifacts/`
     - `<root>/templates/default/AGENTS.md`
   - do not overwrite existing `templates/default/` content
+- Ensure `<root>/.gionx/config.yaml` exists on first init
+  - create default content:
+    - `workspace.default_template = default`
+  - do not overwrite existing file content
 - Create `<root>/AGENTS.md` with a default "how to use gionx" guidance (for the no-template MVP)
   - include a short explanation of `notes/` vs `artifacts/`
 - If `<root>` is not a Git repo, run `git init`
 - When `git init` is newly performed by `gionx init`, create an initial commit containing:
   - `<root>/.gitignore`
+  - `<root>/.gionx/config.yaml`
   - `<root>/AGENTS.md`
   - `<root>/templates/default/AGENTS.md` (if created)
 - Write `.gitignore` such that `workspaces/**/repos/**` is ignored

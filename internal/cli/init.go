@@ -209,6 +209,9 @@ func ensureInitLayout(root string) error {
 	if err := ensureDefaultWorkspaceTemplate(root); err != nil {
 		return err
 	}
+	if err := ensureRootConfig(root); err != nil {
+		return err
+	}
 	if didGitInit {
 		if err := commitInitFiles(root); err != nil {
 			return err
@@ -303,6 +306,7 @@ func commitInitFiles(root string) error {
 		return err
 	}
 	defaultTemplateAgentsRel := filepath.Join(workspaceTemplatesDirName, defaultWorkspaceTemplateName, rootAgentsFilename)
+	rootConfigRel := filepath.Join(".gionx", "config.yaml")
 	allowlist := map[string]struct{}{
 		allowGitignore: {},
 		allowAgents:    {},
@@ -318,6 +322,16 @@ func commitInitFiles(root string) error {
 		addArgs = append(addArgs, filepath.ToSlash(defaultTemplateAgentsRel))
 	} else if statErr != nil && !os.IsNotExist(statErr) {
 		return fmt.Errorf("stat default template AGENTS.md: %w", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(root, rootConfigRel)); statErr == nil {
+		allowRootConfig, allowErr := toGitTopLevelPath(ctx, root, rootConfigRel)
+		if allowErr != nil {
+			return allowErr
+		}
+		allowlist[allowRootConfig] = struct{}{}
+		addArgs = append(addArgs, filepath.ToSlash(rootConfigRel))
+	} else if statErr != nil && !os.IsNotExist(statErr) {
+		return fmt.Errorf("stat root config: %w", statErr)
 	}
 
 	addCmd := exec.Command("git", addArgs...)
@@ -403,6 +417,30 @@ Notes vs artifacts:
 - Track: everything except workspaces/**/repos/**
 - Ignore: workspaces/**/repos/**
 `
+}
+
+func ensureRootConfig(root string) error {
+	path := paths.RootConfigPath(root)
+	if info, err := os.Stat(path); err == nil {
+		if info.IsDir() {
+			return fmt.Errorf("root config path is a directory: %s", path)
+		}
+		return nil
+	} else if err != nil && !os.IsNotExist(err) {
+		return fmt.Errorf("stat root config: %w", err)
+	}
+
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		return fmt.Errorf("create root config dir: %w", err)
+	}
+	if err := os.WriteFile(path, []byte(defaultRootConfigContent()), 0o644); err != nil {
+		return fmt.Errorf("write root config: %w", err)
+	}
+	return nil
+}
+
+func defaultRootConfigContent() string {
+	return "workspace:\n  default_template: default\n"
 }
 
 func ensureDefaultWorkspaceTemplate(root string) error {

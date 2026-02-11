@@ -254,6 +254,14 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(root, "templates", "default", "AGENTS.md")); statErr != nil {
 		t.Fatalf("default template AGENTS.md not created: %v", statErr)
 	}
+	rootConfigPath := filepath.Join(root, ".gionx", "config.yaml")
+	rootConfigBytes, statErr := os.ReadFile(rootConfigPath)
+	if statErr != nil {
+		t.Fatalf("root config not created: %v", statErr)
+	}
+	if !strings.Contains(string(rootConfigBytes), "workspace:") || !strings.Contains(string(rootConfigBytes), "default_template: default") {
+		t.Fatalf("root config content mismatch: %q", string(rootConfigBytes))
+	}
 	b, statErr := os.ReadFile(filepath.Join(root, ".gitignore"))
 	if statErr != nil {
 		t.Fatalf(".gitignore not created: %v", statErr)
@@ -271,6 +279,7 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	tracked := strings.Fields(runGit(t, root, "ls-files"))
 	wantTracked := map[string]bool{
 		".gitignore":                  true,
+		".gionx/config.yaml":          true,
 		"AGENTS.md":                   true,
 		"templates/default/AGENTS.md": true,
 	}
@@ -326,6 +335,41 @@ func TestCLI_Init_CreatesMissingGIONXRootDirectory(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "archive")); statErr != nil {
 		t.Fatalf("archive/ not created: %v", statErr)
+	}
+}
+
+func TestCLI_Init_DoesNotOverwriteRootConfig(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git not found in PATH")
+	}
+	setGitIdentity(t)
+
+	root := t.TempDir()
+	setGionxHomeForTest(t)
+
+	rootConfigPath := filepath.Join(root, ".gionx", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
+		t.Fatalf("create root config dir: %v", err)
+	}
+	const custom = "workspace:\n  default_template: custom\n"
+	if err := os.WriteFile(rootConfigPath, []byte(custom), 0o644); err != nil {
+		t.Fatalf("write custom root config: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"init", "--root", root, "--context", "test"})
+	if code != exitOK {
+		t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+
+	got, readErr := os.ReadFile(rootConfigPath)
+	if readErr != nil {
+		t.Fatalf("read root config: %v", readErr)
+	}
+	if string(got) != custom {
+		t.Fatalf("root config was overwritten: got=%q want=%q", string(got), custom)
 	}
 }
 
