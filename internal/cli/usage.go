@@ -91,10 +91,12 @@ func (c *CLI) printWSUsage(w io.Writer) {
   gionx ws [--id <id>] [--act <action>] [action-args...]
   gionx ws select [--archived] [--act <go|close|add-repo|reopen|purge>]
   gionx ws create [--no-prompt] <id>
+  gionx ws import jira (--sprint [<id|name>] [--board <id|name>] | --jql "<expr>") [--limit <n>] [--apply] [--no-prompt] [--json]
   gionx ws list|ls [--archived] [--tree] [--format human|tsv]
 
 Subcommands:
   create            Create a workspace
+  import            Import workspaces from external systems
   select            Select workspace (then action or fixed action)
   ls                Alias of list
   list              List workspaces
@@ -125,6 +127,34 @@ Create a workspace directory under GIONX_ROOT/workspaces/<id>/ and write .gionx.
 Options:
   --no-prompt        Do not prompt for title (store empty)
   --jira             Resolve workspace id/title from Jira issue URL (env auth required)
+`)
+}
+
+func (c *CLI) printWSImportUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx ws import <source> [args]
+
+Sources:
+  jira              Import workspaces from Jira issues
+  help              Show this help
+`)
+}
+
+func (c *CLI) printWSImportJiraUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx ws import jira --sprint [<id|name>] --space <key> [--limit <n>] [--apply] [--no-prompt] [--json]
+  gionx ws import jira --sprint [<id|name>] --project <key> [--limit <n>] [--apply] [--no-prompt] [--json]
+  gionx ws import jira --jql "<expr>" [--limit <n>] [--apply] [--no-prompt] [--json]
+
+Plan-first bulk workspace creation from Jira.
+
+Rules:
+  --sprint and --jql are mutually exclusive.
+  One of --sprint or --jql is required.
+  --space (or --project) is required with --sprint.
+  --space and --project cannot be combined.
+  --board is not supported with --sprint.
+  --limit default is 30 (range: 1..200).
 `)
 }
 

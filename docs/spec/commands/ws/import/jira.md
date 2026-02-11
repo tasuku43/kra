@@ -86,7 +86,7 @@ This command is for workspace creation (0..N), not for actions on existing works
   - `Plan:`
   - bullet-based `source` and `filters`
   - `to create (N)` list
-  - `skipped (N)` list with reason
+  - `skipped (N)` list (`already_active` reason is omitted for readability)
   - `failed (N)` list with reason/message
 - In prompt mode (human):
   - include `apply this plan? [Enter=yes / n=no]` as the last plan line.

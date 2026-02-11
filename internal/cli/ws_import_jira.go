@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/mattn/go-isatty"
 	"github.com/tasuku43/gionx/internal/app/wsimport"
 	"github.com/tasuku43/gionx/internal/infra/appports"
 	"github.com/tasuku43/gionx/internal/infra/paths"
@@ -164,8 +165,8 @@ func (c *CLI) runWSImportJira(args []string) int {
 			confirm = strings.ToLower(strings.TrimSpace(confirm))
 			shouldApply = confirm == "" || confirm == "y" || confirm == "yes"
 		} else {
-			c.printWSImportJiraPlanHuman(plan, true)
-			confirm, err := c.readWSImportJiraApplyConfirmationLine()
+			c.printWSImportJiraPlanHuman(plan)
+			confirm, err := c.promptWSImportJiraApplyOnOut()
 			if err != nil {
 				fmt.Fprintf(c.Err, "read apply confirmation: %v\n", err)
 				return exitError
@@ -213,7 +214,7 @@ func (c *CLI) runWSImportJira(args []string) int {
 	}
 
 	if !interactivePromptFlow {
-		c.printWSImportJiraPlanHuman(plan, false)
+		c.printWSImportJiraPlanHuman(plan)
 	}
 
 	if plan.Summary.Failed > 0 {
@@ -557,7 +558,7 @@ func (c *CLI) promptWSImportJiraChoice(title string, options []string) (int, err
 	}
 }
 
-func (c *CLI) printWSImportJiraPlanHuman(plan wsImportJiraPlan, includeApplyPrompt bool) {
+func (c *CLI) printWSImportJiraPlanHuman(plan wsImportJiraPlan) {
 	useColor := writerSupportsColor(c.Out)
 	bullet := styleMuted("•", useColor)
 	connectorMuted := func(connector string) string {
@@ -602,10 +603,6 @@ func (c *CLI) printWSImportJiraPlanHuman(plan wsImportJiraPlan, includeApplyProm
 	body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, failedLabel, plan.Summary.Failed))
 	body = append(body, renderWSImportJiraPlanItems(plan.Items, "fail", connectorMuted)...)
 
-	if includeApplyPrompt {
-		body = append(body, "")
-		body = append(body, renderWSImportJiraApplyPromptLine(useColor))
-	}
 	for _, line := range renderSectionAtoms(newSectionAtom(styleBold("Plan:", useColor), body, sectionRenderOptions{
 		blankAfterHeading: false,
 		trailingBlank:     true,
@@ -691,7 +688,11 @@ func renderWSImportJiraPlanItemLabel(it wsImportJiraItem) string {
 	base := fmt.Sprintf("%s: %s", strings.TrimSpace(it.IssueKey), formatWorkspaceTitle(it.Title))
 	switch it.Action {
 	case "skip":
-		return fmt.Sprintf("%s (%s)", base, strings.TrimSpace(it.Reason))
+		reason := strings.TrimSpace(it.Reason)
+		if reason == "" || strings.EqualFold(reason, "already_active") {
+			return base
+		}
+		return fmt.Sprintf("%s (%s)", base, reason)
 	case "fail":
 		msg := strings.TrimSpace(it.Message)
 		if msg == "" {
@@ -709,13 +710,18 @@ func renderWSImportJiraApplyPrompt(useColor bool) string {
 	return fmt.Sprintf("%s%s apply this plan? %s: ", uiIndent, bullet, guide)
 }
 
-func renderWSImportJiraApplyPromptLine(useColor bool) string {
-	bullet := styleMuted("•", useColor)
-	guide := styleMuted("[Enter=yes / n=no]", useColor)
-	return fmt.Sprintf("%s%s apply this plan? %s:", uiIndent, bullet, guide)
-}
+func (c *CLI) promptWSImportJiraApplyOnOut() (string, error) {
+	prompt := renderWSImportJiraApplyPrompt(writerSupportsColor(c.Out))
 
-func (c *CLI) readWSImportJiraApplyConfirmationLine() (string, error) {
+	inFile, inOK := c.In.(*os.File)
+	outFile, outOK := c.Out.(*os.File)
+	if inOK && outOK && isatty.IsTerminal(inFile.Fd()) && isatty.IsTerminal(outFile.Fd()) {
+		return runInlineTextInput(inFile, c.Out, prompt)
+	}
+
+	if prompt != "" {
+		fmt.Fprint(c.Out, prompt)
+	}
 	if c.inReader == nil {
 		c.inReader = bufio.NewReader(c.In)
 	}
@@ -723,6 +729,7 @@ func (c *CLI) readWSImportJiraApplyConfirmationLine() (string, error) {
 	if err != nil && !errors.Is(err, io.EOF) {
 		return "", err
 	}
+	fmt.Fprintln(c.Out)
 	return strings.TrimSpace(line), nil
 }
 

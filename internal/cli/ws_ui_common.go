@@ -178,6 +178,20 @@ type sectionRenderOptions struct {
 	trailingBlank     bool
 }
 
+type sectionAtom struct {
+	heading string
+	body    []string
+	opts    sectionRenderOptions
+}
+
+func newSectionAtom(heading string, body []string, opts sectionRenderOptions) sectionAtom {
+	return sectionAtom{
+		heading: heading,
+		body:    append([]string(nil), body...),
+		opts:    opts,
+	}
+}
+
 func appendSectionLines(lines []string, heading string, body []string, opts sectionRenderOptions) []string {
 	section := make([]string, 0, 2+len(body))
 	section = append(section, heading)
@@ -194,9 +208,21 @@ func appendSectionLines(lines []string, heading string, body []string, opts sect
 	return append(lines, section...)
 }
 
+func renderSectionAtoms(atoms ...sectionAtom) []string {
+	lines := make([]string, 0, len(atoms)*4)
+	for _, atom := range atoms {
+		lines = appendSectionLines(lines, atom.heading, atom.body, atom.opts)
+	}
+	return lines
+}
+
 func printSection(out io.Writer, heading string, body []string, opts sectionRenderOptions) {
-	lines := appendSectionLines(nil, heading, body, opts)
+	lines := renderSectionAtoms(newSectionAtom(heading, body, opts))
 	for _, line := range lines {
 		fmt.Fprintln(out, line)
 	}
+}
+
+func printSectionBoundary(out io.Writer) {
+	fmt.Fprintln(out)
 }

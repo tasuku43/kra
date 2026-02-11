@@ -425,6 +425,7 @@ func runWorkspaceSelectorWithOptionsAndMode(in *os.File, out io.Writer, status s
 	if len(ids) == 0 {
 		return nil, errSelectorCanceled
 	}
+	printSectionBoundary(out)
 	return ids, nil
 }
 
@@ -609,12 +610,10 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 		}
 	}
 
-	lines := make([]string, 0, len(candidates)+8)
-	lines = appendSectionLines(lines, titleLine, sectionBody, sectionRenderOptions{
+	return renderSectionAtoms(newSectionAtom(titleLine, sectionBody, sectionRenderOptions{
 		blankAfterHeading: !compactTitle,
 		trailingBlank:     true,
-	})
-	return lines
+	}))
 }
 
 func selectorBodyRowsLimit(termHeight int, compactTitle bool) int {

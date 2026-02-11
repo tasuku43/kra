@@ -36,6 +36,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `concepts/architecture.md`: Layered architecture (`cli/app/domain/infra/ui`) and migration rules
   - `concepts/workspace-lifecycle.md`: Workspace lifecycle state machine and transition policy
 - Commands
+  - `commands/agent/activity.md`: `gionx agent` activity tracking baseline
   - `commands/context.md`: `gionx context`
   - `commands/init.md`: `gionx init`
   - `commands/repo/add.md`: `gionx repo add`
@@ -47,6 +48,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/selector.md`: Shared inline selector UI for workspace actions
   - `commands/ws/select.md`: Unified human launcher (`ws select` / context-aware `ws`)
   - `commands/ws/create.md`: `gionx ws create`
+  - `commands/ws/import/jira.md`: `gionx ws import jira`
   - `commands/ws/add-repo.md`: `gionx ws --act add-repo`
   - `commands/ws/list.md`: `gionx ws list`
   - `commands/ws/go.md`: `gionx ws --act go`
@@ -56,3 +58,4 @@ Implementation should reference these specs. When behavior changes, update the s
 
 - Development
   - `../dev/TESTING.md`: Testing principles (developer guidance)
+  - `testing/ui-regression.md`: CLI human UI regression testing policy (E2E + component golden)

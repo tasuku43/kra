@@ -155,6 +155,31 @@ func TestRenderWSImportJiraApplyPrompt_UsesBulletedPlanAlignment(t *testing.T) {
 	}
 }
 
+func TestRenderWSImportJiraPlanItemLabel_SkipReasonPolicy(t *testing.T) {
+	got := renderWSImportJiraPlanItemLabel(wsImportJiraItem{
+		IssueKey: "PROJ-101",
+		Title:    "Already exists",
+		Action:   "skip",
+		Reason:   "already_active",
+	})
+	if strings.Contains(got, "(") || strings.Contains(got, ")") {
+		t.Fatalf("already_active reason should be hidden, got %q", got)
+	}
+	if got != "PROJ-101: Already exists" {
+		t.Fatalf("unexpected label for already_active: %q", got)
+	}
+
+	got = renderWSImportJiraPlanItemLabel(wsImportJiraItem{
+		IssueKey: "PROJ-102",
+		Title:    "Archived exists",
+		Action:   "skip",
+		Reason:   "archived_exists",
+	})
+	if got != "PROJ-102: Archived exists (archived_exists)" {
+		t.Fatalf("non already_active reason should be shown, got %q", got)
+	}
+}
+
 func TestCLI_WS_Import_Jira_NoPromptWithoutApply_PrintsPlanWithSkipAndFail(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
@@ -186,8 +211,11 @@ func TestCLI_WS_Import_Jira_NoPromptWithoutApply_PrintsPlanWithSkipAndFail(t *te
 	if !strings.Contains(got, "Plan:") {
 		t.Fatalf("stdout missing plan heading: %q", got)
 	}
-	if !strings.Contains(got, "already_active") {
-		t.Fatalf("stdout missing skip reason: %q", got)
+	if !strings.Contains(got, "PROJ-101: Already exists") {
+		t.Fatalf("stdout missing skipped item label: %q", got)
+	}
+	if strings.Contains(got, "(already_active)") {
+		t.Fatalf("stdout should hide already_active reason: %q", got)
 	}
 	if !strings.Contains(got, "invalid_workspace_id") {
 		t.Fatalf("stdout missing fail reason: %q", got)
@@ -335,6 +363,9 @@ func TestCLI_WS_Import_Jira_PromptDecline_WithFailedPlan_ReturnsError(t *testing
 	}
 	if !strings.Contains(out.String(), "apply this plan? [Enter=yes / n=no]:") {
 		t.Fatalf("stdout missing apply prompt line: %q", out.String())
+	}
+	if !strings.HasSuffix(out.String(), ": \n") {
+		t.Fatalf("stdout should end with apply prompt and newline: %q", out.String())
 	}
 	if err.Len() != 0 {
 		t.Fatalf("stderr not empty: %q", err.String())

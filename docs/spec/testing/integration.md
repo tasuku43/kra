@@ -39,6 +39,13 @@ Commands implemented through `MVP-042`:
 
 This section maps the spec scenarios to concrete CLI integration tests.
 
+### CLI UI regression matrix (cross-command)
+
+- command-level human UI golden snapshots:
+  - `internal/cli/ui_e2e_golden_test.go`: `TestGolden_UIE2E_CoreWorkspaceWorkflow`
+- component-level UI golden snapshots:
+  - `internal/cli/golden_ui_test.go`: selector/add-repo/ws-import-jira/ws-list render snapshots
+
 ### `init`
 
 - settings drift by `root_path`:

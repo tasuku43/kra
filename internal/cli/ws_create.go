@@ -7,9 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
-	"time"
 
 	"github.com/mattn/go-isatty"
 	"github.com/tasuku43/gionx/internal/app/wscreate"
@@ -141,60 +139,9 @@ func (c *CLI) runWSCreate(args []string) int {
 		title = d
 	}
 
-	wsPath := filepath.Join(root, "workspaces", id)
-	archivedPath := filepath.Join(root, "archive", id)
-	if _, err := os.Stat(wsPath); err == nil {
-		fmt.Fprintf(c.Err, "workspace directory already exists: %s\n", wsPath)
-		return exitError
-	} else if err != nil && !os.IsNotExist(err) {
-		fmt.Fprintf(c.Err, "stat workspace dir: %v\n", err)
-		return exitError
-	}
-	if _, err := os.Stat(archivedPath); err == nil {
-		fmt.Fprintf(c.Err, "workspace already exists and is archived: %s\nrun: gionx ws --act reopen %s\n", id, id)
-		return exitError
-	} else if err != nil && !os.IsNotExist(err) {
-		fmt.Fprintf(c.Err, "stat archived workspace dir: %v\n", err)
-		return exitError
-	}
-
-	createdDir := false
-	if err := os.Mkdir(wsPath, 0o755); err != nil {
-		if errors.Is(err, os.ErrExist) {
-			fmt.Fprintf(c.Err, "workspace directory already exists: %s\n", wsPath)
-			return exitError
-		}
-		fmt.Fprintf(c.Err, "create workspace dir: %v\n", err)
-		return exitError
-	}
-	createdDir = true
-	cleanup := func() {
-		if createdDir {
-			_ = os.RemoveAll(wsPath)
-		}
-	}
-
-	if err := os.Mkdir(filepath.Join(wsPath, "notes"), 0o755); err != nil {
-		cleanup()
-		fmt.Fprintf(c.Err, "create notes/: %v\n", err)
-		return exitError
-	}
-	if err := os.Mkdir(filepath.Join(wsPath, "artifacts"), 0o755); err != nil {
-		cleanup()
-		fmt.Fprintf(c.Err, "create artifacts/: %v\n", err)
-		return exitError
-	}
-	if err := os.WriteFile(filepath.Join(wsPath, "AGENTS.md"), []byte(defaultWorkspaceAgentsContent(id, title)), 0o644); err != nil {
-		cleanup()
-		fmt.Fprintf(c.Err, "write AGENTS.md: %v\n", err)
-		return exitError
-	}
-
-	now := time.Now().Unix()
-	meta := newWorkspaceMetaFileForCreate(id, title, sourceURL, now)
-	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
-		cleanup()
-		fmt.Fprintf(c.Err, "write %s: %v\n", workspaceMetaFilename, err)
+	wsPath, err := c.createWorkspaceAtRoot(root, id, title, sourceURL)
+	if err != nil {
+		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
 
