@@ -1521,7 +1521,8 @@ func printAddRepoResult(out io.Writer, applied []addRepoAppliedItem, useColor bo
 		fmt.Sprintf("%s%s Added %d / %d", uiIndent, bullet, len(applied), len(applied)),
 	}
 	for _, it := range applied {
-		body = append(body, fmt.Sprintf("%s%s ✔ %s", uiIndent, bullet, it.Plan.Candidate.RepoKey))
+		check := styleSuccess("✔", useColor)
+		body = append(body, fmt.Sprintf("%s%s %s %s", uiIndent, bullet, check, it.Plan.Candidate.RepoKey))
 	}
 	printSection(out, renderResultTitle(useColor), body, sectionRenderOptions{
 		blankAfterHeading: false,

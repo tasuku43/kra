@@ -85,7 +85,7 @@ func (c *CLI) runTemplateValidate(args []string) int {
 			styleSuccess(fmt.Sprintf("Validated %d / %d", validated, total), useColorOut),
 		}
 		for _, r := range reports {
-			lines = append(lines, fmt.Sprintf("✔ %s", r.TemplateName))
+			lines = append(lines, fmt.Sprintf("%s %s", styleSuccess("✔", useColorOut), r.TemplateName))
 		}
 		printResultSection(c.Out, useColorOut, lines...)
 		return exitOK

@@ -169,7 +169,7 @@ func (c *CLI) runWSCreate(args []string) int {
 		c.Out,
 		useColorOut,
 		styleSuccess("Created 1 / 1", useColorOut),
-		fmt.Sprintf("✔ %s", id),
+		fmt.Sprintf("%s %s", styleSuccess("✔", useColorOut), id),
 		styleMuted(fmt.Sprintf("path: %s", wsPath), useColorOut),
 	)
 	c.debugf("ws create completed id=%s path=%s", id, wsPath)

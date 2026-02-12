@@ -118,8 +118,9 @@ func (c *CLI) printWorkspaceFlowResult(verb string, mark string, done []string, 
 
 	body := make([]string, 0, len(done)+1)
 	body = append(body, fmt.Sprintf("%s%s %d / %d", uiIndent, verb, len(done), total))
+	successMark := styleSuccess(mark, useColor)
 	for _, id := range done {
-		body = append(body, fmt.Sprintf("%s%s %s", uiIndent, mark, id))
+		body = append(body, fmt.Sprintf("%s%s %s", uiIndent, successMark, id))
 	}
 	printSection(c.Out, renderResultTitle(useColor), body, sectionRenderOptions{
 		blankAfterHeading: false,
