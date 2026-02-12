@@ -47,7 +47,7 @@ Backlog is managed by epic/prefix under `docs/backlog/*.md`.
 - [x] `docs/backlog/MVP.md` (`19/19` done)
 - [x] `docs/backlog/UX-WS.md` (`28/28` done)
 - [x] `docs/backlog/UX-REPO.md` (`2/2` done)
-- [x] `docs/backlog/UX-CORE.md` (`11/11` done)
+- [x] `docs/backlog/UX-CORE.md` (`13/13` done)
 - [x] `docs/backlog/ARCH.md` (`10/10` done)
 - [x] `docs/backlog/INT-JIRA.md` (`7/7` done)
 - [x] `docs/backlog/CTX-ROOT.md` (`4/4` done)

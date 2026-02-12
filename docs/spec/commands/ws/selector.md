@@ -13,7 +13,9 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
 
 - Render an inline list in terminal (do not take over full screen).
 - Cursor movement by arrow keys (`Up` / `Down`).
-- `Space`: toggle check on focused row.
+- `Space`: behavior depends on mode.
+  - multi-select: toggle check on focused row, then move cursor to next visible row.
+  - single-select: confirm focused row (same as `Enter`).
 - `Enter`: proceed with current selection.
 - `Esc` or `Ctrl+C`: cancel without side effects.
 - Text input is always treated as filter query input (no dedicated filter mode).
@@ -26,11 +28,10 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
     - `example-org/helmfiles` matches query `c s`.
 - `Backspace` / `Delete`: remove one rune from filter query.
 - Filter text must persist after selection toggle; it is cleared only when the user explicitly deletes it.
-- Single-select mode (`ws --act go`) uses cursor + Enter confirmation:
+- Single-select mode (`ws --act go`) uses cursor + confirm (`Enter` or `Space`):
   - selection markers stay visible (`○/●`) for visual parity with multi-select.
-  - `Space` has no effect.
   - footer does not show `selected: n/m`.
-  - `Enter` confirmation locks input briefly (`0.2s`) before stage transition.
+  - confirmation locks input briefly (`0.2s`) before stage transition.
 
 ## TTY requirement
 

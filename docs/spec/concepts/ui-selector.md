@@ -12,19 +12,21 @@ Define one shared interaction contract for interactive list selection used by `w
 ## Interaction
 
 - Cursor: `Up` / `Down`
-- Confirm: `Enter`
+- Confirm: `Enter` (single-select also accepts `Space`)
 - Cancel: `Esc` or `Ctrl+C`
 - Filter input: direct typing
 - Filter delete: `Backspace` / `Delete`
 
 Multi-select:
 - Toggle selection: `Space` (or full-width space)
+- `Space` toggles focused row and then moves cursor to the next visible row.
+- On the last visible row, cursor stays on that row after toggle.
 - Footer includes `selected: n/m`
 
 Single-select:
-- `Space` does nothing
+- Confirm: `Enter` or `Space` (including full-width space)
 - Footer does not show `selected: n/m`
-- `Enter` starts confirm transition:
+- Confirm starts transition:
   - mark focused row as selected (`●`)
   - keep frame visible briefly (`0.2s`)
   - lock cursor/input during the transition

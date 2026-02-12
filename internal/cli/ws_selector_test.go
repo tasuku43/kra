@@ -180,6 +180,43 @@ func TestWorkspaceSelectorModel_BackspaceDeletesRuneBeforeFilterCursor(t *testin
 	}
 }
 
+func TestWorkspaceSelectorModel_RuneInputInsertsAtFilterCursor(t *testing.T) {
+	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean}}, "active", "proceed", false, nil)
+	next := m
+	for _, r := range []rune("abde") {
+		updated, _ := next.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		var ok bool
+		next, ok = updated.(workspaceSelectorModel)
+		if !ok {
+			t.Fatalf("unexpected model type: %T", updated)
+		}
+	}
+
+	updated, _ := next.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	var ok bool
+	next, ok = updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyLeft})
+	next, ok = updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("c")})
+	next, ok = updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if next.filter != "abcde" {
+		t.Fatalf("rune input should insert at cursor, got %q", next.filter)
+	}
+	if pos := next.filterInput.Position(); pos != 3 {
+		t.Fatalf("cursor position after insertion = %d, want 3", pos)
+	}
+}
+
 func TestWorkspaceSelectorModel_LetterAIsFilterInput(t *testing.T) {
 	m := newWorkspaceSelectorModel([]workspaceSelectorCandidate{
 		{ID: "WS1", Title: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
@@ -449,8 +486,8 @@ func TestRenderWorkspaceSelectorLinesWithOptions_SingleModeShowsSelectionMarkerA
 	if strings.Contains(joined, "selected:") {
 		t.Fatalf("single mode footer should not show selected summary: %q", joined)
 	}
-	if !strings.Contains(joined, "enter go") {
-		t.Fatalf("single mode footer should keep enter action hint: %q", joined)
+	if !strings.Contains(joined, "space/enter go") {
+		t.Fatalf("single mode footer should show space/enter action hint: %q", joined)
 	}
 }
 
@@ -581,6 +618,119 @@ func TestWorkspaceSelectorModel_SingleModeEnterSelectsCurrent(t *testing.T) {
 	}
 	if !next.done {
 		t.Fatalf("single mode should complete after confirm delay")
+	}
+}
+
+func TestWorkspaceSelectorModel_SingleModeSpaceSelectsCurrent(t *testing.T) {
+	m := newWorkspaceSelectorModelWithOptionsAndMode(
+		[]workspaceSelectorCandidate{
+			{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean},
+			{ID: "WS2", Risk: workspacerisk.WorkspaceRiskClean},
+		},
+		"active",
+		"go",
+		"",
+		"workspace",
+		true,
+		false,
+		nil,
+	)
+	m.cursor = 1
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	next, ok := updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if next.done {
+		t.Fatalf("single mode space should wait confirm delay before completion")
+	}
+	if !next.confirming {
+		t.Fatalf("single mode space should enter confirming state")
+	}
+	ids := next.selectedIDs()
+	if len(ids) != 1 || ids[0] != "WS2" {
+		t.Fatalf("single mode should select focused row, got=%v", ids)
+	}
+}
+
+func TestWorkspaceSelectorModel_SingleModeFullWidthSpaceSelectsCurrent(t *testing.T) {
+	m := newWorkspaceSelectorModelWithOptionsAndMode(
+		[]workspaceSelectorCandidate{
+			{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean},
+			{ID: "WS2", Risk: workspacerisk.WorkspaceRiskClean},
+		},
+		"active",
+		"go",
+		"",
+		"workspace",
+		true,
+		false,
+		nil,
+	)
+	m.cursor = 1
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("　")})
+	next, ok := updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if !next.confirming {
+		t.Fatalf("single mode full-width space should enter confirming state")
+	}
+	ids := next.selectedIDs()
+	if len(ids) != 1 || ids[0] != "WS2" {
+		t.Fatalf("single mode should select focused row, got=%v", ids)
+	}
+}
+
+func TestWorkspaceSelectorModel_MultiModeSpaceAutoAdvancesCursor(t *testing.T) {
+	m := newWorkspaceSelectorModel(
+		[]workspaceSelectorCandidate{
+			{ID: "WS1", Risk: workspacerisk.WorkspaceRiskClean},
+			{ID: "WS2", Risk: workspacerisk.WorkspaceRiskClean},
+			{ID: "WS3", Risk: workspacerisk.WorkspaceRiskClean},
+		},
+		"active",
+		"close",
+		false,
+		nil,
+	)
+
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	next, ok := updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if !next.selected[0] {
+		t.Fatalf("first space should toggle current row")
+	}
+	if next.cursor != 1 {
+		t.Fatalf("cursor should advance to next row after first space, got=%d", next.cursor)
+	}
+
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeySpace})
+	next, ok = updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if !next.selected[1] {
+		t.Fatalf("second space should toggle next row")
+	}
+	if next.cursor != 2 {
+		t.Fatalf("cursor should advance to next row after second space, got=%d", next.cursor)
+	}
+
+	updated, _ = next.Update(tea.KeyMsg{Type: tea.KeySpace})
+	next, ok = updated.(workspaceSelectorModel)
+	if !ok {
+		t.Fatalf("unexpected model type: %T", updated)
+	}
+	if !next.selected[2] {
+		t.Fatalf("third space should toggle last row")
+	}
+	if next.cursor != 2 {
+		t.Fatalf("cursor should stay on last row, got=%d", next.cursor)
 	}
 }
 

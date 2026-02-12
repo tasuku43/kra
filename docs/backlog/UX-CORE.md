@@ -103,3 +103,21 @@ status: planned
     - `docs/spec/commands/ws/list.md`
   - Depends: UX-CORE-004
   - Parallel: yes
+
+- [x] UX-CORE-012: Single-select confirm key parity (`Enter` + `Space`)
+  - What: in single-select mode, allow `Space` to confirm the focused row with the same behavior as `Enter`
+    (including confirm transition / reduced-motion handling). Keep existing single-select flow semantics otherwise.
+  - Specs:
+    - `docs/spec/concepts/ui-selector.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-CORE-004
+  - Parallel: yes
+
+- [x] UX-CORE-013: Multi-select space-toggle auto-advance (single-mode excluded)
+  - What: in multi-select mode only, pressing `Space` toggles focused row and then moves cursor to the next row.
+    Single-select mode must keep current cursor behavior (no auto-advance on `Space`).
+  - Specs:
+    - `docs/spec/concepts/ui-selector.md`
+    - `docs/spec/commands/ws/selector.md`
+  - Depends: UX-CORE-004
+  - Parallel: yes

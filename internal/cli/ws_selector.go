@@ -147,22 +147,7 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case tea.KeyEnter:
 			if m.single {
-				visible := m.filteredIndices()
-				if len(visible) == 0 {
-					m.setErrorMessage(fmt.Sprintf("at least one %s must be visible", m.itemLabel))
-					m.debugf("selector enter rejected: no visible candidate")
-					return m, nil
-				}
-				idx := visible[m.cursor]
-				m.selected = map[int]bool{idx: true}
-				m.filterInput.Blur()
-				if m.reducedMotion {
-					m.done = true
-					m.debugf("selector done (single reduced motion) selected=%v", m.selectedIDs())
-					return m, tea.Quit
-				}
-				m.confirming = true
-				return m, selectorSingleConfirmCmd()
+				return m, m.confirmSingleSelection()
 			} else {
 				if m.selectedCount() == 0 {
 					m.setErrorMessage(fmt.Sprintf("at least one %s must be selected", m.itemLabel))
@@ -195,9 +180,11 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		case tea.KeySpace:
 			if m.single {
-				return m, nil
+				return m, m.confirmSingleSelection()
 			}
-			m.toggleCurrentSelection()
+			if m.toggleCurrentSelection() {
+				m.moveCursorToNextVisible()
+			}
 			return m, nil
 		}
 		if msg.Type == tea.KeyRunes && len(msg.Runes) == 1 {
@@ -205,38 +192,30 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch r {
 			case ' ', '　':
 				if m.single {
-					return m, nil
+					return m, m.confirmSingleSelection()
 				}
-				m.toggleCurrentSelection()
+				if m.toggleCurrentSelection() {
+					m.moveCursorToNextVisible()
+				}
 				return m, nil
 			default:
 				if isFilterAppendableRune(r) {
-					m.setFilter(m.filter + string(r))
-					m.ensureCursorInFilteredRange()
-					m.clearMessage()
-					return m, nil
+					var cmd tea.Cmd
+					m.filterInput, cmd = m.filterInput.Update(msg)
+					m.syncFilterFromInput()
+					return m, cmd
 				}
 			}
 		}
 		var cmd tea.Cmd
 		m.filterInput, cmd = m.filterInput.Update(msg)
-		if next := m.filterInput.Value(); next != m.filter {
-			m.filter = next
-			m.filterInput.CursorEnd()
-			m.ensureCursorInFilteredRange()
-			m.clearMessage()
-		}
+		m.syncFilterFromInput()
 		return m, cmd
 	}
 
 	var cmd tea.Cmd
 	m.filterInput, cmd = m.filterInput.Update(msg)
-	if next := m.filterInput.Value(); next != m.filter {
-		m.filter = next
-		m.filterInput.CursorEnd()
-		m.ensureCursorInFilteredRange()
-		m.clearMessage()
-	}
+	m.syncFilterFromInput()
 	return m, cmd
 }
 
@@ -272,17 +251,47 @@ func selectorSingleConfirmCmd() tea.Cmd {
 	})
 }
 
-func (m *workspaceSelectorModel) toggleCurrentSelection() {
+func (m *workspaceSelectorModel) toggleCurrentSelection() bool {
 	visible := m.filteredIndices()
 	if len(visible) == 0 {
 		m.message = "no workspaces match current filter"
 		m.msgLevel = selectorMessageLevelError
-		return
+		return false
 	}
 	idx := visible[m.cursor]
 	m.selected[idx] = !m.selected[idx]
 	m.clearMessage()
 	m.debugf("selector toggle idx=%d selected=%t", idx, m.selected[idx])
+	return true
+}
+
+func (m *workspaceSelectorModel) moveCursorToNextVisible() {
+	visible := m.filteredIndices()
+	if len(visible) == 0 {
+		return
+	}
+	if m.cursor < len(visible)-1 {
+		m.cursor++
+	}
+}
+
+func (m *workspaceSelectorModel) confirmSingleSelection() tea.Cmd {
+	visible := m.filteredIndices()
+	if len(visible) == 0 {
+		m.setErrorMessage(fmt.Sprintf("at least one %s must be visible", m.itemLabel))
+		m.debugf("selector confirm rejected: no visible candidate")
+		return nil
+	}
+	idx := visible[m.cursor]
+	m.selected = map[int]bool{idx: true}
+	m.filterInput.Blur()
+	if m.reducedMotion {
+		m.done = true
+		m.debugf("selector done (single reduced motion) selected=%v", m.selectedIDs())
+		return tea.Quit
+	}
+	m.confirming = true
+	return selectorSingleConfirmCmd()
 }
 
 func (m *workspaceSelectorModel) clearMessage() {
@@ -293,12 +302,6 @@ func (m *workspaceSelectorModel) clearMessage() {
 func (m *workspaceSelectorModel) setErrorMessage(message string) {
 	m.message = message
 	m.msgLevel = selectorMessageLevelError
-}
-
-func (m *workspaceSelectorModel) setFilter(filter string) {
-	m.filter = filter
-	m.filterInput.SetValue(filter)
-	m.filterInput.CursorEnd()
 }
 
 func (m *workspaceSelectorModel) deleteFilterRuneBeforeCursor() bool {
@@ -318,6 +321,14 @@ func (m *workspaceSelectorModel) deleteFilterRuneBeforeCursor() bool {
 	m.filterInput.SetValue(m.filter)
 	m.filterInput.SetCursor(pos - 1)
 	return true
+}
+
+func (m *workspaceSelectorModel) syncFilterFromInput() {
+	if next := m.filterInput.Value(); next != m.filter {
+		m.filter = next
+		m.ensureCursorInFilteredRange()
+		m.clearMessage()
+	}
 }
 
 func (m *workspaceSelectorModel) ensureCursorInFilteredRange() {
@@ -763,7 +774,7 @@ func renderSelectorFooterLine(selectedCount int, total int, action string, singl
 	if single {
 		base := uiIndent + "↑↓ move"
 		parts := []string{
-			fmt.Sprintf("enter %s", action),
+			fmt.Sprintf("space/enter %s", action),
 			"type filter",
 			"esc cancel",
 		}

@@ -4,5 +4,5 @@ Action:
   ○ close       (archive this workspace)
 
   filter: 
-  ↑↓ move  enter run  type filter  esc cancel
+  ↑↓ move  space/enter run  type filter  esc cancel
 
