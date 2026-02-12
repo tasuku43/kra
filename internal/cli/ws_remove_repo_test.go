@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tasuku43/gion-core/workspacerisk"
 	"github.com/tasuku43/gionx/internal/testutil"
 )
 
@@ -169,6 +170,43 @@ func TestPrintRemoveRepoResult_UsesSameSuccessPatternAsAddRepo(t *testing.T) {
 	}
 	if !strings.Contains(got, "• ✔ example-org/astraea-tools") {
 		t.Fatalf("result line should use check marker: %q", got)
+	}
+}
+
+func TestPrintRemoveRepoPlan_ShowsFilesSectionForDirtyRepo(t *testing.T) {
+	var out bytes.Buffer
+	selected := []removeRepoCandidate{
+		{RepoKey: "example-org/ai-secretary-tools", Alias: "ai-secretary-tools"},
+	}
+	details := []removeRepoPlanDetail{
+		{
+			candidate: selected[0],
+			branch:    "DEMO-0000",
+			state:     workspacerisk.RepoStateDirty,
+			upstream:  "origin/main",
+			ahead:     2,
+			behind:    0,
+			unstaged:  2,
+			files: []string{
+				" M docs/backlog/README.md",
+				" M docs/backlog/UX-WS.md",
+			},
+		},
+	}
+
+	printRemoveRepoPlan(&out, "DEMO-0000", selected, details, false)
+	got := out.String()
+	if !strings.Contains(got, "files:") {
+		t.Fatalf("plan should include files section: %q", got)
+	}
+	if !strings.Contains(got, "(branch: DEMO-0000)") {
+		t.Fatalf("plan should include branch on repo line: %q", got)
+	}
+	if !strings.Contains(got, "M docs/backlog/README.md") {
+		t.Fatalf("plan should include changed file line: %q", got)
+	}
+	if !strings.Contains(got, "M docs/backlog/UX-WS.md") {
+		t.Fatalf("plan should include changed file line: %q", got)
 	}
 }
 

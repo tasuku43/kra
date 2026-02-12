@@ -44,14 +44,20 @@ This command is the operational counterpart of `gionx ws --act add-repo`.
   - verify each selected binding exists in target workspace
   - verify selected worktree path is under `workspaces/<id>/repos/<alias>`
   - dirty/unpushed worktree policy:
-    - default: abort if any selected worktree has non-clean risk
-    - `--force`: allow removal with explicit warning
+    - human mode:
+      - `Plan:` must include per-repo `risk` / `sync` / `files` details before apply
+      - if any selected worktree has non-clean risk, apply confirmation requires explicit `yes`
+    - JSON mode:
+      - non-clean risk requires `--force`; otherwise fail with `error.code=conflict`
 
 3. Plan and confirmation
-  - print `Plan:` with selected repo list
+  - print `Plan:` with selected repo list and per-repo details:
+    - `risk:`
+    - `sync: upstream=<...> ahead=<n> behind=<n>`
+    - `files:` (`git status --short` style lines) when there are changes
   - final prompt:
     - default: `apply this plan? [Enter=yes / n=no]: `
-    - with `--force` and non-clean risk: require explicit `yes` confirmation
+    - with non-clean risk: require explicit `yes` confirmation
 
 4. Apply (all-or-nothing)
   - remove workspace repo bindings from state/index

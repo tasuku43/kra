@@ -26,6 +26,20 @@ type removeRepoCandidate struct {
 	WorktreePath string
 }
 
+type removeRepoPlanDetail struct {
+	candidate removeRepoCandidate
+	branch    string
+	state     workspacerisk.RepoState
+	upstream  string
+	ahead     int
+	behind    int
+	staged    int
+	unstaged  int
+	untracked int
+	files     []string
+	filesANSI []string
+}
+
 func (c *CLI) runWSRemoveRepo(args []string) int {
 	idFromFlag := ""
 	outputFormat := "human"
@@ -231,20 +245,14 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 		return exitError
 	}
 
-	risky := evaluateRemoveRepoRisk(ctx, selected)
-	if len(risky) > 0 && !force {
-		fmt.Fprintln(c.Err, "preflight remove-repo: selected repos include non-clean worktrees (use --force to proceed)")
-		for _, it := range risky {
-			fmt.Fprintf(c.Err, "%s- %s %s\n", uiIndent, it.alias, renderRepoRiskState(it.state, writerSupportsColor(c.Err)))
-		}
-		return exitError
-	}
-
 	useColorOut := writerSupportsColor(c.Out)
-	printRemoveRepoPlan(c.Out, workspaceID, selected, useColorOut)
+	planDetails := collectRemoveRepoPlanDetails(ctx, selected)
+	risky := extractRiskyRepoItems(planDetails)
+
+	printRemoveRepoPlan(c.Out, workspaceID, selected, planDetails, useColorOut)
 	prompt := renderAddRepoApplyPrompt(useColorOut)
-	if force && len(risky) > 0 {
-		prompt = fmt.Sprintf("%stype %s to force remove non-clean repos: ", uiIndent, styleAccent("yes", useColorOut))
+	if len(risky) > 0 {
+		prompt = fmt.Sprintf("%stype %s to apply remove on non-clean repos: ", uiIndent, styleAccent("yes", useColorOut))
 	}
 	line, err := c.promptLine(prompt)
 	if err != nil {
@@ -252,7 +260,7 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 		return exitError
 	}
 	confirmed := strings.TrimSpace(line) == ""
-	if force && len(risky) > 0 {
+	if len(risky) > 0 {
 		confirmed = strings.EqualFold(strings.TrimSpace(line), "yes")
 	}
 	if !confirmed {
@@ -444,19 +452,92 @@ func (c *CLI) promptRemoveRepoSelection(candidates []removeRepoCandidate) ([]rem
 }
 
 func evaluateRemoveRepoRisk(ctx context.Context, selected []removeRepoCandidate) []repoRiskItem {
-	risky := make([]repoRiskItem, 0, len(selected))
-	for _, it := range selected {
-		state := workspacerisk.RepoStateUnknown
-		if _, err := os.Stat(it.WorktreePath); errors.Is(err, os.ErrNotExist) {
-			state = workspacerisk.RepoStateUnknown
-		} else {
-			state = workspacerisk.ClassifyRepoStatus(inspectGitRepoStatus(ctx, it.WorktreePath))
-		}
-		if state != workspacerisk.RepoStateClean {
-			risky = append(risky, repoRiskItem{alias: it.Alias, state: state})
+	details := collectRemoveRepoPlanDetails(ctx, selected)
+	return extractRiskyRepoItems(details)
+}
+
+func extractRiskyRepoItems(details []removeRepoPlanDetail) []repoRiskItem {
+	risky := make([]repoRiskItem, 0, len(details))
+	for _, it := range details {
+		if it.state != workspacerisk.RepoStateClean {
+			risky = append(risky, repoRiskItem{alias: it.candidate.Alias, state: it.state})
 		}
 	}
 	return risky
+}
+
+func collectRemoveRepoPlanDetails(ctx context.Context, selected []removeRepoCandidate) []removeRepoPlanDetail {
+	details := make([]removeRepoPlanDetail, 0, len(selected))
+	for _, it := range selected {
+		d := removeRepoPlanDetail{
+			candidate: it,
+			state:     workspacerisk.RepoStateUnknown,
+		}
+		if _, err := os.Stat(it.WorktreePath); errors.Is(err, os.ErrNotExist) {
+			details = append(details, d)
+			continue
+		}
+
+		status := inspectGitRepoStatus(ctx, it.WorktreePath)
+		d.state = workspacerisk.ClassifyRepoStatus(status)
+		d.upstream = strings.TrimSpace(status.Upstream)
+		d.ahead = status.AheadCount
+		d.behind = status.BehindCount
+		d.branch = detectBranchForClose(ctx, it.WorktreePath, "")
+		d.staged, d.unstaged, d.untracked, d.files, d.filesANSI = collectGitShortStatusSummary(ctx, it.WorktreePath)
+		details = append(details, d)
+	}
+	return details
+}
+
+func collectGitShortStatusSummary(ctx context.Context, worktreePath string) (staged int, unstaged int, untracked int, files []string, filesANSI []string) {
+	out, err := gitutil.Run(ctx, worktreePath, "status", "--short")
+	if err != nil {
+		return 0, 0, 0, nil, nil
+	}
+	outANSI, err := gitutil.Run(ctx, worktreePath, "-c", "color.status=always", "status", "--short")
+	if err != nil {
+		outANSI = ""
+	}
+	lines := strings.Split(strings.TrimSpace(out), "\n")
+	linesANSI := strings.Split(strings.TrimSpace(outANSI), "\n")
+	if strings.TrimSpace(outANSI) == "" {
+		linesANSI = nil
+	}
+	useANSI := len(linesANSI) == len(lines)
+	for _, line := range lines {
+		line = strings.TrimRight(line, " \t")
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		files = append(files, line)
+		if len(line) >= 2 {
+			x := line[0]
+			y := line[1]
+			if x == '?' && y == '?' {
+				untracked++
+				continue
+			}
+			if x != ' ' {
+				staged++
+			}
+			if y != ' ' {
+				unstaged++
+			}
+		} else {
+			unstaged++
+		}
+	}
+	if useANSI {
+		for _, line := range linesANSI {
+			line = strings.TrimRight(line, " \t")
+			if strings.TrimSpace(line) == "" {
+				continue
+			}
+			filesANSI = append(filesANSI, line)
+		}
+	}
+	return staged, unstaged, untracked, files, filesANSI
 }
 
 func selectedAliases(selected []removeRepoCandidate) []string {
@@ -502,7 +583,7 @@ func applyRemoveRepoPlan(ctx context.Context, db *sql.DB, root string, workspace
 	return nil
 }
 
-func printRemoveRepoPlan(out io.Writer, workspaceID string, selected []removeRepoCandidate, useColor bool) {
+func printRemoveRepoPlan(out io.Writer, workspaceID string, selected []removeRepoCandidate, details []removeRepoPlanDetail, useColor bool) {
 	bullet := styleMuted("•", useColor)
 	reposLabel := styleAccent("repos", useColor)
 	body := []string{
@@ -516,13 +597,106 @@ func printRemoveRepoPlan(out io.Writer, workspaceID string, selected []removeRep
 		if i == len(selected)-1 {
 			connector = "└─ "
 		}
-		body = append(body, fmt.Sprintf("%s%s%s", uiIndent+uiIndent, styleMuted(connector, useColor), p.RepoKey))
+		d, ok := lookupRemoveRepoPlanDetail(details, p)
+		branchSuffix := ""
+		if ok && strings.TrimSpace(d.branch) != "" {
+			branchSuffix = fmt.Sprintf(" (branch: %s)", d.branch)
+		}
+		body = append(body, fmt.Sprintf("%s%s%s%s", uiIndent+uiIndent, styleMuted(connector, useColor), p.RepoKey, branchSuffix))
+		if !ok {
+			continue
+		}
+		riskLine := fmt.Sprintf("%s%srisk: %s", uiIndent+uiIndent, styleMuted("│  ", useColor), renderPlanRiskLabel(d, useColor))
+		if i == len(selected)-1 {
+			riskLine = fmt.Sprintf("%s%srisk: %s", uiIndent+uiIndent, "   ", renderPlanRiskLabel(d, useColor))
+		}
+		body = append(body, riskLine)
+		syncLine := fmt.Sprintf("%s%ssync: upstream=%s ahead=%s behind=%s",
+			uiIndent+uiIndent,
+			styleMuted("│  ", useColor),
+			renderPlanUpstreamLabel(d.upstream, useColor),
+			renderPlanAheadBehindValue(d.ahead, useColor),
+			renderPlanAheadBehindValue(d.behind, useColor),
+		)
+		if i == len(selected)-1 {
+			syncLine = fmt.Sprintf("%s%ssync: upstream=%s ahead=%s behind=%s",
+				uiIndent+uiIndent,
+				"   ",
+				renderPlanUpstreamLabel(d.upstream, useColor),
+				renderPlanAheadBehindValue(d.ahead, useColor),
+				renderPlanAheadBehindValue(d.behind, useColor),
+			)
+		}
+		body = append(body, syncLine)
+		if len(d.files) > 0 {
+			prefix := styleMuted("│  ", useColor)
+			if i == len(selected)-1 {
+				prefix = "   "
+			}
+			body = append(body, fmt.Sprintf("%s%sfiles:", uiIndent+uiIndent, prefix))
+			renderLines := d.files
+			if useColor && len(d.filesANSI) == len(d.files) {
+				renderLines = d.filesANSI
+			}
+			for _, f := range renderLines {
+				body = append(body, fmt.Sprintf("%s%s  %s", uiIndent+uiIndent, prefix, f))
+			}
+		}
 	}
 	fmt.Fprintln(out)
 	printSection(out, styleBold("Plan:", useColor), body, sectionRenderOptions{
 		blankAfterHeading: false,
 		trailingBlank:     true,
 	})
+}
+
+func lookupRemoveRepoPlanDetail(details []removeRepoPlanDetail, candidate removeRepoCandidate) (removeRepoPlanDetail, bool) {
+	for _, d := range details {
+		if d.candidate.RepoKey == candidate.RepoKey && d.candidate.Alias == candidate.Alias {
+			return d, true
+		}
+	}
+	return removeRepoPlanDetail{}, false
+}
+
+func renderPlanRiskLabel(detail removeRepoPlanDetail, useColor bool) string {
+	riskText := string(detail.state)
+	switch detail.state {
+	case workspacerisk.RepoStateClean:
+		return riskText
+	case workspacerisk.RepoStateUnpushed, workspacerisk.RepoStateDiverged:
+		return styleWarn(riskText, useColor)
+	default:
+		base := styleError(riskText, useColor)
+		parts := make([]string, 0, 3)
+		if detail.staged > 0 {
+			parts = append(parts, fmt.Sprintf("staged=%d", detail.staged))
+		}
+		if detail.unstaged > 0 {
+			parts = append(parts, fmt.Sprintf("unstaged=%d", detail.unstaged))
+		}
+		if detail.untracked > 0 {
+			parts = append(parts, fmt.Sprintf("untracked=%d", detail.untracked))
+		}
+		if len(parts) == 0 {
+			return base
+		}
+		return fmt.Sprintf("%s (%s)", base, strings.Join(parts, " "))
+	}
+}
+
+func renderPlanUpstreamLabel(upstream string, useColor bool) string {
+	if strings.TrimSpace(upstream) == "" {
+		return styleMuted("(none)", useColor)
+	}
+	return upstream
+}
+
+func renderPlanAheadBehindValue(v int, useColor bool) string {
+	if v > 0 {
+		return styleWarn(fmt.Sprintf("%d", v), useColor)
+	}
+	return fmt.Sprintf("%d", v)
 }
 
 func printRemoveRepoResult(out io.Writer, removed []removeRepoCandidate, useColor bool) {
