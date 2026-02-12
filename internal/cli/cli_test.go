@@ -115,6 +115,7 @@ func TestCLI_WS_SelectFlagRejected(t *testing.T) {
 		{name: "go", args: []string{"ws", "--act", "go", "--select", "WS-1"}},
 		{name: "close", args: []string{"ws", "--act", "close", "--select", "WS-1"}},
 		{name: "add-repo", args: []string{"ws", "--act", "add-repo", "--select", "WS-1"}},
+		{name: "remove-repo", args: []string{"ws", "--act", "remove-repo", "--select", "WS-1"}},
 		{name: "reopen", args: []string{"ws", "--act", "reopen", "--select", "WS-1"}},
 		{name: "purge", args: []string{"ws", "--act", "purge", "--select", "WS-1"}},
 	}

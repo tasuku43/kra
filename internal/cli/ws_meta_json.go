@@ -142,3 +142,33 @@ func upsertWorkspaceMetaReposRestore(wsPath string, repos []workspaceMetaRepoRes
 	}
 	return writeWorkspaceMetaFile(wsPath, meta)
 }
+
+func removeWorkspaceMetaReposRestoreByAlias(wsPath string, aliases []string, now int64) error {
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		return err
+	}
+	toDelete := make(map[string]bool, len(aliases))
+	for _, alias := range aliases {
+		trimmed := strings.TrimSpace(alias)
+		if trimmed == "" {
+			continue
+		}
+		toDelete[trimmed] = true
+	}
+	if len(toDelete) == 0 {
+		return nil
+	}
+	next := make([]workspaceMetaRepoRestore, 0, len(meta.ReposRestore))
+	for _, r := range meta.ReposRestore {
+		if toDelete[strings.TrimSpace(r.Alias)] {
+			continue
+		}
+		next = append(next, r)
+	}
+	meta.ReposRestore = next
+	if now > 0 {
+		meta.Workspace.UpdatedAt = now
+	}
+	return writeWorkspaceMetaFile(wsPath, meta)
+}

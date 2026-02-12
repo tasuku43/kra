@@ -279,4 +279,15 @@ status: planned
   - Depends: UX-WS-027
   - Serial: yes
 
+- [x] UX-WS-029: `ws --act remove-repo` (workspace binding + worktree removal)
+  - What: add `remove-repo` as the operational counterpart of `add-repo`; remove selected workspace repo bindings
+    and corresponding `workspaces/<id>/repos/<alias>` worktrees, while keeping repo pool entries untouched.
+  - Specs:
+    - `docs/spec/commands/ws/remove-repo.md`
+    - `docs/spec/commands/ws/select.md`
+    - `docs/spec/commands/ws/selector.md`
+    - `docs/spec/commands/ws/add-repo.md`
+  - Depends: UX-WS-028, UX-WS-026, MVP-031
+  - Serial: yes
+
 ## Architecture Refactor (full layering migration)

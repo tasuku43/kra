@@ -53,6 +53,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/create.md`: `gionx ws create`
   - `commands/ws/import/jira.md`: `gionx ws import jira`
   - `commands/ws/add-repo.md`: `gionx ws --act add-repo`
+  - `commands/ws/remove-repo.md`: `gionx ws --act remove-repo`
   - `commands/ws/list.md`: `gionx ws list`
   - `commands/ws/go.md`: `gionx ws --act go`
   - `commands/ws/close.md`: `gionx ws --act close`

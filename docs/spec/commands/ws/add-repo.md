@@ -99,7 +99,11 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 7. Result
   - print `Result:`
   - summary: `Added <n> / <m>`
-  - per repo success lines
+  - per repo success lines: `✔ <repo-key>`
+  - visual emphasis policy:
+    - `Added <n> / <m>` stays primary
+    - success color is used on `✔` only
+    - repo key text stays primary
   - end `Result:` section with exactly one trailing blank line
 
 ## Non-interactive JSON contract

@@ -99,7 +99,7 @@ func shouldBootstrapGlobalConfig(args []string) bool {
 		}
 		action := parseWSAct(args[1:])
 		switch action {
-		case "add-repo", "close", "reopen", "purge":
+		case "add-repo", "remove-repo", "close", "reopen", "purge":
 			return true
 		default:
 			return false

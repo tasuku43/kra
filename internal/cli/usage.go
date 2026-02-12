@@ -111,7 +111,7 @@ Context name:
 func (c *CLI) printWSUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   gionx ws [--id <id>] [--act <action>] [action-args...]
-  gionx ws select [--archived] [--act <go|close|add-repo|reopen|purge>]
+  gionx ws select [--archived] [--act <go|close|add-repo|remove-repo|reopen|purge>]
   gionx ws create [--no-prompt] <id>
   gionx ws import jira (--sprint [<id|name>] [--board <id|name>] | --jql "<expr>") [--limit <n>] [--apply] [--no-prompt] [--json]
   gionx ws list|ls [--archived] [--tree] [--format human|tsv]
@@ -129,9 +129,9 @@ Run:
 
 Notes:
 - edit actions for existing workspaces are routed by --act.
-- active actions: go, add-repo, close
+- active actions: go, add-repo, remove-repo, close
 - archived actions: reopen, purge (applies archived scope automatically)
-- ws --archived --act go|add-repo|close is invalid.
+- ws --archived --act go|add-repo|remove-repo|close is invalid.
 - gionx ws opens action launcher when --act is omitted.
 - gionx ws resolves workspace from --id or current workspace context.
 - gionx ws select always opens workspace selection first.
@@ -269,6 +269,25 @@ Behavior:
   - Select one or more repos from the existing bare repo pool.
   - For each selected repo, input base_ref and branch.
   - Show Plan, ask final confirmation, then create worktrees and bindings atomically.
+`)
+}
+
+func (c *CLI) printWSRemoveRepoUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  gionx ws --act remove-repo [--id <workspace-id>] [<workspace-id>] [--format human|json]
+  gionx ws --act remove-repo --format json --id <workspace-id> --repo <repo-key> [--repo <repo-key> ...] [--yes] [--force]
+
+Remove repositories from a workspace (binding + worktree).
+
+Inputs:
+  workspace-id       Existing active workspace ID (optional when running under workspaces/<id>/)
+  --id               Explicit workspace ID
+
+Behavior:
+  - Select one or more repos already bound to the workspace.
+  - Show Plan and ask confirmation.
+  - Remove workspace bindings and corresponding worktrees.
+  - Repo pool entries/bare repositories are kept.
 `)
 }
 

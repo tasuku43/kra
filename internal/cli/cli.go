@@ -108,7 +108,7 @@ func (c *CLI) runWS(args []string) int {
 		return c.runWSList(args[1:])
 	case "select":
 		return c.runWSSelect(args[1:])
-	case "add-repo", "go", "close", "reopen", "purge":
+	case "add-repo", "remove-repo", "go", "close", "reopen", "purge":
 		c.printWSUsage(c.Err)
 		return exitUsage
 	default:

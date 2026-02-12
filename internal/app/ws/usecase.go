@@ -16,6 +16,7 @@ type Action string
 const (
 	ActionGo      Action = "go"
 	ActionAddRepo Action = "add-repo"
+	ActionRemove  Action = "remove-repo"
 	ActionClose   Action = "close"
 	ActionReopen  Action = "reopen"
 	ActionPurge   Action = "purge"

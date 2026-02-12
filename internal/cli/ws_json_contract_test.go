@@ -112,3 +112,29 @@ func TestCLI_WS_ActAddRepo_JSON_RequiresRepo(t *testing.T) {
 		t.Fatalf("unexpected json response: %+v", resp)
 	}
 }
+
+func TestCLI_WS_ActRemoveRepo_JSON_RequiresRepo(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "--act", "remove-repo", "--format", "json", "--id", "WS1", "--yes"})
+	if code != exitUsage {
+		t.Fatalf("ws --act remove-repo --format json exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if resp.OK || resp.Action != "remove-repo" || resp.Error.Code != "invalid_argument" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+}

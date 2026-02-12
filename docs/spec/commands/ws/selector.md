@@ -3,7 +3,7 @@ title: "`gionx ws` selector UI"
 status: implemented
 ---
 
-# Selector UI (shared by `ws --act close` / `ws --act go` / `ws --act reopen` / `ws --act purge`)
+# Selector UI (shared by `ws --act close` / `ws --act go` / `ws --act add-repo` / `ws --act remove-repo` / `ws --act reopen` / `ws --act purge`)
 
 ## Purpose
 
@@ -48,7 +48,7 @@ Each row should include at least:
 - summary text (for example title)
 
 Header/footer should show:
-- command mode (`close`, `go`, `reopen`, `purge`)
+- command mode (`close`, `go`, `add-repo`, `remove-repo`, `reopen`, `purge`)
 - scope (`active` or `archived`)
 - key hints (`Space`, `Enter`, text filter input, `Esc`/`Ctrl+C`)
 - `Enter` hint label should be command-specific action text (for example `enter close` for `ws --act close`).
@@ -85,7 +85,7 @@ Section body indentation must be controlled by shared global constants (no per-c
   - Preferred terminal style is gray-like ANSI colors (for example `bright black` family).
 - Validation/error messages shown below selector footer must use the shared error token (danger/error color).
 - Do not vary supplemental color semantics by command; the same visual hierarchy must be applied across
-  `ws --act close/go/reopen/purge`.
+  `ws --act close/go/add-repo/remove-repo/reopen/purge`.
 - Color is optional fallback:
   - when color is unavailable, preserve hierarchy via prefixes/indentation only.
 
@@ -144,7 +144,7 @@ Required shared modules (logical units):
 - `SelectorFrameRenderer`: footer and key-hint renderer
 
 Rules:
-- Command handlers (`ws --act close/go/reopen/purge`) must not define ad-hoc colors or row formats inline.
+- Command handlers (`ws --act close/go/add-repo/remove-repo/reopen/purge`) must not define ad-hoc colors or row formats inline.
 - Display differences by command should be expressed via data (mode/scope/actions), not bespoke render code.
 - `ws list --tree` should reuse `WorkspaceRowRenderer` and `RepoTreeRenderer` for visual parity with selector flows.
 - Selector-capable command handlers must delegate stage orchestration (`Workspaces -> Risk -> Result`) to the
@@ -199,7 +199,8 @@ Behavior:
 Action menu ordering:
 - fixed order for in-workspace active mode:
   - `add-repo` first
-  - `close` second
+  - `remove-repo` second
+  - `close` third
 - fixed order for in-workspace archived mode:
   - `reopen` first
   - `purge` second
@@ -212,6 +213,8 @@ Launcher and selector relationship:
 ## Selection cardinality
 
 - `ws --act go`: single selection only (exactly one required)
+- `ws --act add-repo`: multiple selection allowed
+- `ws --act remove-repo`: multiple selection allowed
 - `ws --act close`: multiple selection allowed
 - `ws --act reopen`: multiple selection allowed
 - `ws --act purge`: multiple selection allowed

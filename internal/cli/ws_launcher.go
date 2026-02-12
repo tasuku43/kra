@@ -107,7 +107,7 @@ parseFlags:
 	}
 	if fixedAction != "" {
 		switch fixedAction {
-		case "go", "add-repo", "close":
+		case "go", "add-repo", "remove-repo", "close":
 			if archivedScope {
 				fmt.Fprintf(c.Err, "--act %s cannot be used with --archived\n", fixedAction)
 				c.printWSUsage(c.Err)
@@ -196,6 +196,8 @@ parseFlags:
 		return c.runWSGo([]string{"--ui", target.ID})
 	case "add-repo":
 		return c.runWSAddRepo([]string{target.ID})
+	case "remove-repo":
+		return c.runWSRemoveRepo([]string{target.ID})
 	case "close":
 		return c.runWSClose([]string{target.ID})
 	case "reopen":
@@ -231,7 +233,7 @@ func runWSActionHasPositional(actionArgs []string) bool {
 
 func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archivedScope bool, wd string, root string, actionArgs []string) int {
 	switch action {
-	case "go", "add-repo", "close":
+	case "go", "add-repo", "remove-repo", "close":
 		if archivedScope {
 			c.printWSUsage(c.Err)
 			return exitUsage
@@ -251,7 +253,7 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 
 	opArgs := append([]string{}, actionArgs...)
 	switch action {
-	case "go", "add-repo", "close":
+	case "go", "add-repo", "remove-repo", "close":
 		if workspaceID != "" && !runWSActionHasIDArg(opArgs) && !runWSActionHasPositional(opArgs) {
 			opArgs = append([]string{"--id", workspaceID}, opArgs...)
 		}
@@ -278,6 +280,8 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 		return c.runWSGo(opArgs)
 	case "add-repo":
 		return c.runWSAddRepo(opArgs)
+	case "remove-repo":
+		return c.runWSRemoveRepo(opArgs)
 	case "close":
 		return c.runWSClose(opArgs)
 	case "reopen":
@@ -403,12 +407,14 @@ func (c *CLI) promptLauncherAction(target workspaceContextSelection, fromContext
 		if fromContext {
 			actions = append(actions,
 				workspaceSelectorCandidate{ID: "add-repo", Description: "add repositories"},
+				workspaceSelectorCandidate{ID: "remove-repo", Description: "remove repositories"},
 				workspaceSelectorCandidate{ID: "close", Description: "archive this workspace"},
 			)
 		} else {
 			actions = append(actions,
 				workspaceSelectorCandidate{ID: "go", Description: "switch to workspace"},
 				workspaceSelectorCandidate{ID: "add-repo", Description: "add repositories"},
+				workspaceSelectorCandidate{ID: "remove-repo", Description: "remove repositories"},
 				workspaceSelectorCandidate{ID: "close", Description: "archive this workspace"},
 			)
 		}
