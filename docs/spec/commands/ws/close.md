@@ -116,7 +116,8 @@ If the Git working tree has unrelated changes, this command must not include the
 - Stage by allowlist only:
   - `workspaces/<id>/`
   - `archive/<id>/`
-- Verify staged paths are a strict subset of the allowlist; otherwise abort.
+- Commit must be scoped by allowlist pathspec only (`archive/<id>/`, `workspaces/<id>/`), so pre-existing
+  staged changes outside the allowlist are preserved and must not be included in the archive commit.
 - If `gitignore` causes any non-`repos/` files under selected workspace to be unstageable, abort.
 
 ## FS metadata behavior

@@ -113,10 +113,6 @@ func (c *CLI) runWSClose(args []string) int {
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	if err := ensureNoStagedChanges(ctx, root); err != nil {
-		fmt.Fprintf(c.Err, "%v\n", err)
-		return exitError
-	}
 	useColorOut := writerSupportsColor(c.Out)
 
 	if len(args) == 1 {
@@ -858,7 +854,7 @@ func ensureNoStagedChanges(ctx context.Context, root string) error {
 		return err
 	}
 	if strings.TrimSpace(out) != "" {
-		return fmt.Errorf("git index has staged changes; commit or unstage them before running ws close")
+		return fmt.Errorf("git index has staged changes; commit or unstage them before running ws purge")
 	}
 	return nil
 }
@@ -938,7 +934,7 @@ func commitArchiveChange(ctx context.Context, root string, workspaceID string, e
 		}
 	}
 
-	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only")
+	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", archiveArg, workspacesArg)
 	if err != nil {
 		resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
 		return "", err
@@ -946,14 +942,13 @@ func commitArchiveChange(ctx context.Context, root string, workspaceID string, e
 
 	staged := strings.Fields(out)
 	stagedSet := make(map[string]struct{}, len(staged))
+	hasWorkspacesStage := false
 	for _, p := range staged {
 		p = filepath.Clean(filepath.FromSlash(p))
 		stagedSet[p] = struct{}{}
-		if strings.HasPrefix(p, archivePrefix) || strings.HasPrefix(p, workspacesPrefix) {
-			continue
+		if strings.HasPrefix(p, workspacesPrefix) {
+			hasWorkspacesStage = true
 		}
-		resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
-		return "", fmt.Errorf("unexpected staged path outside allowlist: %s", p)
 	}
 
 	for _, rel := range expectedArchiveFiles {
@@ -977,10 +972,17 @@ func commitArchiveChange(ctx context.Context, root string, workspaceID string, e
 		return "", fmt.Errorf("workspace contains files ignored by git; cannot archive commit: %s", rel)
 	}
 
-	if _, err := gitutil.Run(ctx, root, "commit", "-m", fmt.Sprintf("archive: %s", workspaceID)); err != nil {
+	commitArgs := []string{"commit", "--only", "-m", fmt.Sprintf("archive: %s", workspaceID), "--", archiveArg}
+	if hasWorkspacesStage {
+		commitArgs = append(commitArgs, workspacesArg)
+	}
+	if _, err := gitutil.Run(ctx, root, commitArgs...); err != nil {
 		resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
 		return "", err
 	}
+	// commit --only does not clear index entries staged by earlier add commands.
+	// Unstage only the command scope so unrelated user staged changes stay intact.
+	resetArchiveStaging(ctx, root, archiveArg, workspacesArg)
 
 	sha, err := gitutil.Run(ctx, root, "rev-parse", "HEAD")
 	if err != nil {

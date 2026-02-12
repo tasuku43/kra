@@ -352,6 +352,62 @@ func TestCLI_WS_Close_ShiftsProcessCWDWhenInsideTargetWorkspace(t *testing.T) {
 	}
 }
 
+func TestCLI_WS_Close_AllowsUnrelatedPreStagedChangesOutsideWorkspaceAllowlist(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env := testutil.NewEnv(t)
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"init", "--root", env.Root, "--context", "ws-close"})
+		if code != exitOK {
+			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	runGit(t, env.Root, "config", "user.email", "test@example.com")
+	runGit(t, env.Root, "config", "user.name", "test")
+	unrelated := filepath.Join(env.Root, "UNRELATED.md")
+	if err := os.WriteFile(unrelated, []byte("keep staged\n"), 0o644); err != nil {
+		t.Fatalf("write unrelated file: %v", err)
+	}
+	runGit(t, env.Root, "add", "UNRELATED.md")
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "--act", "close", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(env.Root, "archive", "WS1")); err != nil {
+		t.Fatalf("archive/WS1 should exist after close: %v", err)
+	}
+
+	staged := strings.TrimSpace(mustGitOutput(t, env.Root, "diff", "--cached", "--name-only"))
+	if !strings.Contains(staged, "UNRELATED.md") {
+		t.Fatalf("unrelated staged file should remain staged: %q", staged)
+	}
+
+	subj := strings.TrimSpace(mustGitOutput(t, env.Root, "log", "-1", "--pretty=%s"))
+	if subj != "archive: WS1" {
+		t.Fatalf("commit subject = %q, want %q", subj, "archive: WS1")
+	}
+}
+
 func TestPrintCloseRiskSection_UsesSharedSpacingAndIndent(t *testing.T) {
 	var out bytes.Buffer
 	items := []workspaceRiskDetail{
