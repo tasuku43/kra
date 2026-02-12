@@ -215,12 +215,13 @@ func TestCLI_WS_RemoveRepo_JSON_ShiftsCWDWhenInsideTargetWorkspace(t *testing.T)
 	if resolved, err := filepath.EvalSymlinks(afterWD); err == nil {
 		afterResolved = resolved
 	}
-	rootResolved := env.Root
-	if resolved, err := filepath.EvalSymlinks(env.Root); err == nil {
-		rootResolved = resolved
+	workspacePath := filepath.Join(env.Root, "workspaces", "WS1")
+	workspaceResolved := workspacePath
+	if resolved, err := filepath.EvalSymlinks(workspacePath); err == nil {
+		workspaceResolved = resolved
 	}
-	if afterResolved != rootResolved {
-		t.Fatalf("process cwd = %q (resolved=%q), want %q (resolved=%q)", afterWD, afterResolved, env.Root, rootResolved)
+	if afterResolved != workspaceResolved {
+		t.Fatalf("process cwd = %q (resolved=%q), want %q (resolved=%q)", afterWD, afterResolved, workspacePath, workspaceResolved)
 	}
 
 	actionBytes, actionErr := os.ReadFile(actionFile)
@@ -228,8 +229,8 @@ func TestCLI_WS_RemoveRepo_JSON_ShiftsCWDWhenInsideTargetWorkspace(t *testing.T)
 		t.Fatalf("read action file: %v", actionErr)
 	}
 	action := string(actionBytes)
-	if !strings.Contains(action, env.Root) {
-		t.Fatalf("shell action should include root path: %q", action)
+	if !strings.Contains(action, workspacePath) {
+		t.Fatalf("shell action should include workspace path: %q", action)
 	}
 }
 

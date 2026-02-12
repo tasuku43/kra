@@ -232,9 +232,10 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 	}
 
 	shouldShiftCWD := isPathInside(filepath.Join(root, "workspaces", workspaceID), wd)
+	workspacePath := filepath.Join(root, "workspaces", workspaceID)
 	if shouldShiftCWD {
-		if err := os.Chdir(root); err != nil {
-			fmt.Fprintf(c.Err, "shift process cwd to GIONX_ROOT: %v\n", err)
+		if err := os.Chdir(workspacePath); err != nil {
+			fmt.Fprintf(c.Err, "shift process cwd to workspace path: %v\n", err)
 			return exitError
 		}
 	}
@@ -260,7 +261,7 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 	printRemoveRepoPlan(c.Out, workspaceID, selected, planDetails, useColorOut)
 	prompt := renderAddRepoApplyPrompt(useColorOut)
 	if len(risky) > 0 {
-		prompt = fmt.Sprintf("%stype %s to apply remove on non-clean repos: ", uiIndent, styleAccent("yes", useColorOut))
+		prompt = renderRemoveRepoRiskApplyPrompt(useColorOut)
 	}
 	line, err := c.promptLine(prompt)
 	if err != nil {
@@ -289,7 +290,7 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 
 	printRemoveRepoResult(c.Out, selected, useColorOut)
 	if shouldShiftCWD {
-		if err := emitShellActionCD(root); err != nil {
+		if err := emitShellActionCD(workspacePath); err != nil {
 			fmt.Fprintf(c.Err, "write shell action: %v\n", err)
 			return exitError
 		}
@@ -300,15 +301,16 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 func (c *CLI) runWSRemoveRepoJSON(root string, workspaceID string, wd string, db *sql.DB, candidates []removeRepoCandidate, repoKeys []string, yes bool, force bool) int {
 	_ = yes
 	shouldShiftCWD := isPathInside(filepath.Join(root, "workspaces", workspaceID), wd)
+	workspacePath := filepath.Join(root, "workspaces", workspaceID)
 	if shouldShiftCWD {
-		if err := os.Chdir(root); err != nil {
+		if err := os.Chdir(workspacePath); err != nil {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
 				OK:          false,
 				Action:      "remove-repo",
 				WorkspaceID: workspaceID,
 				Error: &cliJSONError{
 					Code:    "internal_error",
-					Message: fmt.Sprintf("shift process cwd to GIONX_ROOT: %v", err),
+					Message: fmt.Sprintf("shift process cwd to workspace path: %v", err),
 				},
 			})
 			return exitError
@@ -396,7 +398,7 @@ func (c *CLI) runWSRemoveRepoJSON(root string, workspaceID string, wd string, db
 		},
 	})
 	if shouldShiftCWD {
-		if err := emitShellActionCD(root); err != nil {
+		if err := emitShellActionCD(workspacePath); err != nil {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
 				OK:          false,
 				Action:      "remove-repo",
@@ -770,4 +772,9 @@ func printRemoveRepoResult(out io.Writer, removed []removeRepoCandidate, useColo
 		blankAfterHeading: false,
 		trailingBlank:     true,
 	})
+}
+
+func renderRemoveRepoRiskApplyPrompt(useColor bool) string {
+	bullet := styleMuted("•", useColor)
+	return fmt.Sprintf("%s%s type %s to apply remove on non-clean repos: ", uiIndent, bullet, styleAccent("yes", useColor))
 }
