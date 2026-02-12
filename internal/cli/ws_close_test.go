@@ -432,19 +432,25 @@ func TestPrintCloseRiskSection_UsesSharedSpacingAndIndent(t *testing.T) {
 		t.Fatalf("close plan section should start with plan heading: %q", got)
 	}
 	if !strings.Contains(got, "\n  • close 2 workspaces\n") {
-		t.Fatalf("plan summary row should use shared indentation: %q", got)
+		t.Fatalf("plan heading row mismatch: %q", got)
 	}
-	if !strings.Contains(got, "\n    ├─ WS1\n") {
-		t.Fatalf("workspace tree row mismatch: %q", got)
+	if !strings.Contains(got, "\n  • workspace WS1\n") {
+		t.Fatalf("workspace label row mismatch: %q", got)
 	}
-	if !strings.Contains(got, "\n    │  risk: [dirty]\n") {
-		t.Fatalf("workspace risk row mismatch: %q", got)
+	if !strings.Contains(got, "\n    └─ repo-a\n") {
+		t.Fatalf("repo tree row mismatch: %q", got)
 	}
-	if !strings.Contains(got, "\n    │  repos:  repo-a [dirty]\n") {
+	if !strings.Contains(got, "\n       risk: dirty\n") {
+		t.Fatalf("repo risk row mismatch: %q", got)
+	}
+	if !strings.Contains(got, "\n       sync: upstream=(none) ahead=0 behind=0\n") {
+		t.Fatalf("sync row mismatch: %q", got)
+	}
+	if !strings.Contains(got, "\n  • workspace WS2\n") {
+		t.Fatalf("second workspace label row mismatch: %q", got)
+	}
+	if !strings.Contains(got, "\n    └─ repo-b\n") {
 		t.Fatalf("repo risk detail indentation mismatch: %q", got)
-	}
-	if !strings.Contains(got, "\n  • summary: clean=1 warning=0 danger=1\n  • policy: all-or-nothing close\n") {
-		t.Fatalf("plan summary block mismatch: %q", got)
 	}
 }
 

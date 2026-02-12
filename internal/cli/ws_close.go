@@ -542,9 +542,26 @@ type repoRiskItem struct {
 }
 
 type workspaceRiskDetail struct {
-	id      string
-	risk    workspacerisk.WorkspaceRisk
-	perRepo []repoRiskItem
+	id        string
+	risk      workspacerisk.WorkspaceRisk
+	perRepo   []repoRiskItem
+	repoPlans []closeRepoPlanDetail
+}
+
+type closeRepoPlanDetail struct {
+	repoKey    string
+	alias      string
+	branch     string
+	state      workspacerisk.RepoState
+	upstream   string
+	ahead      int
+	behind     int
+	staged     int
+	unstaged   int
+	untracked  int
+	files      []string
+	filesANSI  []string
+	worktreeOK bool
 }
 
 func collectWorkspaceRiskDetails(ctx context.Context, db *sql.DB, root string, workspaceIDs []string) ([]workspaceRiskDetail, error) {
@@ -555,10 +572,12 @@ func collectWorkspaceRiskDetails(ctx context.Context, db *sql.DB, root string, w
 			return nil, fmt.Errorf("list workspace repos for %s: %w", workspaceID, err)
 		}
 		risk, perRepo := inspectWorkspaceRepoRisk(ctx, root, workspaceID, repos)
+		plans := collectCloseRepoPlanDetails(ctx, root, workspaceID, repos)
 		out = append(out, workspaceRiskDetail{
-			id:      workspaceID,
-			risk:    risk,
-			perRepo: perRepo,
+			id:        workspaceID,
+			risk:      risk,
+			perRepo:   perRepo,
+			repoPlans: plans,
 		})
 	}
 	return out, nil
@@ -574,48 +593,99 @@ func hasNonCleanRisk(items []workspaceRiskDetail) bool {
 }
 
 func printRiskSection(w io.Writer, items []workspaceRiskDetail, useColor bool) {
-	body := make([]string, 0, len(items)*2+6)
-	cleanCount := 0
-	warningCount := 0
-	dangerCount := 0
-	body = append(body, fmt.Sprintf("%s%s close %d workspaces", uiIndent, styleMuted("•", useColor), len(items)))
-	if len(items) > 0 {
-		body = append(body, fmt.Sprintf("%s%s workspaces:", uiIndent, styleMuted("•", useColor)))
-	}
-
-	for i, it := range items {
-		switch it.risk {
-		case workspacerisk.WorkspaceRiskClean:
-			cleanCount++
-		case workspacerisk.WorkspaceRiskUnpushed, workspacerisk.WorkspaceRiskDiverged:
-			warningCount++
-		default:
-			dangerCount++
-		}
-
-		connector := "├─ "
-		prefix := styleMuted("│  ", useColor)
-		if i == len(items)-1 {
-			connector = "└─ "
-			prefix = "   "
-		}
-		body = append(body, fmt.Sprintf("%s%s%s", uiIndent+uiIndent, styleMuted(connector, useColor), it.id))
-		body = append(body, fmt.Sprintf("%s%s%s %s", uiIndent+uiIndent, prefix, styleMuted("risk:", useColor), renderWorkspaceRiskBadge(it.risk, useColor)))
-		for _, repo := range it.perRepo {
-			if repo.state == workspacerisk.RepoStateClean {
-				continue
-			}
-			body = append(body, fmt.Sprintf("%s%s%s  %s %s", uiIndent+uiIndent, prefix, styleMuted("repos:", useColor), repo.alias, renderRepoRiskState(repo.state, useColor)))
+	body := make([]string, 0, len(items)*8+4)
+	if len(items) == 1 {
+		body = append(body, fmt.Sprintf("%s%s close workspace %s", uiIndent, styleMuted("•", useColor), items[0].id))
+		body = append(body, fmt.Sprintf("%s%s %s:", uiIndent, styleMuted("•", useColor), styleAccent("repos", useColor)))
+		appendCloseRepoPlanBody(&body, items[0], useColor)
+	} else {
+		body = append(body, fmt.Sprintf("%s%s close %d workspaces", uiIndent, styleMuted("•", useColor), len(items)))
+		for _, it := range items {
+			body = append(body, fmt.Sprintf("%s%s workspace %s", uiIndent, styleMuted("•", useColor), it.id))
+			body = append(body, fmt.Sprintf("%s%s %s:", uiIndent, styleMuted("•", useColor), styleAccent("repos", useColor)))
+			appendCloseRepoPlanBody(&body, it, useColor)
 		}
 	}
-	body = append(body, "")
-	body = append(body, fmt.Sprintf("%s%s %s clean=%d warning=%d danger=%d", uiIndent, styleMuted("•", useColor), styleAccent("summary:", useColor), cleanCount, warningCount, dangerCount))
-	body = append(body, fmt.Sprintf("%s%s %s all-or-nothing close", uiIndent, styleMuted("•", useColor), styleAccent("policy:", useColor)))
 
 	printSection(w, styleBold("Plan:", useColor), body, sectionRenderOptions{
 		blankAfterHeading: false,
 		trailingBlank:     true,
 	})
+}
+
+func appendCloseRepoPlanBody(body *[]string, item workspaceRiskDetail, useColor bool) {
+	plans := item.repoPlans
+	if len(plans) == 0 {
+		plans = make([]closeRepoPlanDetail, 0, len(item.perRepo))
+		for _, r := range item.perRepo {
+			plans = append(plans, closeRepoPlanDetail{
+				repoKey: r.alias,
+				alias:   r.alias,
+				state:   r.state,
+			})
+		}
+	}
+	for i, p := range plans {
+		connector := "├─ "
+		prefix := styleMuted("│  ", useColor)
+		if i == len(plans)-1 {
+			connector = "└─ "
+			prefix = "   "
+		}
+		branchSuffix := ""
+		if strings.TrimSpace(p.branch) != "" {
+			branchSuffix = fmt.Sprintf(" (%s%s)", styleMuted("branch: ", useColor), p.branch)
+		}
+		*body = append(*body, fmt.Sprintf("%s%s%s%s", uiIndent+uiIndent, styleMuted(connector, useColor), p.repoKey, branchSuffix))
+		*body = append(*body, fmt.Sprintf("%s%s%s %s", uiIndent+uiIndent, prefix, styleMuted("risk:", useColor), renderClosePlanRiskLabel(p, useColor)))
+		*body = append(*body, fmt.Sprintf("%s%s%s %s%s %s%s %s%s",
+			uiIndent+uiIndent,
+			prefix,
+			styleMuted("sync:", useColor),
+			styleMuted("upstream=", useColor),
+			renderPlanUpstreamLabel(p.upstream, useColor),
+			styleMuted("ahead=", useColor),
+			renderPlanAheadBehindValue(p.ahead, useColor),
+			styleMuted("behind=", useColor),
+			renderPlanAheadBehindValue(p.behind, useColor),
+		))
+		if len(p.files) > 0 {
+			*body = append(*body, fmt.Sprintf("%s%s%s", uiIndent+uiIndent, prefix, styleMuted("files:", useColor)))
+			renderLines := p.files
+			if useColor && len(p.filesANSI) == len(p.files) {
+				renderLines = p.filesANSI
+			}
+			for _, f := range renderLines {
+				*body = append(*body, fmt.Sprintf("%s%s  %s", uiIndent+uiIndent, prefix, f))
+			}
+		}
+	}
+}
+
+func renderClosePlanRiskLabel(detail closeRepoPlanDetail, useColor bool) string {
+	riskText := string(detail.state)
+	switch detail.state {
+	case workspacerisk.RepoStateClean:
+		return styleMuted(riskText, useColor)
+	case workspacerisk.RepoStateUnpushed, workspacerisk.RepoStateDiverged:
+		return styleWarn(riskText, useColor)
+	default:
+		base := styleError(riskText, useColor)
+		parts := make([]string, 0, 3)
+		if detail.staged > 0 {
+			parts = append(parts, renderPlanDirtyCounter("staged", detail.staged, useColor))
+		}
+		if detail.unstaged > 0 {
+			parts = append(parts, renderPlanDirtyCounter("unstaged", detail.unstaged, useColor))
+		}
+		if detail.untracked > 0 {
+			parts = append(parts, renderPlanDirtyCounter("untracked", detail.untracked, useColor))
+		}
+		if len(parts) == 0 {
+			return base
+		}
+		return fmt.Sprintf("%s (%s)", base, strings.Join(parts, " "))
+	}
 }
 
 func renderCloseRiskApplyPrompt(useColor bool) string {
@@ -639,6 +709,40 @@ func inspectWorkspaceRepoRisk(ctx context.Context, root string, workspaceID stri
 		items = append(items, repoRiskItem{alias: r.Alias, state: state})
 	}
 	return workspacerisk.Aggregate(states), items
+}
+
+func collectCloseRepoPlanDetails(ctx context.Context, root string, workspaceID string, repos []statestore.WorkspaceRepo) []closeRepoPlanDetail {
+	details := make([]closeRepoPlanDetail, 0, len(repos))
+	for _, r := range repos {
+		repoKey := strings.TrimSpace(r.RepoKey)
+		if repoKey == "" {
+			repoKey = strings.TrimSpace(r.Alias)
+		}
+		worktreePath := filepath.Join(root, "workspaces", workspaceID, "repos", r.Alias)
+		d := closeRepoPlanDetail{
+			repoKey: repoKey,
+			alias:   strings.TrimSpace(r.Alias),
+			branch:  strings.TrimSpace(r.Branch),
+			state:   workspacerisk.RepoStateUnknown,
+		}
+		if !r.MissingAt.Valid {
+			status := inspectGitRepoStatus(ctx, worktreePath)
+			d.state = workspacerisk.ClassifyRepoStatus(status)
+			d.upstream = strings.TrimSpace(status.Upstream)
+			d.ahead = status.AheadCount
+			d.behind = status.BehindCount
+			d.branch = detectBranchForClose(ctx, worktreePath, d.branch)
+			d.staged, d.unstaged, d.untracked, d.files, d.filesANSI = collectGitShortStatusSummary(ctx, worktreePath)
+		}
+		details = append(details, d)
+	}
+	slices.SortFunc(details, func(a, b closeRepoPlanDetail) int {
+		if a.repoKey != b.repoKey {
+			return strings.Compare(a.repoKey, b.repoKey)
+		}
+		return strings.Compare(a.alias, b.alias)
+	})
+	return details
 }
 
 func inspectGitRepoStatus(ctx context.Context, dir string) workspacerisk.RepoStatus {

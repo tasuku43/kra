@@ -1,13 +1,16 @@
 Plan:
   • close 2 workspaces
-  • workspaces:
-    ├─ WS1
-    │  risk: [dirty]
-    │  repos:  repo-a [dirty]
-    │  repos:  repo-b [unpushed]
-    └─ WS2
-       risk: [clean]
-
-  • summary: clean=1 warning=0 danger=1
-  • policy: all-or-nothing close
+  • workspace WS1
+  • repos:
+    ├─ repo-a
+    │  risk: dirty
+    │  sync: upstream=(none) ahead=0 behind=0
+    └─ repo-b
+       risk: unpushed
+       sync: upstream=(none) ahead=0 behind=0
+  • workspace WS2
+  • repos:
+    └─ repo-c
+       risk: clean
+       sync: upstream=(none) ahead=0 behind=0
 
