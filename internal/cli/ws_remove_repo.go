@@ -228,7 +228,15 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 	}
 
 	if outputFormat == "json" {
-		return c.runWSRemoveRepoJSON(root, workspaceID, db, candidates, repoKeysFromFlag, yes, force)
+		return c.runWSRemoveRepoJSON(root, workspaceID, wd, db, candidates, repoKeysFromFlag, yes, force)
+	}
+
+	shouldShiftCWD := isPathInside(filepath.Join(root, "workspaces", workspaceID), wd)
+	if shouldShiftCWD {
+		if err := os.Chdir(root); err != nil {
+			fmt.Fprintf(c.Err, "shift process cwd to GIONX_ROOT: %v\n", err)
+			return exitError
+		}
 	}
 
 	selected, err := c.promptRemoveRepoSelection(candidates)
@@ -280,11 +288,32 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 	}
 
 	printRemoveRepoResult(c.Out, selected, useColorOut)
+	if shouldShiftCWD {
+		if err := emitShellActionCD(root); err != nil {
+			fmt.Fprintf(c.Err, "write shell action: %v\n", err)
+			return exitError
+		}
+	}
 	return exitOK
 }
 
-func (c *CLI) runWSRemoveRepoJSON(root string, workspaceID string, db *sql.DB, candidates []removeRepoCandidate, repoKeys []string, yes bool, force bool) int {
+func (c *CLI) runWSRemoveRepoJSON(root string, workspaceID string, wd string, db *sql.DB, candidates []removeRepoCandidate, repoKeys []string, yes bool, force bool) int {
 	_ = yes
+	shouldShiftCWD := isPathInside(filepath.Join(root, "workspaces", workspaceID), wd)
+	if shouldShiftCWD {
+		if err := os.Chdir(root); err != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "remove-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("shift process cwd to GIONX_ROOT: %v", err),
+				},
+			})
+			return exitError
+		}
+	}
 	byRepoKey := make(map[string]removeRepoCandidate, len(candidates))
 	for _, cand := range candidates {
 		byRepoKey[cand.RepoKey] = cand
@@ -366,6 +395,20 @@ func (c *CLI) runWSRemoveRepoJSON(root string, workspaceID string, db *sql.DB, c
 			"repos":   repos,
 		},
 	})
+	if shouldShiftCWD {
+		if err := emitShellActionCD(root); err != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "remove-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("write shell action: %v", err),
+				},
+			})
+			return exitError
+		}
+	}
 	return exitOK
 }
 

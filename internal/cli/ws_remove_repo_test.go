@@ -154,6 +154,85 @@ func TestCLI_WS_RemoveRepo_JSON_RiskyRequiresForce(t *testing.T) {
 	}
 }
 
+func TestCLI_WS_RemoveRepo_JSON_ShiftsCWDWhenInsideTargetWorkspace(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	repoSpec := createTestRemoteRepoSpec(t)
+	_, repoKey, alias := seedRepoPoolAndState(t, env, repoSpec)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
+		if code := c.Run([]string{"ws", "--act", "add-repo", "WS1"}); code != exitOK {
+			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("Getwd() error: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(origWD) })
+
+	worktreePath := filepath.Join(env.Root, "workspaces", "WS1", "repos", alias)
+	if err := os.Chdir(worktreePath); err != nil {
+		t.Fatalf("Chdir(%s) error: %v", worktreePath, err)
+	}
+
+	actionFile := filepath.Join(t.TempDir(), "action.sh")
+	t.Setenv(shellActionFileEnv, actionFile)
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	code := c.Run([]string{
+		"ws", "--act", "remove-repo",
+		"--format", "json",
+		"--id", "WS1",
+		"--repo", repoKey,
+		"--yes",
+	})
+	if code != exitOK {
+		t.Fatalf("ws remove-repo json exit code = %d, want %d (stderr=%q)", code, exitOK, errBuf.String())
+	}
+
+	afterWD, wdErr := os.Getwd()
+	if wdErr != nil {
+		t.Fatalf("Getwd() after remove-repo error: %v", wdErr)
+	}
+	afterResolved := afterWD
+	if resolved, err := filepath.EvalSymlinks(afterWD); err == nil {
+		afterResolved = resolved
+	}
+	rootResolved := env.Root
+	if resolved, err := filepath.EvalSymlinks(env.Root); err == nil {
+		rootResolved = resolved
+	}
+	if afterResolved != rootResolved {
+		t.Fatalf("process cwd = %q (resolved=%q), want %q (resolved=%q)", afterWD, afterResolved, env.Root, rootResolved)
+	}
+
+	actionBytes, actionErr := os.ReadFile(actionFile)
+	if actionErr != nil {
+		t.Fatalf("read action file: %v", actionErr)
+	}
+	action := string(actionBytes)
+	if !strings.Contains(action, env.Root) {
+		t.Fatalf("shell action should include root path: %q", action)
+	}
+}
+
 func TestPrintRemoveRepoResult_UsesSameSuccessPatternAsAddRepo(t *testing.T) {
 	var out bytes.Buffer
 	printRemoveRepoResult(&out, []removeRepoCandidate{

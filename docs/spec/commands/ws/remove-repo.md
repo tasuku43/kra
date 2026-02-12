@@ -62,6 +62,8 @@ This command is the operational counterpart of `gionx ws --act add-repo`.
 4. Apply (all-or-nothing)
   - remove workspace repo bindings from state/index
   - delete selected worktree directories under `workspaces/<id>/repos/`
+  - if current process cwd is inside target `workspaces/<id>/`, shift cwd to `GIONX_ROOT` before destructive removal
+  - when cwd shift happened, emit shell action `cd <GIONX_ROOT>` after successful apply
   - keep repo pool entries and bare repos untouched
   - on failure, abort with error
 
