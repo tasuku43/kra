@@ -1,6 +1,6 @@
 ---
 title: "`kra ws select --multi`"
-status: planned
+status: implemented
 ---
 
 # `kra ws select --multi --act <close|reopen|purge> [--archived] [--commit] [--format human|json] [--yes] [--continue-on-error]`
@@ -40,11 +40,10 @@ Add multi-select execution mode to the existing workspace selector entrypoint wi
 ## Output
 
 - Human mode:
-  - `Plan:` with action + selected count
-  - `Result:` summary totals and per-workspace lines
+  - selected action prints its own sections per workspace (`Risk:`/`Result:` as defined by each action command).
+  - `ws select --multi` itself does not print an additional aggregate `Result:` block.
 - JSON mode:
-  - shared envelope (`ok`, `action`, `result`, `error`)
-  - `result.items[]` with workspace ID + status + message
+  - not implemented in MVP scope for `ws select --multi`.
 
 ## Safety / commit scope
 

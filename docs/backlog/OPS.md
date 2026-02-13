@@ -14,7 +14,7 @@ status: planned
   - Depends: none
   - Serial: yes
 
-- [ ] OPS-002: Workspace multi-select action (`ws select --multi`)
+- [x] OPS-002: Workspace multi-select action (`ws select --multi`)
   - What: extend existing selector to support multi-selection with explicit action binding.
   - Specs:
     - `docs/spec/commands/ws/select-multi.md`
