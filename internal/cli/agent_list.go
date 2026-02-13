@@ -23,12 +23,15 @@ type agentListOptions struct {
 }
 
 type agentActivityRecord struct {
-	WorkspaceID     string `json:"workspace_id"`
-	AgentKind       string `json:"agent_kind"`
-	StartedAt       int64  `json:"started_at"`
-	LastHeartbeatAt int64  `json:"last_heartbeat_at"`
-	Status          string `json:"status"`
-	LogPath         string `json:"log_path"`
+	WorkspaceID        string `json:"workspace_id"`
+	RepoKey            string `json:"repo_key"`
+	AgentKind          string `json:"agent_kind"`
+	TaskSummary        string `json:"task_summary"`
+	InstructionSummary string `json:"instruction_summary"`
+	StartedAt          int64  `json:"started_at"`
+	LastHeartbeatAt    int64  `json:"last_heartbeat_at"`
+	Status             string `json:"status"`
+	LogPath            string `json:"log_path"`
 }
 
 func (c *CLI) runAgentList(args []string) int {
@@ -139,8 +142,14 @@ func loadAgentActivities(root string) ([]agentActivityRecord, error) {
 	}
 	for i := range records {
 		records[i].WorkspaceID = strings.TrimSpace(records[i].WorkspaceID)
+		records[i].RepoKey = strings.TrimSpace(records[i].RepoKey)
 		records[i].AgentKind = strings.TrimSpace(records[i].AgentKind)
+		records[i].TaskSummary = strings.TrimSpace(records[i].TaskSummary)
+		records[i].InstructionSummary = strings.TrimSpace(records[i].InstructionSummary)
 		records[i].Status = strings.TrimSpace(strings.ToLower(records[i].Status))
+		if records[i].Status == "" {
+			records[i].Status = "unknown"
+		}
 		records[i].LogPath = strings.TrimSpace(records[i].LogPath)
 	}
 
@@ -173,13 +182,16 @@ func saveAgentActivities(root string, records []agentActivityRecord) error {
 }
 
 func printAgentListTSV(out io.Writer, rows []agentActivityRecord) {
-	fmt.Fprintln(out, "workspace_id\tagent_kind\tstarted_at\tlast_heartbeat_at\tstatus\tlog_path")
+	fmt.Fprintln(out, "workspace_id\trepo_key\tagent_kind\ttask_summary\tinstruction_summary\tstarted_at\tlast_heartbeat_at\tstatus\tlog_path")
 	for _, r := range rows {
 		fmt.Fprintf(
 			out,
-			"%s\t%s\t%s\t%s\t%s\t%s\n",
+			"%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			r.WorkspaceID,
+			r.RepoKey,
 			r.AgentKind,
+			r.TaskSummary,
+			r.InstructionSummary,
 			formatUnixTS(r.StartedAt),
 			formatUnixTS(r.LastHeartbeatAt),
 			r.Status,
@@ -208,6 +220,15 @@ func printAgentListHuman(out io.Writer, rows []agentActivityRecord, useColor boo
 			r.Status,
 			formatUnixTS(r.LastHeartbeatAt),
 		)
+		if r.RepoKey != "" {
+			line += "  repo:" + r.RepoKey
+		}
+		if r.TaskSummary != "" {
+			line += "  task:" + r.TaskSummary
+		}
+		if r.InstructionSummary != "" {
+			line += "  instruction:" + r.InstructionSummary
+		}
 		if r.LogPath != "" {
 			line += "  log:" + r.LogPath
 		}

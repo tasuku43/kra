@@ -13,7 +13,11 @@ import (
 
 type agentRunOptions struct {
 	workspaceID string
+	repoKey     string
 	agentKind   string
+	taskSummary string
+	instruction string
+	status      string
 	logPath     string
 }
 
@@ -48,12 +52,15 @@ func (c *CLI) runAgentRun(args []string) int {
 
 	now := time.Now().Unix()
 	newRecord := agentActivityRecord{
-		WorkspaceID:     opts.workspaceID,
-		AgentKind:       opts.agentKind,
-		StartedAt:       now,
-		LastHeartbeatAt: now,
-		Status:          "running",
-		LogPath:         opts.logPath,
+		WorkspaceID:        opts.workspaceID,
+		RepoKey:            opts.repoKey,
+		AgentKind:          opts.agentKind,
+		TaskSummary:        opts.taskSummary,
+		InstructionSummary: opts.instruction,
+		StartedAt:          now,
+		LastHeartbeatAt:    now,
+		Status:             opts.status,
+		LogPath:            opts.logPath,
 	}
 
 	updated := false
@@ -78,7 +85,7 @@ func (c *CLI) runAgentRun(args []string) int {
 }
 
 func parseAgentRunOptions(args []string) (agentRunOptions, error) {
-	opts := agentRunOptions{}
+	opts := agentRunOptions{status: "running"}
 	rest := append([]string{}, args...)
 	for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
 		arg := rest[0]
@@ -94,6 +101,15 @@ func parseAgentRunOptions(args []string) (agentRunOptions, error) {
 			}
 			opts.workspaceID = strings.TrimSpace(rest[1])
 			rest = rest[2:]
+		case strings.HasPrefix(arg, "--repo="):
+			opts.repoKey = strings.TrimSpace(strings.TrimPrefix(arg, "--repo="))
+			rest = rest[1:]
+		case arg == "--repo":
+			if len(rest) < 2 {
+				return agentRunOptions{}, fmt.Errorf("--repo requires a value")
+			}
+			opts.repoKey = strings.TrimSpace(rest[1])
+			rest = rest[2:]
 		case strings.HasPrefix(arg, "--kind="):
 			opts.agentKind = strings.TrimSpace(strings.TrimPrefix(arg, "--kind="))
 			rest = rest[1:]
@@ -102,6 +118,33 @@ func parseAgentRunOptions(args []string) (agentRunOptions, error) {
 				return agentRunOptions{}, fmt.Errorf("--kind requires a value")
 			}
 			opts.agentKind = strings.TrimSpace(rest[1])
+			rest = rest[2:]
+		case strings.HasPrefix(arg, "--task="):
+			opts.taskSummary = strings.TrimSpace(strings.TrimPrefix(arg, "--task="))
+			rest = rest[1:]
+		case arg == "--task":
+			if len(rest) < 2 {
+				return agentRunOptions{}, fmt.Errorf("--task requires a value")
+			}
+			opts.taskSummary = strings.TrimSpace(rest[1])
+			rest = rest[2:]
+		case strings.HasPrefix(arg, "--instruction="):
+			opts.instruction = strings.TrimSpace(strings.TrimPrefix(arg, "--instruction="))
+			rest = rest[1:]
+		case arg == "--instruction":
+			if len(rest) < 2 {
+				return agentRunOptions{}, fmt.Errorf("--instruction requires a value")
+			}
+			opts.instruction = strings.TrimSpace(rest[1])
+			rest = rest[2:]
+		case strings.HasPrefix(arg, "--status="):
+			opts.status = strings.TrimSpace(strings.ToLower(strings.TrimPrefix(arg, "--status=")))
+			rest = rest[1:]
+		case arg == "--status":
+			if len(rest) < 2 {
+				return agentRunOptions{}, fmt.Errorf("--status requires a value")
+			}
+			opts.status = strings.TrimSpace(strings.ToLower(rest[1]))
 			rest = rest[2:]
 		case strings.HasPrefix(arg, "--log-path="):
 			opts.logPath = strings.TrimSpace(strings.TrimPrefix(arg, "--log-path="))
@@ -124,6 +167,11 @@ func parseAgentRunOptions(args []string) (agentRunOptions, error) {
 	}
 	if opts.agentKind == "" {
 		return agentRunOptions{}, fmt.Errorf("--kind is required")
+	}
+	switch opts.status {
+	case "running", "waiting_user", "thinking", "blocked":
+	default:
+		return agentRunOptions{}, fmt.Errorf("unsupported --status: %q (supported: running, waiting_user, thinking, blocked)", opts.status)
 	}
 	return opts, nil
 }

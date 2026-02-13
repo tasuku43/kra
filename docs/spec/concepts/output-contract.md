@@ -40,6 +40,11 @@ Implemented code classes in this phase:
 - Human `Result:` sections are not required to mirror JSON field names.
 - Semantics (success/failure totals and target IDs) should remain equivalent.
 
+## TSV naming policy
+
+- For commands with machine-readable TSV output, column names should use stable `snake_case`.
+- When JSON field names exist for the same data, TSV column names should align with those JSON names.
+
 ## Applied commands (OPS-003)
 
 - `init`

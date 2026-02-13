@@ -441,13 +441,17 @@ Subcommands:
 
 func (c *CLI) printAgentRunUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra agent run --workspace <id> --kind <agent-kind> [--log-path <path>]
+  kra agent run --workspace <id> --kind <agent-kind> [--repo <repo-key>] [--task <summary>] [--instruction <summary>] [--status <running|waiting_user|thinking|blocked>] [--log-path <path>]
 
 Start/replace tracked running agent activity for one workspace.
 
 Options:
   --workspace       Workspace ID (required)
   --kind            Agent kind label (required)
+  --repo            Optional repository key in workspace scope
+  --task            Optional short work summary
+  --instruction     Optional short instruction summary
+  --status          Initial live status (default: running)
   --log-path        Optional log path for operator navigation
 `)
 }
@@ -473,7 +477,7 @@ List tracked agent activities managed by kra in current KRA_ROOT.
 
 Options:
   --workspace       Filter by workspace ID
-  --format          Output format (default: human)
+  --format          Output format (default: human; tsv columns include repo/task/instruction summaries)
 `)
 }
 

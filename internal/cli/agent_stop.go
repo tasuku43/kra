@@ -56,7 +56,9 @@ func (c *CLI) runAgentStop(args []string) int {
 		fmt.Fprintf(c.Err, "agent activity not found for workspace: %s\n", opts.workspaceID)
 		return exitError
 	}
-	if records[idx].Status != "running" {
+	switch records[idx].Status {
+	case "running", "waiting_user", "thinking", "blocked":
+	default:
 		fmt.Fprintf(c.Err, "agent activity is not running for workspace: %s (status=%s)\n", opts.workspaceID, records[idx].Status)
 		return exitError
 	}

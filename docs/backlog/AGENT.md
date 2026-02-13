@@ -42,7 +42,7 @@ status: planned
   - Depends: AGENT-010
   - Parallel: yes
 
-- [ ] AGENT-040: Agent activity v2 state model (workspace/repo/task/instruction summary)
+- [x] AGENT-040: Agent activity v2 state model (workspace/repo/task/instruction summary)
   - What: extend activity schema for practical operations visibility:
     workspace + repo scope, task summary, instruction summary, and richer runtime states
     (`running`/`waiting_user`/`thinking`/`blocked`/`succeeded`/`failed`/`unknown`).

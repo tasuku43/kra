@@ -79,8 +79,8 @@ func TestCLI_AgentList_FilterTSV(t *testing.T) {
 		t.Fatalf("mkdir state dir: %v", err)
 	}
 	content := `[
-  {"workspace_id":"WS-1","agent_kind":"codex","started_at":100,"last_heartbeat_at":110,"status":"running","log_path":"logs/ws1.log"},
-  {"workspace_id":"WS-2","agent_kind":"copilot","started_at":90,"last_heartbeat_at":95,"status":"failed","log_path":"logs/ws2.log"}
+  {"workspace_id":"WS-1","repo_key":"repo/a","agent_kind":"codex","task_summary":"fix flow","instruction_summary":"apply patch","started_at":100,"last_heartbeat_at":110,"status":"running","log_path":"logs/ws1.log"},
+  {"workspace_id":"WS-2","repo_key":"repo/b","agent_kind":"copilot","task_summary":"review","instruction_summary":"check tests","started_at":90,"last_heartbeat_at":95,"status":"failed","log_path":"logs/ws2.log"}
 ]`
 	if err := os.WriteFile(filepath.Join(stateDir, agentActivitiesFilename), []byte(content), 0o644); err != nil {
 		t.Fatalf("write activity file: %v", err)
@@ -94,10 +94,10 @@ func TestCLI_AgentList_FilterTSV(t *testing.T) {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "workspace_id\tagent_kind\tstarted_at\tlast_heartbeat_at\tstatus\tlog_path") {
+	if !strings.Contains(got, "workspace_id\trepo_key\tagent_kind\ttask_summary\tinstruction_summary\tstarted_at\tlast_heartbeat_at\tstatus\tlog_path") {
 		t.Fatalf("tsv header missing: %q", got)
 	}
-	if !strings.Contains(got, "WS-1\tcodex\t100\t110\trunning\tlogs/ws1.log") {
+	if !strings.Contains(got, "WS-1\trepo/a\tcodex\tfix flow\tapply patch\t100\t110\trunning\tlogs/ws1.log") {
 		t.Fatalf("filtered row missing: %q", got)
 	}
 	if strings.Contains(got, "WS-2\t") {
@@ -135,6 +135,21 @@ func TestCLI_AgentRun_RequiresWorkspaceAndKind(t *testing.T) {
 	}
 }
 
+func TestCLI_AgentRun_RejectsUnsupportedLiveStatus(t *testing.T) {
+	prepareCurrentRootForTest(t)
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"agent", "run", "--workspace", "WS-1", "--kind", "codex", "--status", "succeeded"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(err.String(), "unsupported --status") {
+		t.Fatalf("stderr should include unsupported status error: %q", err.String())
+	}
+}
+
 func TestCLI_AgentRun_WritesRunningRecord(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	var out bytes.Buffer
@@ -163,8 +178,50 @@ func TestCLI_AgentRun_WritesRunningRecord(t *testing.T) {
 	if rows[0].WorkspaceID != "WS-1" || rows[0].AgentKind != "codex" || rows[0].Status != "running" {
 		t.Fatalf("unexpected record: %+v", rows[0])
 	}
+	if rows[0].RepoKey != "" || rows[0].TaskSummary != "" || rows[0].InstructionSummary != "" {
+		t.Fatalf("extended fields should be empty by default: %+v", rows[0])
+	}
 	if rows[0].StartedAt <= 0 || rows[0].LastHeartbeatAt <= 0 {
 		t.Fatalf("timestamps should be positive: %+v", rows[0])
+	}
+}
+
+func TestCLI_AgentRun_WritesExtendedFields(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{
+		"agent", "run",
+		"--workspace", "WS-1",
+		"--repo", "repo/api",
+		"--kind", "codex",
+		"--task", "fix login flow",
+		"--instruction", "apply focused patch",
+		"--status", "waiting_user",
+		"--log-path", "logs/ws1.log",
+	})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+
+	b, readErr := os.ReadFile(filepath.Join(root, ".kra", "state", agentActivitiesFilename))
+	if readErr != nil {
+		t.Fatalf("read activity file: %v", readErr)
+	}
+	var rows []agentActivityRecord
+	if unmarshalErr := json.Unmarshal(b, &rows); unmarshalErr != nil {
+		t.Fatalf("unmarshal activity file: %v", unmarshalErr)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("record count=%d, want=1", len(rows))
+	}
+	if rows[0].RepoKey != "repo/api" || rows[0].TaskSummary != "fix login flow" || rows[0].InstructionSummary != "apply focused patch" {
+		t.Fatalf("unexpected v2 fields: %+v", rows[0])
+	}
+	if rows[0].Status != "waiting_user" {
+		t.Fatalf("status=%q, want=waiting_user", rows[0].Status)
 	}
 }
 
@@ -299,6 +356,36 @@ func TestCLI_AgentStop_UpdatesStatusAndHeartbeat(t *testing.T) {
 	}
 	if rows[0].LastHeartbeatAt <= 100 {
 		t.Fatalf("last_heartbeat_at should increase, got=%d", rows[0].LastHeartbeatAt)
+	}
+}
+
+func TestCLI_AgentStop_UpdatesFromWaitingUserStatus(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	stateDir := filepath.Join(root, ".kra", "state")
+	if err := os.MkdirAll(stateDir, 0o755); err != nil {
+		t.Fatalf("mkdir state dir: %v", err)
+	}
+	content := `[
+  {"workspace_id":"WS-1","agent_kind":"codex","started_at":100,"last_heartbeat_at":100,"status":"waiting_user","log_path":"logs/ws1.log"}
+]`
+	if err := os.WriteFile(filepath.Join(stateDir, agentActivitiesFilename), []byte(content), 0o644); err != nil {
+		t.Fatalf("write activity file: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"agent", "stop", "--workspace", "WS-1", "--status", "failed"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+
+	rows, loadErr := loadAgentActivities(root)
+	if loadErr != nil {
+		t.Fatalf("load activities: %v", loadErr)
+	}
+	if rows[0].Status != "failed" {
+		t.Fatalf("status=%q, want=failed", rows[0].Status)
 	}
 }
 
