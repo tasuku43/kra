@@ -2,14 +2,24 @@ version: "3"
 
 tasks:
   build:
-    desc: Build kra binary at ./kra
+    desc: Build stable kra binary at ./kra
     cmds:
       - go build -o kra ./cmd/kra
 
+  build-exp:
+    desc: Build experimental kra binary at ./kra
+    cmds:
+      - go build -tags experimental -o kra ./cmd/kra-exp
+
   run:
-    desc: Run kra from source
+    desc: Run stable kra from source
     cmds:
       - go run ./cmd/kra {{.CLI_ARGS}}
+
+  run-exp:
+    desc: Run experimental kra from source
+    cmds:
+      - go run -tags experimental ./cmd/kra-exp {{.CLI_ARGS}}
 
   test:
     desc: Run all tests

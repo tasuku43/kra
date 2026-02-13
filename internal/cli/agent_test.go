@@ -1,3 +1,5 @@
+//go:build experimental
+
 package cli
 
 import (
@@ -23,7 +25,7 @@ func TestCLI_RootHelp_HidesAgent(t *testing.T) {
 	}
 }
 
-func TestCLI_AgentList_AvailableWithoutExperimentFlag(t *testing.T) {
+func TestCLI_AgentList_AvailableInExperimentalBuild(t *testing.T) {
 	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
 	var err bytes.Buffer
