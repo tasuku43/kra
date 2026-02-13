@@ -109,7 +109,7 @@ func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *te
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "--act", "close", "WS1"})
+		code := c.Run([]string{"ws", "--act", "close", "--commit", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
@@ -387,7 +387,7 @@ func TestCLI_WS_Close_AllowsUnrelatedPreStagedChangesOutsideWorkspaceAllowlist(t
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "--act", "close", "WS1"})
+		code := c.Run([]string{"ws", "--act", "close", "--commit", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
