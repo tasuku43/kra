@@ -387,18 +387,18 @@ func writeWSDashboardJSON(out io.Writer, result wsDashboardResult) int {
 func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor bool) {
 	header := []string{
 		fmt.Sprintf("%s%s %s", uiIndent, styleMuted("•", useColor), result.Root),
-		fmt.Sprintf("%s%s context: %s", uiIndent, styleMuted("•", useColor), result.Context),
-		fmt.Sprintf("%s%s generated_at: %d", uiIndent, styleMuted("•", useColor), result.GeneratedAt),
+		fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleAccent("context", useColor), result.Context),
+		fmt.Sprintf("%s%s %s: %d", uiIndent, styleMuted("•", useColor), styleMuted("generated_at", useColor), result.GeneratedAt),
 	}
-	printSection(out, "Dashboard:", header, sectionRenderOptions{
+	printSection(out, styleBold("Dashboard:", useColor), header, sectionRenderOptions{
 		blankAfterHeading: true,
 		trailingBlank:     true,
 	})
 
 	summary := []string{
-		fmt.Sprintf("%s%s active: %d", uiIndent, styleMuted("•", useColor), result.Summary.Active),
-		fmt.Sprintf("%s%s archived: %d", uiIndent, styleMuted("•", useColor), result.Summary.Archived),
-		fmt.Sprintf("%s%s running_agents: %d", uiIndent, styleMuted("•", useColor), result.Summary.RunningAgent),
+		fmt.Sprintf("%s%s %s: %d", uiIndent, styleMuted("•", useColor), styleAccent("active", useColor), result.Summary.Active),
+		fmt.Sprintf("%s%s %s: %d", uiIndent, styleMuted("•", useColor), styleMuted("archived", useColor), result.Summary.Archived),
+		fmt.Sprintf("%s%s %s: %d", uiIndent, styleMuted("•", useColor), styleAccent("running_agents", useColor), result.Summary.RunningAgent),
 		fmt.Sprintf("%s%s risk: clean=%d warning=%d danger=%d unknown=%d",
 			uiIndent,
 			styleMuted("•", useColor),
@@ -408,7 +408,7 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 			result.Summary.RiskTotals[string(workspacerisk.WorkspaceRiskUnknown)],
 		),
 	}
-	printSection(out, "Summary:", summary, sectionRenderOptions{
+	printSection(out, styleBold("Summary:", useColor), summary, sectionRenderOptions{
 		blankAfterHeading: true,
 		trailingBlank:     true,
 	})
@@ -418,31 +418,37 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 		rows = append(rows, fmt.Sprintf("%s(none)", uiIndent))
 	} else {
 		for _, row := range result.Workspaces {
-			rows = append(rows, fmt.Sprintf(
-				"%s%s %s: %s  risk:%s  repos:%d  agent:%s",
+			line := fmt.Sprintf(
+				"%s%s %s: %s  %s:%s  %s:%d",
 				uiIndent,
 				styleMuted("•", useColor),
 				row.ID,
 				formatWorkspaceTitle(row.Title),
-				string(row.Risk),
+				styleMuted("risk", useColor),
+				renderDashboardWorkspaceRisk(row.Risk, useColor),
+				styleMuted("repos", useColor),
 				row.RepoCount,
-				row.AgentStatus,
-			))
+			)
+			normalizedAgent := strings.TrimSpace(strings.ToLower(row.AgentStatus))
+			if normalizedAgent != "" && normalizedAgent != "none" {
+				line += fmt.Sprintf("  %s:%s", styleMuted("agent", useColor), renderDashboardAgentStatus(row.AgentStatus, useColor))
+			}
+			rows = append(rows, line)
 		}
 	}
-	printSection(out, fmt.Sprintf("Workspaces(%s):", result.Scope), rows, sectionRenderOptions{
+	printSection(out, renderWorkspacesTitle(result.Scope, useColor), rows, sectionRenderOptions{
 		blankAfterHeading: true,
 		trailingBlank:     true,
 	})
 
 	if result.Detail != nil {
 		lines := make([]string, 0, len(result.Detail.perRepo)+2)
-		lines = append(lines, fmt.Sprintf("%s%s workspace: %s", uiIndent, styleMuted("•", useColor), result.Detail.id))
-		lines = append(lines, fmt.Sprintf("%s%s risk: %s", uiIndent, styleMuted("•", useColor), result.Detail.risk))
+		lines = append(lines, fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleAccent("workspace", useColor), result.Detail.id))
+		lines = append(lines, fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("risk", useColor), renderDashboardWorkspaceRisk(result.Detail.risk, useColor)))
 		for _, repo := range result.Detail.perRepo {
-			lines = append(lines, fmt.Sprintf("%s%s %s (%s)", uiIndent+uiIndent, styleMuted("-", useColor), repo.alias, repo.state))
+			lines = append(lines, fmt.Sprintf("%s%s %s (%s)", uiIndent+uiIndent, styleMuted("-", useColor), repo.alias, renderRepoRiskState(repo.state, useColor)))
 		}
-		printSection(out, "Detail:", lines, sectionRenderOptions{
+		printSection(out, styleBold("Detail:", useColor), lines, sectionRenderOptions{
 			blankAfterHeading: true,
 			trailingBlank:     true,
 		})
@@ -451,11 +457,37 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 	if len(result.Warnings) > 0 {
 		lines := make([]string, 0, len(result.Warnings))
 		for _, w := range result.Warnings {
-			lines = append(lines, fmt.Sprintf("%s%s %s", uiIndent, styleMuted("•", useColor), w))
+			lines = append(lines, fmt.Sprintf("%s%s %s", uiIndent, styleWarn("•", useColor), w))
 		}
-		printSection(out, "Warnings:", lines, sectionRenderOptions{
+		printSection(out, styleBold(styleWarn("Warnings:", useColor), useColor), lines, sectionRenderOptions{
 			blankAfterHeading: true,
 			trailingBlank:     true,
 		})
+	}
+}
+
+func renderDashboardWorkspaceRisk(risk workspacerisk.WorkspaceRisk, useColor bool) string {
+	switch risk {
+	case workspacerisk.WorkspaceRiskDirty, workspacerisk.WorkspaceRiskUnknown:
+		return styleError(string(risk), useColor)
+	case workspacerisk.WorkspaceRiskDiverged, workspacerisk.WorkspaceRiskUnpushed:
+		return styleWarn(string(risk), useColor)
+	default:
+		return styleMuted(string(risk), useColor)
+	}
+}
+
+func renderDashboardAgentStatus(status string, useColor bool) string {
+	switch strings.TrimSpace(strings.ToLower(status)) {
+	case "running":
+		return styleSuccess("running", useColor)
+	case "failed":
+		return styleError("failed", useColor)
+	case "succeeded":
+		return styleInfo("succeeded", useColor)
+	case "none", "":
+		return styleMuted("none", useColor)
+	default:
+		return styleMuted(status, useColor)
 	}
 }
