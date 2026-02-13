@@ -357,6 +357,74 @@ func TestCLI_WS_List_TSVUsesCompactColumns(t *testing.T) {
 	}
 }
 
+func TestCLI_WS_List_JSON_Success(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "list", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("ws list --format json exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "ws.list" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	if got, _ := resp.Result["scope"].(string); got != "active" {
+		t.Fatalf("result.scope = %q, want %q", got, "active")
+	}
+	items, ok := resp.Result["items"].([]any)
+	if !ok || len(items) == 0 {
+		t.Fatalf("result.items missing: %#v", resp.Result["items"])
+	}
+	found := false
+	for _, raw := range items {
+		row, ok := raw.(map[string]any)
+		if !ok {
+			continue
+		}
+		if id, _ := row["id"].(string); id == "WS1" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("WS1 not found in result.items: %#v", items)
+	}
+}
+
+func TestCLI_WS_List_JSON_UsageError(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "list", "--format", "json", "--unknown"})
+	if code != exitUsage {
+		t.Fatalf("ws list --format json invalid arg exit code = %d, want %d", code, exitUsage)
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if resp.OK || resp.Action != "ws.list" || resp.Error.Code != "invalid_argument" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr should be empty in json usage error: %q", err.String())
+	}
+}
+
 func TestPrintWSListHuman_EmptyRowsUsesIndentedNone(t *testing.T) {
 	var out bytes.Buffer
 	printWSListHuman(&out, nil, "active", false, false)

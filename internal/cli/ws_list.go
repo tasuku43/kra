@@ -33,11 +33,37 @@ type wsListRow struct {
 }
 
 func (c *CLI) runWSList(args []string) int {
+	requestedJSON := false
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		if arg == "--format" {
+			if i+1 < len(args) && strings.TrimSpace(args[i+1]) == "json" {
+				requestedJSON = true
+			}
+			i++
+			continue
+		}
+		if strings.HasPrefix(arg, "--format=") && strings.TrimSpace(strings.TrimPrefix(arg, "--format=")) == "json" {
+			requestedJSON = true
+		}
+	}
+
 	opts, err := parseWSListOptions(args)
 	if err != nil {
 		if err == errHelpRequested {
 			c.printWSListUsage(c.Out)
 			return exitOK
+		}
+		if requestedJSON {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "ws.list",
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: err.Error(),
+				},
+			})
+			return exitUsage
 		}
 		fmt.Fprintf(c.Err, "%v\n", err)
 		c.printWSListUsage(c.Err)
@@ -46,11 +72,33 @@ func (c *CLI) runWSList(args []string) int {
 
 	wd, err := os.Getwd()
 	if err != nil {
+		if opts.format == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "ws.list",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("get working dir: %v", err),
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "get working dir: %v\n", err)
 		return exitError
 	}
 	root, err := paths.ResolveExistingRoot(wd)
 	if err != nil {
+		if opts.format == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "ws.list",
+				Error: &cliJSONError{
+					Code:    "not_found",
+					Message: fmt.Sprintf("resolve KRA_ROOT: %v", err),
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "resolve KRA_ROOT: %v\n", err)
 		return exitError
 	}
@@ -61,6 +109,17 @@ func (c *CLI) runWSList(args []string) int {
 
 	ctx := context.Background()
 	if err := c.touchStateRegistry(root); err != nil {
+		if opts.format == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "ws.list",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("update root registry: %v", err),
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "update root registry: %v\n", err)
 		return exitError
 	}
@@ -68,6 +127,17 @@ func (c *CLI) runWSList(args []string) int {
 	now := time.Now().Unix()
 	rows, usedFSFallback, err := buildWSListRows(ctx, root, opts.scope, now, opts.tree)
 	if err != nil {
+		if opts.format == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "ws.list",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("list workspaces: %v", err),
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "list workspaces: %v\n", err)
 		return exitError
 	}
@@ -78,6 +148,8 @@ func (c *CLI) runWSList(args []string) int {
 	switch opts.format {
 	case "tsv":
 		printWSListTSV(c.Out, rows)
+	case "json":
+		printWSListJSON(c.Out, rows, opts.scope, opts.tree)
 	default:
 		useColorOut := writerSupportsColor(c.Out)
 		printWSListHuman(c.Out, rows, opts.scope, opts.tree, useColorOut)
@@ -303,9 +375,9 @@ func parseWSListOptions(args []string) (wsListOptions, error) {
 		return wsListOptions{}, fmt.Errorf("unexpected args for ws list: %q", strings.Join(rest, " "))
 	}
 	switch opts.format {
-	case "human", "tsv":
+	case "human", "tsv", "json":
 	default:
-		return wsListOptions{}, fmt.Errorf("unsupported --format: %q (supported: human, tsv)", opts.format)
+		return wsListOptions{}, fmt.Errorf("unsupported --format: %q (supported: human, tsv, json)", opts.format)
 	}
 	return opts, nil
 }
@@ -323,6 +395,42 @@ func printWSListTSV(out io.Writer, rows []wsListRow) {
 			row.Title,
 		)
 	}
+}
+
+func printWSListJSON(out io.Writer, rows []wsListRow, scope string, tree bool) {
+	items := make([]map[string]any, 0, len(rows))
+	for _, row := range rows {
+		item := map[string]any{
+			"id":         row.ID,
+			"status":     row.Status,
+			"updated_at": row.UpdatedAt,
+			"repo_count": row.RepoCount,
+			"title":      row.Title,
+		}
+		if tree {
+			repos := make([]map[string]any, 0, len(row.Repos))
+			for _, r := range row.Repos {
+				repos = append(repos, map[string]any{
+					"repo_uid": r.RepoUID,
+					"alias":    r.Alias,
+					"branch":   r.Branch,
+					"base_ref": r.BaseRef,
+					"missing":  r.MissingAt.Valid,
+				})
+			}
+			item["repos"] = repos
+		}
+		items = append(items, item)
+	}
+	_ = writeCLIJSON(out, cliJSONResponse{
+		OK:     true,
+		Action: "ws.list",
+		Result: map[string]any{
+			"scope": scope,
+			"tree":  tree,
+			"items": items,
+		},
+	})
 }
 
 func printWSListHuman(out io.Writer, rows []wsListRow, scope string, tree bool, useColor bool) {
