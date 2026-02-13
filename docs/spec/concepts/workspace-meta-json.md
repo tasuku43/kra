@@ -37,7 +37,13 @@ This file is canonical and stored in:
       "branch": "feature/MVP-001",
       "base_ref": "origin/main"
     }
-  ]
+  ],
+  "protection": {
+    "purge_guard": {
+      "enabled": true,
+      "updated_at": 1730000000
+    }
+  }
 }
 ```
 
@@ -48,6 +54,7 @@ This file is canonical and stored in:
   - `active`: file is under `workspaces/<id>/`
   - `archived`: file is under `archive/<id>/`
 - `repos_restore` is the authoritative input for worktree reconstruction on `ws reopen`.
+- `protection.purge_guard.enabled` controls whether purge is blocked.
 - Runtime-only states (`risk`, `todo`, `in-progress`) are not stored.
 
 ## Write rules

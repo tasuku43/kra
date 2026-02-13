@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"regexp"
 	"runtime"
 	"slices"
 	"strconv"
@@ -249,6 +250,23 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-add-repo"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
+	cfg, err := c.loadMergedConfig(root)
+	if err != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "add-repo",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("load config: %v", err),
+				},
+			})
+			return exitError
+		}
+		fmt.Fprintf(c.Err, "load config: %v\n", err)
+		return exitError
+	}
+	branchTemplate := cfg.Workspace.Branch.Template
 
 	ctx := context.Background()
 	repoPoolPath, err := paths.DefaultRepoPoolPath()
@@ -286,7 +304,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		return exitUsage
 	}
 	if outputFormat == "json" {
-		return c.runWSAddRepoJSON(workspaceID, root, repoPoolPath, repoKeysFromFlag, baseRefFromFlag, branchFromFlag, forceApply, addRepoFetchOptions{
+		return c.runWSAddRepoJSON(workspaceID, root, repoPoolPath, repoKeysFromFlag, baseRefFromFlag, branchFromFlag, branchTemplate, forceApply, addRepoFetchOptions{
 			Refresh: refreshFetch,
 			NoFetch: noFetch,
 		})
@@ -387,14 +405,18 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		c.debugf("add-repo inputs render stage=after-base-ref active_index=%d prev_lines=%d prompt_closed=%t show_pending_branch=%t keep_base_ref_open=%t", i, renderedInputLines, true, false, true)
 		renderedInputLines = renderAddRepoInputsProgress(c.Err, workspaceID, progress, i, useColorErr, renderedInputLines, false, true)
 
-		branchDisplayDefault := workspaceID
+		branchDisplayDefault, err := renderAddRepoDefaultBranch(branchTemplate, workspaceID, cand.RepoKey)
+		if err != nil {
+			fmt.Fprintf(c.Err, "invalid workspace.branch.template: %v\n", err)
+			return exitError
+		}
 		branchInput, _, err := c.promptAddRepoEditableInput(addRepoInputDetailPromptPrefix(useColorErr), "branch", branchDisplayDefault, useColorErr)
 		if err != nil {
 			fmt.Fprintf(c.Err, "read branch: %v\n", err)
 			return exitError
 		}
 		c.debugf("add-repo branch input repo=%s raw=%q", cand.RepoKey, branchInput)
-		branch := resolveBranchInput(branchInput, workspaceID)
+		branch := resolveBranchInput(branchInput, branchDisplayDefault)
 		if err := gitutil.CheckRefFormat(ctx, "refs/heads/"+branch); err != nil {
 			fmt.Fprintf(c.Err, "invalid branch name for %s: %v\n", cand.RepoKey, err)
 			return exitError
@@ -518,7 +540,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	return exitOK
 }
 
-func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath string, repoKeys []string, baseRefInput string, branchInput string, yes bool, fetchOpts addRepoFetchOptions) int {
+func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath string, repoKeys []string, baseRefInput string, branchInput string, branchTemplate string, yes bool, fetchOpts addRepoFetchOptions) int {
 	ctx := context.Background()
 	if len(repoKeys) == 0 {
 		_ = writeCLIJSON(c.Out, cliJSONResponse{
@@ -662,7 +684,20 @@ func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath str
 			})
 			return exitUsage
 		}
-		branch := resolveBranchInput(branchInput, workspaceID)
+		defaultBranch, err := renderAddRepoDefaultBranch(branchTemplate, workspaceID, cand.RepoKey)
+		if err != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "add-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: fmt.Sprintf("invalid workspace.branch.template: %v", err),
+				},
+			})
+			return exitUsage
+		}
+		branch := resolveBranchInput(branchInput, defaultBranch)
 		if err := gitutil.CheckRefFormat(ctx, "refs/heads/"+branch); err != nil {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
 				OK:          false,
@@ -1757,8 +1792,62 @@ func resolveBaseRefInput(rawInput string, defaultBaseRef string) (string, error)
 }
 
 func resolveBranchInput(rawInput string, defaultPrefix string) string {
-	_ = defaultPrefix
-	return strings.TrimSpace(rawInput)
+	v := strings.TrimSpace(rawInput)
+	if v == "" {
+		return strings.TrimSpace(defaultPrefix)
+	}
+	return v
+}
+
+var addRepoBranchTemplatePlaceholderPattern = regexp.MustCompile(`\{\{\s*([a-z_]+)\s*\}\}`)
+
+func renderAddRepoDefaultBranch(template string, workspaceID string, repoKey string) (string, error) {
+	trimmedTemplate := strings.TrimSpace(template)
+	if trimmedTemplate == "" {
+		return workspaceID, nil
+	}
+
+	allowed := map[string]string{
+		"workspace_id": workspaceID,
+		"repo_key":     repoKey,
+		"repo_name":    addRepoBranchTemplateRepoName(repoKey),
+	}
+	rendered := addRepoBranchTemplatePlaceholderPattern.ReplaceAllStringFunc(trimmedTemplate, func(s string) string {
+		m := addRepoBranchTemplatePlaceholderPattern.FindStringSubmatch(s)
+		if len(m) < 2 {
+			return s
+		}
+		key := strings.TrimSpace(m[1])
+		if v, ok := allowed[key]; ok {
+			return v
+		}
+		return "{{invalid:" + key + "}}"
+	})
+	if strings.Contains(rendered, "{{invalid:") {
+		start := strings.Index(rendered, "{{invalid:")
+		end := strings.Index(rendered[start:], "}}")
+		token := "unknown"
+		if start >= 0 && end > 0 {
+			token = strings.TrimSuffix(strings.TrimPrefix(rendered[start:start+end+2], "{{invalid:"), "}}")
+		}
+		return "", fmt.Errorf("unsupported placeholder %q (allowed: workspace_id, repo_key, repo_name)", token)
+	}
+	if strings.Contains(rendered, "{{") || strings.Contains(rendered, "}}") {
+		return "", fmt.Errorf("unresolved placeholder syntax")
+	}
+	return strings.TrimSpace(rendered), nil
+}
+
+func addRepoBranchTemplateRepoName(repoKey string) string {
+	trimmed := strings.TrimSpace(repoKey)
+	if trimmed == "" {
+		return ""
+	}
+	lastSlash := strings.LastIndex(trimmed, "/")
+	if lastSlash < 0 || lastSlash == len(trimmed)-1 {
+		return trimmed
+	}
+	return trimmed[lastSlash+1:]
 }
 
 func applyAddRepoPlanAllOrNothing(ctx context.Context, plan []addRepoPlanItem, debugf func(string, ...any)) ([]addRepoAppliedItem, error) {

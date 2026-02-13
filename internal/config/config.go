@@ -22,9 +22,14 @@ type Config struct {
 
 type WorkspaceConfig struct {
 	Defaults WorkspaceDefaults `yaml:"defaults"`
+	Branch   WorkspaceBranch   `yaml:"branch"`
 }
 
 type WorkspaceDefaults struct {
+	Template string `yaml:"template"`
+}
+
+type WorkspaceBranch struct {
 	Template string `yaml:"template"`
 }
 
@@ -68,6 +73,7 @@ func LoadFile(path string) (Config, error) {
 
 func (c *Config) Normalize() {
 	c.Workspace.Defaults.Template = strings.TrimSpace(c.Workspace.Defaults.Template)
+	c.Workspace.Branch.Template = strings.TrimSpace(c.Workspace.Branch.Template)
 	c.Integration.Jira.BaseURL = strings.TrimSpace(c.Integration.Jira.BaseURL)
 	c.Integration.Jira.Defaults.Space = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.Defaults.Space))
 	c.Integration.Jira.Defaults.Project = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.Defaults.Project))
@@ -103,6 +109,9 @@ func Merge(global Config, root Config) Config {
 	out := global
 	if root.Workspace.Defaults.Template != "" {
 		out.Workspace.Defaults.Template = root.Workspace.Defaults.Template
+	}
+	if root.Workspace.Branch.Template != "" {
+		out.Workspace.Branch.Template = root.Workspace.Branch.Template
 	}
 	if root.Integration.Jira.BaseURL != "" {
 		out.Integration.Jira.BaseURL = root.Integration.Jira.BaseURL

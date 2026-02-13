@@ -62,6 +62,16 @@ func TestCLI_WS_Purge_ArchivedWorkspace_DeletesPathsAndCanCommitAndUpdatesDB(t *
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
+		code := c.Run([]string{"ws", "unlock", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws unlock exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
 		c.In = strings.NewReader("y\n")
 		code := c.Run([]string{"ws", "--act", "purge", "--commit", "WS1"})
 		if code != exitOK {
@@ -112,7 +122,7 @@ func TestCLI_WS_Purge_NoPromptWithoutForce_Refuses(t *testing.T) {
 	}
 }
 
-func TestCLI_WS_Purge_ActiveDirtyRepo_AsksSecondConfirmationAndCanAbort(t *testing.T) {
+func TestCLI_WS_Purge_ActiveWorkspace_RefusesUntilArchived(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
 	runGit := func(dir string, args ...string) {
@@ -162,25 +172,29 @@ func TestCLI_WS_Purge_ActiveDirtyRepo_AsksSecondConfirmationAndCanAbort(t *testi
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		c.In = strings.NewReader("y\nn\n")
+		code := c.Run([]string{"ws", "unlock", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws unlock exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
 		code := c.Run([]string{"ws", "--act", "purge", "WS1"})
 		if code != exitError {
 			t.Fatalf("ws purge exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
 		}
-		if !strings.Contains(err.String(), "purge workspace WS1?") {
-			t.Fatalf("stderr missing first confirmation prompt: %q", err.String())
-		}
-		if !strings.Contains(err.String(), "workspace has risk; continue purging?") {
-			t.Fatalf("stderr missing second confirmation prompt: %q", err.String())
+		if !strings.Contains(err.String(), "workspace cannot be purged unless archived") {
+			t.Fatalf("stderr missing archived-only guidance: %q", err.String())
 		}
 	}
-
 	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); err != nil {
-		t.Fatalf("workspaces/WS1 should still exist after abort: %v", err)
+		t.Fatalf("workspaces/WS1 should still exist: %v", err)
 	}
 }
 
-func TestCLI_WS_Purge_NoPromptForce_ActiveWorkspace_Succeeds(t *testing.T) {
+func TestCLI_WS_Purge_NoPromptForce_ActiveWorkspace_Refuses(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 
@@ -197,12 +211,18 @@ func TestCLI_WS_Purge_NoPromptForce_ActiveWorkspace_Succeeds(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	code := c.Run([]string{"ws", "--act", "purge", "--no-prompt", "--force", "WS1"})
+	code := c.Run([]string{"ws", "unlock", "WS1"})
 	if code != exitOK {
-		t.Fatalf("ws purge exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		t.Fatalf("ws unlock exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
-	if _, statErr := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); statErr == nil {
-		t.Fatalf("workspaces/WS1 should not exist after purge")
+	out.Reset()
+	err.Reset()
+	code = c.Run([]string{"ws", "--act", "purge", "--no-prompt", "--force", "WS1"})
+	if code != exitError {
+		t.Fatalf("ws purge exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+	}
+	if !strings.Contains(err.String(), "workspace cannot be purged unless archived") {
+		t.Fatalf("stderr missing archived-only guidance: %q", err.String())
 	}
 }
 

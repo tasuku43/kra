@@ -15,15 +15,18 @@ import (
 )
 
 type purgeWorkspaceMeta struct {
-	status  string
-	risk    workspacerisk.WorkspaceRisk
-	perRepo []repoRiskItem
+	status           string
+	risk             workspacerisk.WorkspaceRisk
+	perRepo          []repoRiskItem
+	purgeGuardActive bool
 }
 
 func (c *CLI) runWSPurge(args []string) int {
 	var noPrompt bool
 	var force bool
 	var doCommit bool
+	var outputFormat = "human"
+	var dryRun bool
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -38,11 +41,39 @@ func (c *CLI) runWSPurge(args []string) int {
 		case "--commit":
 			doCommit = true
 			args = args[1:]
+		case "--dry-run":
+			dryRun = true
+			args = args[1:]
+		case "--format":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printWSPurgeUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(args[1])
+			args = args[2:]
 		default:
+			if strings.HasPrefix(args[0], "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(args[0], "--format="))
+				args = args[1:]
+				continue
+			}
 			fmt.Fprintf(c.Err, "unknown flag for ws purge: %q\n", args[0])
 			c.printWSPurgeUsage(c.Err)
 			return exitUsage
 		}
+	}
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printWSPurgeUsage(c.Err)
+		return exitUsage
+	}
+	if dryRun && outputFormat != "json" {
+		fmt.Fprintln(c.Err, "--dry-run requires --format json")
+		c.printWSPurgeUsage(c.Err)
+		return exitUsage
 	}
 
 	if len(args) != 1 {
@@ -82,6 +113,9 @@ func (c *CLI) runWSPurge(args []string) int {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
 	c.debugf("run ws purge args=%q noPrompt=%t force=%t", args, noPrompt, force)
+	if outputFormat == "json" {
+		return c.runWSPurgeJSON(context.Background(), root, directWorkspaceID, force, doCommit, dryRun)
+	}
 
 	ctx := context.Background()
 
@@ -116,6 +150,12 @@ func (c *CLI) runWSPurge(args []string) int {
 				meta, err := collectPurgeWorkspaceMeta(ctx, root, id)
 				if err != nil {
 					return workspaceFlowRiskStage{}, err
+				}
+				if meta.purgeGuardActive {
+					return workspaceFlowRiskStage{}, fmt.Errorf("purge guard is enabled for workspace %s (hint: run 'kra ws unlock %s' before purge)", id, id)
+				}
+				if meta.status != "archived" {
+					return workspaceFlowRiskStage{}, fmt.Errorf("workspace cannot be purged unless archived (run: kra ws --act close %s)", id)
 				}
 				riskMeta[id] = meta
 				if meta.status == "active" && meta.risk != workspacerisk.WorkspaceRiskClean {
@@ -189,6 +229,80 @@ func (c *CLI) runWSPurge(args []string) int {
 	return exitOK
 }
 
+func (c *CLI) runWSPurgeJSON(ctx context.Context, root string, workspaceID string, force bool, doCommit bool, dryRun bool) int {
+	if !dryRun {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "purge",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "invalid_argument",
+				Message: "--format json currently supports --dry-run only for ws purge",
+			},
+		})
+		return exitUsage
+	}
+	meta, err := collectPurgeWorkspaceMeta(ctx, root, workspaceID)
+	if err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "ws.purge.dry-run",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "not_found",
+				Message: err.Error(),
+			},
+		})
+		return exitError
+	}
+	checks := make([]map[string]any, 0, 3)
+	executable := true
+	if meta.status != "archived" {
+		executable = false
+		checks = append(checks, map[string]any{"name": "archived_only", "status": "fail", "message": "ws purge supports archived workspaces only"})
+	} else {
+		checks = append(checks, map[string]any{"name": "archived_only", "status": "pass", "message": "workspace is archived"})
+	}
+	requiresForce := meta.status == "active" && meta.risk != workspacerisk.WorkspaceRiskClean && !force
+	if meta.purgeGuardActive {
+		checks = append(checks, map[string]any{"name": "purge_guard", "status": "fail", "message": "purge guard is enabled"})
+		executable = false
+	} else {
+		checks = append(checks, map[string]any{"name": "purge_guard", "status": "pass", "message": "purge guard is disabled"})
+	}
+	if requiresForce {
+		checks = append(checks, map[string]any{"name": "risk_gate", "status": "fail", "message": "active non-clean risk requires --force"})
+		executable = false
+	} else {
+		checks = append(checks, map[string]any{"name": "risk_gate", "status": "pass", "message": "purge can proceed"})
+	}
+	_ = writeCLIJSON(c.Out, cliJSONResponse{
+		OK:          executable,
+		Action:      "ws.purge.dry-run",
+		WorkspaceID: workspaceID,
+		Result: map[string]any{
+			"executable": executable,
+			"checks":     checks,
+			"risk": map[string]any{
+				"workspace": string(meta.risk),
+				"repos":     renderRiskItemsJSON(meta.perRepo),
+			},
+			"planned_effects": []map[string]any{
+				{"path": filepath.Join(root, "workspaces", workspaceID), "effect": "delete_if_exists"},
+				{"path": filepath.Join(root, "archive", workspaceID), "effect": "delete_if_exists"},
+			},
+			"requires_confirmation": true,
+			"requires_force":        requiresForce,
+			"commit_enabled":        doCommit,
+			"purge_guard_enabled":   meta.purgeGuardActive,
+		},
+	})
+	if !executable {
+		return exitError
+	}
+	return exitOK
+}
+
 func collectPurgeWorkspaceMeta(ctx context.Context, root string, workspaceID string) (purgeWorkspaceMeta, error) {
 	status := ""
 	activePath := filepath.Join(root, "workspaces", workspaceID)
@@ -212,7 +326,21 @@ func collectPurgeWorkspaceMeta(ctx context.Context, root string, workspaceID str
 		return purgeWorkspaceMeta{}, fmt.Errorf("workspace cannot be purged (status=%s): %s", status, workspaceID)
 	}
 
-	meta := purgeWorkspaceMeta{status: status, risk: workspacerisk.WorkspaceRiskClean}
+	var wsPath string
+	if status == "active" {
+		wsPath = activePath
+	} else {
+		wsPath = archivePath
+	}
+	metaFile, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		return purgeWorkspaceMeta{}, fmt.Errorf("load %s: %w", workspaceMetaFilename, err)
+	}
+	meta := purgeWorkspaceMeta{
+		status:           status,
+		risk:             workspacerisk.WorkspaceRiskClean,
+		purgeGuardActive: workspaceMetaPurgeGuardEnabled(metaFile),
+	}
 	if status != "active" {
 		return meta, nil
 	}
@@ -261,24 +389,15 @@ func printPurgeRiskSection(out io.Writer, selectedIDs []string, riskMeta map[str
 }
 
 func (c *CLI) purgeWorkspace(ctx context.Context, root string, workspaceID string, doCommit bool) error {
-	status := ""
-	if fi, err := os.Stat(filepath.Join(root, "workspaces", workspaceID)); err == nil && fi.IsDir() {
-		status = "active"
-	} else if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("stat workspace dir: %w", err)
+	meta, err := collectPurgeWorkspaceMeta(ctx, root, workspaceID)
+	if err != nil {
+		return err
 	}
-	if status == "" {
-		if fi, err := os.Stat(filepath.Join(root, "archive", workspaceID)); err == nil && fi.IsDir() {
-			status = "archived"
-		} else if err != nil && !os.IsNotExist(err) {
-			return fmt.Errorf("stat archive dir: %w", err)
-		}
+	if meta.purgeGuardActive {
+		return fmt.Errorf("purge guard is enabled for workspace %s (hint: run 'kra ws unlock %s' before purge)", workspaceID, workspaceID)
 	}
-	if status == "" {
-		return fmt.Errorf("workspace not found: %s", workspaceID)
-	}
-	if status != "active" && status != "archived" {
-		return fmt.Errorf("workspace cannot be purged (status=%s): %s", status, workspaceID)
+	if meta.status != "archived" {
+		return fmt.Errorf("workspace cannot be purged unless archived (run: kra ws --act close %s)", workspaceID)
 	}
 
 	repos, err := listWorkspaceReposForClose(ctx, root, workspaceID)

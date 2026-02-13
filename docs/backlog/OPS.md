@@ -35,3 +35,52 @@ status: planned
     - `docs/spec/commands/ws/list.md`
   - Depends: none
   - Parallel: yes
+
+- [x] OPS-004: `kra doctor --fix` staged remediation (`--plan` / `--apply`)
+  - What: extend `doctor` from detection-only to staged remediation with explicit plan/apply modes and stable action report.
+  - Specs:
+    - `docs/spec/commands/doctor.md`
+    - `docs/spec/commands/doctor-fix.md`
+    - `docs/spec/concepts/output-contract.md`
+  - Depends: OPS-001, OPS-003
+  - Serial: yes
+
+- [x] OPS-005: Workspace lifecycle dry-run JSON parity (`close`/`reopen`/`purge`)
+  - What: add `--dry-run --format json` preflight contract for lifecycle actions with unified checks/risk/planned-effects envelope.
+  - Specs:
+    - `docs/spec/commands/ws/close.md`
+    - `docs/spec/commands/ws/reopen.md`
+    - `docs/spec/commands/ws/purge.md`
+    - `docs/spec/commands/ws/dry-run.md`
+    - `docs/spec/concepts/output-contract.md`
+  - Depends: OPS-003
+  - Parallel: yes
+
+- [x] OPS-006: Workspace lock/unlock safety gate (`ws lock` / `ws unlock`)
+  - What: add purge-guard metadata (`.kra.meta.json`) and enforce lock-aware conflict guard for `ws purge` only.
+    Guard defaults to enabled on `ws create`, persists across `close/reopen`, and archived launcher exposes `unlock`.
+  - Specs:
+    - `docs/spec/commands/ws/lock.md`
+    - `docs/spec/commands/ws/close.md`
+    - `docs/spec/commands/ws/purge.md`
+    - `docs/spec/concepts/workspace-lifecycle.md`
+  - Depends: none
+  - Parallel: yes
+
+- [x] OPS-007: Branch naming policy templates for `ws add-repo`
+  - What: introduce config-driven branch template rendering with deterministic placeholders and validation.
+  - Specs:
+    - `docs/spec/concepts/branch-naming-policy.md`
+    - `docs/spec/concepts/config.md`
+    - `docs/spec/commands/ws/add-repo.md`
+  - Depends: CONFIG-002, MVP-031
+  - Parallel: yes
+
+- [x] OPS-008: `kra ws dashboard` operational overview
+  - What: add one-screen read-only dashboard combining workspace risk/context/agent signals with JSON contract.
+  - Specs:
+    - `docs/spec/commands/ws/dashboard.md`
+    - `docs/spec/commands/agent/activity.md`
+    - `docs/spec/concepts/output-contract.md`
+  - Depends: AGENT-001, OPS-003
+  - Parallel: yes

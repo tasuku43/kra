@@ -23,6 +23,8 @@ func TestLoadFile_NormalizeAndValidate(t *testing.T) {
 workspace:
   defaults:
     template: "  custom "
+  branch:
+    template: " feature/{{workspace_id}}/{{repo_name}} "
 integration:
   jira:
     base_url: " https://jira.example.com "
@@ -39,6 +41,9 @@ integration:
 	}
 	if cfg.Workspace.Defaults.Template != "custom" {
 		t.Fatalf("workspace.defaults.template = %q, want %q", cfg.Workspace.Defaults.Template, "custom")
+	}
+	if cfg.Workspace.Branch.Template != "feature/{{workspace_id}}/{{repo_name}}" {
+		t.Fatalf("workspace.branch.template = %q, want %q", cfg.Workspace.Branch.Template, "feature/{{workspace_id}}/{{repo_name}}")
 	}
 	if cfg.Integration.Jira.BaseURL != "https://jira.example.com" {
 		t.Fatalf("integration.jira.base_url = %q, want %q", cfg.Integration.Jira.BaseURL, "https://jira.example.com")
@@ -113,7 +118,10 @@ integration:
 
 func TestMerge_RootOverridesGlobal(t *testing.T) {
 	global := Config{
-		Workspace: WorkspaceConfig{Defaults: WorkspaceDefaults{Template: "default"}},
+		Workspace: WorkspaceConfig{
+			Defaults: WorkspaceDefaults{Template: "default"},
+			Branch:   WorkspaceBranch{Template: "feature/{{workspace_id}}"},
+		},
 		Integration: IntegrationConfig{
 			Jira: JiraConfig{
 				BaseURL: "https://jira.global.example.com",
@@ -125,7 +133,10 @@ func TestMerge_RootOverridesGlobal(t *testing.T) {
 		},
 	}
 	root := Config{
-		Workspace: WorkspaceConfig{Defaults: WorkspaceDefaults{Template: "custom"}},
+		Workspace: WorkspaceConfig{
+			Defaults: WorkspaceDefaults{Template: "custom"},
+			Branch:   WorkspaceBranch{Template: "bugfix/{{workspace_id}}/{{repo_name}}"},
+		},
 		Integration: IntegrationConfig{
 			Jira: JiraConfig{
 				BaseURL: "https://jira.root.example.com",
@@ -140,6 +151,9 @@ func TestMerge_RootOverridesGlobal(t *testing.T) {
 	got := Merge(global, root)
 	if got.Workspace.Defaults.Template != "custom" {
 		t.Fatalf("workspace.defaults.template = %q, want %q", got.Workspace.Defaults.Template, "custom")
+	}
+	if got.Workspace.Branch.Template != "bugfix/{{workspace_id}}/{{repo_name}}" {
+		t.Fatalf("workspace.branch.template = %q, want %q", got.Workspace.Branch.Template, "bugfix/{{workspace_id}}/{{repo_name}}")
 	}
 	if got.Integration.Jira.BaseURL != "https://jira.root.example.com" {
 		t.Fatalf("integration.jira.base_url = %q, want %q", got.Integration.Jira.BaseURL, "https://jira.root.example.com")

@@ -26,6 +26,7 @@ func (c *CLI) runWSClose(args []string) int {
 	outputFormat := "human"
 	force := false
 	doCommit := false
+	dryRun := false
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -36,6 +37,9 @@ func (c *CLI) runWSClose(args []string) int {
 			args = args[1:]
 		case "--commit":
 			doCommit = true
+			args = args[1:]
+		case "--dry-run":
+			dryRun = true
 			args = args[1:]
 		case "--format":
 			if len(args) < 2 {
@@ -73,6 +77,11 @@ func (c *CLI) runWSClose(args []string) int {
 	case "human", "json":
 	default:
 		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printWSCloseUsage(c.Err)
+		return exitUsage
+	}
+	if dryRun && outputFormat != "json" {
+		fmt.Fprintln(c.Err, "--dry-run requires --format json")
 		c.printWSCloseUsage(c.Err)
 		return exitUsage
 	}
@@ -147,7 +156,7 @@ func (c *CLI) runWSClose(args []string) int {
 		directWorkspaceID = fromCWD.ID
 	}
 	if outputFormat == "json" {
-		return c.runWSCloseJSON(directWorkspaceID, force, wd, root, doCommit)
+		return c.runWSCloseJSON(directWorkspaceID, force, wd, root, doCommit, dryRun)
 	}
 	shouldShiftCWD := isPathInside(filepath.Join(root, "workspaces", directWorkspaceID), wd)
 	if shouldShiftCWD {
@@ -222,7 +231,7 @@ func (c *CLI) runWSClose(args []string) int {
 	return exitOK
 }
 
-func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root string, doCommit bool) int {
+func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root string, doCommit bool, dryRun bool) int {
 	ctx := context.Background()
 	shouldShiftCWD := isPathInside(filepath.Join(root, "workspaces", workspaceID), wd)
 	if shouldShiftCWD {
@@ -254,6 +263,31 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 		return exitError
 	}
 	if hasNonCleanRisk(riskItems) && !force {
+		if dryRun {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "ws.close.dry-run",
+				WorkspaceID: workspaceID,
+				Result: map[string]any{
+					"executable": false,
+					"checks": []map[string]any{
+						{"name": "workspace_exists_active", "status": "pass", "message": "workspace exists and is active"},
+						{"name": "risk_gate", "status": "fail", "message": "non-clean risk requires --force"},
+					},
+					"risk": map[string]any{
+						"workspace": string(workspaceRiskFromDetails(riskItems)),
+						"repos":     renderRiskDetailItemsJSON(riskItems),
+					},
+					"planned_effects": []map[string]any{
+						{"path": filepath.Join(root, "workspaces", workspaceID), "effect": "move_to_archive"},
+						{"path": filepath.Join(root, "archive", workspaceID), "effect": "create"},
+					},
+					"requires_confirmation": true,
+					"requires_force":        true,
+				},
+			})
+			return exitError
+		}
 		_ = writeCLIJSON(c.Out, cliJSONResponse{
 			OK:          false,
 			Action:      "close",
@@ -264,6 +298,31 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 			},
 		})
 		return exitError
+	}
+	if dryRun {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          true,
+			Action:      "ws.close.dry-run",
+			WorkspaceID: workspaceID,
+			Result: map[string]any{
+				"executable": true,
+				"checks": []map[string]any{
+					{"name": "workspace_exists_active", "status": "pass", "message": "workspace exists and is active"},
+					{"name": "risk_gate", "status": "pass", "message": "close can proceed"},
+				},
+				"risk": map[string]any{
+					"workspace": string(workspaceRiskFromDetails(riskItems)),
+					"repos":     renderRiskDetailItemsJSON(riskItems),
+				},
+				"planned_effects": []map[string]any{
+					{"path": filepath.Join(root, "workspaces", workspaceID), "effect": "move_to_archive"},
+					{"path": filepath.Join(root, "archive", workspaceID), "effect": "create"},
+				},
+				"requires_confirmation": hasNonCleanRisk(riskItems),
+				"requires_force":        false,
+			},
+		})
+		return exitOK
 	}
 
 	if err := c.closeWorkspace(ctx, root, workspaceID, doCommit); err != nil {
@@ -309,6 +368,31 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 		},
 	})
 	return exitOK
+}
+
+func renderRiskItemsJSON(items []repoRiskItem) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, it := range items {
+		out = append(out, map[string]any{
+			"alias": it.alias,
+			"risk":  string(it.state),
+		})
+	}
+	return out
+}
+
+func renderRiskDetailItemsJSON(items []workspaceRiskDetail) []map[string]any {
+	if len(items) == 0 {
+		return []map[string]any{}
+	}
+	return renderRiskItemsJSON(items[0].perRepo)
+}
+
+func workspaceRiskFromDetails(items []workspaceRiskDetail) workspacerisk.WorkspaceRisk {
+	if len(items) == 0 {
+		return workspacerisk.WorkspaceRiskClean
+	}
+	return items[0].risk
 }
 
 func isPathInside(base string, target string) bool {

@@ -45,6 +45,8 @@ For string values, empty/whitespace-only values are treated as "unset".
 workspace:
   defaults:
     template: default
+  branch:
+    template: "feature/{{workspace_id}}"
 
 integration:
   jira:

@@ -15,6 +15,7 @@ type workspaceMetaFile struct {
 	SchemaVersion int                        `json:"schema_version"`
 	Workspace     workspaceMetaWorkspace     `json:"workspace"`
 	ReposRestore  []workspaceMetaRepoRestore `json:"repos_restore"`
+	Protection    workspaceMetaProtection    `json:"protection,omitempty"`
 }
 
 type workspaceMetaWorkspace struct {
@@ -35,7 +36,17 @@ type workspaceMetaRepoRestore struct {
 	BaseRef   string `json:"base_ref"`
 }
 
+type workspaceMetaProtection struct {
+	PurgeGuard workspaceMetaPurgeGuard `json:"purge_guard,omitempty"`
+}
+
+type workspaceMetaPurgeGuard struct {
+	Enabled   *bool `json:"enabled,omitempty"`
+	UpdatedAt int64 `json:"updated_at,omitempty"`
+}
+
 func newWorkspaceMetaFileForCreate(id string, title string, sourceURL string, now int64) workspaceMetaFile {
+	enabled := true
 	return workspaceMetaFile{
 		SchemaVersion: 1,
 		Workspace: workspaceMetaWorkspace{
@@ -47,6 +58,12 @@ func newWorkspaceMetaFileForCreate(id string, title string, sourceURL string, no
 			UpdatedAt: now,
 		},
 		ReposRestore: make([]workspaceMetaRepoRestore, 0),
+		Protection: workspaceMetaProtection{
+			PurgeGuard: workspaceMetaPurgeGuard{
+				Enabled:   &enabled,
+				UpdatedAt: now,
+			},
+		},
 	}
 }
 
@@ -141,6 +158,28 @@ func upsertWorkspaceMetaReposRestore(wsPath string, repos []workspaceMetaRepoRes
 		meta.Workspace.UpdatedAt = now
 	}
 	return writeWorkspaceMetaFile(wsPath, meta)
+}
+
+func workspaceMetaPurgeGuardEnabled(meta workspaceMetaFile) bool {
+	if meta.Protection.PurgeGuard.Enabled == nil {
+		return true
+	}
+	return *meta.Protection.PurgeGuard.Enabled
+}
+
+func setWorkspaceMetaPurgeGuard(meta *workspaceMetaFile, enabled bool, now int64) {
+	if meta == nil {
+		return
+	}
+	meta.Protection.PurgeGuard.Enabled = boolPtr(enabled)
+	if now > 0 {
+		meta.Protection.PurgeGuard.UpdatedAt = now
+	}
+}
+
+func boolPtr(v bool) *bool {
+	b := v
+	return &b
 }
 
 func removeWorkspaceMetaReposRestoreByAlias(wsPath string, aliases []string, now int64) error {

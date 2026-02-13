@@ -3,7 +3,7 @@ title: "`kra ws` selector UI"
 status: implemented
 ---
 
-# Selector UI (shared by `ws --act close` / `ws --act go` / `ws --act add-repo` / `ws --act remove-repo` / `ws --act reopen` / `ws --act purge`)
+# Selector UI (shared by `ws --act close` / `ws --act go` / `ws --act add-repo` / `ws --act remove-repo` / `ws --act reopen` / `ws --act unlock` / `ws --act purge`)
 
 ## Purpose
 
@@ -48,7 +48,7 @@ Each row should include at least:
 - summary text (for example title)
 
 Header/footer should show:
-- command mode (`close`, `go`, `add-repo`, `remove-repo`, `reopen`, `purge`)
+- command mode (`close`, `go`, `add-repo`, `remove-repo`, `reopen`, `unlock`, `purge`)
 - scope (`active` or `archived`)
 - key hints (`Space`, `Enter`, text filter input, `Esc`/`Ctrl+C`)
 - `Enter` hint label should be command-specific action text (for example `enter close` for `ws --act close`).
@@ -86,7 +86,7 @@ Section body indentation must be controlled by shared global constants (no per-c
   - Preferred terminal style is gray-like ANSI colors (for example `bright black` family).
 - Validation/error messages shown below selector footer must use the shared error token (danger/error color).
 - Do not vary supplemental color semantics by command; the same visual hierarchy must be applied across
-  `ws --act close/go/add-repo/remove-repo/reopen/purge`.
+  `ws --act close/go/add-repo/remove-repo/reopen/unlock/purge`.
 - Color is optional fallback:
   - when color is unavailable, preserve hierarchy via prefixes/indentation only.
 
@@ -145,7 +145,7 @@ Required shared modules (logical units):
 - `SelectorFrameRenderer`: footer and key-hint renderer
 
 Rules:
-- Command handlers (`ws --act close/go/add-repo/remove-repo/reopen/purge`) must not define ad-hoc colors or row formats inline.
+- Command handlers (`ws --act close/go/add-repo/remove-repo/reopen/unlock/purge`) must not define ad-hoc colors or row formats inline.
 - Display differences by command should be expressed via data (mode/scope/actions), not bespoke render code.
 - `ws list --tree` should reuse `WorkspaceRowRenderer` and `RepoTreeRenderer` for visual parity with selector flows.
 - Selector-capable command handlers must delegate stage orchestration (`Workspaces -> Risk -> Result`) to the
@@ -193,9 +193,10 @@ Behavior:
   - if under `workspaces/<id>/`: show current-workspace action menu:
     - `add-repo`
     - `close`
-  - if under `archive/<id>/`: show current-workspace action menu:
-    - `reopen`
-    - `purge`
+- if under `archive/<id>/`: show current-workspace action menu:
+  - `reopen`
+  - `unlock`
+  - `purge`
 
 Action menu ordering:
 - fixed order for in-workspace active mode:
@@ -204,7 +205,8 @@ Action menu ordering:
   - `close` third
 - fixed order for in-workspace archived mode:
   - `reopen` first
-  - `purge` second
+  - `unlock` second
+  - `purge` third
 
 Launcher and selector relationship:
 - launcher flow must delegate to existing action command flows to keep behavior parity.

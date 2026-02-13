@@ -19,6 +19,7 @@ const (
 	ActionRemove  Action = "remove-repo"
 	ActionClose   Action = "close"
 	ActionReopen  Action = "reopen"
+	ActionUnlock  Action = "unlock"
 	ActionPurge   Action = "purge"
 )
 

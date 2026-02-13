@@ -87,6 +87,93 @@ func TestCLI_WS_ActClose_JSON_Success(t *testing.T) {
 	}
 }
 
+func TestCLI_WS_ActClose_DryRun_JSON_Success(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "--act", "close", "--dry-run", "--format", "json", "--id", "WS1"})
+	if code != exitOK {
+		t.Fatalf("ws --act close --dry-run --format json exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "ws.close.dry-run" || resp.WorkspaceID != "WS1" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	if got := resp.Result["executable"]; got != true {
+		t.Fatalf("executable = %v, want true", got)
+	}
+}
+
+func TestCLI_WS_ActReopen_DryRun_JSON_Success(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+		if code := c.Run([]string{"ws", "--act", "close", "--format", "json", "--id", "WS1"}); code != exitOK {
+			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "--act", "reopen", "--dry-run", "--format", "json", "WS1"})
+	if code != exitOK {
+		t.Fatalf("ws --act reopen --dry-run --format json exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "ws.reopen.dry-run" || resp.WorkspaceID != "WS1" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+}
+
+func TestCLI_WS_ActPurge_DryRun_JSON_ArchivedOnly(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "--act", "purge", "--dry-run", "--format", "json", "WS1"})
+	if code != exitError {
+		t.Fatalf("ws --act purge --dry-run --format json exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if resp.OK || resp.Action != "ws.purge.dry-run" || resp.WorkspaceID != "WS1" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	if got := resp.Result["executable"]; got != false {
+		t.Fatalf("executable = %v, want false", got)
+	}
+}
+
 func TestCLI_WS_ActAddRepo_JSON_RequiresRepo(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)

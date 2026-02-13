@@ -24,8 +24,8 @@ Unify interactive selection into a single entrypoint while keeping operation com
 - `kra ws` is context-aware launcher.
 - `kra ws --id <id>` resolves launcher target explicitly by id.
 - `kra ws select` always starts from workspace selection.
-- `kra ws select --act <go|close|add-repo|remove-repo|reopen|purge>` skips action menu and executes fixed action.
-- `kra ws select --act reopen|purge` implicitly switches to archived scope.
+- `kra ws select --act <go|close|add-repo|remove-repo|reopen|unlock|purge>` skips action menu and executes fixed action.
+- `kra ws select --act reopen|unlock|purge` implicitly switches to archived scope.
 - `kra ws select --archived --act go|add-repo|remove-repo|close` must fail with usage error.
 - `kra ws select --multi` requires `--act`.
 - `kra ws select --multi --act <close|reopen|purge>` enables multi-selection and executes the fixed action for each

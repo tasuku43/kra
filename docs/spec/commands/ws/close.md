@@ -4,6 +4,7 @@ status: implemented
 ---
 
 # `kra ws --act close [--id <id>] [--force] [--format human|json] [--commit] [<id>]`
+# `kra ws --act close --dry-run --format json [--id <id>|<id>]`
 
 ## Purpose
 
@@ -110,6 +111,7 @@ If `--commit` is enabled, unrelated changes must not be included in the commit.
 - `--format json` enables non-interactive execution contract.
 - In JSON mode, cwd fallback is not allowed; target must be explicit (`--id` or positional id).
 - If non-clean risk exists, execution requires `--force`; otherwise command returns non-zero with JSON error.
+- `--dry-run --format json` must not mutate filesystem/git/state and should return executable/risk/planned-effects envelope.
 
 ### Commit strictness (non-repo files)
 

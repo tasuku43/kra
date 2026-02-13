@@ -4,6 +4,7 @@ status: implemented
 ---
 
 # `kra ws --act purge [--no-prompt --force] [--commit] <id>`
+# `kra ws --act purge --dry-run --format json <id>`
 
 ## Purpose
 
@@ -61,3 +62,13 @@ If `--commit` is enabled, unrelated changes must not be included in the commit.
 
 - This command is explicit-id mode only.
 - Interactive selection must use `kra ws select --archived`.
+- JSON execution in phase 1 is `--dry-run` preflight only.
+
+## Purge guard policy
+
+- Workspace metadata contains purge guard state (`protection.purge_guard.enabled` in `.kra.meta.json`).
+- `ws create` initializes purge guard as enabled.
+- `ws purge` must fail with conflict guidance while purge guard is enabled:
+  - `hint: run 'kra ws unlock <id>' before purge`
+- `ws close`/`ws reopen` preserve purge guard value.
+- Purge execution is archived-only in current policy.

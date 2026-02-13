@@ -3,7 +3,8 @@ title: "`kra doctor`"
 status: implemented
 ---
 
-# `kra doctor [--format human|json] [--fix]`
+# `kra doctor [--format human|json]`
+# `kra doctor --fix --plan|--apply [--format human|json]`
 
 ## Purpose
 
@@ -34,10 +35,12 @@ Provide a non-destructive health report for current `KRA_ROOT` to detect operati
 - `3` when at least one `error` finding exists, or command runtime fails.
 - `2` for usage errors (including unsupported `--fix` in MVP).
 
-## `--fix` policy (deferred)
+## `--fix` policy
 
-- `--fix` is reserved but out of MVP implementation scope.
-- In MVP, command must reject `--fix` with clear usage error to avoid implied destructive behavior.
+- Staged remediation mode is defined in:
+  - `docs/spec/commands/doctor-fix.md`
+- This command keeps detection/reporting behavior as default.
+- Remediation is opt-in and explicit via `--fix --plan|--apply`.
 
 ## Non-goals (MVP)
 

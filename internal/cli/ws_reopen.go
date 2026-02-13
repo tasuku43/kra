@@ -19,6 +19,8 @@ var errNoArchivedWorkspaces = errors.New("no archived workspaces available")
 
 func (c *CLI) runWSReopen(args []string) int {
 	doCommit := false
+	outputFormat := "human"
+	dryRun := false
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -27,11 +29,39 @@ func (c *CLI) runWSReopen(args []string) int {
 		case "--commit":
 			doCommit = true
 			args = args[1:]
+		case "--dry-run":
+			dryRun = true
+			args = args[1:]
+		case "--format":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printWSReopenUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(args[1])
+			args = args[2:]
 		default:
+			if strings.HasPrefix(args[0], "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(args[0], "--format="))
+				args = args[1:]
+				continue
+			}
 			fmt.Fprintf(c.Err, "unknown flag for ws reopen: %q\n", args[0])
 			c.printWSReopenUsage(c.Err)
 			return exitUsage
 		}
+	}
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printWSReopenUsage(c.Err)
+		return exitUsage
+	}
+	if dryRun && outputFormat != "json" {
+		fmt.Fprintln(c.Err, "--dry-run requires --format json")
+		c.printWSReopenUsage(c.Err)
+		return exitUsage
 	}
 
 	if len(args) != 1 {
@@ -68,6 +98,9 @@ func (c *CLI) runWSReopen(args []string) int {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
 	c.debugf("run ws reopen args=%q", args)
+	if outputFormat == "json" {
+		return c.runWSReopenJSON(root, directWorkspaceID, doCommit, dryRun)
+	}
 
 	ctx := context.Background()
 	repoPoolPath, err := paths.DefaultRepoPoolPath()
@@ -127,6 +160,66 @@ func (c *CLI) runWSReopen(args []string) int {
 	}
 
 	c.debugf("ws reopen completed reopened=%v", reopened)
+	return exitOK
+}
+
+func (c *CLI) runWSReopenJSON(root string, workspaceID string, doCommit bool, dryRun bool) int {
+	if !dryRun {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "reopen",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "invalid_argument",
+				Message: "--format json currently supports --dry-run only for ws reopen",
+			},
+		})
+		return exitUsage
+	}
+	archivePath := filepath.Join(root, "archive", workspaceID)
+	workspacePath := filepath.Join(root, "workspaces", workspaceID)
+	checks := make([]map[string]any, 0, 3)
+	executable := true
+
+	if fi, err := os.Stat(archivePath); err != nil || !fi.IsDir() {
+		checks = append(checks, map[string]any{"name": "archive_exists", "status": "fail", "message": "archive workspace not found"})
+		executable = false
+	} else {
+		checks = append(checks, map[string]any{"name": "archive_exists", "status": "pass", "message": "archive workspace exists"})
+	}
+	if _, err := os.Stat(workspacePath); err == nil {
+		checks = append(checks, map[string]any{"name": "workspace_absent", "status": "fail", "message": "active workspace already exists"})
+		executable = false
+	} else if !os.IsNotExist(err) {
+		checks = append(checks, map[string]any{"name": "workspace_absent", "status": "fail", "message": err.Error()})
+		executable = false
+	} else {
+		checks = append(checks, map[string]any{"name": "workspace_absent", "status": "pass", "message": "active workspace path is free"})
+	}
+	result := map[string]any{
+		"executable": executable,
+		"checks":     checks,
+		"risk": map[string]any{
+			"workspace": "clean",
+			"repos":     []map[string]any{},
+		},
+		"planned_effects": []map[string]any{
+			{"path": archivePath, "effect": "move_to_workspaces"},
+			{"path": workspacePath, "effect": "create"},
+		},
+		"requires_confirmation": false,
+		"requires_force":        false,
+		"commit_enabled":        doCommit,
+	}
+	_ = writeCLIJSON(c.Out, cliJSONResponse{
+		OK:          executable,
+		Action:      "ws.reopen.dry-run",
+		WorkspaceID: workspaceID,
+		Result:      result,
+	})
+	if !executable {
+		return exitError
+	}
 	return exitOK
 }
 

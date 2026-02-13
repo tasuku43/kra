@@ -113,7 +113,7 @@ parseFlags:
 				c.printWSUsage(c.Err)
 				return exitUsage
 			}
-		case "reopen", "purge":
+		case "reopen", "purge", "unlock":
 			archivedScope = true
 		default:
 			fmt.Fprintf(c.Err, "unsupported --act: %q\n", fixedAction)
@@ -202,6 +202,8 @@ parseFlags:
 		return c.runWSClose([]string{target.ID})
 	case "reopen":
 		return c.runWSReopen([]string{target.ID})
+	case "unlock":
+		return c.runWSUnlock([]string{target.ID})
 	case "purge":
 		return c.runWSPurge([]string{target.ID})
 	default:
@@ -238,7 +240,7 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 			c.printWSUsage(c.Err)
 			return exitUsage
 		}
-	case "reopen", "purge":
+	case "reopen", "purge", "unlock":
 		archivedScope = true
 	default:
 		c.printWSUsage(c.Err)
@@ -257,7 +259,7 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 		if workspaceID != "" && !runWSActionHasIDArg(opArgs) && !runWSActionHasPositional(opArgs) {
 			opArgs = append([]string{"--id", workspaceID}, opArgs...)
 		}
-	case "reopen", "purge":
+	case "reopen", "purge", "unlock":
 		if workspaceID != "" && !runWSActionHasPositional(opArgs) {
 			opArgs = append([]string{workspaceID}, opArgs...)
 		}
@@ -286,6 +288,8 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 		return c.runWSClose(opArgs)
 	case "reopen":
 		return c.runWSReopen(opArgs)
+	case "unlock":
+		return c.runWSUnlock(opArgs)
 	case "purge":
 		return c.runWSPurge(opArgs)
 	default:
@@ -635,6 +639,7 @@ func (c *CLI) promptLauncherAction(target workspaceContextSelection, fromContext
 	case "archived":
 		actions = append(actions,
 			workspaceSelectorCandidate{ID: "reopen", Description: "restore workspace"},
+			workspaceSelectorCandidate{ID: "unlock", Description: "disable purge guard"},
 			workspaceSelectorCandidate{ID: "purge", Description: "delete permanently"},
 		)
 	default:

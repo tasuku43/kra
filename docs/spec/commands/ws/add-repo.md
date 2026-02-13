@@ -19,7 +19,7 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 - interactive selection is handled by `kra ws select --act add-repo`.
 - JSON mode (`--format json`) is non-interactive and accepts:
   - `--repo <repo-key>` (repeatable, required)
-  - `--branch <name>` (optional, defaults to workspace id)
+  - `--branch <name>` (optional, highest precedence when provided)
   - `--base-ref <origin/branch>` (optional, defaults to detected default branch)
   - `--refresh` (optional; force fetch even when cache is fresh)
   - `--no-fetch` (optional; skip fetch decision/execution entirely)
@@ -72,9 +72,13 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
       - `<branch>` (normalized to `origin/<branch>`)
       - `/branch` (normalized to `origin/branch`)
   - prompt branch for each selected repo
-    - prompt style: `branch: <workspace-id>`
+    - prompt style: `branch: <rendered-default>`
     - default text is editable (not prefix-locked)
-    - empty means `<workspace-id>`
+    - default generation precedence:
+      1. CLI `--branch` (JSON mode only)
+      2. config `workspace.branch.template` (rendered with `workspace_id` / `repo_key` / `repo_name`)
+      3. fallback `<workspace-id>`
+    - empty input keeps the rendered default
     - validate via `git check-ref-format`
 
 3. Remote sync policy (smart-fetch)

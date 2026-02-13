@@ -4,6 +4,7 @@ status: implemented
 ---
 
 # `kra ws --act reopen [--commit] <id>`
+# `kra ws --act reopen --dry-run --format json <id>`
 
 ## Purpose
 
@@ -67,6 +68,7 @@ If `--commit` is enabled, unrelated changes must not be included in the commit.
 
 - This command is explicit-id mode only.
 - Interactive selection must use `kra ws select --archived`.
+- JSON execution in phase 1 is `--dry-run` preflight only.
 
 ## FS metadata behavior
 

@@ -87,7 +87,7 @@ func isActionAllowedForScope(action Action, scope Scope) bool {
 	case ScopeActive:
 		return action == ActionGo || action == ActionAddRepo || action == ActionRemove || action == ActionClose
 	case ScopeArchived:
-		return action == ActionReopen || action == ActionPurge
+		return action == ActionReopen || action == ActionUnlock || action == ActionPurge
 	default:
 		return false
 	}

@@ -76,6 +76,7 @@ Create a workspace from a root-local template.
   - `schema_version`
   - `workspace` object (`id`, `title`(stored as `title` for compatibility), `source_url`, `status=active`, timestamps)
   - `repos_restore` as an empty array
+  - `protection.purge_guard.enabled=true`
 - File write must be atomic (`temp + rename`).
 
 ## Errors

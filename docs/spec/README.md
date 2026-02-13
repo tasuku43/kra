@@ -31,6 +31,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `concepts/layout.md`: KRA_ROOT layout and Git tracking policy
   - `concepts/state-store.md`: Optional/rebuildable root index and registry
   - `concepts/config.md`: Global/root user config model and precedence
+  - `concepts/branch-naming-policy.md`: Branch naming template policy for workspace repo operations
   - `concepts/fs-source-of-truth.md`: FS=SoT and index-store downgrade policy (planned)
   - `concepts/workspace-meta-json.md`: `.kra.meta.json` schema and atomic update rules (planned)
   - `concepts/workspace-template.md`: root-local workspace template model and validation
@@ -43,6 +44,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/agent/logs.md`: `kra agent logs`
   - `commands/agent/run.md`: `kra agent run`
   - `commands/agent/stop.md`: `kra agent stop`
+  - `commands/doctor-fix.md`: `kra doctor --fix --plan|--apply` staged remediation
   - `commands/doctor.md`: `kra doctor`
   - `commands/context.md`: `kra context`
   - `commands/init.md`: `kra init`
@@ -58,7 +60,10 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/create.md`: `kra ws create`
   - `commands/ws/select-multi.md`: `kra ws select --multi`
   - `commands/ws/import/jira.md`: `kra ws import jira`
+  - `commands/ws/dashboard.md`: `kra ws dashboard`
   - `commands/ws/add-repo.md`: `kra ws --act add-repo`
+  - `commands/ws/dry-run.md`: `kra ws --act <close|reopen|purge> --dry-run`
+  - `commands/ws/lock.md`: `kra ws lock` / `kra ws unlock`
   - `commands/ws/remove-repo.md`: `kra ws --act remove-repo`
   - `commands/ws/list.md`: `kra ws list`
   - `commands/ws/go.md`: `kra ws --act go`

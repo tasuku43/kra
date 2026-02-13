@@ -143,10 +143,133 @@ func TestCLI_Doctor_JSONAndFixValidation(t *testing.T) {
 	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
 		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
 	}
-	if resp.OK || resp.Action != "doctor" || resp.Error == nil || resp.Error.Code != "invalid_argument" {
+	if resp.OK || resp.Action != "doctor.fix" || resp.Error == nil || resp.Error.Code != "invalid_argument" {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
 	if errBuf.Len() != 0 {
 		t.Fatalf("stderr should be empty in json mode, got %q", errBuf.String())
+	}
+}
+
+func TestCLI_Doctor_FixPlan_JSON(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	lockDir := filepath.Join(env.Root, ".kra", "locks")
+	if err := os.MkdirAll(lockDir, 0o755); err != nil {
+		t.Fatalf("mkdir lock dir: %v", err)
+	}
+	lockPath := filepath.Join(lockDir, "WS-1.lock")
+	if err := os.WriteFile(lockPath, []byte("pid=999999\n"), 0o644); err != nil {
+		t.Fatalf("write lock file: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"doctor", "--fix", "--plan", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		OK     bool   `json:"ok"`
+		Action string `json:"action"`
+		Result struct {
+			Mode    string `json:"mode"`
+			Summary struct {
+				Planned int `json:"planned"`
+				Applied int `json:"applied"`
+				Skipped int `json:"skipped"`
+				Failed  int `json:"failed"`
+			} `json:"summary"`
+			Actions []doctorFixAction `json:"actions"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !resp.OK || resp.Action != "doctor.fix" {
+		t.Fatalf("unexpected response head: %+v", resp)
+	}
+	if resp.Result.Mode != "plan" || resp.Result.Summary.Planned == 0 {
+		t.Fatalf("unexpected fix plan result: %+v", resp.Result)
+	}
+}
+
+func TestCLI_Doctor_FixApply_RemovesStaleLock(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	lockDir := filepath.Join(env.Root, ".kra", "locks")
+	if err := os.MkdirAll(lockDir, 0o755); err != nil {
+		t.Fatalf("mkdir lock dir: %v", err)
+	}
+	lockPath := filepath.Join(lockDir, "WS-1.lock")
+	if err := os.WriteFile(lockPath, []byte("pid=999999\n"), 0o644); err != nil {
+		t.Fatalf("write lock file: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"doctor", "--fix", "--apply", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
+		t.Fatalf("lock file should be removed, stat err=%v", err)
+	}
+}
+
+func TestCLI_Doctor_FixApply_RegistersCurrentRoot(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"doctor", "--fix", "--apply", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+
+	out.Reset()
+	errBuf.Reset()
+	code = c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("doctor after fix exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	for _, f := range resp.Result.Findings {
+		if f.Code == "root_not_registered" {
+			t.Fatalf("root_not_registered should be repaired, findings=%+v", resp.Result.Findings)
+		}
+	}
+}
+
+func TestCLI_Doctor_FixFlagValidation(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"doctor", "--format", "json", "--plan"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+
+	code = c.Run([]string{"doctor", "--format", "json", "--fix", "--plan", "--apply"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
 	}
 }

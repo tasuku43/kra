@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/tasuku43/kra/internal/infra/paths"
 	"github.com/tasuku43/kra/internal/infra/stateregistry"
@@ -33,9 +34,33 @@ type doctorReport struct {
 	Findings []doctorFinding `json:"findings,omitempty"`
 }
 
+type doctorFixAction struct {
+	ID     string `json:"id"`
+	Kind   string `json:"kind"`
+	Target string `json:"target"`
+	Status string `json:"status"`
+	Reason string `json:"reason,omitempty"`
+}
+
+type doctorFixSummary struct {
+	Planned int `json:"planned"`
+	Applied int `json:"applied"`
+	Skipped int `json:"skipped"`
+	Failed  int `json:"failed"`
+}
+
+type doctorFixResult struct {
+	Root    string            `json:"root"`
+	Mode    string            `json:"mode"`
+	Summary doctorFixSummary  `json:"summary"`
+	Actions []doctorFixAction `json:"actions"`
+}
+
 func (c *CLI) runDoctor(args []string) int {
 	outputFormat := "human"
 	withFix := false
+	fixPlan := false
+	fixApply := false
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -43,6 +68,12 @@ func (c *CLI) runDoctor(args []string) int {
 			return exitOK
 		case "--fix":
 			withFix = true
+			args = args[1:]
+		case "--plan":
+			fixPlan = true
+			args = args[1:]
+		case "--apply":
+			fixApply = true
 			args = args[1:]
 		case "--format":
 			if len(args) < 2 {
@@ -75,8 +106,25 @@ func (c *CLI) runDoctor(args []string) int {
 		c.printDoctorUsage(c.Err)
 		return exitUsage
 	}
-	if withFix {
-		msg := "--fix is reserved and not supported yet"
+	if withFix && fixPlan == fixApply {
+		msg := "--fix requires exactly one of --plan or --apply"
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "doctor.fix",
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: msg,
+				},
+			})
+			return exitUsage
+		}
+		fmt.Fprintln(c.Err, msg)
+		c.printDoctorUsage(c.Err)
+		return exitUsage
+	}
+	if !withFix && (fixPlan || fixApply) {
+		msg := "--plan/--apply require --fix"
 		if outputFormat == "json" {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
 				OK:     false,
@@ -131,6 +179,63 @@ func (c *CLI) runDoctor(args []string) int {
 	c.debugf("run doctor format=%s", outputFormat)
 
 	report := runDoctorChecks(root)
+	if withFix {
+		mode := "plan"
+		if fixApply {
+			mode = "apply"
+		}
+		result := runDoctorFix(root, mode, report)
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     result.Summary.Failed == 0,
+				Action: "doctor.fix",
+				Result: result,
+			})
+			if result.Summary.Failed > 0 {
+				return exitError
+			}
+			return exitOK
+		}
+		useColorOut := writerSupportsColor(c.Out)
+		lines := []string{
+			fmt.Sprintf("%s: %s", styleAccent("root", useColorOut), result.Root),
+			fmt.Sprintf("%s: %s", styleAccent("mode", useColorOut), result.Mode),
+			fmt.Sprintf("%s: %d", styleAccent("planned", useColorOut), result.Summary.Planned),
+			fmt.Sprintf("%s: %d", styleSuccess("applied", useColorOut), result.Summary.Applied),
+			fmt.Sprintf("%s: %d", styleWarn("skipped", useColorOut), result.Summary.Skipped),
+			fmt.Sprintf("%s: %d", styleError("failed", useColorOut), result.Summary.Failed),
+		}
+		if len(result.Actions) > 0 {
+			lines = append(lines, "actions:")
+			for _, a := range result.Actions {
+				line := fmt.Sprintf("  - [%s] %s (%s)", a.Status, a.Target, a.Kind)
+				if strings.TrimSpace(a.Reason) != "" {
+					line += ": " + a.Reason
+				}
+				switch a.Status {
+				case "applied":
+					line = styleSuccess(line, useColorOut)
+				case "failed":
+					line = styleError(line, useColorOut)
+				default:
+					line = styleWarn(line, useColorOut)
+				}
+				lines = append(lines, line)
+			}
+		}
+		body := make([]string, 0, len(lines))
+		for _, line := range lines {
+			body = append(body, fmt.Sprintf("%s%s", uiIndent, line))
+		}
+		printSection(c.Out, renderResultTitle(useColorOut), body, sectionRenderOptions{
+			blankAfterHeading: false,
+			trailingBlank:     true,
+		})
+		if result.Summary.Failed > 0 {
+			return exitError
+		}
+		return exitOK
+	}
 	if outputFormat == "json" {
 		_ = writeCLIJSON(c.Out, cliJSONResponse{
 			OK:     report.Error == 0,
@@ -186,6 +291,93 @@ func (c *CLI) runDoctor(args []string) int {
 		return exitError
 	}
 	return exitOK
+}
+
+func runDoctorFix(root string, mode string, report doctorReport) doctorFixResult {
+	actions := planDoctorFixActions(report)
+	result := doctorFixResult{
+		Root:    root,
+		Mode:    mode,
+		Actions: actions,
+	}
+	result.Summary.Planned = len(actions)
+	if mode != "apply" {
+		for i := range result.Actions {
+			result.Actions[i].Status = "planned"
+		}
+		return result
+	}
+	for i := range result.Actions {
+		switch result.Actions[i].Kind {
+		case "remove_stale_lock":
+			if err := os.Remove(result.Actions[i].Target); err != nil {
+				if os.IsNotExist(err) {
+					result.Actions[i].Status = "skipped"
+					result.Actions[i].Reason = "already_missing"
+					result.Summary.Skipped++
+					continue
+				}
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			result.Actions[i].Status = "applied"
+			result.Summary.Applied++
+		case "register_root":
+			if err := touchRootRegistry(root); err != nil {
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			result.Actions[i].Status = "applied"
+			result.Summary.Applied++
+		default:
+			result.Actions[i].Status = "skipped"
+			result.Actions[i].Reason = "manual_required"
+			result.Summary.Skipped++
+		}
+	}
+	return result
+}
+
+func planDoctorFixActions(report doctorReport) []doctorFixAction {
+	actions := make([]doctorFixAction, 0, len(report.Findings))
+	seen := map[string]bool{}
+	nextID := 1
+	for _, f := range report.Findings {
+		kind := ""
+		switch f.Code {
+		case "stale_lock":
+			kind = "remove_stale_lock"
+		case "root_not_registered":
+			kind = "register_root"
+		default:
+			continue
+		}
+		key := kind + "|" + f.Target
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		actions = append(actions, doctorFixAction{
+			ID:     fmt.Sprintf("fx-%03d", nextID),
+			Kind:   kind,
+			Target: f.Target,
+			Status: "planned",
+		})
+		nextID++
+	}
+	return actions
+}
+
+func touchRootRegistry(root string) error {
+	cleanRoot, err := filepath.Abs(root)
+	if err != nil {
+		return err
+	}
+	return stateregistry.Touch(cleanRoot, time.Now())
 }
 
 func runDoctorChecks(root string) doctorReport {

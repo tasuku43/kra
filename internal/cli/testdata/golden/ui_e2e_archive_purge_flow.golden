@@ -41,6 +41,14 @@ Result:
   ✔ UI-200
 
 
+$ kra ws unlock UI-200
+exit: 0
+stdout:
+
+Result:
+  purge guard disabled: UI-200
+
+
 $ kra ws --act purge --no-prompt --force UI-200
 exit: 0
 stdout:
