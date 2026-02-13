@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -12,6 +13,33 @@ import (
 	"github.com/tasuku43/kra/internal/infra/appports"
 	"github.com/tasuku43/kra/internal/infra/paths"
 )
+
+func writeContextJSONError(out io.Writer, action string, code string, message string) {
+	_ = writeCLIJSON(out, cliJSONResponse{
+		OK:     false,
+		Action: action,
+		Error: &cliJSONError{
+			Code:    code,
+			Message: message,
+		},
+	})
+}
+
+func contextErrorCode(err error) string {
+	msg := strings.TrimSpace(err.Error())
+	switch {
+	case strings.Contains(msg, "not found"):
+		return "not_found"
+	case strings.Contains(msg, "already exists"):
+		return "conflict"
+	case strings.Contains(msg, "cannot remove current context"):
+		return "conflict"
+	case strings.Contains(msg, "validate root:"):
+		return "invalid_argument"
+	default:
+		return "internal_error"
+	}
+}
 
 func (c *CLI) runContext(args []string) int {
 	if len(args) == 0 {
@@ -43,40 +71,118 @@ func (c *CLI) runContext(args []string) int {
 }
 
 func (c *CLI) runContextCurrent(args []string) int {
-	if len(args) > 0 {
-		switch args[0] {
+	outputFormat := "human"
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch arg {
 		case "-h", "--help", "help":
 			c.printContextUsage(c.Out)
 			return exitOK
+		case "--format":
+			if i+1 >= len(args) {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printContextUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(args[i+1])
+			i++
+		default:
+			if strings.HasPrefix(arg, "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
+				continue
+			}
+			rest = append(rest, arg)
 		}
-		fmt.Fprintf(c.Err, "unexpected args for context current: %q\n", strings.Join(args, " "))
+	}
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printContextUsage(c.Err)
+		return exitUsage
+	}
+	if len(rest) > 0 {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.current", "invalid_argument", fmt.Sprintf("unexpected args for context current: %q", strings.Join(rest, " ")))
+			return exitUsage
+		}
+		fmt.Fprintf(c.Err, "unexpected args for context current: %q\n", strings.Join(rest, " "))
 		c.printContextUsage(c.Err)
 		return exitUsage
 	}
 
 	wd, err := os.Getwd()
 	if err != nil {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.current", "internal_error", fmt.Sprintf("get working dir: %v", err))
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "get working dir: %v\n", err)
 		return exitError
 	}
 	svc := contextcmd.NewService(appports.NewContextPort(resolveContextUseRoot))
 	current, err := svc.Current(wd)
 	if err != nil {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.current", contextErrorCode(err), fmt.Sprintf("resolve current context: %v", err))
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "resolve current context: %v\n", err)
 		return exitError
+	}
+	if outputFormat == "json" {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:     true,
+			Action: "context.current",
+			Result: map[string]any{
+				"current": current,
+			},
+		})
+		return exitOK
 	}
 	fmt.Fprintln(c.Out, current)
 	return exitOK
 }
 
 func (c *CLI) runContextList(args []string) int {
-	if len(args) > 0 {
-		switch args[0] {
+	outputFormat := "human"
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch arg {
 		case "-h", "--help", "help":
 			c.printContextUsage(c.Out)
 			return exitOK
+		case "--format":
+			if i+1 >= len(args) {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printContextUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(args[i+1])
+			i++
+		default:
+			if strings.HasPrefix(arg, "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
+				continue
+			}
+			rest = append(rest, arg)
 		}
-		fmt.Fprintf(c.Err, "unexpected args for context list: %q\n", strings.Join(args, " "))
+	}
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printContextUsage(c.Err)
+		return exitUsage
+	}
+	if len(rest) > 0 {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.list", "invalid_argument", fmt.Sprintf("unexpected args for context list: %q", strings.Join(rest, " ")))
+			return exitUsage
+		}
+		fmt.Fprintf(c.Err, "unexpected args for context list: %q\n", strings.Join(rest, " "))
 		c.printContextUsage(c.Err)
 		return exitUsage
 	}
@@ -84,8 +190,32 @@ func (c *CLI) runContextList(args []string) int {
 	svc := contextcmd.NewService(appports.NewContextPort(resolveContextUseRoot))
 	entries, err := svc.List()
 	if err != nil {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.list", contextErrorCode(err), err.Error())
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
+	}
+	currentRoot, _, _ := paths.ReadCurrentContext()
+	if outputFormat == "json" {
+		items := make([]map[string]any, 0, len(entries))
+		for _, e := range entries {
+			items = append(items, map[string]any{
+				"name":         strings.TrimSpace(e.ContextName),
+				"path":         strings.TrimSpace(e.RootPath),
+				"last_used_at": e.LastUsedAt,
+				"current":      strings.TrimSpace(e.RootPath) != "" && strings.TrimSpace(e.RootPath) == strings.TrimSpace(currentRoot),
+			})
+		}
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:     true,
+			Action: "context.list",
+			Result: map[string]any{
+				"contexts": items,
+			},
+		})
+		return exitOK
 	}
 	if len(entries) == 0 {
 		fmt.Fprintln(c.Out, "(none)")
@@ -94,7 +224,6 @@ func (c *CLI) runContextList(args []string) int {
 
 	useColorOut := writerSupportsColor(c.Out)
 	fmt.Fprintln(c.Out, styleBold("Contexts:", useColorOut))
-	currentRoot, _, _ := paths.ReadCurrentContext()
 
 	ordered := make([]contextcmd.Entry, 0, len(entries))
 	for _, e := range entries {
@@ -135,7 +264,43 @@ func (c *CLI) runContextList(args []string) int {
 }
 
 func (c *CLI) runContextUse(args []string) int {
-	if len(args) == 0 {
+	outputFormat := "human"
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch arg {
+		case "-h", "--help", "help":
+			c.printContextUsage(c.Out)
+			return exitOK
+		case "--format":
+			if i+1 >= len(args) {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printContextUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(args[i+1])
+			i++
+		default:
+			if strings.HasPrefix(arg, "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
+				continue
+			}
+			rest = append(rest, arg)
+		}
+	}
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printContextUsage(c.Err)
+		return exitUsage
+	}
+
+	if len(rest) == 0 {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.use", "invalid_argument", "context use --format json requires <name>")
+			return exitUsage
+		}
 		svc := contextcmd.NewService(appports.NewContextPort(resolveContextUseRoot))
 		entries, err := svc.List()
 		if err != nil {
@@ -181,21 +346,26 @@ func (c *CLI) runContextUse(args []string) int {
 			fmt.Fprintf(c.Err, "run context selector: %v\n", err)
 			return exitError
 		}
-		args = []string{selected[0]}
+		rest = []string{selected[0]}
 	}
-	if len(args) > 1 {
-		fmt.Fprintf(c.Err, "unexpected args for context use: %q\n", strings.Join(args[1:], " "))
+	if len(rest) > 1 {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.use", "invalid_argument", fmt.Sprintf("unexpected args for context use: %q", strings.Join(rest[1:], " ")))
+			return exitUsage
+		}
+		fmt.Fprintf(c.Err, "unexpected args for context use: %q\n", strings.Join(rest[1:], " "))
 		c.printContextUsage(c.Err)
 		return exitUsage
 	}
-	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
-		c.printContextUsage(c.Out)
-		return exitOK
-	}
+	name := strings.TrimSpace(rest[0])
 
 	svc := contextcmd.NewService(appports.NewContextPort(resolveContextUseRoot))
-	root, err := svc.Use(args[0])
+	root, err := svc.Use(name)
 	if err != nil {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.use", contextErrorCode(err), err.Error())
+			return exitError
+		}
 		switch {
 		case strings.HasPrefix(err.Error(), "resolve context by name:"):
 			fmt.Fprintf(c.Err, "%v\n", err)
@@ -208,8 +378,19 @@ func (c *CLI) runContextUse(args []string) int {
 		}
 		return exitError
 	}
+	if outputFormat == "json" {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:     true,
+			Action: "context.use",
+			Result: map[string]any{
+				"context_name": name,
+				"path":         root,
+			},
+		})
+		return exitOK
+	}
 	useColorOut := writerSupportsColor(c.Out)
-	printResultSection(c.Out, useColorOut, styleSuccess(fmt.Sprintf("Context selected: %s", args[0]), useColorOut), styleMuted(fmt.Sprintf("path: %s", root), useColorOut))
+	printResultSection(c.Out, useColorOut, styleSuccess(fmt.Sprintf("Context selected: %s", name), useColorOut), styleMuted(fmt.Sprintf("path: %s", root), useColorOut))
 	return exitOK
 }
 
@@ -230,6 +411,7 @@ func (c *CLI) runContextCreate(args []string) int {
 	}
 	rawPath := ""
 	useNow := false
+	outputFormat := "human"
 	rest := args[1:]
 	for len(rest) > 0 {
 		switch rest[0] {
@@ -244,9 +426,22 @@ func (c *CLI) runContextCreate(args []string) int {
 		case "--use":
 			useNow = true
 			rest = rest[1:]
+		case "--format":
+			if len(rest) < 2 {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printContextUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(rest[1])
+			rest = rest[2:]
 		default:
 			if strings.HasPrefix(rest[0], "--path=") {
 				rawPath = strings.TrimSpace(strings.TrimPrefix(rest[0], "--path="))
+				rest = rest[1:]
+				continue
+			}
+			if strings.HasPrefix(rest[0], "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(rest[0], "--format="))
 				rest = rest[1:]
 				continue
 			}
@@ -255,7 +450,18 @@ func (c *CLI) runContextCreate(args []string) int {
 			return exitUsage
 		}
 	}
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printContextUsage(c.Err)
+		return exitUsage
+	}
 	if rawPath == "" {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.create", "invalid_argument", "context create requires --path <path>")
+			return exitUsage
+		}
 		fmt.Fprintln(c.Err, "context create requires --path <path>")
 		c.printContextUsage(c.Err)
 		return exitUsage
@@ -264,6 +470,10 @@ func (c *CLI) runContextCreate(args []string) int {
 	svc := contextcmd.NewService(appports.NewContextPort(resolveContextUseRoot))
 	root, err := svc.Create(name, rawPath, useNow)
 	if err != nil {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.create", contextErrorCode(err), err.Error())
+			return exitError
+		}
 		switch {
 		case strings.HasPrefix(err.Error(), "validate root:"):
 			fmt.Fprintf(c.Err, "%v\n", err)
@@ -276,6 +486,18 @@ func (c *CLI) runContextCreate(args []string) int {
 		}
 		return exitError
 	}
+	if outputFormat == "json" {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:     true,
+			Action: "context.create",
+			Result: map[string]any{
+				"context_name": name,
+				"path":         root,
+				"selected":     useNow,
+			},
+		})
+		return exitOK
+	}
 
 	useColorOut := writerSupportsColor(c.Out)
 	if useNow {
@@ -287,22 +509,69 @@ func (c *CLI) runContextCreate(args []string) int {
 }
 
 func (c *CLI) runContextRename(args []string) int {
-	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
-		c.printContextUsage(c.Out)
-		return exitOK
+	outputFormat := "human"
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch arg {
+		case "-h", "--help", "help":
+			c.printContextUsage(c.Out)
+			return exitOK
+		case "--format":
+			if i+1 >= len(args) {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printContextUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(args[i+1])
+			i++
+		default:
+			if strings.HasPrefix(arg, "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
+				continue
+			}
+			rest = append(rest, arg)
+		}
 	}
-	if len(args) != 2 {
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printContextUsage(c.Err)
+		return exitUsage
+	}
+	if len(rest) != 2 {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.rename", "invalid_argument", "usage: kra context rename <old-name> <new-name>")
+			return exitUsage
+		}
 		fmt.Fprintf(c.Err, "usage: kra context rename <old-name> <new-name>\n")
 		return exitUsage
 	}
 
-	oldName := strings.TrimSpace(args[0])
-	newName := strings.TrimSpace(args[1])
+	oldName := strings.TrimSpace(rest[0])
+	newName := strings.TrimSpace(rest[1])
 	svc := contextcmd.NewService(appports.NewContextPort(resolveContextUseRoot))
 	root, err := svc.Rename(oldName, newName)
 	if err != nil {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.rename", contextErrorCode(err), err.Error())
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
+	}
+	if outputFormat == "json" {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:     true,
+			Action: "context.rename",
+			Result: map[string]any{
+				"old_name": oldName,
+				"new_name": newName,
+				"path":     root,
+			},
+		})
+		return exitOK
 	}
 
 	useColorOut := writerSupportsColor(c.Out)
@@ -311,7 +580,43 @@ func (c *CLI) runContextRename(args []string) int {
 }
 
 func (c *CLI) runContextRemove(args []string) int {
-	if len(args) == 0 {
+	outputFormat := "human"
+	rest := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch arg {
+		case "-h", "--help", "help":
+			c.printContextUsage(c.Out)
+			return exitOK
+		case "--format":
+			if i+1 >= len(args) {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printContextUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(args[i+1])
+			i++
+		default:
+			if strings.HasPrefix(arg, "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
+				continue
+			}
+			rest = append(rest, arg)
+		}
+	}
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printContextUsage(c.Err)
+		return exitUsage
+	}
+
+	if len(rest) == 0 {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.remove", "invalid_argument", "context rm --format json requires <name>")
+			return exitUsage
+		}
 		svc := contextcmd.NewService(appports.NewContextPort(resolveContextUseRoot))
 		entries, err := svc.List()
 		if err != nil {
@@ -357,37 +662,64 @@ func (c *CLI) runContextRemove(args []string) int {
 			fmt.Fprintf(c.Err, "run context selector: %v\n", err)
 			return exitError
 		}
-		args = []string{selected[0]}
+		rest = []string{selected[0]}
 	}
-	if args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
-		c.printContextUsage(c.Out)
-		return exitOK
-	}
-	if len(args) != 1 {
+	if len(rest) != 1 {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.remove", "invalid_argument", "usage: kra context rm <name>")
+			return exitUsage
+		}
 		fmt.Fprintf(c.Err, "usage: kra context rm <name>\n")
 		return exitUsage
 	}
 
-	name := strings.TrimSpace(args[0])
+	name := strings.TrimSpace(rest[0])
 	svc := contextcmd.NewService(appports.NewContextPort(resolveContextUseRoot))
 	root, ok, err := svc.ResolveRootByName(name)
 	if err != nil {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.remove", contextErrorCode(err), err.Error())
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
 	if !ok {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.remove", "not_found", fmt.Sprintf("context not found: %s", name))
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "context not found: %s\n", name)
 		return exitError
 	}
 	currentRoot, _, _ := paths.ReadCurrentContext()
 	if strings.TrimSpace(root) != "" && strings.TrimSpace(root) == strings.TrimSpace(currentRoot) {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.remove", "conflict", fmt.Sprintf("cannot remove current context: %s", name))
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "cannot remove current context: %s\n", name)
 		return exitError
 	}
 	removedRoot, err := svc.Remove(name)
 	if err != nil {
+		if outputFormat == "json" {
+			writeContextJSONError(c.Out, "context.remove", contextErrorCode(err), err.Error())
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
+	}
+	if outputFormat == "json" {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:     true,
+			Action: "context.remove",
+			Result: map[string]any{
+				"context_name": name,
+				"path":         removedRoot,
+			},
+		})
+		return exitOK
 	}
 
 	useColorOut := writerSupportsColor(c.Out)
