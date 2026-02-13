@@ -352,6 +352,67 @@ func TestCLI_RepoRemove_RemovesSelectedRegisteredRepo(t *testing.T) {
 	}
 }
 
+func TestCLI_RepoRemove_JSON_Success(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "remove-json")
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
+			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"repo", "remove", "--format", "json", "example-org/remove-json"})
+	if code != exitOK {
+		t.Fatalf("repo remove --format json exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "repo.remove" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	if got := int(resp.Result["removed"].(float64)); got != 1 {
+		t.Fatalf("result.removed = %d, want 1", got)
+	}
+}
+
+func TestCLI_RepoRemove_JSON_RequiresRepoKey(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"repo", "remove", "--format", "json"})
+	if code != exitUsage {
+		t.Fatalf("repo remove --format json exit code = %d, want %d", code, exitUsage)
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if resp.OK || resp.Action != "repo.remove" || resp.Error.Code != "invalid_argument" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+}
+
 func TestCLI_RepoRemove_FailsWhenRepoBoundToWorkspace(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
@@ -407,6 +468,64 @@ func TestCLI_RepoRemove_FailsWhenRepoBoundToWorkspace(t *testing.T) {
 	}
 	if !strings.Contains(err.String(), "cannot remove repos that are still bound to workspaces") {
 		t.Fatalf("stderr missing bound warning: %q", err.String())
+	}
+}
+
+func TestCLI_RepoRemove_JSON_BlockedWhenRepoBound(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "bound-json")
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
+			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"ws", "create", "--no-prompt", "TEST-201"}); code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		c.In = strings.NewReader(addRepoSelectionInput("", "TEST-201"))
+		if code := c.Run([]string{"ws", "--act", "add-repo", "TEST-201"}); code != exitOK {
+			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"repo", "remove", "--format", "json", "example-org/bound-json"})
+	if code != exitError {
+		t.Fatalf("repo remove --format json exit code = %d, want %d", code, exitError)
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if resp.OK || resp.Action != "repo.remove" || resp.Error.Code != "conflict" {
+		t.Fatalf("unexpected json response: %+v", resp)
 	}
 }
 

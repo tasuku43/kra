@@ -21,16 +21,67 @@ var promptRepoRemoveSelection = func(c *CLI, candidates []workspaceSelectorCandi
 }
 
 func (c *CLI) runRepoRemove(args []string) int {
-	if len(args) > 0 {
-		switch args[0] {
+	outputFormat := "human"
+	repoArgs := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch arg {
 		case "-h", "--help", "help":
 			c.printRepoRemoveUsage(c.Out)
 			return exitOK
+		case "--format":
+			if i+1 >= len(args) {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printRepoRemoveUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(args[i+1])
+			i++
+		default:
+			if strings.HasPrefix(arg, "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
+				continue
+			}
+			if strings.HasPrefix(arg, "-") {
+				fmt.Fprintf(c.Err, "unknown flag for repo remove: %q\n", arg)
+				c.printRepoRemoveUsage(c.Err)
+				return exitUsage
+			}
+			repoArgs = append(repoArgs, arg)
 		}
+	}
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printRepoRemoveUsage(c.Err)
+		return exitUsage
+	}
+	if outputFormat == "json" && len(repoArgs) == 0 {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:     false,
+			Action: "repo.remove",
+			Error: &cliJSONError{
+				Code:    "invalid_argument",
+				Message: "repo remove --format json requires at least one <repo-key>",
+			},
+		})
+		return exitUsage
 	}
 
 	wd, err := os.Getwd()
 	if err != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.remove",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("get working dir: %v", err),
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "get working dir: %v\n", err)
 		return exitError
 	}
@@ -42,31 +93,101 @@ func (c *CLI) runRepoRemove(args []string) int {
 		TouchRegistry: true,
 	})
 	if err != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.remove",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: err.Error(),
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	c.debugf("run repo remove args=%d", len(args))
+	c.debugf("run repo remove args=%d", len(repoArgs))
 
 	repos, fallbackErr := listRootRepoCandidatesFromFilesystem(ctx, session.Root, session.RepoPoolPath)
 	if fallbackErr != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.remove",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("list repos: %v", fallbackErr),
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "list repos: %v\n", fallbackErr)
 		return exitError
 	}
 	if len(repos) == 0 {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.remove",
+				Error: &cliJSONError{
+					Code:    "not_found",
+					Message: "no repos registered in current root",
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintln(c.Err, "no repos registered in current root")
 		return exitError
 	}
 
-	selected, err := selectReposForRemove(c, repos, args)
+	selected, err := selectReposForRemove(c, repos, repoArgs)
 	if err != nil {
 		if errors.Is(err, errSelectorCanceled) {
+			if outputFormat == "json" {
+				_ = writeCLIJSON(c.Out, cliJSONResponse{
+					OK:     false,
+					Action: "repo.remove",
+					Error: &cliJSONError{
+						Code:    "conflict",
+						Message: "aborted",
+					},
+				})
+				return exitError
+			}
 			fmt.Fprintln(c.Err, "aborted")
+			return exitError
+		}
+		if outputFormat == "json" {
+			code := "invalid_argument"
+			if strings.Contains(strings.ToLower(err.Error()), "not found") {
+				code = "not_found"
+			}
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.remove",
+				Error: &cliJSONError{
+					Code:    code,
+					Message: err.Error(),
+				},
+			})
 			return exitError
 		}
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
 	if len(selected) == 0 {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.remove",
+				Error: &cliJSONError{
+					Code:    "conflict",
+					Message: "aborted",
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintln(c.Err, "aborted")
 		return exitError
 	}
@@ -78,12 +199,42 @@ func (c *CLI) runRepoRemove(args []string) int {
 		}
 	}
 	if len(blocked) > 0 {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.remove",
+				Result: map[string]any{
+					"blocked": blocked,
+				},
+				Error: &cliJSONError{
+					Code:    "conflict",
+					Message: "cannot remove repos that are still bound to workspaces",
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintln(c.Err, "cannot remove repos that are still bound to workspaces:")
 		for _, line := range blocked {
 			fmt.Fprintf(c.Err, "%s- %s\n", uiIndent, line)
 		}
 		fmt.Fprintln(c.Err, "hint: remove workspace repo bindings first (for example via ws close/purge or future ws repo detach flow)")
 		return exitError
+	}
+	if outputFormat == "json" {
+		reposOut := make([]string, 0, len(selected))
+		for _, it := range selected {
+			reposOut = append(reposOut, it.RepoKey)
+		}
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:     true,
+			Action: "repo.remove",
+			Result: map[string]any{
+				"removed": len(selected),
+				"total":   len(selected),
+				"repos":   reposOut,
+			},
+		})
+		return exitOK
 	}
 
 	useColorOut := writerSupportsColor(c.Out)
