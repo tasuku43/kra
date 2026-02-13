@@ -45,15 +45,82 @@ var promptRepoGCSelection = func(c *CLI, candidates []workspaceSelectorCandidate
 }
 
 func (c *CLI) runRepoGC(args []string) int {
-	if len(args) > 0 {
-		switch args[0] {
+	outputFormat := "human"
+	forceYes := false
+	selectArgs := make([]string, 0, len(args))
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch arg {
 		case "-h", "--help", "help":
 			c.printRepoGCUsage(c.Out)
 			return exitOK
+		case "--yes":
+			forceYes = true
+		case "--format":
+			if i+1 >= len(args) {
+				fmt.Fprintln(c.Err, "--format requires a value")
+				c.printRepoGCUsage(c.Err)
+				return exitUsage
+			}
+			outputFormat = strings.TrimSpace(args[i+1])
+			i++
+		default:
+			if strings.HasPrefix(arg, "--format=") {
+				outputFormat = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
+				continue
+			}
+			if strings.HasPrefix(arg, "-") {
+				fmt.Fprintf(c.Err, "unknown flag for repo gc: %q\n", arg)
+				c.printRepoGCUsage(c.Err)
+				return exitUsage
+			}
+			selectArgs = append(selectArgs, arg)
+		}
+	}
+	switch outputFormat {
+	case "human", "json":
+	default:
+		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
+		c.printRepoGCUsage(c.Err)
+		return exitUsage
+	}
+	if outputFormat == "json" {
+		if len(selectArgs) == 0 {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.gc",
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: "repo gc --format json requires at least one <repo-key|repo-uid>",
+				},
+			})
+			return exitUsage
+		}
+		if !forceYes {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.gc",
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: "--yes is required in --format json mode",
+				},
+			})
+			return exitUsage
 		}
 	}
 	wd, err := os.Getwd()
 	if err != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.gc",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("get working dir: %v", err),
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "get working dir: %v\n", err)
 		return exitError
 	}
@@ -66,13 +133,35 @@ func (c *CLI) runRepoGC(args []string) int {
 		TouchRegistry: true,
 	})
 	if err != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.gc",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: err.Error(),
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
-	c.debugf("run repo gc args=%d", len(args))
+	c.debugf("run repo gc args=%d", len(selectArgs))
 
 	candidates, err := buildRepoGCCandidates(ctx, session.Root, session.RepoPoolPath, c.debugf)
 	if err != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.gc",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("build repo gc candidates: %v", err),
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintf(c.Err, "build repo gc candidates: %v\n", err)
 		return exitError
 	}
@@ -83,20 +172,68 @@ func (c *CLI) runRepoGC(args []string) int {
 		}
 	}
 	if len(selectable) == 0 {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.gc",
+				Error: &cliJSONError{
+					Code:    "not_found",
+					Message: "no gc candidates found in repo pool",
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintln(c.Err, "no gc candidates found in repo pool")
 		return exitError
 	}
 
-	selected, err := selectRepoGCCandidates(c, selectable, args)
+	selected, err := selectRepoGCCandidates(c, selectable, selectArgs)
 	if err != nil {
 		if errors.Is(err, errSelectorCanceled) {
+			if outputFormat == "json" {
+				_ = writeCLIJSON(c.Out, cliJSONResponse{
+					OK:     false,
+					Action: "repo.gc",
+					Error: &cliJSONError{
+						Code:    "conflict",
+						Message: "aborted",
+					},
+				})
+				return exitError
+			}
 			fmt.Fprintln(c.Err, "aborted")
+			return exitError
+		}
+		if outputFormat == "json" {
+			code := "invalid_argument"
+			if strings.Contains(strings.ToLower(err.Error()), "not found") {
+				code = "not_found"
+			}
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.gc",
+				Error: &cliJSONError{
+					Code:    code,
+					Message: err.Error(),
+				},
+			})
 			return exitError
 		}
 		fmt.Fprintf(c.Err, "%v\n", err)
 		return exitError
 	}
 	if len(selected) == 0 {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.gc",
+				Error: &cliJSONError{
+					Code:    "conflict",
+					Message: "aborted",
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintln(c.Err, "aborted")
 		return exitError
 	}
@@ -110,6 +247,27 @@ func (c *CLI) runRepoGC(args []string) int {
 		blocked = append(blocked, it)
 	}
 	if len(blocked) > 0 {
+		if outputFormat == "json" {
+			items := make([]map[string]any, 0, len(blocked))
+			for _, it := range blocked {
+				items = append(items, map[string]any{
+					"repo_key": it.RepoKey,
+					"reason":   describeRepoGCSkipReason(it),
+				})
+			}
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.gc",
+				Result: map[string]any{
+					"blocked": items,
+				},
+				Error: &cliJSONError{
+					Code:    "conflict",
+					Message: "selected repos are not eligible for gc",
+				},
+			})
+			return exitError
+		}
 		fmt.Fprintln(c.Err, "selected repos are not eligible for gc:")
 		for _, it := range blocked {
 			reason := describeRepoGCSkipReason(it)
@@ -122,25 +280,69 @@ func (c *CLI) runRepoGC(args []string) int {
 	}
 
 	useColorOut := writerSupportsColor(c.Out)
-	printRepoGCSelection(c.Out, eligibleSelected, useColorOut)
-	fmt.Fprintln(c.Out)
-	fmt.Fprintln(c.Out, renderRiskTitle(useColorOut))
-	fmt.Fprintf(c.Out, "%srepo gc permanently deletes bare repos from pool.\n", uiIndent)
-	fmt.Fprintf(c.Out, "%s%s %d\n", uiIndent, styleAccent("selected:", useColorOut), len(eligibleSelected))
+	if outputFormat == "human" {
+		printRepoGCSelection(c.Out, eligibleSelected, useColorOut)
+		fmt.Fprintln(c.Out)
+		fmt.Fprintln(c.Out, renderRiskTitle(useColorOut))
+		fmt.Fprintf(c.Out, "%srepo gc permanently deletes bare repos from pool.\n", uiIndent)
+		fmt.Fprintf(c.Out, "%s%s %d\n", uiIndent, styleAccent("selected:", useColorOut), len(eligibleSelected))
 
-	line, err := c.promptLine(fmt.Sprintf("%sremove selected bare repos from pool? this is permanent (y/N): ", uiIndent))
-	if err != nil {
-		fmt.Fprintf(c.Err, "read confirmation: %v\n", err)
-		return exitError
-	}
-	switch strings.ToLower(strings.TrimSpace(line)) {
-	case "y", "yes":
-	default:
-		fmt.Fprintln(c.Err, "aborted")
-		return exitError
+		line, err := c.promptLine(fmt.Sprintf("%sremove selected bare repos from pool? this is permanent (y/N): ", uiIndent))
+		if err != nil {
+			fmt.Fprintf(c.Err, "read confirmation: %v\n", err)
+			return exitError
+		}
+		switch strings.ToLower(strings.TrimSpace(line)) {
+		case "y", "yes":
+		default:
+			fmt.Fprintln(c.Err, "aborted")
+			return exitError
+		}
 	}
 
 	removed, failed := applyRepoGC(eligibleSelected)
+	if outputFormat == "json" {
+		removedItems := make([]map[string]any, 0, len(removed))
+		for _, it := range removed {
+			removedItems = append(removedItems, map[string]any{
+				"repo_key": it.RepoKey,
+			})
+		}
+		failedItems := make([]map[string]any, 0, len(failed))
+		for _, it := range failed {
+			failedItems = append(failedItems, map[string]any{
+				"repo_key": it.RepoKey,
+				"reason":   it.SkipReason,
+			})
+		}
+		if len(failed) == 0 {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     true,
+				Action: "repo.gc",
+				Result: map[string]any{
+					"removed": len(removed),
+					"total":   len(eligibleSelected),
+					"items":   removedItems,
+				},
+			})
+			return exitOK
+		}
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:     false,
+			Action: "repo.gc",
+			Result: map[string]any{
+				"removed": len(removed),
+				"total":   len(eligibleSelected),
+				"items":   removedItems,
+				"failed":  failedItems,
+			},
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("failed to remove %d repo(s)", len(failed)),
+			},
+		})
+		return exitError
+	}
 	useColor := useColorOut
 	fmt.Fprintln(c.Out)
 	fmt.Fprintln(c.Out, renderResultTitle(useColor))

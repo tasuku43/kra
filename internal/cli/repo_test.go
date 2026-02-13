@@ -589,6 +589,67 @@ func TestCLI_RepoGC_RemovesOrphanBareRepo(t *testing.T) {
 	}
 }
 
+func TestCLI_RepoGC_JSON_Success(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "gc-json-target")
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
+			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"repo", "gc", "--format", "json", "--yes", "example-org/gc-json-target"})
+	if code != exitOK {
+		t.Fatalf("repo gc --format json exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "repo.gc" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	if got := int(resp.Result["removed"].(float64)); got != 1 {
+		t.Fatalf("result.removed = %d, want 1", got)
+	}
+}
+
+func TestCLI_RepoGC_JSON_RequiresYes(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"repo", "gc", "--format", "json", "example-org/any"})
+	if code != exitUsage {
+		t.Fatalf("repo gc --format json exit code = %d, want %d", code, exitUsage)
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if resp.OK || resp.Action != "repo.gc" || resp.Error.Code != "invalid_argument" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+}
+
 func TestCLI_RepoGC_FailsWhenNoEligibleCandidates(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
@@ -645,6 +706,65 @@ func TestCLI_RepoGC_FailsWhenNoEligibleCandidates(t *testing.T) {
 	}
 	if !strings.Contains(err.String(), "selected repos are not eligible for gc") {
 		t.Fatalf("stderr missing expected reason: %q", err.String())
+	}
+}
+
+func TestCLI_RepoGC_JSON_BlockedWhenNotEligible(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+	initAndConfigureRootRepo(t, env.Root)
+	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "gc-json-blocked")
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
+			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS-GC-JSON"}); code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		c.In = strings.NewReader(addRepoSelectionInput("", "WS-GC-JSON"))
+		if code := c.Run([]string{"ws", "--act", "add-repo", "WS-GC-JSON"}); code != exitOK {
+			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"repo", "gc", "--format", "json", "--yes", "example-org/gc-json-blocked"})
+	if code != exitError {
+		t.Fatalf("repo gc --format json exit code = %d, want %d", code, exitError)
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if resp.OK || resp.Action != "repo.gc" || resp.Error.Code != "conflict" {
+		t.Fatalf("unexpected json response: %+v", resp)
 	}
 }
 
