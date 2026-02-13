@@ -72,6 +72,10 @@ func (c *CLI) Run(args []string) int {
 		return c.runShell(args[1:])
 	case "ws":
 		return c.runWS(args[1:])
+	case "doctor":
+		return c.runDoctor(args[1:])
+	case "agent":
+		return c.runAgent(args[1:])
 	default:
 		fmt.Fprintf(c.Err, "unknown command: %q\n", args[0])
 		c.printRootUsage(c.Err)
@@ -102,9 +106,9 @@ func (c *CLI) runWS(args []string) int {
 		return c.runWSCreate(args[1:])
 	case "import":
 		return c.runWSImport(args[1:])
-	case "ls":
-		return c.runWSList(args[1:])
 	case "list":
+		return c.runWSList(args[1:])
+	case "ls":
 		return c.runWSList(args[1:])
 	case "select":
 		return c.runWSSelect(args[1:])

@@ -178,6 +178,105 @@ func TestCLI_WS_Select_ActScopeMismatch(t *testing.T) {
 	}
 }
 
+func TestCLI_WS_Select_Multi_RequiresAct(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "select", "--multi"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
+	}
+	if !strings.Contains(err.String(), "--multi requires --act") {
+		t.Fatalf("stderr missing --act required message: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Select_Multi_RejectsUnsupportedAct(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "select", "--multi", "--act", "go"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
+	}
+	if !strings.Contains(err.String(), "does not support --multi") {
+		t.Fatalf("stderr missing unsupported multi action message: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Select_Multi_CloseWithArchivedRejected(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "select", "--multi", "--archived", "--act", "close"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
+	}
+	if !strings.Contains(err.String(), "cannot be used with --archived") {
+		t.Fatalf("stderr missing scope mismatch message: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Select_Multi_ReopenImplicitArchived(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "select", "--multi", "--act", "reopen"})
+	if code == exitUsage {
+		t.Fatalf("exit code = %d, want not %d (stderr=%q)", code, exitUsage, err.String())
+	}
+	if !strings.Contains(err.String(), "resolve KRA_ROOT:") {
+		t.Fatalf("stderr should continue to runtime root resolution, got: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Select_Multi_Purge_PreflightErrorPrintedOnce(t *testing.T) {
+	root := t.TempDir()
+	setKraHomeForTest(t)
+	if err := paths.WriteCurrentContext(root); err != nil {
+		t.Fatalf("WriteCurrentContext() error: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "archive", "WS1"), 0o755); err != nil {
+		t.Fatalf("mkdir archive WS1: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "archive", "WS2"), 0o755); err != nil {
+		t.Fatalf("mkdir archive WS2: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, ".kra", "state"), 0o755); err != nil {
+		t.Fatalf("mkdir .kra/state: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, ".kra", "state", "state.db"), []byte("not-sqlite"), 0o644); err != nil {
+		t.Fatalf("write state.db: %v", err)
+	}
+
+	wd, _ := os.Getwd()
+	if err := os.Chdir(root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(wd) })
+
+	in := strings.NewReader(" \n \n")
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	c.In = in
+
+	code := c.Run([]string{"ws", "select", "--multi", "--act", "purge"})
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitError, errBuf.String())
+	}
+	if cnt := strings.Count(errBuf.String(), "git index has staged changes"); cnt > 1 {
+		t.Fatalf("preflight error should be printed once, got count=%d stderr=%q", cnt, errBuf.String())
+	}
+}
+
 func TestCLI_WS_Create_NotImplemented(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer

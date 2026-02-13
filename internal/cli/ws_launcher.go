@@ -298,6 +298,16 @@ func (c *CLI) runWSSelect(args []string) int {
 		c.printWSUsage(c.Out)
 		return exitOK
 	}
+	hasMulti := false
+	for _, arg := range args {
+		if strings.TrimSpace(arg) == "--multi" {
+			hasMulti = true
+			break
+		}
+	}
+	if hasMulti {
+		return c.runWSSelectMulti(args)
+	}
 	for i := 0; i < len(args); i++ {
 		if args[i] == "--id" || strings.HasPrefix(args[i], "--id=") {
 			fmt.Fprintln(c.Err, "ws select does not support --id (always starts from workspace selection)")
@@ -306,6 +316,177 @@ func (c *CLI) runWSSelect(args []string) int {
 		}
 	}
 	return c.runWSLauncherWithSelectMode(args, true)
+}
+
+func (c *CLI) runWSSelectMulti(args []string) int {
+	archivedScope := false
+	fixedAction := ""
+	parseAct := func(next string) (string, bool) {
+		v := strings.TrimSpace(next)
+		if v == "" {
+			fmt.Fprintln(c.Err, "--act requires a value")
+			c.printWSUsage(c.Err)
+			return "", false
+		}
+		return v, true
+	}
+
+	for len(args) > 0 {
+		cur := strings.TrimSpace(args[0])
+		switch cur {
+		case "--multi":
+			args = args[1:]
+		case "--archived":
+			archivedScope = true
+			args = args[1:]
+		case "--act":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--act requires a value")
+				c.printWSUsage(c.Err)
+				return exitUsage
+			}
+			v, ok := parseAct(args[1])
+			if !ok {
+				return exitUsage
+			}
+			fixedAction = v
+			args = args[2:]
+		default:
+			if strings.HasPrefix(cur, "--act=") {
+				v, ok := parseAct(strings.TrimPrefix(cur, "--act="))
+				if !ok {
+					return exitUsage
+				}
+				fixedAction = v
+				args = args[1:]
+				continue
+			}
+			if cur == "--id" || strings.HasPrefix(cur, "--id=") {
+				fmt.Fprintln(c.Err, "ws select does not support --id (always starts from workspace selection)")
+				c.printWSUsage(c.Err)
+				return exitUsage
+			}
+			fmt.Fprintf(c.Err, "unknown flag for ws select: %q\n", cur)
+			c.printWSUsage(c.Err)
+			return exitUsage
+		}
+	}
+
+	if fixedAction == "" {
+		fmt.Fprintln(c.Err, "--multi requires --act")
+		c.printWSUsage(c.Err)
+		return exitUsage
+	}
+	switch fixedAction {
+	case "close":
+		if archivedScope {
+			fmt.Fprintln(c.Err, "--act close cannot be used with --archived in --multi mode")
+			c.printWSUsage(c.Err)
+			return exitUsage
+		}
+	case "reopen", "purge":
+		archivedScope = true
+	default:
+		fmt.Fprintf(c.Err, "--act %s does not support --multi\n", fixedAction)
+		c.printWSUsage(c.Err)
+		return exitUsage
+	}
+
+	wd, err := os.Getwd()
+	if err != nil {
+		fmt.Fprintf(c.Err, "get working dir: %v\n", err)
+		return exitError
+	}
+	root, err := paths.ResolveExistingRoot(wd)
+	if err != nil {
+		fmt.Fprintf(c.Err, "resolve KRA_ROOT: %v\n", err)
+		return exitError
+	}
+	if err := c.ensureDebugLog(root, "ws-select-multi"); err != nil {
+		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
+	}
+
+	status := "active"
+	if archivedScope {
+		status = "archived"
+	}
+	ids, err := c.selectWorkspaceIDsByStatus(root, status, fixedAction)
+	if err != nil {
+		switch err {
+		case errNoActiveWorkspaces:
+			fmt.Fprintln(c.Err, "no active workspaces available")
+		case errNoArchivedWorkspaces:
+			fmt.Fprintln(c.Err, "no archived workspaces available")
+		case errSelectorCanceled:
+			fmt.Fprintln(c.Err, "aborted")
+		default:
+			fmt.Fprintf(c.Err, "run ws select --multi: %v\n", err)
+		}
+		return exitError
+	}
+	if err := preflightWSSelectMultiAction(context.Background(), fixedAction, root); err != nil {
+		fmt.Fprintf(c.Err, "%v\n", err)
+		return exitError
+	}
+
+	success := make([]string, 0, len(ids))
+	failed := make([]string, 0, len(ids))
+	for _, id := range ids {
+		code := c.runWSSelectMultiActionByID(fixedAction, id)
+		if code == exitOK {
+			success = append(success, id)
+			continue
+		}
+		failed = append(failed, id)
+	}
+
+	useColor := writerSupportsColor(c.Out)
+	body := []string{
+		fmt.Sprintf("%sselected: %d", uiIndent, len(ids)),
+		fmt.Sprintf("%ssucceeded: %d", uiIndent, len(success)),
+		fmt.Sprintf("%sfailed: %d", uiIndent, len(failed)),
+	}
+	for _, id := range failed {
+		body = append(body, fmt.Sprintf("%s%s %s", uiIndent, styleError("!", useColor), id))
+	}
+	printSection(c.Out, renderResultTitle(useColor), body, sectionRenderOptions{
+		blankAfterHeading: false,
+		trailingBlank:     true,
+	})
+	if len(failed) > 0 {
+		return exitError
+	}
+	return exitOK
+}
+
+func (c *CLI) runWSSelectMultiActionByID(action string, workspaceID string) int {
+	switch action {
+	case "close":
+		return c.runWSClose([]string{"--id", workspaceID})
+	case "reopen":
+		return c.runWSReopen([]string{workspaceID})
+	case "purge":
+		return c.runWSPurge([]string{workspaceID})
+	default:
+		return exitUsage
+	}
+}
+
+func preflightWSSelectMultiAction(ctx context.Context, action string, root string) error {
+	switch action {
+	case "reopen":
+		if err := ensureRootGitWorktree(ctx, root); err != nil {
+			return err
+		}
+		return ensureNoStagedChangesForReopen(ctx, root)
+	case "purge":
+		if err := ensureRootGitWorktree(ctx, root); err != nil {
+			return err
+		}
+		return ensureNoStagedChanges(ctx, root)
+	default:
+		return nil
+	}
 }
 
 type cliWSLauncherAdapter struct {
@@ -376,6 +557,34 @@ func (c *CLI) selectWorkspaceIDByStatus(root string, status string, action strin
 	}
 	c.debugf("ws launcher prompt selector done status=%s action=%s elapsed_ms=%d selected=%v", status, action, selectElapsedMs, ids)
 	return ids[0], nil
+}
+
+func (c *CLI) selectWorkspaceIDsByStatus(root string, status string, action string) ([]string, error) {
+	ctx := context.Background()
+	c.debugf("ws launcher load candidates status=%s action=%s multi=true", status, action)
+	start := time.Now()
+	candidates, err := listWorkspaceCandidatesByStatus(ctx, root, status)
+	elapsedMs := time.Since(start).Milliseconds()
+	if err != nil {
+		c.debugf("ws launcher load candidates failed status=%s action=%s elapsed_ms=%d err=%v", status, action, elapsedMs, err)
+		return nil, err
+	}
+	c.debugf("ws launcher load candidates done status=%s action=%s count=%d elapsed_ms=%d", status, action, len(candidates), elapsedMs)
+	if len(candidates) == 0 {
+		if status == "archived" {
+			return nil, errNoArchivedWorkspaces
+		}
+		return nil, errNoActiveWorkspaces
+	}
+	selectStart := time.Now()
+	ids, err := c.promptWorkspaceSelector(status, action, candidates)
+	selectElapsedMs := time.Since(selectStart).Milliseconds()
+	if err != nil {
+		c.debugf("ws launcher prompt selector failed status=%s action=%s multi=true elapsed_ms=%d err=%v", status, action, selectElapsedMs, err)
+		return nil, err
+	}
+	c.debugf("ws launcher prompt selector done status=%s action=%s multi=true elapsed_ms=%d selected=%v", status, action, selectElapsedMs, ids)
+	return ids, nil
 }
 
 func lookupWorkspaceStatusByID(ctx context.Context, root string, workspaceID string) (string, bool, error) {

@@ -3,25 +3,25 @@ package cli
 import (
 	"fmt"
 	"io"
+	"strings"
 )
 
 func (c *CLI) printRootUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
-  kra [--debug] <command> [args]
+	commands := []string{
+		"  init              Initialize KRA_ROOT",
+		"  context           Context commands",
+		"  repo              Repository pool commands",
+		"  template          Workspace template commands",
+		"  shell             Shell integration commands",
+		"  ws                Workspace commands",
+		"  doctor            Diagnose KRA_ROOT health",
+	}
+	commands = append(commands,
+		"  version           Print version",
+		"  help              Show this help",
+	)
 
-Commands:
-  init              Initialize KRA_ROOT
-  context           Context commands
-  repo              Repository pool commands
-  template          Workspace template commands
-  shell             Shell integration commands
-  ws                Workspace commands
-  version           Print version
-  help              Show this help
-
-Run:
-  kra <command> --help
-`)
+	fmt.Fprintf(w, "Usage:\n  kra [--debug] <command> [args]\n\nCommands:\n%s\n\nRun:\n  kra <command> --help\n", strings.Join(commands, "\n"))
 }
 
 func (c *CLI) printContextUsage(w io.Writer) {
@@ -90,6 +90,18 @@ Options:
 `)
 }
 
+func (c *CLI) printDoctorUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra doctor [--format human|json] [--fix]
+
+Diagnose current KRA_ROOT health in a non-destructive way.
+
+Options:
+  --format          Output format (default: human)
+  --fix             Reserved for future use (not supported yet)
+`)
+}
+
 func (c *CLI) printInitUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra init [--root <path>] [--context <name>]
@@ -112,6 +124,7 @@ func (c *CLI) printWSUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws [--id <id>] [--act <action>] [action-args...]
   kra ws select [--archived] [--act <go|close|add-repo|remove-repo|reopen|purge>]
+  kra ws select --multi --act <close|reopen|purge> [--archived]
   kra ws create [--no-prompt] <id>
   kra ws import jira (--sprint [<id|name>] [--board <id|name>] | --jql "<expr>") [--limit <n>] [--apply] [--no-prompt] [--json]
   kra ws list|ls [--archived] [--tree] [--format human|tsv]
@@ -120,8 +133,8 @@ Subcommands:
   create            Create a workspace
   import            Import workspaces from external systems
   select            Select workspace (then action or fixed action)
-  ls                Alias of list
   list              List workspaces
+  ls                Alias of list
   help              Show this help
 
 Run:
@@ -135,6 +148,9 @@ Notes:
 - kra ws opens action launcher when --act is omitted.
 - kra ws resolves workspace from --id or current workspace context.
 - kra ws select always opens workspace selection first.
+- ws select --multi requires --act.
+- ws select --multi supports only close/reopen/purge.
+- ws select --multi --act reopen|purge implies archived scope.
 - invalid --act/scope combinations fail with usage.
 `)
 }
@@ -351,5 +367,56 @@ Options:
   --force            Required with --no-prompt
 
 Use kra ws select --archived for interactive selection.
+`)
+}
+
+func (c *CLI) printAgentUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra agent <subcommand> [args]
+
+Subcommands:
+  run               Start an agent activity
+  stop              Stop a running agent activity
+  list              List agent activities
+  ls                Alias of list
+  help              Show this help
+`)
+}
+
+func (c *CLI) printAgentRunUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra agent run --workspace <id> --kind <agent-kind> [--log-path <path>]
+
+Start/replace tracked running agent activity for one workspace.
+
+Options:
+  --workspace       Workspace ID (required)
+  --kind            Agent kind label (required)
+  --log-path        Optional log path for operator navigation
+`)
+}
+
+func (c *CLI) printAgentStopUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra agent stop --workspace <id> [--status succeeded|failed|unknown]
+
+Stop tracked running agent activity for one workspace.
+
+Options:
+  --workspace       Workspace ID (required)
+  --status          Final status (default: failed)
+`)
+}
+
+func (c *CLI) printAgentListUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra agent list [--workspace <id>] [--format human|tsv]
+  kra agent ls [--workspace <id>] [--format human|tsv]
+
+List tracked agent activities managed by kra in current KRA_ROOT.
+
+Options:
+  --workspace       Filter by workspace ID
+  --format          Output format (default: human)
 `)
 }

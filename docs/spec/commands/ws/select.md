@@ -27,6 +27,12 @@ Unify interactive selection into a single entrypoint while keeping operation com
 - `kra ws select --act <go|close|add-repo|remove-repo|reopen|purge>` skips action menu and executes fixed action.
 - `kra ws select --act reopen|purge` implicitly switches to archived scope.
 - `kra ws select --archived --act go|add-repo|remove-repo|close` must fail with usage error.
+- `kra ws select --multi` requires `--act`.
+- `kra ws select --multi --act <close|reopen|purge>` enables multi-selection and executes the fixed action for each
+  selected workspace.
+- `kra ws select --multi --act close` is active-scope only (`--archived` is invalid).
+- `kra ws select --multi --act reopen|purge` implicitly switches to archived scope.
+- `go|add-repo|remove-repo` are not supported in `--multi` mode.
 - `kra ws` must not auto-fallback to workspace list selection when current path cannot resolve workspace.
   unresolved invocation should fail and instruct users to run `kra ws select`.
 - `kra ws` must resolve target workspace by either:
@@ -36,10 +42,12 @@ Unify interactive selection into a single entrypoint while keeping operation com
 ## Selection flow
 
 - Stage 1: select exactly one workspace from list scope.
+- Stage 1 (multi): select one or more workspaces from list scope when `--multi` is set.
 - Stage 2: select action for selected workspace.
   - active scope: `go`, `add-repo`, `remove-repo`, `close`
   - archived scope: `reopen`, `purge`
 - Stage 3: dispatch to operation command with explicit `<id>`.
+- Stage 3 (multi): dispatch selected fixed action for each selected workspace id.
 
 ## Action routing policy
 

@@ -37,8 +37,12 @@ Implementation should reference these specs. When behavior changes, update the s
   - `concepts/ui-color.md`: CLI/TUI semantic color token policy
   - `concepts/architecture.md`: Layered architecture (`cli/app/domain/infra/ui`) and migration rules
   - `concepts/workspace-lifecycle.md`: Workspace lifecycle state machine and transition policy
+  - `concepts/output-contract.md`: Shared machine-readable output envelope and error code policy
 - Commands
   - `commands/agent/activity.md`: `kra agent` activity tracking baseline
+  - `commands/agent/run.md`: `kra agent run`
+  - `commands/agent/stop.md`: `kra agent stop`
+  - `commands/doctor.md`: `kra doctor`
   - `commands/context.md`: `kra context`
   - `commands/init.md`: `kra init`
   - `commands/repo/add.md`: `kra repo add`
@@ -51,6 +55,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/selector.md`: Shared inline selector UI for workspace actions
   - `commands/ws/select.md`: Unified human launcher (`ws select` / context-aware `ws`)
   - `commands/ws/create.md`: `kra ws create`
+  - `commands/ws/select-multi.md`: `kra ws select --multi`
   - `commands/ws/import/jira.md`: `kra ws import jira`
   - `commands/ws/add-repo.md`: `kra ws --act add-repo`
   - `commands/ws/remove-repo.md`: `kra ws --act remove-repo`
