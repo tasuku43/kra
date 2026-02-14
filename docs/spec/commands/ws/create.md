@@ -13,12 +13,17 @@ Create a workspace from a root-local template.
 
 - `id`: user-provided workspace ID
   - validation rules should follow `gion` (e.g. reject `/`)
+- `--id <id>` (optional): automation-friendly explicit ID flag
+  - must not be combined with positional `<id>`
+- `--title <title>` (optional): explicit title for non-Jira creation
+  - when provided, title prompt is skipped
 - `--template <name>` (optional): template name under `<current-root>/templates`
   - if omitted, resolve in this order:
     1. `<current-root>/.kra/config.yaml` -> `workspace.defaults.template`
     2. `~/.kra/config.yaml` -> `workspace.defaults.template`
     3. fallback `default`
 - `--no-prompt` (optional): do not prompt for `title` (store empty)
+- `--format human|json` (optional, default: `human`)
 - `--jira <ticket-url>` (optional): resolve `id` and `title` from Jira issue
   - `id = issueKey`
   - `title = issue summary`
@@ -49,6 +54,11 @@ Create a workspace from a root-local template.
 - Copy `templates/<name>/` contents into `workspaces/<id>/` (static copy, no placeholder expansion).
 - Prompt for `title` and store it in workspace metadata (`.kra.meta.json`)
   - if in a no-prompt mode, store an empty title
+  - if `--title` is provided, use it and do not prompt
+- In `--format json` mode:
+  - command behaves non-interactively (no title prompt)
+  - caller should provide either positional `<id>` or `--id <id>` for non-Jira create
+  - machine response uses shared JSON envelope (`action=ws.create`)
 - In `--jira` mode:
   - do not prompt
   - store `workspace.source_url = <ticket-url>`
@@ -68,6 +78,13 @@ Create a workspace from a root-local template.
   - `  path: <KRA_ROOT/workspaces/<id>>`
 - `Result:` heading style follows shared UI token rules (`text.primary` + bold).
 - Summary line should follow shared result color semantics (`status.success` on success).
+- JSON mode output (`--format json`) must follow shared envelope:
+  - `ok=true`
+  - `action=ws.create`
+  - `workspace_id=<id>`
+  - `result.created=1`
+  - `result.path=<KRA_ROOT/workspaces/<id>>`
+  - `result.template=<resolved-template-name>`
 
 ## FS metadata behavior
 
@@ -81,6 +98,8 @@ Create a workspace from a root-local template.
 
 ## Errors
 
+- `--format json` with missing explicit workspace target:
+  - fail with `invalid_argument` and usage exit code
 - Missing template:
   - fail and show available template names
 - `--template` omitted and `default` missing:

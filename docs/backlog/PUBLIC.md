@@ -1,6 +1,6 @@
 ---
 title: "PUBLIC backlog"
-status: planned
+status: implemented
 ---
 
 # PUBLIC Backlog
@@ -11,7 +11,7 @@ This backlog tracks release-readiness work item by item.
 
 ## P0: Must be completed before public release
 
-- [ ] PUBLIC-001: Public-facing README rewrite
+- [x] PUBLIC-001: Public-facing README rewrite
   - What: rewrite `README.md` as an external entrypoint with installation, target users, core use-cases, and FAQ.
   - Specs:
     - `README.md`
@@ -20,7 +20,7 @@ This backlog tracks release-readiness work item by item.
   - Depends: none
   - Serial: yes
 
-- [ ] PUBLIC-002: OSS governance docs minimum baseline
+- [x] PUBLIC-002: OSS governance docs minimum baseline
   - What: add minimum OSS operation docs required at release time (`CONTRIBUTING.md`, `SECURITY.md`).
   - Specs:
     - `CONTRIBUTING.md`
@@ -28,7 +28,7 @@ This backlog tracks release-readiness work item by item.
   - Depends: PUBLIC-001
   - Parallel: yes
 
-- [ ] PUBLIC-003: Build metadata injection (`version/commit/date`)
+- [x] PUBLIC-003: Build metadata injection (`version/commit/date`)
   - What: replace fixed `dev` version behavior with release-grade build metadata via ldflags.
   - Specs:
     - `cmd/kra/main.go`
@@ -36,7 +36,7 @@ This backlog tracks release-readiness work item by item.
   - Depends: none
   - Parallel: yes
 
-- [ ] PUBLIC-004: Release/distribution workflow
+- [x] PUBLIC-004: Release/distribution workflow
   - What: add tag-driven release workflow that publishes binaries and checksums.
   - Specs:
     - `.github/workflows/`
@@ -46,7 +46,7 @@ This backlog tracks release-readiness work item by item.
 
 ## P1: High priority after release baseline
 
-- [ ] PUBLIC-011: Output contract parity audit completion
+- [x] PUBLIC-011: Output contract parity audit completion
   - What: remove remaining output contract exceptions (including `ws import jira`) so automation can rely on a unified JSON envelope.
   - Specs:
     - `docs/spec/concepts/output-contract.md`
@@ -54,7 +54,7 @@ This backlog tracks release-readiness work item by item.
   - Depends: OPS-003
   - Parallel: yes
 
-- [ ] PUBLIC-013: Non-interactive automation parity for `ws create`
+- [x] PUBLIC-013: Non-interactive automation parity for `ws create`
   - What: strengthen automation-oriented mode for `ws create` to reduce TTY-only operation requirements.
   - Specs:
     - `docs/spec/commands/ws/create.md`
@@ -64,7 +64,7 @@ This backlog tracks release-readiness work item by item.
 
 ## P2: Medium-term improvements
 
-- [ ] PUBLIC-022: `ws import jira` help consistency audit
+- [x] PUBLIC-022: `ws import jira` help consistency audit
   - What: resolve flag/help consistency drift (including `--board` wording mismatch) and lock behavior with tests.
   - Specs:
     - `docs/spec/commands/ws/import/jira.md`

@@ -165,9 +165,11 @@ func (c *CLI) printWSUsage(w io.Writer) {
   kra ws [--id <id>] [--act <action>] [action-args...]
   kra ws select [--archived] [--act <go|close|add-repo|remove-repo|reopen|unlock|purge>]
   kra ws select --multi --act <close|reopen|purge> [--archived] [--commit]
-  kra ws create [--no-prompt] <id>
-  kra ws import jira (--sprint [<id|name>] [--board <id|name>] | --jql "<expr>") [--limit <n>] [--apply] [--no-prompt] [--json]
-  kra ws list|ls [--archived] [--tree] [--format human|tsv]
+  kra ws create [--no-prompt] [--template <name>] [--format human|json] <id>
+  kra ws create [--no-prompt] [--template <name>] [--format human|json] --id <id> [--title "<title>"]
+  kra ws create --jira <ticket-url> [--template <name>] [--format human|json]
+  kra ws import jira (--sprint [<id|name>] [--space <key>|--project <key>] | --jql "<expr>") [--limit <n>] [--apply] [--no-prompt] [--format human|json]
+  kra ws list|ls [--archived] [--tree] [--format human|tsv|json]
   kra ws dashboard [--archived] [--workspace <id>] [--format human|json]
   kra ws lock <id> [--format human|json]
   kra ws unlock <id> [--format human|json]
@@ -246,15 +248,19 @@ Disable purge guard for the target workspace.
 
 func (c *CLI) printWSCreateUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws create [--no-prompt] [--template <name>] <id>
-  kra ws create --jira <ticket-url> [--template <name>]
+  kra ws create [--no-prompt] [--template <name>] [--format human|json] <id>
+  kra ws create [--no-prompt] [--template <name>] [--format human|json] --id <id> [--title "<title>"]
+  kra ws create --jira <ticket-url> [--template <name>] [--format human|json]
 
 Create a workspace directory from template and write .kra.meta.json.
 
 Options:
   --no-prompt        Do not prompt for title (store empty)
+  --id               Explicit workspace id (automation-friendly alternative to positional <id>)
+  --title            Workspace title for non-Jira create (skips title prompt)
   --template         Template name under <current-root>/templates (default: default)
   --jira             Resolve workspace id/title from Jira issue URL (email/token env required; base URL supports config)
+  --format           Output format (human or json; default: human)
 `)
 }
 
@@ -270,18 +276,18 @@ Sources:
 
 func (c *CLI) printWSImportJiraUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws import jira --sprint [<id|name>] --space <key> [--limit <n>] [--apply] [--no-prompt] [--json]
-  kra ws import jira --sprint [<id|name>] --project <key> [--limit <n>] [--apply] [--no-prompt] [--json]
-  kra ws import jira --jql "<expr>" [--limit <n>] [--apply] [--no-prompt] [--json]
+  kra ws import jira --sprint [<id|name>] --space <key> [--limit <n>] [--apply] [--no-prompt] [--format human|json]
+  kra ws import jira --sprint [<id|name>] --project <key> [--limit <n>] [--apply] [--no-prompt] [--format human|json]
+  kra ws import jira --jql "<expr>" [--limit <n>] [--apply] [--no-prompt] [--format human|json]
 
 Plan-first bulk workspace creation from Jira.
 
 Rules:
   --sprint and --jql are mutually exclusive.
-  One of --sprint or --jql is required.
+  If both are omitted, mode is resolved from config defaults.
   --space (or --project) is required with --sprint.
   --space and --project cannot be combined.
-  --board is not supported with --sprint.
+  --board is not supported (use --space/--project with --sprint).
   --limit default is 30 (range: 1..200).
 `)
 }

@@ -12,10 +12,10 @@ This command is for workspace creation (0..N), not for actions on existing works
 
 ## Command forms
 
-- `kra ws import jira [--sprint [<id|name>] [--space <key>|--project <key>] | --jql [<expr>]] [--limit <n>] [--apply] [--no-prompt] [--json]`
-- `kra ws import jira --sprint [<id|name>] --space <key> [--limit <n>] [--apply] [--no-prompt] [--json]`
-- `kra ws import jira --sprint [<id|name>] --project <key> [--limit <n>] [--apply] [--no-prompt] [--json]`
-- `kra ws import jira --jql "<expr>" [--limit <n>] [--apply] [--no-prompt] [--json]`
+- `kra ws import jira [--sprint [<id|name>] [--space <key>|--project <key>] | --jql [<expr>]] [--limit <n>] [--apply] [--no-prompt] [--format human|json]`
+- `kra ws import jira --sprint [<id|name>] --space <key> [--limit <n>] [--apply] [--no-prompt] [--format human|json]`
+- `kra ws import jira --sprint [<id|name>] --project <key> [--limit <n>] [--apply] [--no-prompt] [--format human|json]`
+- `kra ws import jira --jql "<expr>" [--limit <n>] [--apply] [--no-prompt] [--format human|json]`
 
 ## Input rules
 
@@ -28,7 +28,8 @@ This command is for workspace creation (0..N), not for actions on existing works
 - `--project` is an alias of `--space` (same behavior).
 - `--space`/`--project` is required with sprint mode after config resolution.
 - `--space` and `--project` must not be combined.
-- `--board` is not supported with `--sprint`.
+- `--board` is not supported.
+- Legacy `--json` is supported as an alias for `--format json`.
 - `--limit` default is `30` and valid range is `1..200`.
 - Jira base URL resolution order:
   1. `KRA_JIRA_BASE_URL` (if set)
@@ -108,59 +109,68 @@ This command is for workspace creation (0..N), not for actions on existing works
   - include `apply this plan? [Enter=yes / n=no]` as the last plan line.
 - After apply (human):
   - `Result:` + `create=<n> skipped=<n> failed=<n>`
-- JSON output (`--json`) must provide equivalent information in stable schema.
+- JSON output (`--format json`) must provide equivalent information in the shared envelope.
 
-### JSON contract (`--json`)
+### JSON contract (`--format json`)
 
 - `stdout` must contain JSON only.
 - Prompts and progress logs must go to `stderr`.
 - In plan-only mode, items must be classified with `action=create|skip|fail`.
+- Top-level shape must follow `docs/spec/concepts/output-contract.md`:
+  - `ok`
+  - `action=ws.import.jira`
+  - `result` containing import details (`source`, `filters`, `summary`, `items`, `applied`)
+  - `error` when `ok=false`
 
 Example shape:
 
 ```json
 {
-  "source": {
-    "type": "jira",
-    "mode": "sprint",
-    "board": "TEAM",
-    "sprint": "Sprint 34",
-    "jql": ""
-  },
-  "filters": {
-    "assignee": "currentUser()",
-    "statusCategory": "not_done",
-    "limit": 30
-  },
-  "summary": {
-    "candidates": 18,
-    "to_create": 12,
-    "skipped": 4,
-    "failed": 2
-  },
-  "items": [
-    {
-      "issue_key": "PROJ-101",
-      "title": "API retry logic",
-      "workspace_id": "PROJ-101",
-      "action": "create"
+  "ok": true,
+  "action": "ws.import.jira",
+  "result": {
+    "source": {
+      "type": "jira",
+      "mode": "sprint",
+      "sprint": "Sprint 34",
+      "jql": ""
     },
-    {
-      "issue_key": "PROJ-099",
-      "title": "Old task",
-      "workspace_id": "PROJ-099",
-      "action": "skip",
-      "reason": "already_active"
+    "filters": {
+      "assignee": "currentUser()",
+      "statusCategory": "not_done",
+      "limit": 30
     },
-    {
-      "issue_key": "PROJ-120",
-      "title": "Broken task",
-      "workspace_id": "PROJ-120",
-      "action": "fail",
-      "reason": "fetch_failed",
-      "message": "jira fetch timeout"
-    }
-  ]
+    "summary": {
+      "candidates": 18,
+      "to_create": 12,
+      "skipped": 4,
+      "failed": 2
+    },
+    "items": [
+      {
+        "issue_key": "PROJ-101",
+        "title": "API retry logic",
+        "workspace_id": "PROJ-101",
+        "action": "create"
+      },
+      {
+        "issue_key": "PROJ-099",
+        "title": "Old task",
+        "workspace_id": "PROJ-099",
+        "action": "skip",
+        "reason": "already_active"
+      },
+      {
+        "issue_key": "PROJ-120",
+        "title": "Broken task",
+        "workspace_id": "PROJ-120",
+        "action": "fail",
+        "reason": "fetch_failed",
+        "message": "jira fetch timeout"
+      }
+    ],
+    "applied": false
+  }
 }
 ```
 

@@ -7,7 +7,7 @@ status: implemented
 
 ## Purpose
 
-Define one shared machine-readable response envelope for commands that support `--format json`.
+Define one shared machine-readable response envelope for commands that support machine-readable JSON output.
 
 ## JSON envelope
 
@@ -18,6 +18,9 @@ Define one shared machine-readable response envelope for commands that support `
 - `error` (`object`, optional):
   - `code` (`string`): stable machine code.
   - `message` (`string`): human-readable diagnostic.
+
+For commands with domain-specific JSON details (for example plan/apply breakdown),
+those details must live under `result` rather than replacing the top-level envelope.
 
 ## Error code policy
 
@@ -53,3 +56,8 @@ Implemented code classes in this phase:
 - `repo remove`
 - `repo gc`
 - `ws list`
+
+## Applied commands (PUBLIC)
+
+- `ws create` (`--format json`)
+- `ws import jira` (`--format json`; legacy `--json` remains as an alias)

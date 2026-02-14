@@ -27,16 +27,16 @@ const (
 )
 
 type wsImportJiraOpts struct {
-	sprintValue string
-	sprintSet   bool
-	jqlSet      bool
-	jql         string
-	board       string
-	spaceKey    string
-	limit       int
-	apply       bool
-	noPrompt    bool
-	jsonOutput  bool
+	sprintValue  string
+	sprintSet    bool
+	jqlSet       bool
+	jql          string
+	board        string
+	spaceKey     string
+	limit        int
+	apply        bool
+	noPrompt     bool
+	outputFormat string
 }
 
 type wsImportJiraPlan struct {
@@ -95,19 +95,86 @@ func (c *CLI) runWSImportJira(args []string) int {
 
 	opts, err := c.parseWSImportJiraOpts(args)
 	if err != nil {
+		if wsImportJiraWantsJSON(args) {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "ws.import.jira",
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: err.Error(),
+				},
+			})
+			return exitUsage
+		}
 		fmt.Fprintln(c.Err, err.Error())
 		c.printWSImportJiraUsage(c.Err)
 		return exitUsage
 	}
+	outputJSON := opts.outputFormat == "json"
+	writeUsageError := func(message string) int {
+		if outputJSON {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "ws.import.jira",
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: message,
+				},
+			})
+			return exitUsage
+		}
+		fmt.Fprintln(c.Err, message)
+		c.printWSImportJiraUsage(c.Err)
+		return exitUsage
+	}
+	writeRuntimeError := func(code string, message string) int {
+		if outputJSON {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "ws.import.jira",
+				Error: &cliJSONError{
+					Code:    code,
+					Message: message,
+				},
+			})
+			return exitError
+		}
+		fmt.Fprintln(c.Err, message)
+		return exitError
+	}
+	writeJSONResult := func(ok bool, plan wsImportJiraPlan, applied bool, code string, message string) int {
+		result := map[string]any{
+			"source":  plan.Source,
+			"filters": plan.Filters,
+			"summary": plan.Summary,
+			"items":   plan.Items,
+			"applied": applied,
+		}
+		resp := cliJSONResponse{
+			OK:     ok,
+			Action: "ws.import.jira",
+			Result: result,
+		}
+		if !ok {
+			resp.Error = &cliJSONError{
+				Code:    code,
+				Message: message,
+			}
+		}
+		_ = writeCLIJSON(c.Out, resp)
+		if ok {
+			return exitOK
+		}
+		return exitError
+	}
+
 	wd, err := os.Getwd()
 	if err != nil {
-		fmt.Fprintf(c.Err, "get working dir: %v\n", err)
-		return exitError
+		return writeRuntimeError("internal_error", fmt.Sprintf("get working dir: %v", err))
 	}
 	root, err := paths.ResolveExistingRoot(wd)
 	if err != nil {
-		fmt.Fprintf(c.Err, "resolve KRA_ROOT: %v\n", err)
-		return exitError
+		return writeRuntimeError("not_found", fmt.Sprintf("resolve KRA_ROOT: %v", err))
 	}
 	if err := c.ensureDebugLog(root, "ws-import-jira"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
@@ -116,14 +183,11 @@ func (c *CLI) runWSImportJira(args []string) int {
 
 	cfg, err := c.loadMergedConfig(root)
 	if err != nil {
-		fmt.Fprintf(c.Err, "load config: %v\n", err)
-		return exitError
+		return writeRuntimeError("internal_error", fmt.Sprintf("load config: %v", err))
 	}
 	opts, err = applyWSImportJiraConfigDefaults(opts, cfg)
 	if err != nil {
-		fmt.Fprintln(c.Err, err.Error())
-		c.printWSImportJiraUsage(c.Err)
-		return exitUsage
+		return writeUsageError(err.Error())
 	}
 
 	ctx := context.Background()
@@ -136,8 +200,7 @@ func (c *CLI) runWSImportJira(args []string) int {
 		if strings.TrimSpace(sprintQueryValue) == "" {
 			chosen, err := c.selectWSImportJiraSprintFromSpace(ctx, svc, opts.spaceKey)
 			if err != nil {
-				fmt.Fprintf(c.Err, "resolve sprint: %v\n", err)
-				return exitUsage
+				return writeUsageError(fmt.Sprintf("resolve sprint: %v", err))
 			}
 			sprintQueryValue = strconv.Itoa(chosen.ID)
 			sprintDisplayValue = chosen.Name
@@ -150,14 +213,11 @@ func (c *CLI) runWSImportJira(args []string) int {
 		if jql == "" {
 			prompted, promptErr := c.promptLine("jql: ")
 			if promptErr != nil {
-				fmt.Fprintf(c.Err, "read jql: %v\n", promptErr)
-				return exitError
+				return writeRuntimeError("internal_error", fmt.Sprintf("read jql: %v", promptErr))
 			}
 			jql = strings.TrimSpace(prompted)
 			if jql == "" {
-				fmt.Fprintln(c.Err, "jql is required")
-				c.printWSImportJiraUsage(c.Err)
-				return exitUsage
+				return writeUsageError("jql is required")
 			}
 		}
 		source.JQL = jql
@@ -166,8 +226,7 @@ func (c *CLI) runWSImportJira(args []string) int {
 
 	inputs, err := svc.ResolveWorkspaceInputsByJQL(ctx, jql, opts.limit)
 	if err != nil {
-		fmt.Fprintf(c.Err, "resolve jira issues: %v\n", err)
-		return exitError
+		return writeRuntimeError("internal_error", fmt.Sprintf("resolve jira issues: %v", err))
 	}
 
 	plan, createInputs := buildWSImportJiraPlan(source, opts.limit, root, inputs)
@@ -179,15 +238,10 @@ func (c *CLI) runWSImportJira(args []string) int {
 	} else if opts.apply {
 		shouldApply = true
 	} else {
-		if opts.jsonOutput {
-			if err := c.printWSImportJiraPlanJSON(plan); err != nil {
-				fmt.Fprintf(c.Err, "write json: %v\n", err)
-				return exitError
-			}
+		if outputJSON {
 			confirm, err := c.promptLine(renderWSImportJiraApplyPrompt(writerSupportsColor(c.Err)))
 			if err != nil {
-				fmt.Fprintf(c.Err, "read apply confirmation: %v\n", err)
-				return exitError
+				return writeRuntimeError("internal_error", fmt.Sprintf("read apply confirmation: %v", err))
 			}
 			confirm = strings.ToLower(strings.TrimSpace(confirm))
 			shouldApply = confirm == "" || confirm == "y" || confirm == "yes"
@@ -195,13 +249,18 @@ func (c *CLI) runWSImportJira(args []string) int {
 			c.printWSImportJiraPlanHuman(plan)
 			confirm, err := c.promptWSImportJiraApplyOnOut()
 			if err != nil {
-				fmt.Fprintf(c.Err, "read apply confirmation: %v\n", err)
-				return exitError
+				return writeRuntimeError("internal_error", fmt.Sprintf("read apply confirmation: %v", err))
 			}
 			confirm = strings.ToLower(strings.TrimSpace(confirm))
 			shouldApply = confirm == "" || confirm == "y" || confirm == "yes"
 		}
 		if !shouldApply {
+			if outputJSON {
+				if plan.Summary.Failed > 0 {
+					return writeJSONResult(false, plan, false, "conflict", "one or more import items failed in plan")
+				}
+				return writeJSONResult(true, plan, false, "", "")
+			}
 			if plan.Summary.Failed > 0 {
 				return exitError
 			}
@@ -221,15 +280,11 @@ func (c *CLI) runWSImportJira(args []string) int {
 		plan.Summary.ToCreate = createdCount
 	}
 
-	if opts.jsonOutput {
-		if err := c.printWSImportJiraPlanJSON(plan); err != nil {
-			fmt.Fprintf(c.Err, "write json: %v\n", err)
-			return exitError
-		}
+	if outputJSON {
 		if plan.Summary.Failed > 0 {
-			return exitError
+			return writeJSONResult(false, plan, shouldApply, "conflict", "import completed with failures")
 		}
-		return exitOK
+		return writeJSONResult(true, plan, shouldApply, "", "")
 	}
 
 	if shouldApply {
@@ -251,7 +306,7 @@ func (c *CLI) runWSImportJira(args []string) int {
 }
 
 func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
-	opts := wsImportJiraOpts{limit: wsImportJiraDefaultLimit}
+	opts := wsImportJiraOpts{limit: wsImportJiraDefaultLimit, outputFormat: "human"}
 	rest := args
 
 	for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
@@ -313,9 +368,20 @@ func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
 			opts.noPrompt = true
 			rest = rest[1:]
 		case "--json":
-			opts.jsonOutput = true
+			opts.outputFormat = "json"
 			rest = rest[1:]
+		case "--format":
+			if len(rest) < 2 {
+				return wsImportJiraOpts{}, fmt.Errorf("--format requires a value")
+			}
+			opts.outputFormat = strings.TrimSpace(rest[1])
+			rest = rest[2:]
 		default:
+			if strings.HasPrefix(rest[0], "--format=") {
+				opts.outputFormat = strings.TrimSpace(strings.TrimPrefix(rest[0], "--format="))
+				rest = rest[1:]
+				continue
+			}
 			return wsImportJiraOpts{}, fmt.Errorf("unknown flag for ws import jira: %q", rest[0])
 		}
 	}
@@ -326,11 +392,8 @@ func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
 	if opts.sprintSet && opts.jqlSet {
 		return wsImportJiraOpts{}, fmt.Errorf("--sprint and --jql cannot be combined")
 	}
-	if !opts.sprintSet && opts.board != "" {
-		return wsImportJiraOpts{}, fmt.Errorf("--board is only valid with --sprint")
-	}
-	if opts.sprintSet && opts.board != "" {
-		return wsImportJiraOpts{}, fmt.Errorf("--board is not supported with --sprint; use --space/--project")
+	if opts.board != "" {
+		return wsImportJiraOpts{}, fmt.Errorf("--board is not supported; use --space/--project with --sprint")
 	}
 	if !opts.sprintSet && opts.spaceKey != "" {
 		return wsImportJiraOpts{}, fmt.Errorf("--space/--project is only valid with --sprint")
@@ -338,8 +401,28 @@ func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
 	if opts.limit < wsImportJiraMinLimit || opts.limit > wsImportJiraMaxLimit {
 		return wsImportJiraOpts{}, fmt.Errorf("--limit must be in range %d..%d", wsImportJiraMinLimit, wsImportJiraMaxLimit)
 	}
+	switch opts.outputFormat {
+	case "human", "json":
+	default:
+		return wsImportJiraOpts{}, fmt.Errorf("unsupported --format: %q (supported: human, json)", opts.outputFormat)
+	}
 
 	return opts, nil
+}
+
+func wsImportJiraWantsJSON(args []string) bool {
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch {
+		case arg == "--json":
+			return true
+		case strings.HasPrefix(arg, "--format="):
+			return strings.TrimSpace(strings.TrimPrefix(arg, "--format=")) == "json"
+		case arg == "--format" && i+1 < len(args):
+			return strings.TrimSpace(args[i+1]) == "json"
+		}
+	}
+	return false
 }
 
 func applyWSImportJiraConfigDefaults(opts wsImportJiraOpts, cfg config.Config) (wsImportJiraOpts, error) {

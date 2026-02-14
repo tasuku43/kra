@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -237,7 +236,7 @@ func TestCLI_WS_Import_Jira_RejectsBoardWithoutSprint(t *testing.T) {
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d", code, exitUsage)
 	}
-	if !strings.Contains(err.String(), "--board is only valid with --sprint") {
+	if !strings.Contains(err.String(), "--board is not supported; use --space/--project with --sprint") {
 		t.Fatalf("stderr missing board validation error: %q", err.String())
 	}
 	if out.Len() != 0 {
@@ -423,29 +422,91 @@ func TestCLI_WS_Import_Jira_JSON_NoPromptWithoutApply_Contract(t *testing.T) {
 		t.Fatalf("stderr not empty: %q", err.String())
 	}
 
-	var plan wsImportJiraPlan
-	if decodeErr := json.Unmarshal(out.Bytes(), &plan); decodeErr != nil {
-		t.Fatalf("stdout is not valid json: %v (stdout=%q)", decodeErr, out.String())
+	resp := decodeJSONResponse(t, out.String())
+	if resp.OK {
+		t.Fatalf("response ok = true, want false: %+v", resp)
 	}
-	if plan.Summary.Candidates != 4 || plan.Summary.ToCreate != 1 || plan.Summary.Skipped != 2 || plan.Summary.Failed != 1 {
-		t.Fatalf("unexpected summary: %+v", plan.Summary)
+	if resp.Action != "ws.import.jira" {
+		t.Fatalf("response action = %q, want %q", resp.Action, "ws.import.jira")
+	}
+	if resp.Error.Code != "conflict" {
+		t.Fatalf("error.code = %q, want %q", resp.Error.Code, "conflict")
 	}
 
-	items := map[string]wsImportJiraItem{}
-	for _, it := range plan.Items {
-		items[it.IssueKey] = it
+	summaryAny, ok := resp.Result["summary"]
+	if !ok {
+		t.Fatalf("result.summary missing: %+v", resp.Result)
 	}
-	if got := items["PROJ-101"]; got.Action != "skip" || got.Reason != "already_active" {
+	summary, ok := summaryAny.(map[string]any)
+	if !ok {
+		t.Fatalf("result.summary type = %T, want map[string]any", summaryAny)
+	}
+	if summary["candidates"] != float64(4) || summary["to_create"] != float64(1) || summary["skipped"] != float64(2) || summary["failed"] != float64(1) {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
+
+	itemsAny, ok := resp.Result["items"]
+	if !ok {
+		t.Fatalf("result.items missing: %+v", resp.Result)
+	}
+	items, ok := itemsAny.([]any)
+	if !ok {
+		t.Fatalf("result.items type = %T, want []any", itemsAny)
+	}
+	if len(items) != 4 {
+		t.Fatalf("len(items) = %d, want %d", len(items), 4)
+	}
+	byKey := map[string]map[string]any{}
+	for _, raw := range items {
+		item, ok := raw.(map[string]any)
+		if !ok {
+			t.Fatalf("item type = %T, want map[string]any", raw)
+		}
+		key, _ := item["issue_key"].(string)
+		byKey[key] = item
+	}
+	if got := byKey["PROJ-101"]; got["action"] != "skip" || got["reason"] != "already_active" {
 		t.Fatalf("PROJ-101 item = %+v", got)
 	}
-	if got := items["PROJ-102"]; got.Action != "skip" || got.Reason != "archived_exists" {
+	if got := byKey["PROJ-102"]; got["action"] != "skip" || got["reason"] != "archived_exists" {
 		t.Fatalf("PROJ-102 item = %+v", got)
 	}
-	if got := items["BAD/1"]; got.Action != "fail" || got.Reason != "invalid_workspace_id" {
+	if got := byKey["BAD/1"]; got["action"] != "fail" || got["reason"] != "invalid_workspace_id" {
 		t.Fatalf("BAD/1 item = %+v", got)
 	}
-	if got := items["PROJ-103"]; got.Action != "create" || got.Reason != "" {
+	if got := byKey["PROJ-103"]; got["action"] != "create" {
 		t.Fatalf("PROJ-103 item = %+v", got)
+	}
+}
+
+func TestCLI_WS_Import_Jira_FormatJSON_AliasWorks(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/rest/api/3/search/jql" {
+			t.Fatalf("request path = %q, want /rest/api/3/search/jql", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"issues":[{"key":"PROJ-130","fields":{"summary":"Format flag"}}]}`))
+	}))
+	t.Cleanup(server.Close)
+	t.Setenv("KRA_JIRA_BASE_URL", server.URL)
+	t.Setenv("KRA_JIRA_EMAIL", "dev@example.com")
+	t.Setenv("KRA_JIRA_API_TOKEN", "token-123")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "import", "jira", "--jql", "assignee=currentUser()", "--no-prompt", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "ws.import.jira" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
 	}
 }
 
@@ -562,12 +623,20 @@ func TestCLI_WS_Import_Jira_JSON_Prompt_PrintsPromptToStderr(t *testing.T) {
 		t.Fatalf("stderr missing prompt: %q", err.String())
 	}
 
-	var plan wsImportJiraPlan
-	if decodeErr := json.Unmarshal(out.Bytes(), &plan); decodeErr != nil {
-		t.Fatalf("stdout is not valid json: %v (stdout=%q)", decodeErr, out.String())
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "ws.import.jira" {
+		t.Fatalf("unexpected json response: %+v", resp)
 	}
-	if plan.Summary.Failed != 0 || plan.Summary.ToCreate != 1 {
-		t.Fatalf("unexpected summary: %+v", plan.Summary)
+	summaryAny, ok := resp.Result["summary"]
+	if !ok {
+		t.Fatalf("result.summary missing: %+v", resp.Result)
+	}
+	summary, ok := summaryAny.(map[string]any)
+	if !ok {
+		t.Fatalf("result.summary type = %T, want map[string]any", summaryAny)
+	}
+	if summary["failed"] != float64(0) || summary["to_create"] != float64(1) {
+		t.Fatalf("unexpected summary: %+v", summary)
 	}
 }
 
@@ -650,27 +719,46 @@ func TestCLI_WS_Import_Jira_JSON_NoPromptApply_CreateFailureReason(t *testing.T)
 		t.Fatalf("stderr not empty: %q", err.String())
 	}
 
-	var plan wsImportJiraPlan
-	if decodeErr := json.Unmarshal(out.Bytes(), &plan); decodeErr != nil {
-		t.Fatalf("stdout is not valid json: %v (stdout=%q)", decodeErr, out.String())
+	resp := decodeJSONResponse(t, out.String())
+	if resp.OK {
+		t.Fatalf("response ok = true, want false: %+v", resp)
 	}
-	if plan.Summary.Failed != 1 {
-		t.Fatalf("unexpected summary: %+v", plan.Summary)
+	if resp.Action != "ws.import.jira" {
+		t.Fatalf("response action = %q, want %q", resp.Action, "ws.import.jira")
 	}
-	if len(plan.Items) != 1 {
-		t.Fatalf("items len = %d, want 1", len(plan.Items))
+	if resp.Error.Code != "conflict" {
+		t.Fatalf("error.code = %q, want %q", resp.Error.Code, "conflict")
 	}
-	foundFail := false
-	for _, it := range plan.Items {
-		if it.IssueKey == "PROJ-201" && it.Action == "fail" {
-			foundFail = true
-			if it.Reason != "permission_denied" {
-				t.Fatalf("unexpected fail reason: %+v", it)
-			}
-		}
+
+	summaryAny, ok := resp.Result["summary"]
+	if !ok {
+		t.Fatalf("result.summary missing: %+v", resp.Result)
 	}
-	if !foundFail {
-		t.Fatalf("fail item for PROJ-201 not found: %+v", plan.Items)
+	summary, ok := summaryAny.(map[string]any)
+	if !ok {
+		t.Fatalf("result.summary type = %T, want map[string]any", summaryAny)
+	}
+	if summary["failed"] != float64(1) {
+		t.Fatalf("unexpected summary: %+v", summary)
+	}
+
+	itemsAny, ok := resp.Result["items"]
+	if !ok {
+		t.Fatalf("result.items missing: %+v", resp.Result)
+	}
+	items, ok := itemsAny.([]any)
+	if !ok {
+		t.Fatalf("result.items type = %T, want []any", itemsAny)
+	}
+	if len(items) != 1 {
+		t.Fatalf("items len = %d, want 1", len(items))
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("items[0] type = %T, want map[string]any", items[0])
+	}
+	if item["issue_key"] != "PROJ-201" || item["action"] != "fail" || item["reason"] != "permission_denied" {
+		t.Fatalf("unexpected failure item: %+v", item)
 	}
 }
 
