@@ -1,6 +1,6 @@
 ---
 title: "Product Concept: AI-Agent Driven Knowledge Work"
-status: proposed
+status: implemented
 date: 2026-02-14
 ---
 
@@ -13,9 +13,9 @@ who it is for, and the value it should deliver.
 
 ## 2. Problem
 
-Modern knowledge work with AI agents generates a large volume of outputs across
-many work types: implementation, investigation, incident response, metrics analysis,
-and concept definition. Teams move quickly, but traceability often breaks down.
+Modern knowledge work with AI agents generates large output across coding,
+investigation, incident response, and definition tasks. Speed increases, but
+traceability often degrades.
 
 As a result, workers struggle to:
 
@@ -24,47 +24,29 @@ As a result, workers struggle to:
 3. Reuse past findings effectively
 4. Turn day-to-day work into reviewable outcomes
 
-## 3. Who It Is For (Primary Persona)
-
-### Persona Name
+## 3. Primary Persona
 
 **AI-Agent Driven Knowledge Worker**
 
-### Profile
-
-- Cross-functional practitioner working across implementation, investigation,
-  incident response, and definition work
-- Uses external ticketing systems (e.g., Jira) as the system of record for task management
+- Works across implementation and non-implementation tasks
+- Uses external ticket systems (for example Jira) as task source-of-truth
 - Uses AI agents heavily in day-to-day execution
-- Produces high-volume outputs that must be revisitable and explainable later
-
-### Behavioral Traits
-
-- Switches between coding and non-coding work multiple times per day
-- Pulls evidence from multiple sources (code, tickets, metrics, logs, docs)
-- Needs periodic narrative output for review, reporting, and career records
-
-### Success Criteria
-
-1. Can start work quickly from an external ticket context
-2. Can recover context quickly after interruption
-3. Can explain what was done and why afterward
-4. Can convert work traces into outcomes for evaluation and reporting
+- Needs outputs that stay revisitable and explainable later
 
 ## 4. Operating Context
 
-- Task-management source of truth lives outside `kra`
+- Task management stays outside `kra`
 - `kra` is a local execution and traceability layer
-- Work is primarily CLI and AI-agent driven
+- Main interaction is CLI + AI agents
 - Work themes change frequently and are not fixed by job type
 
 ## 5. Core Value Proposition
 
-`kra` should help users execute diverse AI-assisted work with speed and
-maintain high traceability without replacing external ticket tools.
+`kra` should help users execute diverse AI-assisted work quickly while keeping
+high traceability, without replacing existing external task systems.
 
 ## 6. Non-goals
 
 1. Replacing Jira or other external task-management tools
-2. Managing complex task dependency graphs inside `kra`
-3. Acting as a GUI whiteboard or visual planning replacement
+2. Managing complex dependency graphs inside `kra`
+3. Acting as a GUI planning/whiteboard replacement
