@@ -41,6 +41,8 @@ Backlog is managed by epic/prefix under `docs/backlog/*.md`.
 - `docs/backlog/AGENT.md`: agent execution visibility
 - `docs/backlog/TEMPLATE-WS.md`: workspace template lifecycle and validation
 - `docs/backlog/OPS.md`: operational resilience and automation ergonomics
+- `docs/backlog/PUBLIC.md`: public release readiness
+- `docs/backlog/PROVIDER.md`: provider extensibility
 
 ## File Status
 
@@ -57,6 +59,8 @@ Backlog is managed by epic/prefix under `docs/backlog/*.md`.
 - [ ] `docs/backlog/AGENT.md` (`5/8` done)
 - [x] `docs/backlog/TEMPLATE-WS.md` (`4/4` done)
 - [x] `docs/backlog/OPS.md` (`11/11` done)
+- [ ] `docs/backlog/PUBLIC.md` (`0/7` done)
+- [ ] `docs/backlog/PROVIDER.md` (`0/1` done)
 
 Update this section whenever any ticket checkbox changes.
 
