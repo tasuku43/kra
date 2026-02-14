@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  goreleaser:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          check-latest: true
+          cache: true
+
+      - name: Install task
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b ~/.local/bin
+          echo "$HOME/.local/bin" >>"$GITHUB_PATH"
+
+      - name: Run release preflight checks
+        run: task release:preflight
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          version: latest
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Determine release channel (stable only)
+        id: channel
+        run: |
+          tag="${GITHUB_REF_NAME}"
+          if [[ "${tag}" == *-* ]]; then
+            echo "stable=false" >>"${GITHUB_OUTPUT}"
+            exit 0
+          fi
+          echo "stable=true" >>"${GITHUB_OUTPUT}"
+
+      - name: Create GitHub App token for Homebrew tap
+        if: steps.channel.outputs.stable == 'true'
+        id: homebrew-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ secrets.HOMEBREW_APP_ID }}
+          private-key: ${{ secrets.HOMEBREW_APP_KEY }}
+          owner: tasuku43
+          repositories: homebrew-kra
+
+      - name: Checkout Homebrew tap
+        if: steps.channel.outputs.stable == 'true'
+        uses: actions/checkout@v4
+        with:
+          repository: tasuku43/homebrew-kra
+          token: ${{ steps.homebrew-token.outputs.token }}
+          path: homebrew-tap
+
+      - name: Update Homebrew formula (working tree)
+        if: steps.channel.outputs.stable == 'true'
+        working-directory: homebrew-tap
+        run: |
+          ../.github/scripts/update-homebrew-formula.sh "${GITHUB_REF_NAME}" "../dist/checksums.txt"
+
+      - name: Create PR for Homebrew formula update
+        if: steps.channel.outputs.stable == 'true'
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ steps.homebrew-token.outputs.token }}
+          path: homebrew-tap
+          commit-message: "Update Homebrew formula for ${{ github.ref_name }}"
+          title: "Update Homebrew formula for ${{ github.ref_name }}"
+          body: |
+            Updates `Formula/kra.rb` to point to GitHub Releases artifacts for `${{ github.ref_name }}`.
+          add-paths: |
+            Formula/kra.rb
+          base: main
+          branch: "chore/homebrew-formula-${{ github.ref_name }}"
+          delete-branch: true

@@ -1,15 +1,29 @@
 version: "3"
 
+vars:
+  VERSION:
+    sh: |
+      tag="$(git describe --tags --exact-match 2>/dev/null || true)"
+      if [ -n "${tag}" ]; then
+        printf "%s" "${tag}"
+      else
+        printf "dev"
+      fi
+  COMMIT:
+    sh: git rev-parse --short HEAD 2>/dev/null || printf "unknown"
+  DATE:
+    sh: date -u +%Y-%m-%dT%H:%M:%SZ
+
 tasks:
   build:
     desc: Build stable kra binary at ./kra
     cmds:
-      - go build -o kra ./cmd/kra
+      - go build -ldflags "-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}" -o kra ./cmd/kra
 
   build-exp:
     desc: Build experimental kra binary at ./kra
     cmds:
-      - go build -tags experimental -o kra ./cmd/kra
+      - go build -tags experimental -ldflags "-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}" -o kra ./cmd/kra
 
   run:
     desc: Run stable kra from source
@@ -43,6 +57,11 @@ tasks:
       - ./scripts/lint-ui-color.sh
       - go vet ./...
       - go test ./...
+
+  release:preflight:
+    desc: Run release preflight checks
+    cmds:
+      - task: check
 
   clean:
     desc: Remove built binary

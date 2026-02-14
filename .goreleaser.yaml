@@ -1,0 +1,47 @@
+version: 2
+
+project_name: kra
+
+before:
+  hooks:
+    - go test ./...
+
+builds:
+  - id: kra
+    main: ./cmd/kra
+    binary: kra
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X main.version={{ .Tag }}
+      - -X main.commit={{ .ShortCommit }}
+      - -X main.date={{ .Date }}
+
+archives:
+  - id: archives
+    ids:
+      - kra
+    formats:
+      - tar.gz
+    name_template: >-
+      {{ .ProjectName }}_{{ .Tag }}_
+      {{- if eq .Os "darwin" -}}macos{{- else -}}{{ .Os }}{{- end -}}_
+      {{- if eq .Arch "amd64" -}}x64{{- else -}}{{ .Arch }}{{- end -}}
+
+checksum:
+  name_template: checksums.txt
+  algorithm: sha256
+
+release:
+  prerelease: auto
+  footer: |
+    ## Docs
+    - README: https://github.com/tasuku43/kra/blob/{{ .Tag }}/README.md
+    - Releasing guide: https://github.com/tasuku43/kra/blob/{{ .Tag }}/docs/ops/RELEASING.md

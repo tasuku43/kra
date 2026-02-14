@@ -20,6 +20,8 @@ type CLI struct {
 	Out     io.Writer
 	Err     io.Writer
 	Version string
+	Commit  string
+	Date    string
 
 	inReader *bufio.Reader
 	Debug    bool
@@ -58,7 +60,7 @@ func (c *CLI) Run(args []string) int {
 		c.printRootUsage(c.Out)
 		return exitOK
 	case "version":
-		fmt.Fprintln(c.Out, c.Version)
+		fmt.Fprintln(c.Out, c.versionLine())
 		return exitOK
 	case "init":
 		return c.runInit(args[1:])
@@ -139,6 +141,21 @@ func (c *CLI) runWS(args []string) int {
 func (c *CLI) notImplemented(name string) int {
 	fmt.Fprintf(c.Err, "not implemented: %s\n", name)
 	return exitNotImplemented
+}
+
+func (c *CLI) versionLine() string {
+	version := strings.TrimSpace(c.Version)
+	if version == "" {
+		version = "dev"
+	}
+	parts := []string{version}
+	if commit := strings.TrimSpace(c.Commit); commit != "" {
+		parts = append(parts, commit)
+	}
+	if date := strings.TrimSpace(c.Date); date != "" {
+		parts = append(parts, date)
+	}
+	return strings.Join(parts, " ")
 }
 
 func (c *CLI) consumeGlobalDebugFlag(args []string) []string {
