@@ -25,7 +25,12 @@ skills:
 		},
 		{
 			relativePath: "flow-investigation/SKILL.md",
-			content: `# Flow: Investigation
+			content: `---
+name: flow-investigation
+description: Use this skill to run structured investigation flow and extract reusable findings.
+---
+
+# Flow: Investigation
 
 ## Goal
 
@@ -42,7 +47,12 @@ Run structured investigation with clear evidence and reusable conclusions.
 		},
 		{
 			relativePath: "flow-execution/SKILL.md",
-			content: `# Flow: Execution
+			content: `---
+name: flow-execution
+description: Use this skill to execute changes in small validated slices with explicit risk reporting.
+---
+
+# Flow: Execution
 
 ## Goal
 
@@ -59,7 +69,12 @@ Execute changes safely with minimal blast radius and clear verification.
 		},
 		{
 			relativePath: "flow-insight-capture/SKILL.md",
-			content: `# Flow: Insight Capture
+			content: `---
+name: flow-insight-capture
+description: Use this skill when a high-value insight appears; propose capture first and persist only after explicit user approval.
+---
+
+# Flow: Insight Capture
 
 ## Goal
 

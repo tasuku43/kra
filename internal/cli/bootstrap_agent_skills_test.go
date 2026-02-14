@@ -314,9 +314,12 @@ func assertSkillpackSeeded(t *testing.T, skillsRoot string) {
 		contains string
 	}{
 		{path: filepath.Join(skillsRoot, ".kra-skillpack.yaml"), contains: `pack: "kra-flow"`},
-		{path: filepath.Join(skillsRoot, "flow-investigation", "SKILL.md"), contains: "# Flow: Investigation"},
-		{path: filepath.Join(skillsRoot, "flow-execution", "SKILL.md"), contains: "# Flow: Execution"},
-		{path: filepath.Join(skillsRoot, "flow-insight-capture", "SKILL.md"), contains: "# Flow: Insight Capture"},
+		{path: filepath.Join(skillsRoot, "flow-investigation", "SKILL.md"), contains: "name: flow-investigation"},
+		{path: filepath.Join(skillsRoot, "flow-investigation", "SKILL.md"), contains: "description:"},
+		{path: filepath.Join(skillsRoot, "flow-execution", "SKILL.md"), contains: "name: flow-execution"},
+		{path: filepath.Join(skillsRoot, "flow-execution", "SKILL.md"), contains: "description:"},
+		{path: filepath.Join(skillsRoot, "flow-insight-capture", "SKILL.md"), contains: "name: flow-insight-capture"},
+		{path: filepath.Join(skillsRoot, "flow-insight-capture", "SKILL.md"), contains: "description:"},
 	}
 	for _, c := range checks {
 		data, err := os.ReadFile(c.path)
