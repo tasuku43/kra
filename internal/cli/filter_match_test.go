@@ -20,13 +20,13 @@ func TestFuzzyFilterMatch(t *testing.T) {
 		{
 			name:     "ordered subsequence matches",
 			haystack: "example-org/helmfiles",
-			needle:   "cs",
+			needle:   "es",
 			want:     true,
 		},
 		{
 			name:     "whitespace in needle is ignored",
 			haystack: "example-org/helmfiles",
-			needle:   "c s",
+			needle:   "e s",
 			want:     true,
 		},
 		{

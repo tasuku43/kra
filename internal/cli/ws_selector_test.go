@@ -93,7 +93,7 @@ func TestFilteredCandidateIndices_UsesFuzzyMatch(t *testing.T) {
 		{ID: "tasuku43/kra", Title: "command line tool", Risk: workspacerisk.WorkspaceRiskClean},
 	}
 
-	got := filteredCandidateIndices(candidates, "cs")
+	got := filteredCandidateIndices(candidates, "es")
 	if len(got) != 1 || got[0] != 0 {
 		t.Fatalf("filteredCandidateIndices should fuzzy-match id: got=%v", got)
 	}

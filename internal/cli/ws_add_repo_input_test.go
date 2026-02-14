@@ -56,7 +56,7 @@ func TestFilterAddRepoPoolCandidates_FuzzyMatch(t *testing.T) {
 		{RepoKey: "example-org/helmfiles"},
 		{RepoKey: "example-org/sre-apps"},
 	}
-	got := filterAddRepoPoolCandidates(cands, "cs")
+	got := filterAddRepoPoolCandidates(cands, "es")
 	if len(got) != 2 {
 		t.Fatalf("len(filtered)=%d, want=2", len(got))
 	}
