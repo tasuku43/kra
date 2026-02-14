@@ -84,3 +84,30 @@ status: planned
     - `docs/spec/concepts/output-contract.md`
   - Depends: AGENT-001, OPS-003
   - Parallel: yes
+
+- [ ] OPS-009: `kra bootstrap agent-skills` foundation + `init` integration
+  - What: add safe bootstrap flow for project-local agent skills:
+    source of truth under `.agent/skills` and directory-level symlink references from `.codex/skills` and `.claude/skills`.
+    Integrate via `kra init --bootstrap agent-skills`.
+  - Specs:
+    - `docs/spec/commands/bootstrap/agent-skills.md`
+  - Depends: none
+  - Serial: yes
+
+- [ ] OPS-010: Tool-provided flow skillpack + AGENTS guidance optimization
+  - What: provide official flow-oriented skillpack (not domain-specific playbooks) and align root AGENTS guidance
+    so operators can use project-local skills effectively without manual setup burden.
+  - Specs:
+    - `docs/spec/concepts/agent-skillpack.md`
+    - `docs/spec/core/AGENTS.md`
+  - Depends: OPS-009
+  - Parallel: yes
+
+- [ ] OPS-011: Workspace insight capture (important-only, conversational proposal)
+  - What: introduce workspace-local insight capture contract:
+    no always-on logging, propose capture in conversation, persist only approved insight documents
+    under `worklog/insights` using markdown + frontmatter.
+  - Specs:
+    - `docs/spec/concepts/worklog-insight.md`
+  - Depends: OPS-009
+  - Serial: yes
