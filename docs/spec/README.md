@@ -37,7 +37,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `concepts/workspace-template.md`: root-local workspace template model and validation
   - `concepts/ui-color.md`: CLI/TUI semantic color token policy
   - `concepts/architecture.md`: Layered architecture (`cli/app/domain/infra/ui`) and migration rules
-  - `concepts/agent-skillpack.md`: project-local non-intrusive skillpack model
+  - `concepts/agent-skillpack.md`: project-local non-intrusive skillpack model (experimental)
   - `concepts/workspace-lifecycle.md`: Workspace lifecycle state machine and transition policy
   - `concepts/output-contract.md`: Shared machine-readable output envelope and error code policy
   - `concepts/worklog-insight.md`: workspace-local approved insight capture model
@@ -67,7 +67,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/add-repo.md`: `kra ws --act add-repo`
   - `commands/ws/dry-run.md`: `kra ws --act <close|reopen|purge> --dry-run`
   - `commands/ws/lock.md`: `kra ws lock` / `kra ws unlock`
-  - `commands/ws/insight.md`: `kra ws insight add`
+  - `commands/ws/insight.md`: `kra ws insight add` (experimental)
   - `commands/ws/remove-repo.md`: `kra ws --act remove-repo`
   - `commands/ws/list.md`: `kra ws list`
   - `commands/ws/go.md`: `kra ws --act go`

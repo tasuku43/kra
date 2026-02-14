@@ -112,7 +112,7 @@ func (c *CLI) runBootstrapAgentSkills(args []string) int {
 		return exitError
 	}
 
-	result, code, execErr := runBootstrapAgentSkills(root)
+	result, code, execErr := runBootstrapAgentSkills(root, c.isExperimentEnabled(experimentAgentSkillpack))
 	if execErr != nil {
 		if outputFormat == "json" {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
@@ -175,7 +175,7 @@ func isDir(path string) bool {
 	return info.IsDir()
 }
 
-func runBootstrapAgentSkills(root string) (bootstrapAgentSkillsResult, string, error) {
+func runBootstrapAgentSkills(root string, seedSkillpack bool) (bootstrapAgentSkillsResult, string, error) {
 	result := bootstrapAgentSkillsResult{
 		Root:      filepath.Clean(root),
 		Created:   []string{},
@@ -188,8 +188,10 @@ func runBootstrapAgentSkills(root string) (bootstrapAgentSkillsResult, string, e
 	if err := ensureBootstrapSkillsRoot(skillsRoot, &result); err != nil {
 		return result, "internal_error", err
 	}
-	if err := ensureBootstrapDefaultSkillpack(skillsRoot, &result); err != nil {
-		return result, "internal_error", err
+	if seedSkillpack {
+		if err := ensureBootstrapDefaultSkillpack(skillsRoot, &result); err != nil {
+			return result, "internal_error", err
+		}
 	}
 
 	plans := make([]bootstrapSkillReferencePlan, 0, 2)

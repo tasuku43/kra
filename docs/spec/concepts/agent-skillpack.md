@@ -26,6 +26,14 @@ This concept covers:
 - tool-managed base skillpack contents
 - guidance synchronization in `KRA_ROOT/AGENTS.md`
 
+## Availability (v1)
+
+Default users should not receive this skillpack automatically.
+
+- enable seeding explicitly:
+  - `KRA_EXPERIMENTS=agent-skillpack`
+- without flag, bootstrap keeps `.agent/skills` structure only.
+
 ## Baseline skillpack (v1)
 
 Bootstrap installs a default pack under:

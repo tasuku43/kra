@@ -41,10 +41,8 @@ Include:
 - Workflow:
   - `kra ws create` -> `kra ws --act add-repo` -> work -> `kra ws --act close`
 - Agent skillpack:
-  - project-local skills under `.agent/skills/`
-  - `.codex/skills` and `.claude/skills` should reference `.agent/skills/`
-  - baseline skill is `flow-insight-capture` only
-  - skill usage should stay non-intrusive to work style
+  - no default guidance in root AGENTS for experimental skillpack features
+  - experimental guidance may be added only when explicitly opted into experiments
 - Insight capture policy:
   - no always-on logs by default
   - propose capture in conversation first

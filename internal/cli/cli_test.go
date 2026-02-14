@@ -349,14 +349,8 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if readAgentsErr != nil {
 		t.Fatalf("read AGENTS.md: %v", readAgentsErr)
 	}
-	if !strings.Contains(string(agentsContent), ".agent/skills/") {
-		t.Fatalf("AGENTS.md should guide skillpack usage: %q", string(agentsContent))
-	}
-	if !strings.Contains(string(agentsContent), "kra ws insight add") {
-		t.Fatalf("AGENTS.md should mention insight capture command: %q", string(agentsContent))
-	}
-	if strings.Contains(string(agentsContent), "flow-investigation") || strings.Contains(string(agentsContent), "flow-execution") {
-		t.Fatalf("AGENTS.md should not prescribe investigation/execution flow skills: %q", string(agentsContent))
+	if strings.Contains(string(agentsContent), ".agent/skills/") || strings.Contains(string(agentsContent), "kra ws insight add") {
+		t.Fatalf("AGENTS.md should not include experimental skillpack guidance by default: %q", string(agentsContent))
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "templates", "default", "notes")); statErr != nil {
 		t.Fatalf("default template notes/ not created: %v", statErr)

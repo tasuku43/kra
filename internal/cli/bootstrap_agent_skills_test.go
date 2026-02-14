@@ -69,7 +69,7 @@ func TestCLI_BootstrapAgentSkills_CreatesDirectoryAndSymlinks(t *testing.T) {
 	} else if !info.IsDir() {
 		t.Fatalf("%s is not dir", skillsRoot)
 	}
-	assertSkillpackSeeded(t, skillsRoot)
+	assertNoSkillpackSeeded(t, skillsRoot)
 	assertSymlinkTo(t, filepath.Join(root, ".codex", "skills"), skillsRoot)
 	assertSymlinkTo(t, filepath.Join(root, ".claude", "skills"), skillsRoot)
 }
@@ -112,7 +112,7 @@ func TestCLI_BootstrapAgentSkills_Idempotent(t *testing.T) {
 	}
 
 	skillsRoot := filepath.Join(root, ".agent", "skills")
-	assertSkillpackSeeded(t, skillsRoot)
+	assertNoSkillpackSeeded(t, skillsRoot)
 	assertSymlinkTo(t, filepath.Join(root, ".codex", "skills"), skillsRoot)
 	assertSymlinkTo(t, filepath.Join(root, ".claude", "skills"), skillsRoot)
 }
@@ -198,9 +198,24 @@ func TestCLI_Init_BootstrapAgentSkills_Integration(t *testing.T) {
 	}
 
 	skillsRoot := filepath.Join(root, ".agent", "skills")
-	assertSkillpackSeeded(t, skillsRoot)
+	assertNoSkillpackSeeded(t, skillsRoot)
 	assertSymlinkTo(t, filepath.Join(root, ".codex", "skills"), skillsRoot)
 	assertSymlinkTo(t, filepath.Join(root, ".claude", "skills"), skillsRoot)
+}
+
+func TestCLI_BootstrapAgentSkills_SeedsSkillpack_WhenExperimentEnabled(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	t.Setenv(experimentsEnvKey, experimentAgentSkillpack)
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"bootstrap", "agent-skills"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	skillsRoot := filepath.Join(root, ".agent", "skills")
+	assertSkillpackSeeded(t, skillsRoot)
 }
 
 func TestCLI_Init_BootstrapAgentSkills_InvalidValue(t *testing.T) {
@@ -325,6 +340,18 @@ func assertSkillpackSeeded(t *testing.T, skillsRoot string) {
 		}
 		if !strings.Contains(string(data), c.contains) {
 			t.Fatalf("%s missing marker %q", c.path, c.contains)
+		}
+	}
+}
+
+func assertNoSkillpackSeeded(t *testing.T, skillsRoot string) {
+	t.Helper()
+	for _, path := range []string{
+		filepath.Join(skillsRoot, ".kra-skillpack.yaml"),
+		filepath.Join(skillsRoot, "flow-insight-capture", "SKILL.md"),
+	} {
+		if _, err := os.Stat(path); !os.IsNotExist(err) {
+			t.Fatalf("skillpack should not be seeded by default: %s (err=%v)", path, err)
 		}
 	}
 }

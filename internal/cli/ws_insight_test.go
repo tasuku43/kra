@@ -10,6 +10,7 @@ import (
 )
 
 func TestCLI_WS_Insight_Help(t *testing.T) {
+	t.Setenv(experimentsEnvKey, experimentInsightCapture)
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
@@ -26,7 +27,22 @@ func TestCLI_WS_Insight_Help(t *testing.T) {
 	}
 }
 
+func TestCLI_WS_Insight_DisabledByDefault(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "insight", "--help"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(err.String(), "ws insight is experimental") {
+		t.Fatalf("stderr missing experimental guidance: %q", err.String())
+	}
+}
+
 func TestCLI_WS_InsightAdd_Human_Succeeds(t *testing.T) {
+	t.Setenv(experimentsEnvKey, experimentInsightCapture)
 	root := prepareCurrentRootForTest(t)
 	workspacePath := filepath.Join(root, "workspaces", "WS1")
 	if err := os.MkdirAll(workspacePath, 0o755); err != nil {
@@ -93,6 +109,7 @@ func TestCLI_WS_InsightAdd_Human_Succeeds(t *testing.T) {
 }
 
 func TestCLI_WS_InsightAdd_JSON_SucceedsForArchivedWorkspace(t *testing.T) {
+	t.Setenv(experimentsEnvKey, experimentInsightCapture)
 	root := prepareCurrentRootForTest(t)
 	if err := os.MkdirAll(filepath.Join(root, "archive", "WSA"), 0o755); err != nil {
 		t.Fatalf("mkdir archived workspace: %v", err)
@@ -130,6 +147,7 @@ func TestCLI_WS_InsightAdd_JSON_SucceedsForArchivedWorkspace(t *testing.T) {
 }
 
 func TestCLI_WS_InsightAdd_JSON_RequiresApproved(t *testing.T) {
+	t.Setenv(experimentsEnvKey, experimentInsightCapture)
 	root := prepareCurrentRootForTest(t)
 	if err := os.MkdirAll(filepath.Join(root, "workspaces", "WS1"), 0o755); err != nil {
 		t.Fatalf("mkdir workspace: %v", err)
@@ -162,6 +180,7 @@ func TestCLI_WS_InsightAdd_JSON_RequiresApproved(t *testing.T) {
 }
 
 func TestCLI_WS_InsightAdd_JSON_WorkspaceNotFound(t *testing.T) {
+	t.Setenv(experimentsEnvKey, experimentInsightCapture)
 	prepareCurrentRootForTest(t)
 
 	var out bytes.Buffer

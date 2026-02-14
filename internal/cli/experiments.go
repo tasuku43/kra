@@ -7,6 +7,11 @@ import (
 
 const experimentsEnvKey = "KRA_EXPERIMENTS"
 
+const (
+	experimentInsightCapture = "insight-capture"
+	experimentAgentSkillpack = "agent-skillpack"
+)
+
 func (c *CLI) isExperimentEnabled(name string) bool {
 	needle := strings.ToLower(strings.TrimSpace(name))
 	if needle == "" {

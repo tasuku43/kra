@@ -169,7 +169,6 @@ func (c *CLI) printWSUsage(w io.Writer) {
   kra ws import jira (--sprint [<id|name>] [--board <id|name>] | --jql "<expr>") [--limit <n>] [--apply] [--no-prompt] [--json]
   kra ws list|ls [--archived] [--tree] [--format human|tsv]
   kra ws dashboard [--archived] [--workspace <id>] [--format human|json]
-  kra ws insight add --id <workspace-id> --ticket <ticket> --session-id <session-id> --what "<text>" --approved [--context "<text>"] [--why "<text>"] [--next "<text>"] [--tag <tag> ...] [--format human|json]
   kra ws lock <id> [--format human|json]
   kra ws unlock <id> [--format human|json]
 
@@ -180,7 +179,6 @@ Subcommands:
   list              List workspaces
   ls                Alias of list
   dashboard         Show workspace operational dashboard
-  insight           Persist one approved workspace insight
   lock              Enable purge guard on workspace metadata
   unlock            Disable purge guard on workspace metadata
   help              Show this help

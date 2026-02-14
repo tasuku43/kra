@@ -178,7 +178,7 @@ func (c *CLI) runInit(args []string) int {
 	}
 	var bootstrapResult *bootstrapAgentSkillsResult
 	if bootstrapMode == "agent-skills" {
-		bootstrapRunResult, code, bootstrapErr := runBootstrapAgentSkills(result.Root)
+		bootstrapRunResult, code, bootstrapErr := runBootstrapAgentSkills(result.Root, c.isExperimentEnabled(experimentAgentSkillpack))
 		if bootstrapErr != nil {
 			if outputFormat == "json" {
 				return writeJSONError(code, fmt.Sprintf("bootstrap agent-skills: %v", bootstrapErr), exitError)
@@ -538,22 +538,6 @@ kra helps you keep task workspaces organized and safely archived.
 Notes vs artifacts:
 - notes/: write what you learned and decided
 - artifacts/: store evidence files you may need later
-
-## Agent skillpack
-
-- project-local skills live under .agent/skills/
-- .codex/skills and .claude/skills should reference .agent/skills/
-- baseline skill is flow-insight-capture only
-- this skill is for approved insight capture and should not prescribe work style
-
-## Insight capture policy
-
-- do not persist always-on activity logs by default
-- when a reusable high-value insight appears:
-  1) propose capture in conversation
-  2) persist only after explicit user approval
-- approved capture command:
-  kra ws insight add --id <workspace-id> --ticket <ticket> --session-id <session-id> --what "<summary>" --approved
 
 ## Workflow (typical)
 

@@ -62,6 +62,8 @@ First phase creates:
 - default baseline skillpack files under `<KRA_ROOT>/.agent/skills/` when missing:
   - `.kra-skillpack.yaml`
   - `flow-insight-capture/SKILL.md`
+  - only when experimental flag is enabled:
+    - `KRA_EXPERIMENTS=agent-skillpack`
 
 ## Conflict policy (safe-first)
 
