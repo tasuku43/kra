@@ -103,11 +103,12 @@ status: planned
   - Depends: OPS-009
   - Parallel: yes
 
-- [ ] OPS-011: Workspace insight capture (important-only, conversational proposal)
+- [x] OPS-011: Workspace insight capture (important-only, conversational proposal)
   - What: introduce workspace-local insight capture contract:
     no always-on logging, propose capture in conversation, persist only approved insight documents
     under `worklog/insights` using markdown + frontmatter.
   - Specs:
     - `docs/spec/concepts/worklog-insight.md`
+    - `docs/spec/commands/ws/insight.md`
   - Depends: OPS-009
   - Serial: yes

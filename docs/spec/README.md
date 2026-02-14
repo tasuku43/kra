@@ -67,6 +67,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/add-repo.md`: `kra ws --act add-repo`
   - `commands/ws/dry-run.md`: `kra ws --act <close|reopen|purge> --dry-run`
   - `commands/ws/lock.md`: `kra ws lock` / `kra ws unlock`
+  - `commands/ws/insight.md`: `kra ws insight add`
   - `commands/ws/remove-repo.md`: `kra ws --act remove-repo`
   - `commands/ws/list.md`: `kra ws list`
   - `commands/ws/go.md`: `kra ws --act go`

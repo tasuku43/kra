@@ -1,6 +1,6 @@
 ---
 title: "Workspace Worklog Insight Capture"
-status: planned
+status: implemented
 ---
 
 # Workspace Worklog Insight Capture
@@ -35,6 +35,25 @@ Archived workspaces keep the same relative path under:
 5. On reject, write nothing.
 
 No background capture is executed in this phase.
+
+## CLI entrypoint (phase 1)
+
+Use an explicit one-shot write command:
+
+```sh
+kra ws insight add --id <workspace-id> --ticket <ticket> --session-id <session-id> --what "<text>" --approved [--context "<text>"] [--why "<text>"] [--next "<text>"] [--tag <tag> ...] [--format human|json]
+```
+
+Guardrails:
+
+- `--approved` is required to write.
+- without approval flag, command must fail and write nothing.
+- this command is the only mutation path in phase 1; no background writer.
+
+Workspace scope:
+
+- `--id` must target an existing workspace in either `workspaces/` or `archive/`.
+- if not found, fail with `not_found`.
 
 ## File format
 
@@ -71,4 +90,3 @@ Body sections (recommended):
 - automatic capture at fixed intervals
 - full event stream persistence
 - multi-kind taxonomy beyond `kind: insight`
-

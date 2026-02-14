@@ -114,6 +114,8 @@ func (c *CLI) runWS(args []string) int {
 		return c.runWSList(args[1:])
 	case "dashboard":
 		return c.runWSDashboard(args[1:])
+	case "insight":
+		return c.runWSInsight(args[1:])
 	case "select":
 		return c.runWSSelect(args[1:])
 	case "lock":
