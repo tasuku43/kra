@@ -203,7 +203,7 @@ func TestCLI_WS_Reopen_WithStagedChanges_PreservesUnrelatedIndexAndReopens(t *te
 	}
 }
 
-func TestCLI_WS_Purge_WithStagedChanges_FailsBeforeDeletingWorkspace(t *testing.T) {
+func TestCLI_WS_Purge_WithStagedChanges_PreservesUnrelatedIndexAndPurges(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
 	env := testutil.NewEnv(t)
@@ -233,16 +233,32 @@ func TestCLI_WS_Purge_WithStagedChanges_FailsBeforeDeletingWorkspace(t *testing.
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "--act", "purge", "--no-prompt", "--force", "--commit", "WS1"})
-		if code != exitError {
-			t.Fatalf("ws purge exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+		if code := c.Run([]string{"ws", "--act", "close", "WS1"}); code != exitOK {
+			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
-		if !strings.Contains(err.String(), "git index has staged changes") {
-			t.Fatalf("stderr missing staged changes guard: %q", err.String())
+		if code := c.Run([]string{"ws", "unlock", "WS1"}); code != exitOK {
+			t.Fatalf("ws unlock exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
 
-	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); err != nil {
-		t.Fatalf("workspaces/WS1 should remain: %v", err)
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		code := c.Run([]string{"ws", "--act", "purge", "--no-prompt", "--force", "--commit", "WS1"})
+		if code != exitOK {
+			t.Fatalf("ws purge exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); err == nil {
+		t.Fatalf("workspaces/WS1 should be removed")
+	}
+	if _, err := os.Stat(filepath.Join(env.Root, "archive", "WS1")); err == nil {
+		t.Fatalf("archive/WS1 should be removed")
+	}
+	staged := strings.TrimSpace(mustGitOutput(t, env.Root, "diff", "--cached", "--name-only"))
+	if !strings.Contains(staged, "README.tmp") {
+		t.Fatalf("pre-existing staged file should remain staged: %q", staged)
 	}
 }

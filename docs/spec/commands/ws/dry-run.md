@@ -28,7 +28,7 @@ For selected action, evaluate:
 - target existence and lifecycle state
 - risk signals (`clean|unpushed|diverged|dirty|unknown`)
 - precondition failures (conflicts, missing paths, lock violations)
-- commit allowlist/staging feasibility when `--commit` is specified
+- lifecycle commit allowlist/staging feasibility in default mode (or when `--commit` is specified)
 
 No file, git, or metadata mutation is allowed.
 
@@ -44,6 +44,7 @@ No file, git, or metadata mutation is allowed.
   - `planned_effects[]` (path and state transitions)
   - `requires_confirmation` (bool)
   - `requires_force` (bool)
+  - `commit_enabled` (bool)
 - `error` for usage/runtime failures
 
 ## Error code policy

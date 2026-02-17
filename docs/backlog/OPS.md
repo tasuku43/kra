@@ -135,7 +135,7 @@ status: planned
   - Depends: OPS-012
   - Serial: yes
 
-- [ ] OPS-014: `ws purge` default auto-commit + `--no-commit`
+- [x] OPS-014: `ws purge` default auto-commit + `--no-commit`
   - What: make `kra ws --act purge` commit-enabled by default with strict two-phase purge flow
     (pre-delete commit, delete, post-delete commit), and replace `--commit` with `--no-commit`.
   - Specs:

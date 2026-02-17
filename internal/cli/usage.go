@@ -164,7 +164,7 @@ func (c *CLI) printWSUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws [--id <id>] [--act <action>] [action-args...]
   kra ws select [--archived] [--act <go|close|add-repo|remove-repo|reopen|unlock|purge>]
-  kra ws select --multi --act <close|reopen|purge> [--archived] [--commit]
+  kra ws select --multi --act <close|reopen|purge> [--archived] [--no-commit]
   kra ws create [--no-prompt] [--template <name>] [--format human|json] <id>
   kra ws create [--no-prompt] [--template <name>] [--format human|json] --id <id> [--title "<title>"]
   kra ws create --jira <ticket-url> [--template <name>] [--format human|json]
@@ -199,7 +199,7 @@ Notes:
 - ws select --multi requires --act.
 - ws select --multi supports only close/reopen/purge.
 - ws select --multi --act reopen|purge implies archived scope.
-- ws select --multi --commit enables per-workspace commit behavior.
+- ws select --multi commits by default; use --no-commit to disable lifecycle commits.
 - invalid --act/scope combinations fail with usage.
 `)
 }
@@ -456,7 +456,7 @@ Use kra ws select --archived for interactive selection.
 
 func (c *CLI) printWSPurgeUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws --act purge [--no-prompt --force] [--commit] <id>
+  kra ws --act purge [--no-prompt --force] [--no-commit] <id>
   kra ws --act purge --dry-run --format json <id>
 
 Purge (permanently delete) a workspace:
@@ -464,8 +464,8 @@ Purge (permanently delete) a workspace:
 - if workspace is active, inspects repo risk and asks an extra confirmation when risky
 - remove git worktrees under workspaces/<id>/repos/ (if present)
 - delete workspaces/<id>/ and archive/<id>/ (if present)
-- by default, no git commit is created.
-- --commit: commit the purge change in KRA_ROOT (message: "purge: <id>")
+- by default, lifecycle commits run automatically (pre-purge + purge).
+- --no-commit: disable lifecycle commits for this command
 
 Options:
   --no-prompt        Do not ask confirmations (requires --force)

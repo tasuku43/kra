@@ -3,7 +3,7 @@ title: "`kra ws --act purge`"
 status: implemented
 ---
 
-# `kra ws --act purge [--no-prompt --force] [--commit] <id>`
+# `kra ws --act purge [--no-prompt --force] [--no-commit] [--commit] <id>`
 # `kra ws --act purge --dry-run --format json <id>`
 
 ## Purpose
@@ -32,23 +32,30 @@ This is a destructive operation. It is separate from `ws --act close`, which kee
   - compute risk similar to `gion` (dirty / unpushed / diverged / unknown / clean)
 - If any repo is not clean, require an additional confirmation before continuing.
 
-2) Remove worktrees (if present)
+2) Commit pre-purge snapshot (default; skipped by `--no-commit`)
+
+- Commit message is fixed: `purge-pre: <id>`
+- Stage allowlist: `archive/<id>/`
+- Preserve unrelated staged changes outside allowlist.
+- `--commit` is accepted for backward compatibility and keeps default behavior.
+
+3) Remove worktrees (if present)
 
 - Remove each worktree under `workspaces/<id>/repos/<alias>`.
 - Remove `workspaces/<id>/repos/` if it becomes empty.
 
-3) Delete workspace and archive directories (if present)
+4) Delete workspace and archive directories (if present)
 
 - Delete `KRA_ROOT/workspaces/<id>/` if it exists.
 - Delete `KRA_ROOT/archive/<id>/` if it exists.
 
-4) Update metadata/index
+5) Update metadata/index
 
 - Append `workspace_events(event_type='purged', workspace_id='<id>', workspace_generation=<gen>, at=..., meta='{}')`.
 - Remove the workspace snapshot row from `workspaces` for `<id>`.
   - This enables reusing the same workspace ID later as a new generation.
 
-5) Commit the purge change (`--commit` only)
+6) Commit the purge change (default; skipped by `--no-commit`)
 
 - Commit message is fixed: `purge: <id>`
 - Commit on the current branch.
@@ -56,7 +63,7 @@ This is a destructive operation. It is separate from `ws --act close`, which kee
   - removal of `workspaces/<id>/`
   - removal of `archive/<id>/`
 
-If `--commit` is enabled, unrelated changes must not be included in the commit.
+In default commit mode, unrelated changes must not be included in lifecycle commits.
 
 ## Modes
 

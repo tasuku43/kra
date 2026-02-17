@@ -325,7 +325,8 @@ func (c *CLI) runWSSelect(args []string) int {
 func (c *CLI) runWSSelectMulti(args []string) int {
 	archivedScope := false
 	fixedAction := ""
-	doCommit := false
+	doCommit := true
+	commitModeExplicit := ""
 	parseAct := func(next string) (string, bool) {
 		v := strings.TrimSpace(next)
 		if v == "" {
@@ -342,7 +343,22 @@ func (c *CLI) runWSSelectMulti(args []string) int {
 		case "--multi":
 			args = args[1:]
 		case "--commit":
+			if commitModeExplicit == "no-commit" {
+				fmt.Fprintln(c.Err, "--commit and --no-commit cannot be used together")
+				c.printWSUsage(c.Err)
+				return exitUsage
+			}
 			doCommit = true
+			commitModeExplicit = "commit"
+			args = args[1:]
+		case "--no-commit":
+			if commitModeExplicit == "commit" {
+				fmt.Fprintln(c.Err, "--commit and --no-commit cannot be used together")
+				c.printWSUsage(c.Err)
+				return exitUsage
+			}
+			doCommit = false
+			commitModeExplicit = "no-commit"
 			args = args[1:]
 		case "--archived":
 			archivedScope = true
@@ -487,12 +503,12 @@ func preflightWSSelectMultiAction(ctx context.Context, action string, root strin
 		if err := ensureRootGitWorktree(ctx, root); err != nil {
 			return err
 		}
-		return ensureNoStagedChangesForReopen(ctx, root)
+		return nil
 	case "purge":
 		if err := ensureRootGitWorktree(ctx, root); err != nil {
 			return err
 		}
-		return ensureNoStagedChanges(ctx, root)
+		return nil
 	default:
 		return nil
 	}

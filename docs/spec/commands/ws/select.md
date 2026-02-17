@@ -32,7 +32,8 @@ Unify interactive selection into a single entrypoint while keeping operation com
   selected workspace.
 - `kra ws select --multi --act close` is active-scope only (`--archived` is invalid).
 - `kra ws select --multi --act reopen|purge` implicitly switches to archived scope.
-- `kra ws select --multi --commit` enables per-workspace commit behavior for selected action.
+- `kra ws select --multi` runs lifecycle commits by default; `--no-commit` disables commits for selected action.
+- `kra ws select --multi --commit` is accepted for backward compatibility and keeps default behavior.
 - `go|add-repo|remove-repo` are not supported in `--multi` mode.
 - `kra ws` must not auto-fallback to workspace list selection when current path cannot resolve workspace.
   unresolved invocation should fail and instruct users to run `kra ws select`.

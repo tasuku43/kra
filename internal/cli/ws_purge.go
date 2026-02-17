@@ -24,9 +24,10 @@ type purgeWorkspaceMeta struct {
 func (c *CLI) runWSPurge(args []string) int {
 	var noPrompt bool
 	var force bool
-	var doCommit bool
+	doCommit := true
 	var outputFormat = "human"
 	var dryRun bool
+	commitModeExplicit := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -39,7 +40,22 @@ func (c *CLI) runWSPurge(args []string) int {
 			force = true
 			args = args[1:]
 		case "--commit":
+			if commitModeExplicit == "no-commit" {
+				fmt.Fprintln(c.Err, "--commit and --no-commit cannot be used together")
+				c.printWSPurgeUsage(c.Err)
+				return exitUsage
+			}
 			doCommit = true
+			commitModeExplicit = "commit"
+			args = args[1:]
+		case "--no-commit":
+			if commitModeExplicit == "commit" {
+				fmt.Fprintln(c.Err, "--commit and --no-commit cannot be used together")
+				c.printWSPurgeUsage(c.Err)
+				return exitUsage
+			}
+			doCommit = false
+			commitModeExplicit = "no-commit"
 			args = args[1:]
 		case "--dry-run":
 			dryRun = true
@@ -121,10 +137,6 @@ func (c *CLI) runWSPurge(args []string) int {
 
 	if doCommit {
 		if err := ensureRootGitWorktree(ctx, root); err != nil {
-			fmt.Fprintf(c.Err, "%v\n", err)
-			return exitError
-		}
-		if err := ensureNoStagedChanges(ctx, root); err != nil {
 			fmt.Fprintf(c.Err, "%v\n", err)
 			return exitError
 		}
@@ -399,6 +411,11 @@ func (c *CLI) purgeWorkspace(ctx context.Context, root string, workspaceID strin
 	if meta.status != "archived" {
 		return fmt.Errorf("workspace cannot be purged unless archived (run: kra ws --act close %s)", workspaceID)
 	}
+	if doCommit {
+		if _, err := commitPurgePreSnapshot(ctx, root, workspaceID); err != nil {
+			return fmt.Errorf("commit purge pre-snapshot: %w", err)
+		}
+	}
 
 	repos, err := listWorkspaceReposForClose(ctx, root, workspaceID)
 	if err != nil {
@@ -453,7 +470,7 @@ func commitPurgeChange(ctx context.Context, root string, workspaceID string) (st
 		}
 	}
 
-	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only")
+	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", archiveArg, workspacesArg)
 	if err != nil {
 		_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg)
 		_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", workspacesArg)
@@ -470,11 +487,50 @@ func commitPurgeChange(ctx context.Context, root string, workspaceID string) (st
 		return "", fmt.Errorf("unexpected staged path outside allowlist: %s", p)
 	}
 
-	if _, err := gitutil.Run(ctx, root, "commit", "--allow-empty", "-m", fmt.Sprintf("purge: %s", workspaceID)); err != nil {
+	if _, err := gitutil.Run(ctx, root, "commit", "--allow-empty", "--only", "-m", fmt.Sprintf("purge: %s", workspaceID), "--", archiveArg, workspacesArg); err != nil {
 		_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg)
 		_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", workspacesArg)
 		return "", err
 	}
+	_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg)
+	_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", workspacesArg)
+
+	sha, err := gitutil.Run(ctx, root, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(sha), nil
+}
+
+func commitPurgePreSnapshot(ctx context.Context, root string, workspaceID string) (string, error) {
+	archivePrefix, err := toGitTopLevelPath(ctx, root, filepath.Join("archive", workspaceID))
+	if err != nil {
+		return "", err
+	}
+	archivePrefix += string(filepath.Separator)
+	archiveArg := filepath.ToSlash(filepath.Join("archive", workspaceID))
+
+	if _, err := gitutil.Run(ctx, root, "add", "-A", "--", archiveArg); err != nil {
+		return "", err
+	}
+	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", archiveArg)
+	if err != nil {
+		_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg)
+		return "", err
+	}
+	for _, p := range strings.Fields(out) {
+		p = filepath.Clean(filepath.FromSlash(p))
+		if strings.HasPrefix(p, archivePrefix) {
+			continue
+		}
+		_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg)
+		return "", fmt.Errorf("unexpected staged path outside allowlist: %s", p)
+	}
+	if _, err := gitutil.Run(ctx, root, "commit", "--allow-empty", "--only", "-m", fmt.Sprintf("purge-pre: %s", workspaceID), "--", archiveArg); err != nil {
+		_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg)
+		return "", err
+	}
+	_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg)
 
 	sha, err := gitutil.Run(ctx, root, "rev-parse", "HEAD")
 	if err != nil {

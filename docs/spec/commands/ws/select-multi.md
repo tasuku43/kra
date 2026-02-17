@@ -3,7 +3,7 @@ title: "`kra ws select --multi`"
 status: implemented
 ---
 
-# `kra ws select --multi --act <close|reopen|purge> [--archived] [--commit] [--format human|json] [--yes] [--continue-on-error]`
+# `kra ws select --multi --act <close|reopen|purge> [--archived] [--no-commit] [--commit] [--format human|json] [--yes] [--continue-on-error]`
 
 ## Purpose
 
@@ -16,9 +16,11 @@ Add multi-select execution mode to the existing workspace selector entrypoint wi
 - `--archived` (optional):
   - implied automatically by archived actions (`reopen`, `purge`)
   - invalid with active action (`close`)
+- default mode is commit-enabled for lifecycle actions.
+- `--no-commit` (optional):
+  - disable lifecycle commits for selected action executions.
 - `--commit` (optional):
-  - when set, each selected action uses commit-enabled mode.
-  - default is non-commit operation mode.
+  - accepted for backward compatibility and keeps default behavior.
 - `--yes` (optional): required in JSON mode for destructive actions
 - `--continue-on-error` (optional):
   - default: fail-fast
