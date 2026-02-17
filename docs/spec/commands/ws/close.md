@@ -3,7 +3,7 @@ title: "`kra ws --act close`"
 status: implemented
 ---
 
-# `kra ws --act close [--id <id>] [--force] [--format human|json] [--commit] [<id>]`
+# `kra ws --act close [--id <id>] [--force] [--format human|json] [--no-commit] [--commit] [<id>]`
 # `kra ws --act close --dry-run --format json [--id <id>|<id>]`
 
 ## Purpose
@@ -18,7 +18,7 @@ This is the primary "task completed" flow in `kra`.
 
 ### Preconditions
 
-- `--commit` enabled mode requires `KRA_ROOT` to be a Git working tree (or `kra init` must have been run).
+- Default mode (without `--no-commit`) requires `KRA_ROOT` to be a Git working tree (or `kra init` must have been run).
 - Workspace `<id>` must exist as workspace metadata and be active.
 - If current process cwd is inside the target workspace path (`workspaces/<id>/...`), the command must
   shift process cwd to `KRA_ROOT` before worktree removal starts.
@@ -31,25 +31,32 @@ This is the primary "task completed" flow in `kra`.
   - compute risk similar to `gion` (dirty / unpushed / diverged / unknown / clean)
 - If any repo is not clean, prompt for confirmation before continuing.
 
-2) Remove worktrees
+2) Commit pre-close snapshot (default; skipped by `--no-commit`)
+
+- Commit message is fixed: `close-pre: <id>`
+- Commit on the current branch.
+- Stage only allowlisted paths:
+  - `workspaces/<id>/`
+- Preserve unrelated staged changes outside allowlist.
+- `--commit` is accepted for backward compatibility and keeps default behavior.
+
+3) Remove worktrees
 
 - Remove each worktree under `workspaces/<id>/repos/<alias>`.
 - Remove `workspaces/<id>/repos/` if it becomes empty.
 - This step must run after process-cwd shift when current cwd is under target workspace.
 
-3) Archive the workspace contents
-
-- Move `KRA_ROOT/workspaces/<id>/` to `KRA_ROOT/archive/<id>/` using an atomic rename.
-- After this step, `KRA_ROOT/workspaces/<id>/` should not exist.
-
 4) Update workspace metadata/index
 
 - Mark the workspace as `archived`.
 - Update `updated_at`.
-- When `--commit` is enabled, record:
-  - `archived_commit_sha` (the commit created by this operation)
 
-5) Commit the archive change (`--commit` only)
+5) Archive the workspace contents
+
+- Move `KRA_ROOT/workspaces/<id>/` to `KRA_ROOT/archive/<id>/` using an atomic rename.
+- After this step, `KRA_ROOT/workspaces/<id>/` should not exist.
+
+6) Commit the archive change (default; skipped by `--no-commit`)
 
 - Commit message is fixed: `archive: <id>`
 - Commit on the current branch.
@@ -57,13 +64,14 @@ This is the primary "task completed" flow in `kra`.
   - `archive/<id>/`
   - removal of `workspaces/<id>/` (and any emptied parent folders as needed)
 - After committing, store the commit SHA in metadata/index as `archived_commit_sha`.
+- If post-archive commit fails, do not auto-rollback filesystem rename; keep archived state and return error.
 
-6) Append an event
+7) Append an event
 
 - Append `workspace_events(event_type='archived', workspace_id='<id>', at=...)` (this is the source of truth
   for the archive timestamp).
 
-If `--commit` is enabled, unrelated changes must not be included in the commit.
+In default commit mode, unrelated changes must not be included in lifecycle commits.
 
 ### Shell synchronization for close
 
@@ -117,10 +125,10 @@ If `--commit` is enabled, unrelated changes must not be included in the commit.
 
 - Policy: non-`repos/` contents must be captured in the archive commit.
 - Stage by allowlist only:
-  - `workspaces/<id>/`
-  - `archive/<id>/`
-- Commit must be scoped by allowlist pathspec only (`archive/<id>/`, `workspaces/<id>/`), so pre-existing
-  staged changes outside the allowlist are preserved and must not be included in the archive commit.
+  - pre-close snapshot commit: `workspaces/<id>/`
+  - archive commit: `workspaces/<id>/`, `archive/<id>/`
+- Each lifecycle commit must be scoped by allowlist pathspec only so pre-existing staged changes outside the
+  allowlist are preserved and must not be included.
 - If `gitignore` causes any non-`repos/` files under selected workspace to be unstageable, abort.
 
 ## FS metadata behavior

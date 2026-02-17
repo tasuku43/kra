@@ -425,15 +425,15 @@ Options:
 
 func (c *CLI) printWSCloseUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws --act close [--id <id>] [--force] [--format human|json] [--commit] [<id>]
+  kra ws --act close [--id <id>] [--force] [--format human|json] [--no-commit] [<id>]
   kra ws --act close --dry-run --format json [--id <id>|<id>]
 
 Close (archive) a workspace:
 - inspect repo risk (live) and prompt if not clean
 - remove git worktrees under workspaces/<id>/repos/
 - move workspaces/<id>/ to archive/<id>/ atomically
-- by default, no git commit is created.
-- --commit: commit the archive change in KRA_ROOT
+- by default, lifecycle commits run automatically (pre-close + archive).
+- --no-commit: disable lifecycle commits for this command
 
 If ID is omitted, current directory must resolve to an active workspace.
 `)

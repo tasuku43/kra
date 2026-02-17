@@ -25,8 +25,9 @@ func (c *CLI) runWSClose(args []string) int {
 	directWorkspaceID := ""
 	outputFormat := "human"
 	force := false
-	doCommit := false
+	doCommit := true
 	dryRun := false
+	commitModeExplicit := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -36,7 +37,22 @@ func (c *CLI) runWSClose(args []string) int {
 			force = true
 			args = args[1:]
 		case "--commit":
+			if commitModeExplicit == "no-commit" {
+				fmt.Fprintln(c.Err, "--commit and --no-commit cannot be used together")
+				c.printWSCloseUsage(c.Err)
+				return exitUsage
+			}
 			doCommit = true
+			commitModeExplicit = "commit"
+			args = args[1:]
+		case "--no-commit":
+			if commitModeExplicit == "commit" {
+				fmt.Fprintln(c.Err, "--commit and --no-commit cannot be used together")
+				c.printWSCloseUsage(c.Err)
+				return exitUsage
+			}
+			doCommit = false
+			commitModeExplicit = "no-commit"
 			args = args[1:]
 		case "--dry-run":
 			dryRun = true
@@ -284,6 +300,7 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 					},
 					"requires_confirmation": true,
 					"requires_force":        true,
+					"commit_enabled":        doCommit,
 				},
 			})
 			return exitError
@@ -320,6 +337,7 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 				},
 				"requires_confirmation": hasNonCleanRisk(riskItems),
 				"requires_force":        false,
+				"commit_enabled":        doCommit,
 			},
 		})
 		return exitOK
@@ -450,8 +468,15 @@ func (c *CLI) closeWorkspace(ctx context.Context, root string, workspaceID strin
 	if err != nil {
 		return fmt.Errorf("prepare %s for close: %w", workspaceMetaFilename, err)
 	}
-	if err := writeWorkspaceMetaFile(wsPath, updatedMeta); err != nil {
-		return fmt.Errorf("write %s: %w", workspaceMetaFilename, err)
+
+	expectedFiles, err := listWorkspaceNonRepoFiles(wsPath)
+	if err != nil {
+		return fmt.Errorf("list workspace files for archive commit: %w", err)
+	}
+	if doCommit {
+		if _, err := commitClosePreSnapshot(ctx, root, workspaceID); err != nil {
+			return fmt.Errorf("commit close pre-snapshot: %w", err)
+		}
 	}
 
 	if err := removeWorkspaceWorktrees(ctx, root, workspaceID, repos); err != nil {
@@ -459,12 +484,13 @@ func (c *CLI) closeWorkspace(ctx context.Context, root string, workspaceID strin
 		return fmt.Errorf("remove worktrees: %w", err)
 	}
 
-	expectedFiles, err := listWorkspaceNonRepoFiles(wsPath)
-	if err != nil {
-		return fmt.Errorf("list workspace files for archive commit: %w", err)
+	if err := writeWorkspaceMetaFile(wsPath, updatedMeta); err != nil {
+		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
+		return fmt.Errorf("write %s: %w", workspaceMetaFilename, err)
 	}
 
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
+		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
 		return fmt.Errorf("ensure archive dir: %w", err)
 	}
 	if err := os.Rename(wsPath, archivePath); err != nil {
@@ -475,8 +501,6 @@ func (c *CLI) closeWorkspace(ctx context.Context, root string, workspaceID strin
 	if doCommit {
 		_, err = commitArchiveChange(ctx, root, workspaceID, expectedFiles)
 		if err != nil {
-			_ = os.Rename(archivePath, wsPath)
-			_ = writeWorkspaceMetaFile(wsPath, originalMeta)
 			return fmt.Errorf("commit archive change: %w", err)
 		}
 	}
@@ -964,6 +988,50 @@ func listWorkspaceNonRepoFiles(wsPath string) ([]string, error) {
 
 func resetArchiveStaging(ctx context.Context, root, archiveArg, workspacesArg string) {
 	_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", archiveArg, workspacesArg)
+}
+
+func resetClosePreStaging(ctx context.Context, root, workspacesArg string) {
+	_, _ = gitutil.Run(ctx, root, "reset", "-q", "--", workspacesArg)
+}
+
+func commitClosePreSnapshot(ctx context.Context, root string, workspaceID string) (string, error) {
+	workspacesPrefix, err := toGitTopLevelPath(ctx, root, filepath.Join("workspaces", workspaceID))
+	if err != nil {
+		return "", err
+	}
+	workspacesPrefix += string(filepath.Separator)
+
+	workspacesArg := filepath.ToSlash(filepath.Join("workspaces", workspaceID))
+	if _, err := gitutil.Run(ctx, root, "add", "-A", "--", workspacesArg); err != nil {
+		return "", err
+	}
+
+	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", workspacesArg)
+	if err != nil {
+		resetClosePreStaging(ctx, root, workspacesArg)
+		return "", err
+	}
+
+	staged := strings.Fields(out)
+	for _, p := range staged {
+		p = filepath.Clean(filepath.FromSlash(p))
+		if !strings.HasPrefix(p, workspacesPrefix) {
+			resetClosePreStaging(ctx, root, workspacesArg)
+			return "", fmt.Errorf("unexpected staged path outside allowlist: %s", p)
+		}
+	}
+
+	if _, err := gitutil.Run(ctx, root, "commit", "--allow-empty", "--only", "-m", fmt.Sprintf("close-pre: %s", workspaceID), "--", workspacesArg); err != nil {
+		resetClosePreStaging(ctx, root, workspacesArg)
+		return "", err
+	}
+	resetClosePreStaging(ctx, root, workspacesArg)
+
+	sha, err := gitutil.Run(ctx, root, "rev-parse", "HEAD")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(sha), nil
 }
 
 func commitArchiveChange(ctx context.Context, root string, workspaceID string, expectedArchiveFiles []string) (string, error) {

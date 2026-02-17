@@ -112,3 +112,35 @@ status: planned
     - `docs/spec/commands/ws/insight.md`
   - Depends: OPS-009
   - Serial: yes
+
+- [x] OPS-012: `ws close` default auto-commit + `--no-commit`
+  - What: make `kra ws --act close` commit-enabled by default with strict two-phase commit flow
+    (pre-state commit under `workspaces/<id>/`, archive rename, post-state commit under `archive/<id>/`).
+    Replace opt-in `--commit` with opt-out `--no-commit`.
+  - Specs:
+    - `docs/spec/commands/ws/close.md`
+    - `docs/spec/commands/ws/dry-run.md`
+    - `docs/spec/commands/ws/select-multi.md`
+  - Depends: OPS-005
+  - Serial: yes
+
+- [ ] OPS-013: `ws reopen` default auto-commit + `--no-commit`
+  - What: make `kra ws --act reopen` commit-enabled by default with strict two-phase reopen flow
+    (`archive/<id>/` pre-state commit, reopen rename, `workspaces/<id>/` post-state commit).
+    Replace opt-in `--commit` with opt-out `--no-commit`.
+  - Specs:
+    - `docs/spec/commands/ws/reopen.md`
+    - `docs/spec/commands/ws/dry-run.md`
+    - `docs/spec/commands/ws/select-multi.md`
+  - Depends: OPS-012
+  - Serial: yes
+
+- [ ] OPS-014: `ws purge` default auto-commit + `--no-commit`
+  - What: make `kra ws --act purge` commit-enabled by default with strict two-phase purge flow
+    (pre-delete commit, delete, post-delete commit), and replace `--commit` with `--no-commit`.
+  - Specs:
+    - `docs/spec/commands/ws/purge.md`
+    - `docs/spec/commands/ws/dry-run.md`
+    - `docs/spec/commands/ws/select-multi.md`
+  - Depends: OPS-012
+  - Serial: yes
