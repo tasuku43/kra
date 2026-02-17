@@ -17,6 +17,12 @@ import (
 
 var errNoArchivedWorkspaces = errors.New("no archived workspaces available")
 
+type reopenCommitTrace struct {
+	CommitEnabled bool
+	PreCommitSHA  string
+	PostCommitSHA string
+}
+
 func (c *CLI) runWSReopen(args []string) int {
 	doCommit := true
 	outputFormat := "human"
@@ -132,9 +138,13 @@ func (c *CLI) runWSReopen(args []string) int {
 		}
 	}
 	useColorOut := writerSupportsColor(c.Out)
+	reopenTraces := make(map[string]reopenCommitTrace, 1)
 
 	flow := workspaceSelectRiskResultFlowConfig{
 		FlowName: "ws reopen",
+		PrintResult: func(done []string, total int, useColor bool) {
+			c.printWSReopenFlowResult(done, total, useColor, reopenTraces)
+		},
 		SelectItems: func() ([]workspaceFlowSelection, error) {
 			selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
 			c.debugf("ws reopen direct mode selected=%v", workspaceFlowSelectionIDs(selected))
@@ -142,9 +152,11 @@ func (c *CLI) runWSReopen(args []string) int {
 		},
 		ApplyOne: func(item workspaceFlowSelection) error {
 			c.debugf("ws reopen start workspace=%s", item.ID)
-			if err := c.reopenWorkspace(ctx, root, repoPoolPath, item.ID, doCommit); err != nil {
+			trace, err := c.reopenWorkspace(ctx, root, repoPoolPath, item.ID, doCommit)
+			if err != nil {
 				return err
 			}
+			reopenTraces[item.ID] = trace
 			c.debugf("ws reopen completed workspace=%s", item.ID)
 			return nil
 		},
@@ -235,55 +247,115 @@ func (c *CLI) runWSReopenJSON(root string, workspaceID string, doCommit bool, dr
 	return exitOK
 }
 
-func (c *CLI) reopenWorkspace(ctx context.Context, root string, repoPoolPath string, workspaceID string, doCommit bool) error {
+func (c *CLI) reopenWorkspace(ctx context.Context, root string, repoPoolPath string, workspaceID string, doCommit bool) (reopenCommitTrace, error) {
 	archivePath := filepath.Join(root, "archive", workspaceID)
 	if fi, err := os.Stat(archivePath); err != nil {
-		return fmt.Errorf("stat archive dir: %w", err)
+		return reopenCommitTrace{}, fmt.Errorf("stat archive dir: %w", err)
 	} else if !fi.IsDir() {
-		return fmt.Errorf("archive path is not a directory: %s", archivePath)
+		return reopenCommitTrace{}, fmt.Errorf("archive path is not a directory: %s", archivePath)
 	}
 
 	wsPath := filepath.Join(root, "workspaces", workspaceID)
 	if _, err := os.Stat(wsPath); err == nil {
-		return fmt.Errorf("workspace directory already exists: %s", wsPath)
+		return reopenCommitTrace{}, fmt.Errorf("workspace directory already exists: %s", wsPath)
 	} else if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("stat workspace dir: %w", err)
+		return reopenCommitTrace{}, fmt.Errorf("stat workspace dir: %w", err)
 	}
 
+	trace := reopenCommitTrace{CommitEnabled: doCommit}
 	if doCommit {
-		if _, err := commitReopenPreSnapshot(ctx, root, workspaceID); err != nil {
-			return fmt.Errorf("commit reopen pre-snapshot: %w", err)
+		preSHA, err := commitReopenPreSnapshot(ctx, root, workspaceID)
+		if err != nil {
+			return reopenCommitTrace{}, fmt.Errorf("commit reopen pre-snapshot: %w", err)
 		}
+		trace.PreCommitSHA = preSHA
 	}
 
 	if err := os.Rename(archivePath, wsPath); err != nil {
-		return fmt.Errorf("restore workspace (rename): %w", err)
+		return reopenCommitTrace{}, fmt.Errorf("restore workspace (rename): %w", err)
 	}
 	meta, err := loadWorkspaceMetaFile(wsPath)
 	if err != nil {
 		_ = os.Rename(wsPath, archivePath)
-		return fmt.Errorf("load %s: %w", workspaceMetaFilename, err)
+		return reopenCommitTrace{}, fmt.Errorf("load %s: %w", workspaceMetaFilename, err)
 	}
 
 	if err := recreateWorkspaceWorktreesFromMeta(ctx, root, repoPoolPath, workspaceID, meta.ReposRestore); err != nil {
 		_ = os.Rename(wsPath, archivePath)
-		return fmt.Errorf("recreate worktrees: %w", err)
+		return reopenCommitTrace{}, fmt.Errorf("recreate worktrees: %w", err)
 	}
 	meta.Workspace.Status = "active"
 	meta.Workspace.UpdatedAt = time.Now().Unix()
 	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
 		_ = os.Rename(wsPath, archivePath)
-		return fmt.Errorf("update %s: %w", workspaceMetaFilename, err)
+		return reopenCommitTrace{}, fmt.Errorf("update %s: %w", workspaceMetaFilename, err)
 	}
 
 	if doCommit {
-		_, err = commitReopenChange(ctx, root, workspaceID)
+		postSHA, err := commitReopenChange(ctx, root, workspaceID)
 		if err != nil {
-			return fmt.Errorf("commit reopen change: %w", err)
+			return reopenCommitTrace{}, fmt.Errorf("commit reopen change: %w", err)
 		}
+		trace.PostCommitSHA = postSHA
 	}
 
-	return nil
+	return trace, nil
+}
+
+func (c *CLI) printWSReopenFlowResult(done []string, total int, useColor bool, traces map[string]reopenCommitTrace) {
+	body := make([]string, 0, len(done)*5+1)
+	body = append(body, fmt.Sprintf("%sReopened %d / %d", uiIndent, len(done), total))
+	successMark := styleSuccess("✔", useColor)
+	for _, id := range done {
+		body = append(body, fmt.Sprintf("%s%s %s", uiIndent, successMark, id))
+		trace, ok := traces[id]
+		if !ok {
+			continue
+		}
+		if trace.CommitEnabled {
+			body = append(body, fmt.Sprintf("%s%s %s reopen-pre: %s %s",
+				uiIndent+uiIndent,
+				styleMuted("1/3", useColor),
+				styleAccent("commit(pre):", useColor),
+				id,
+				styleMuted(shortCommitSHA(trace.PreCommitSHA), useColor),
+			))
+		} else {
+			body = append(body, fmt.Sprintf("%s%s %s %s",
+				uiIndent+uiIndent,
+				styleMuted("1/3", useColor),
+				styleAccent("commit(pre):", useColor),
+				styleMuted("skipped (--no-commit)", useColor),
+			))
+		}
+		body = append(body, fmt.Sprintf("%s%s %s archive/%s -> workspaces/%s",
+			uiIndent+uiIndent,
+			styleMuted("2/3", useColor),
+			styleAccent("reopen:", useColor),
+			id,
+			id,
+		))
+		if trace.CommitEnabled {
+			body = append(body, fmt.Sprintf("%s%s %s reopen: %s %s",
+				uiIndent+uiIndent,
+				styleMuted("3/3", useColor),
+				styleAccent("commit(post):", useColor),
+				id,
+				styleMuted(shortCommitSHA(trace.PostCommitSHA), useColor),
+			))
+		} else {
+			body = append(body, fmt.Sprintf("%s%s %s %s",
+				uiIndent+uiIndent,
+				styleMuted("3/3", useColor),
+				styleAccent("commit(post):", useColor),
+				styleMuted("skipped (--no-commit)", useColor),
+			))
+		}
+	}
+	printSection(c.Out, renderResultTitle(useColor), body, sectionRenderOptions{
+		blankAfterHeading: false,
+		trailingBlank:     true,
+	})
 }
 
 func recreateWorkspaceWorktreesFromMeta(ctx context.Context, root string, repoPoolPath string, workspaceID string, repos []workspaceMetaRepoRestore) error {

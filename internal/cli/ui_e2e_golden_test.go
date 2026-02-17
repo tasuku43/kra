@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"fmt"
 	"os/exec"
+	"regexp"
 	"strings"
 	"testing"
 
@@ -141,5 +142,7 @@ func configureRootGitUserForUIE2E(t *testing.T, root string) {
 
 func normalizeUIE2ETranscript(s string, root string) string {
 	normalized := strings.ReplaceAll(s, root, "<ROOT>")
+	reShortSHA := regexp.MustCompile(`\b[0-9a-f]{7,40}\b`)
+	normalized = reShortSHA.ReplaceAllString(normalized, "<SHA>")
 	return normalized
 }

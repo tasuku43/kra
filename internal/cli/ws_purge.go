@@ -21,6 +21,12 @@ type purgeWorkspaceMeta struct {
 	purgeGuardActive bool
 }
 
+type purgeCommitTrace struct {
+	CommitEnabled bool
+	PreCommitSHA  string
+	PostCommitSHA string
+}
+
 func (c *CLI) runWSPurge(args []string) int {
 	var noPrompt bool
 	var force bool
@@ -142,6 +148,7 @@ func (c *CLI) runWSPurge(args []string) int {
 		}
 	}
 	useColorOut := writerSupportsColor(c.Out)
+	purgeTraces := make(map[string]purgeCommitTrace, 1)
 
 	selectedIDs := make([]string, 0, 4)
 	riskMeta := make(map[string]purgeWorkspaceMeta, 4)
@@ -149,6 +156,9 @@ func (c *CLI) runWSPurge(args []string) int {
 
 	flow := workspaceSelectRiskResultFlowConfig{
 		FlowName: "ws purge",
+		PrintResult: func(done []string, total int, useColor bool) {
+			c.printWSPurgeFlowResult(done, total, useColor, purgeTraces)
+		},
 		SelectItems: func() ([]workspaceFlowSelection, error) {
 			selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
 			c.debugf("ws purge direct mode selected=%v", workspaceFlowSelectionIDs(selected))
@@ -208,9 +218,11 @@ func (c *CLI) runWSPurge(args []string) int {
 		},
 		ApplyOne: func(item workspaceFlowSelection) error {
 			c.debugf("ws purge start workspace=%s", item.ID)
-			if err := c.purgeWorkspace(ctx, root, item.ID, doCommit); err != nil {
+			trace, err := c.purgeWorkspace(ctx, root, item.ID, doCommit)
+			if err != nil {
 				return err
 			}
+			purgeTraces[item.ID] = trace
 			c.debugf("ws purge completed workspace=%s", item.ID)
 			return nil
 		},
@@ -400,47 +412,108 @@ func printPurgeRiskSection(out io.Writer, selectedIDs []string, riskMeta map[str
 	})
 }
 
-func (c *CLI) purgeWorkspace(ctx context.Context, root string, workspaceID string, doCommit bool) error {
+func (c *CLI) purgeWorkspace(ctx context.Context, root string, workspaceID string, doCommit bool) (purgeCommitTrace, error) {
 	meta, err := collectPurgeWorkspaceMeta(ctx, root, workspaceID)
 	if err != nil {
-		return err
+		return purgeCommitTrace{}, err
 	}
 	if meta.purgeGuardActive {
-		return fmt.Errorf("purge guard is enabled for workspace %s (hint: run 'kra ws unlock %s' before purge)", workspaceID, workspaceID)
+		return purgeCommitTrace{}, fmt.Errorf("purge guard is enabled for workspace %s (hint: run 'kra ws unlock %s' before purge)", workspaceID, workspaceID)
 	}
 	if meta.status != "archived" {
-		return fmt.Errorf("workspace cannot be purged unless archived (run: kra ws --act close %s)", workspaceID)
+		return purgeCommitTrace{}, fmt.Errorf("workspace cannot be purged unless archived (run: kra ws --act close %s)", workspaceID)
 	}
+	trace := purgeCommitTrace{CommitEnabled: doCommit}
 	if doCommit {
-		if _, err := commitPurgePreSnapshot(ctx, root, workspaceID); err != nil {
-			return fmt.Errorf("commit purge pre-snapshot: %w", err)
+		preSHA, err := commitPurgePreSnapshot(ctx, root, workspaceID)
+		if err != nil {
+			return purgeCommitTrace{}, fmt.Errorf("commit purge pre-snapshot: %w", err)
 		}
+		trace.PreCommitSHA = preSHA
 	}
 
 	repos, err := listWorkspaceReposForClose(ctx, root, workspaceID)
 	if err != nil {
-		return fmt.Errorf("list workspace repos: %w", err)
+		return purgeCommitTrace{}, fmt.Errorf("list workspace repos: %w", err)
 	}
 	if err := removeWorkspaceWorktrees(ctx, root, workspaceID, repos); err != nil {
-		return fmt.Errorf("remove worktrees: %w", err)
+		return purgeCommitTrace{}, fmt.Errorf("remove worktrees: %w", err)
 	}
 
 	wsPath := filepath.Join(root, "workspaces", workspaceID)
 	if err := os.RemoveAll(wsPath); err != nil {
-		return fmt.Errorf("delete workspace dir: %w", err)
+		return purgeCommitTrace{}, fmt.Errorf("delete workspace dir: %w", err)
 	}
 	archivePath := filepath.Join(root, "archive", workspaceID)
 	if err := os.RemoveAll(archivePath); err != nil {
-		return fmt.Errorf("delete archive dir: %w", err)
+		return purgeCommitTrace{}, fmt.Errorf("delete archive dir: %w", err)
 	}
 
 	if doCommit {
-		if _, err := commitPurgeChange(ctx, root, workspaceID); err != nil {
-			return fmt.Errorf("commit purge change: %w", err)
+		postSHA, err := commitPurgeChange(ctx, root, workspaceID)
+		if err != nil {
+			return purgeCommitTrace{}, fmt.Errorf("commit purge change: %w", err)
 		}
+		trace.PostCommitSHA = postSHA
 	}
 
-	return nil
+	return trace, nil
+}
+
+func (c *CLI) printWSPurgeFlowResult(done []string, total int, useColor bool, traces map[string]purgeCommitTrace) {
+	body := make([]string, 0, len(done)*5+1)
+	body = append(body, fmt.Sprintf("%sPurged %d / %d", uiIndent, len(done), total))
+	successMark := styleSuccess("✔", useColor)
+	for _, id := range done {
+		body = append(body, fmt.Sprintf("%s%s %s", uiIndent, successMark, id))
+		trace, ok := traces[id]
+		if !ok {
+			continue
+		}
+		if trace.CommitEnabled {
+			body = append(body, fmt.Sprintf("%s%s %s purge-pre: %s %s",
+				uiIndent+uiIndent,
+				styleMuted("1/3", useColor),
+				styleAccent("commit(pre):", useColor),
+				id,
+				styleMuted(shortCommitSHA(trace.PreCommitSHA), useColor),
+			))
+		} else {
+			body = append(body, fmt.Sprintf("%s%s %s %s",
+				uiIndent+uiIndent,
+				styleMuted("1/3", useColor),
+				styleAccent("commit(pre):", useColor),
+				styleMuted("skipped (--no-commit)", useColor),
+			))
+		}
+		body = append(body, fmt.Sprintf("%s%s %s delete workspaces/%s, archive/%s",
+			uiIndent+uiIndent,
+			styleMuted("2/3", useColor),
+			styleAccent("purge:", useColor),
+			id,
+			id,
+		))
+		if trace.CommitEnabled {
+			body = append(body, fmt.Sprintf("%s%s %s purge: %s %s",
+				uiIndent+uiIndent,
+				styleMuted("3/3", useColor),
+				styleAccent("commit(post):", useColor),
+				id,
+				styleMuted(shortCommitSHA(trace.PostCommitSHA), useColor),
+			))
+		} else {
+			body = append(body, fmt.Sprintf("%s%s %s %s",
+				uiIndent+uiIndent,
+				styleMuted("3/3", useColor),
+				styleAccent("commit(post):", useColor),
+				styleMuted("skipped (--no-commit)", useColor),
+			))
+		}
+	}
+	printSection(c.Out, renderResultTitle(useColor), body, sectionRenderOptions{
+		blankAfterHeading: false,
+		trailingBlank:     true,
+	})
 }
 
 func commitPurgeChange(ctx context.Context, root string, workspaceID string) (string, error) {

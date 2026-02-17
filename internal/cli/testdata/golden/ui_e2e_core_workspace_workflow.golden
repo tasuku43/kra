@@ -42,6 +42,9 @@ stdout:
 Result:
   Closed 1 / 1
   ✔ UI-100
+    1/3 commit(pre): close-pre: UI-100 <SHA>
+    2/3 archive: workspaces/UI-100 -> archive/UI-100
+    3/3 commit(post): archive: UI-100 <SHA>
 
 
 $ kra ws list --archived

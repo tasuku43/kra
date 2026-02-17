@@ -182,8 +182,12 @@ func (c *CLI) runWSClose(args []string) int {
 		}
 	}
 
+	closeTraces := make(map[string]closeCommitTrace, 1)
 	flow := workspaceSelectRiskResultFlowConfig{
 		FlowName: "ws close",
+		PrintResult: func(done []string, total int, useColor bool) {
+			c.printWSCloseFlowResult(done, total, useColor, closeTraces)
+		},
 		SelectItems: func() ([]workspaceFlowSelection, error) {
 			selected := []workspaceFlowSelection{{ID: directWorkspaceID}}
 			c.debugf("ws close direct mode selected=%v", workspaceFlowSelectionIDs(selected))
@@ -208,9 +212,11 @@ func (c *CLI) runWSClose(args []string) int {
 		ConfirmRisk: c.confirmRiskProceed,
 		ApplyOne: func(item workspaceFlowSelection) error {
 			c.debugf("ws close archive start workspace=%s", item.ID)
-			if err := c.closeWorkspace(ctx, root, item.ID, doCommit); err != nil {
+			trace, err := c.closeWorkspace(ctx, root, item.ID, doCommit)
+			if err != nil {
 				return err
 			}
+			closeTraces[item.ID] = trace
 			c.debugf("ws close archive completed workspace=%s", item.ID)
 			return nil
 		},
@@ -343,7 +349,7 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 		return exitOK
 	}
 
-	if err := c.closeWorkspace(ctx, root, workspaceID, doCommit); err != nil {
+	if _, err := c.closeWorkspace(ctx, root, workspaceID, doCommit); err != nil {
 		code := "internal_error"
 		msg := err.Error()
 		switch {
@@ -439,73 +445,77 @@ func isPathInside(base string, target string) bool {
 	return true
 }
 
-func (c *CLI) closeWorkspace(ctx context.Context, root string, workspaceID string, doCommit bool) error {
+func (c *CLI) closeWorkspace(ctx context.Context, root string, workspaceID string, doCommit bool) (closeCommitTrace, error) {
 	wsPath := filepath.Join(root, "workspaces", workspaceID)
 	if fi, err := os.Stat(wsPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			archivePath := filepath.Join(root, "archive", workspaceID)
 			if afi, aerr := os.Stat(archivePath); aerr == nil && afi.IsDir() {
-				return fmt.Errorf("workspace is not active (status=archived): %s", workspaceID)
+				return closeCommitTrace{}, fmt.Errorf("workspace is not active (status=archived): %s", workspaceID)
 			}
-			return fmt.Errorf("workspace not found: %s", workspaceID)
+			return closeCommitTrace{}, fmt.Errorf("workspace not found: %s", workspaceID)
 		}
-		return fmt.Errorf("stat workspace dir: %w", err)
+		return closeCommitTrace{}, fmt.Errorf("stat workspace dir: %w", err)
 	} else if !fi.IsDir() {
-		return fmt.Errorf("workspace path is not a directory: %s", wsPath)
+		return closeCommitTrace{}, fmt.Errorf("workspace path is not a directory: %s", wsPath)
 	}
 	archivePath := filepath.Join(root, "archive", workspaceID)
 	if _, err := os.Stat(archivePath); err == nil {
-		return fmt.Errorf("archive directory already exists: %s", archivePath)
+		return closeCommitTrace{}, fmt.Errorf("archive directory already exists: %s", archivePath)
 	} else if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("stat archive dir: %w", err)
+		return closeCommitTrace{}, fmt.Errorf("stat archive dir: %w", err)
 	}
 
 	repos, err := listWorkspaceReposForClose(ctx, root, workspaceID)
 	if err != nil {
-		return fmt.Errorf("list workspace repos: %w", err)
+		return closeCommitTrace{}, fmt.Errorf("list workspace repos: %w", err)
 	}
 	originalMeta, updatedMeta, err := buildWorkspaceMetaForClose(ctx, root, workspaceID, repos)
 	if err != nil {
-		return fmt.Errorf("prepare %s for close: %w", workspaceMetaFilename, err)
+		return closeCommitTrace{}, fmt.Errorf("prepare %s for close: %w", workspaceMetaFilename, err)
 	}
 
 	expectedFiles, err := listWorkspaceNonRepoFiles(wsPath)
 	if err != nil {
-		return fmt.Errorf("list workspace files for archive commit: %w", err)
+		return closeCommitTrace{}, fmt.Errorf("list workspace files for archive commit: %w", err)
 	}
+	trace := closeCommitTrace{CommitEnabled: doCommit}
 	if doCommit {
-		if _, err := commitClosePreSnapshot(ctx, root, workspaceID); err != nil {
-			return fmt.Errorf("commit close pre-snapshot: %w", err)
+		preSHA, err := commitClosePreSnapshot(ctx, root, workspaceID)
+		if err != nil {
+			return closeCommitTrace{}, fmt.Errorf("commit close pre-snapshot: %w", err)
 		}
+		trace.PreCommitSHA = preSHA
 	}
 
 	if err := removeWorkspaceWorktrees(ctx, root, workspaceID, repos); err != nil {
 		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
-		return fmt.Errorf("remove worktrees: %w", err)
+		return closeCommitTrace{}, fmt.Errorf("remove worktrees: %w", err)
 	}
 
 	if err := writeWorkspaceMetaFile(wsPath, updatedMeta); err != nil {
 		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
-		return fmt.Errorf("write %s: %w", workspaceMetaFilename, err)
+		return closeCommitTrace{}, fmt.Errorf("write %s: %w", workspaceMetaFilename, err)
 	}
 
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
 		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
-		return fmt.Errorf("ensure archive dir: %w", err)
+		return closeCommitTrace{}, fmt.Errorf("ensure archive dir: %w", err)
 	}
 	if err := os.Rename(wsPath, archivePath); err != nil {
 		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
-		return fmt.Errorf("archive (rename): %w", err)
+		return closeCommitTrace{}, fmt.Errorf("archive (rename): %w", err)
 	}
 
 	if doCommit {
-		_, err = commitArchiveChange(ctx, root, workspaceID, expectedFiles)
+		postSHA, err := commitArchiveChange(ctx, root, workspaceID, expectedFiles)
 		if err != nil {
-			return fmt.Errorf("commit archive change: %w", err)
+			return closeCommitTrace{}, fmt.Errorf("commit archive change: %w", err)
 		}
+		trace.PostCommitSHA = postSHA
 	}
 
-	return nil
+	return trace, nil
 }
 
 func buildWorkspaceMetaForClose(ctx context.Context, root string, workspaceID string, repos []statestore.WorkspaceRepo) (workspaceMetaFile, workspaceMetaFile, error) {
@@ -614,6 +624,12 @@ type workspaceRiskDetail struct {
 	risk      workspacerisk.WorkspaceRisk
 	perRepo   []repoRiskItem
 	repoPlans []closeRepoPlanDetail
+}
+
+type closeCommitTrace struct {
+	CommitEnabled bool
+	PreCommitSHA  string
+	PostCommitSHA string
 }
 
 type closeRepoPlanDetail struct {
@@ -768,6 +784,70 @@ func renderClosePlanRiskLabel(detail closeRepoPlanDetail, useColor bool) string 
 func renderCloseRiskApplyPrompt(useColor bool) string {
 	bullet := styleMuted("•", useColor)
 	return fmt.Sprintf("%s%s type %s to apply close on non-clean workspaces: ", uiIndent, bullet, styleAccent("yes", useColor))
+}
+
+func shortCommitSHA(sha string) string {
+	sha = strings.TrimSpace(sha)
+	if len(sha) <= 7 {
+		return sha
+	}
+	return sha[:7]
+}
+
+func (c *CLI) printWSCloseFlowResult(done []string, total int, useColor bool, traces map[string]closeCommitTrace) {
+	body := make([]string, 0, len(done)*5+1)
+	body = append(body, fmt.Sprintf("%sClosed %d / %d", uiIndent, len(done), total))
+	successMark := styleSuccess("✔", useColor)
+	for _, id := range done {
+		body = append(body, fmt.Sprintf("%s%s %s", uiIndent, successMark, id))
+		trace, ok := traces[id]
+		if !ok {
+			continue
+		}
+		if trace.CommitEnabled {
+			body = append(body, fmt.Sprintf("%s%s %s close-pre: %s %s",
+				uiIndent+uiIndent,
+				styleMuted("1/3", useColor),
+				styleAccent("commit(pre):", useColor),
+				id,
+				styleMuted(shortCommitSHA(trace.PreCommitSHA), useColor),
+			))
+		} else {
+			body = append(body, fmt.Sprintf("%s%s %s %s",
+				uiIndent+uiIndent,
+				styleMuted("1/3", useColor),
+				styleAccent("commit(pre):", useColor),
+				styleMuted("skipped (--no-commit)", useColor),
+			))
+		}
+		body = append(body, fmt.Sprintf("%s%s %s workspaces/%s -> archive/%s",
+			uiIndent+uiIndent,
+			styleMuted("2/3", useColor),
+			styleAccent("archive:", useColor),
+			id,
+			id,
+		))
+		if trace.CommitEnabled {
+			body = append(body, fmt.Sprintf("%s%s %s archive: %s %s",
+				uiIndent+uiIndent,
+				styleMuted("3/3", useColor),
+				styleAccent("commit(post):", useColor),
+				id,
+				styleMuted(shortCommitSHA(trace.PostCommitSHA), useColor),
+			))
+		} else {
+			body = append(body, fmt.Sprintf("%s%s %s %s",
+				uiIndent+uiIndent,
+				styleMuted("3/3", useColor),
+				styleAccent("commit(post):", useColor),
+				styleMuted("skipped (--no-commit)", useColor),
+			))
+		}
+	}
+	printSection(c.Out, renderResultTitle(useColor), body, sectionRenderOptions{
+		blankAfterHeading: false,
+		trailingBlank:     true,
+	})
 }
 
 func collectCloseRepoPlanDetails(ctx context.Context, root string, workspaceID string, repos []statestore.WorkspaceRepo) []closeRepoPlanDetail {
