@@ -524,6 +524,82 @@ func TestRenderWorkspaceSelectorLinesWithOptions_MultiModeUsesCircleSelectionMar
 	}
 }
 
+func TestRenderWorkspaceSelectorLinesWithOptions_WorkspaceSectionsShownWithCounts(t *testing.T) {
+	lines := renderWorkspaceSelectorLinesWithOptions(
+		"active",
+		"",
+		"go",
+		[]workspaceSelectorCandidate{
+			{ID: "WS-IP-1", Title: "ip1", Risk: workspacerisk.WorkspaceRiskClean, WorkState: workspaceWorkStateInProgress},
+			{ID: "WS-IP-2", Title: "ip2", Risk: workspacerisk.WorkspaceRiskClean, WorkState: workspaceWorkStateInProgress},
+			{ID: "WS-TODO-1", Title: "todo", Risk: workspacerisk.WorkspaceRiskClean, WorkState: workspaceWorkStateTodo},
+		},
+		map[int]bool{},
+		0,
+		"",
+		selectorMessageLevelMuted,
+		"",
+		true,
+		true,
+		false,
+		false,
+		false,
+		120,
+	)
+	joined := strings.Join(lines, "\n")
+	if !strings.Contains(joined, "@In Progress (2)") {
+		t.Fatalf("workspace section should show in-progress heading with count, got %q", joined)
+	}
+	if !strings.Contains(joined, "@Todo (1)") {
+		t.Fatalf("workspace section should show todo heading with count, got %q", joined)
+	}
+}
+
+func TestRenderWorkspaceSelectorLinesWithOptions_ActionModeDoesNotShowWorkspaceSections(t *testing.T) {
+	lines := renderWorkspaceSelectorLinesWithOptions(
+		"active",
+		"Action:",
+		"go",
+		[]workspaceSelectorCandidate{
+			{ID: "go", Title: "switch", Risk: workspacerisk.WorkspaceRiskClean, WorkState: workspaceWorkStateInProgress},
+			{ID: "close", Title: "archive", Risk: workspacerisk.WorkspaceRiskClean, WorkState: workspaceWorkStateTodo},
+		},
+		map[int]bool{},
+		0,
+		"",
+		selectorMessageLevelMuted,
+		"",
+		true,
+		true,
+		false,
+		false,
+		false,
+		120,
+	)
+	joined := strings.Join(lines, "\n")
+	if strings.Contains(joined, "@In Progress") || strings.Contains(joined, "@Todo") {
+		t.Fatalf("action selector should not show workspace section headings, got %q", joined)
+	}
+}
+
+func TestRenderWorkspaceStateHeadingLine_UsesSemanticColors(t *testing.T) {
+	ip := renderWorkspaceStateHeadingLine(workspaceWorkStateInProgress, 3, 1, true)
+	if !strings.Contains(ip, ansiAccent+"@In Progress"+ansiReset) {
+		t.Fatalf("in-progress heading should use accent color token, got %q", ip)
+	}
+	if !strings.Contains(ip, ansiMuted+"(3)"+ansiReset) {
+		t.Fatalf("in-progress heading count should use muted color token, got %q", ip)
+	}
+
+	td := renderWorkspaceStateHeadingLine(workspaceWorkStateTodo, 3, 1, true)
+	if !strings.Contains(td, ansiMuted+"@Todo"+ansiReset) {
+		t.Fatalf("todo heading should use muted color token, got %q", td)
+	}
+	if !strings.Contains(td, ansiMuted+"(1)"+ansiReset) {
+		t.Fatalf("todo heading count should use muted color token, got %q", td)
+	}
+}
+
 func TestRenderWorkspaceSelectorLinesWithOptions_RepoModeCompactsHeaderSpacing(t *testing.T) {
 	lines := renderWorkspaceSelectorLinesWithOptions(
 		"active",

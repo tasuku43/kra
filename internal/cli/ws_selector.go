@@ -500,6 +500,19 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 	}
 
 	rowStyle := selectorRowStyleFromContext(itemLabel, title, showDesc)
+	showWorkspaceSections := rowStyle == selectorRowStyleWorkspace
+	inProgressCount := 0
+	todoCount := 0
+	if showWorkspaceSections {
+		for _, idx := range visible {
+			switch normalizeWorkspaceWorkState(candidates[idx].WorkState) {
+			case workspaceWorkStateInProgress:
+				inProgressCount++
+			default:
+				todoCount++
+			}
+		}
+	}
 	bodyRows := selectorBodyRowsLimit(termHeight, compactTitle)
 	start, end := selectorViewportRange(totalVisible, cursor, bodyRows)
 
@@ -514,6 +527,15 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 	for visiblePos := start; visiblePos < end; visiblePos++ {
 		sourceIdx := visible[visiblePos]
 		it := candidates[sourceIdx]
+		if showWorkspaceSections {
+			sectionState := normalizeWorkspaceWorkState(it.WorkState)
+			if visiblePos == start || sectionState != normalizeWorkspaceWorkState(candidates[visible[visiblePos-1]].WorkState) {
+				if len(bodyLines) > 0 && strings.TrimSpace(bodyLines[len(bodyLines)-1]) != "" {
+					bodyLines = append(bodyLines, "")
+				}
+				bodyLines = append(bodyLines, renderWorkspaceStateHeadingLine(sectionState, inProgressCount, todoCount, useColor))
+			}
+		}
 		focus := " "
 		if visiblePos == cursor {
 			focus = ">"
@@ -637,6 +659,22 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 		blankAfterHeading: !compactTitle,
 		trailingBlank:     true,
 	}))
+}
+
+func renderWorkspaceStateHeadingLine(state workspaceWorkState, inProgressCount int, todoCount int, useColor bool) string {
+	label := "@Todo"
+	count := todoCount
+	if normalizeWorkspaceWorkState(state) == workspaceWorkStateInProgress {
+		label = "@In Progress"
+		count = inProgressCount
+	}
+	if !useColor {
+		return fmt.Sprintf("%s%s (%d)", uiIndent, label, count)
+	}
+	if normalizeWorkspaceWorkState(state) == workspaceWorkStateInProgress {
+		return fmt.Sprintf("%s%s %s", uiIndent, styleAccent(label, true), styleMuted(fmt.Sprintf("(%d)", count), true))
+	}
+	return fmt.Sprintf("%s%s %s", uiIndent, styleMuted(label, true), styleMuted(fmt.Sprintf("(%d)", count), true))
 }
 
 func selectorBodyRowsLimit(termHeight int, compactTitle bool) int {
