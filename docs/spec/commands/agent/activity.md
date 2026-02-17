@@ -71,7 +71,11 @@ runtime visibility and no Git-noise in `KRA_ROOT`.
 - Data source:
   - directory scan of `KRA_HOME/state/agents/<root-hash>/`
   - missing directory means empty list
-- `list` is machine-friendly flat output (human/tsv).
+- `list` output contract:
+  - `tsv` is flat machine-friendly rows
+  - `human` is workspace-first summary view
+  - `human` always renders per-session tree rows under each workspace
+  - child row order is deterministic: `workspace` scope first, then `repo:<repo_key>`
 - `board` is human-first grouped output:
   - parent row: workspace
   - child row: execution location (`workspace` or `repo:<repo_key>`)

@@ -151,7 +151,7 @@ func printAgentBoardHuman(out io.Writer, rows []agentRuntimeSessionRecord, useCo
 
 		children := byWorkspace[ws]
 		slices.SortFunc(children, func(a, b agentRuntimeSessionRecord) int {
-			return strings.Compare(locationLabel(a), locationLabel(b))
+			return compareExecutionLocation(a, b)
 		})
 		for _, child := range children {
 			line := fmt.Sprintf(
@@ -181,4 +181,32 @@ func locationLabel(r agentRuntimeSessionRecord) string {
 		return "repo:" + r.RepoKey
 	}
 	return "workspace"
+}
+
+func compareExecutionLocation(a, b agentRuntimeSessionRecord) int {
+	aRank := executionScopeRank(a.ExecutionScope)
+	bRank := executionScopeRank(b.ExecutionScope)
+	if aRank != bRank {
+		if aRank < bRank {
+			return -1
+		}
+		return 1
+	}
+	if a.ExecutionScope == "repo" || b.ExecutionScope == "repo" {
+		if cmp := strings.Compare(a.RepoKey, b.RepoKey); cmp != 0 {
+			return cmp
+		}
+	}
+	return 0
+}
+
+func executionScopeRank(scope string) int {
+	switch scope {
+	case "workspace":
+		return 0
+	case "repo":
+		return 1
+	default:
+		return 2
+	}
 }

@@ -101,7 +101,10 @@ Human mapping:
 - create/update session record until exit
 
 `list`:
-- flat machine-friendly listing from session files
+- `tsv`: flat machine-friendly listing from session files
+- `human`: workspace summary first
+  - always render per-session tree rows under each workspace
+  - child row order: `workspace` scope first, then `repo:<repo_key>`
 
 `board`:
 - workspace-parent grouped view with execution location children

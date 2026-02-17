@@ -210,31 +210,151 @@ func printAgentRuntimeListHuman(out io.Writer, rows []agentRuntimeSessionRecord,
 		})
 		return
 	}
-	maxCols := listTerminalWidth()
-	for _, r := range rows {
-		location := "workspace"
-		if r.ExecutionScope == "repo" {
-			location = "repo:" + r.RepoKey
-		}
-		line := fmt.Sprintf(
-			"%s• %s  session:%s  location:%s  kind:%s  state:%s  updated:%s",
-			uiIndent,
-			r.WorkspaceID,
-			r.SessionID,
-			location,
-			r.Kind,
-			r.RuntimeState,
-			formatUnixTS(r.UpdatedAt),
-		)
-		if useColor {
-			line = styleMuted(line, useColor)
-		}
-		body = append(body, truncateDisplay(line, maxCols))
+
+	totalByState := map[string]int{
+		"running": 0,
+		"idle":    0,
+		"unknown": 0,
+		"exited":  0,
 	}
+	byWorkspace := map[string][]agentRuntimeSessionRecord{}
+	for _, r := range rows {
+		totalByState[r.RuntimeState]++
+		byWorkspace[r.WorkspaceID] = append(byWorkspace[r.WorkspaceID], r)
+	}
+
+	maxCols := listTerminalWidth()
+	summary := fmt.Sprintf(
+		"%ssummary  running:%d  idle:%d  unknown:%d",
+		uiIndent,
+		totalByState["running"],
+		totalByState["idle"],
+		totalByState["unknown"],
+	)
+	if totalByState["exited"] > 0 {
+		summary += fmt.Sprintf("  exited:%d", totalByState["exited"])
+	}
+	if useColor {
+		summary = styleMuted(summary, useColor)
+	}
+	body = append(body, truncateDisplay(summary, maxCols))
+	body = append(body, "")
+
+	workspaceIDs := make([]string, 0, len(byWorkspace))
+	for ws := range byWorkspace {
+		workspaceIDs = append(workspaceIDs, ws)
+	}
+	slices.Sort(workspaceIDs)
+
+	for _, ws := range workspaceIDs {
+		items := byWorkspace[ws]
+		countByState := map[string]int{
+			"running": 0,
+			"idle":    0,
+			"unknown": 0,
+			"exited":  0,
+		}
+		for _, it := range items {
+			countByState[it.RuntimeState]++
+		}
+
+		wsLine := fmt.Sprintf(
+			"%s• %s  %s",
+			uiIndent,
+			ws,
+			compactStateCounts(countByState),
+		)
+		wsLine += fmt.Sprintf("  updated:%s", formatRelativeAge(latestUpdatedAt(items)))
+		if useColor {
+			wsLine = styleAccent(wsLine, useColor)
+		}
+		body = append(body, truncateDisplay(wsLine, maxCols))
+
+		slices.SortFunc(items, func(a, b agentRuntimeSessionRecord) int {
+			if cmp := compareExecutionLocation(a, b); cmp != 0 {
+				return cmp
+			}
+			if a.UpdatedAt != b.UpdatedAt {
+				if a.UpdatedAt > b.UpdatedAt {
+					return -1
+				}
+				return 1
+			}
+			return strings.Compare(a.SessionID, b.SessionID)
+		})
+
+		for i, it := range items {
+			branch := "├─"
+			if i == len(items)-1 {
+				branch = "└─"
+			}
+			location := "workspace"
+			if it.ExecutionScope == "repo" {
+				location = "repo:" + it.RepoKey
+			}
+			line := fmt.Sprintf("%s  %s %-8s %-20s updated:%-7s session:%s", uiIndent, branch, it.Kind, location, formatRelativeAge(it.UpdatedAt), it.SessionID)
+			if it.RuntimeState != "running" {
+				line += fmt.Sprintf(" state:%s", it.RuntimeState)
+			}
+			if useColor {
+				line = styleMuted(line, useColor)
+			}
+			body = append(body, truncateDisplay(line, maxCols))
+		}
+		body = append(body, "")
+	}
+
 	printSection(out, "Agents:", body, sectionRenderOptions{
 		blankAfterHeading: true,
 		trailingBlank:     true,
 	})
+}
+
+func formatRelativeAge(unixSec int64) string {
+	if unixSec <= 0 {
+		return "-"
+	}
+	age := time.Now().Unix() - unixSec
+	if age < 0 {
+		age = 0
+	}
+	switch {
+	case age < 60:
+		return fmt.Sprintf("%ds", age)
+	case age < 3600:
+		return fmt.Sprintf("%dm", age/60)
+	case age < 86400:
+		return fmt.Sprintf("%dh", age/3600)
+	default:
+		return fmt.Sprintf("%dd", age/86400)
+	}
+}
+
+func latestUpdatedAt(rows []agentRuntimeSessionRecord) int64 {
+	var latest int64
+	for _, r := range rows {
+		if r.UpdatedAt > latest {
+			latest = r.UpdatedAt
+		}
+	}
+	return latest
+}
+
+func compactStateCounts(counts map[string]int) string {
+	parts := make([]string, 0, 4)
+	if counts["running"] > 0 || (counts["idle"] == 0 && counts["unknown"] == 0 && counts["exited"] == 0) {
+		parts = append(parts, fmt.Sprintf("running:%d", counts["running"]))
+	}
+	if counts["idle"] > 0 {
+		parts = append(parts, fmt.Sprintf("idle:%d", counts["idle"]))
+	}
+	if counts["unknown"] > 0 {
+		parts = append(parts, fmt.Sprintf("unknown:%d", counts["unknown"]))
+	}
+	if counts["exited"] > 0 {
+		parts = append(parts, fmt.Sprintf("exited:%d", counts["exited"]))
+	}
+	return strings.Join(parts, "  ")
 }
 
 func hashRootPath(root string) string {

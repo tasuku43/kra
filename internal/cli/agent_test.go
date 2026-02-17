@@ -166,8 +166,11 @@ func TestCLI_AgentList_DefaultHidesExited_AndAllShowsExited(t *testing.T) {
 	if strings.Contains(outDefault.String(), "session:s-exit") {
 		t.Fatalf("default list should hide exited sessions: %q", outDefault.String())
 	}
-	if !strings.Contains(outDefault.String(), "session:s-run") {
-		t.Fatalf("default list should include running session: %q", outDefault.String())
+	if !strings.Contains(outDefault.String(), "• WS-1  running:1") {
+		t.Fatalf("default list should include workspace summary: %q", outDefault.String())
+	}
+	if !strings.Contains(outDefault.String(), "└─") || !strings.Contains(outDefault.String(), "session:s-run") {
+		t.Fatalf("default list should render tree session rows: %q", outDefault.String())
 	}
 
 	var outAll bytes.Buffer
@@ -176,8 +179,67 @@ func TestCLI_AgentList_DefaultHidesExited_AndAllShowsExited(t *testing.T) {
 	if code := cAll.Run([]string{"agent", "list", "--workspace", "WS-1", "--all"}); code != exitOK {
 		t.Fatalf("all list exit code=%d, want %d (stderr=%q)", code, exitOK, errAll.String())
 	}
+	if !strings.Contains(outAll.String(), "• WS-1  running:1  exited:1") {
+		t.Fatalf("--all should include exited summary count: %q", outAll.String())
+	}
 	if !strings.Contains(outAll.String(), "session:s-exit") || !strings.Contains(outAll.String(), "session:s-run") {
-		t.Fatalf("--all should include both running and exited: %q", outAll.String())
+		t.Fatalf("--all should include both running and exited sessions: %q", outAll.String())
+	}
+}
+
+func TestCLI_AgentList_AutoExpandsWorkspaceWithRepoSessions(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	now := time.Now().Unix()
+	if err := saveAgentRuntimeSession(agentRuntimeSessionRecord{
+		SessionID:      "s-ws",
+		RootPath:       root,
+		WorkspaceID:    "WS-1",
+		ExecutionScope: "workspace",
+		Kind:           "codex",
+		PID:            201,
+		StartedAt:      now - 20,
+		UpdatedAt:      now - 3,
+		Seq:            1,
+		RuntimeState:   "running",
+	}); err != nil {
+		t.Fatalf("save workspace session: %v", err)
+	}
+	if err := saveAgentRuntimeSession(agentRuntimeSessionRecord{
+		SessionID:      "s-repo",
+		RootPath:       root,
+		WorkspaceID:    "WS-1",
+		ExecutionScope: "repo",
+		RepoKey:        "repo/api",
+		Kind:           "codex",
+		PID:            202,
+		StartedAt:      now - 10,
+		UpdatedAt:      now - 1,
+		Seq:            1,
+		RuntimeState:   "running",
+	}); err != nil {
+		t.Fatalf("save repo session: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	if code := c.Run([]string{"agent", "list", "--workspace", "WS-1"}); code != exitOK {
+		t.Fatalf("list exit code=%d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "• WS-1  running:2") {
+		t.Fatalf("workspace summary missing location counts: %q", got)
+	}
+	if !strings.Contains(got, "session:s-repo") || !strings.Contains(got, "repo:repo/api") {
+		t.Fatalf("repo workspace should render session rows: %q", got)
+	}
+	if !strings.Contains(got, "├─") || !strings.Contains(got, "└─") {
+		t.Fatalf("repo workspace should render tree branches: %q", got)
+	}
+	wsPos := strings.Index(got, "workspace")
+	repoPos := strings.Index(got, "repo:repo/api")
+	if wsPos < 0 || repoPos < 0 || wsPos > repoPos {
+		t.Fatalf("workspace session should be listed before repo session: %q", got)
 	}
 }
 
