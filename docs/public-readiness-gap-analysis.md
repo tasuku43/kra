@@ -61,9 +61,9 @@ date: 2026-02-14
      - `AGENT-060` v2 inspection output
      - `AGENT-100` timeline/history
 
-2. `agent` コマンドが experimental 限定
-   - 根拠: `internal/cli/agent.go`, `internal/cli/agent_disabled.go`
-   - 影響: stable 配布バイナリでは `agent` が使えない
+2. `agent` コマンドの安定運用要件（監視/履歴）が未完
+   - 根拠: `docs/backlog/AGENT.md`
+   - 影響: 基本機能は使えるが、運用視点の可観測性は今後の強化余地がある
 
 3. JSON 契約の統一不足
    - 根拠: `docs/spec/concepts/output-contract.md`
@@ -126,4 +126,3 @@ date: 2026-02-14
 - 条件:
   - Phase 1 の完了を公開条件とする
   - Phase 2 は公開直後マイルストーンで明記する
-

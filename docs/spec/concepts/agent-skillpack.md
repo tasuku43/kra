@@ -30,9 +30,7 @@ This concept covers:
 
 Default users should not receive this skillpack automatically.
 
-- enable seeding explicitly:
-  - `KRA_EXPERIMENTS=agent-skillpack`
-- without flag, bootstrap keeps `.agent/skills` structure only.
+- bootstrap keeps `.agent/skills` structure only in current phase.
 
 ## Baseline skillpack (v1)
 

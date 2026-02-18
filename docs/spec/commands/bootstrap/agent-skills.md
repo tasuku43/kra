@@ -59,11 +59,7 @@ Reference paths (directory-level symlink):
 First phase creates:
 
 - empty `<KRA_ROOT>/.agent/skills/` directory if missing.
-- default baseline skillpack files under `<KRA_ROOT>/.agent/skills/` when missing:
-  - `.kra-skillpack.yaml`
-  - `flow-insight-capture/SKILL.md`
-  - only when experimental flag is enabled:
-    - `KRA_EXPERIMENTS=agent-skillpack`
+- default baseline skillpack files are not auto-seeded in this phase.
 
 ## Conflict policy (safe-first)
 

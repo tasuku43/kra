@@ -136,11 +136,6 @@ parseFlags:
 	if fixedAction != "" {
 		switch fixedAction {
 		case "go", "add-repo", "remove-repo", "close", "run-agent":
-			if fixedAction == "run-agent" && !c.wsAgentActionEnabled() {
-				fmt.Fprintf(c.Err, "unsupported --act: %q\n", fixedAction)
-				c.printWSUsage(c.Err)
-				return exitUsage
-			}
 			if archivedScope {
 				fmt.Fprintf(c.Err, "--act %s cannot be used with --archived\n", fixedAction)
 				c.printWSUsage(c.Err)
@@ -271,10 +266,6 @@ func runWSActionHasPositional(actionArgs []string) bool {
 func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archivedScope bool, wd string, root string, actionArgs []string) int {
 	switch action {
 	case "go", "add-repo", "remove-repo", "close", "run-agent":
-		if action == "run-agent" && !c.wsAgentActionEnabled() {
-			c.printWSUsage(c.Err)
-			return exitUsage
-		}
 		if archivedScope {
 			c.printWSUsage(c.Err)
 			return exitUsage
@@ -684,9 +675,7 @@ func (c *CLI) promptLauncherAction(target workspaceContextSelection, fromContext
 	switch target.Status {
 	case "active":
 		if fromContext {
-			if c.wsAgentActionEnabled() {
-				actions = append(actions, workspaceSelectorCandidate{ID: "run-agent", Description: "start agent session"})
-			}
+			actions = append(actions, workspaceSelectorCandidate{ID: "run-agent", Description: "start agent session"})
 			actions = append(actions,
 				workspaceSelectorCandidate{ID: "add-repo", Description: "add repositories"},
 				workspaceSelectorCandidate{ID: "remove-repo", Description: "remove repositories"},
@@ -696,9 +685,7 @@ func (c *CLI) promptLauncherAction(target workspaceContextSelection, fromContext
 			actions = append(actions,
 				workspaceSelectorCandidate{ID: "go", Description: "switch to workspace"},
 			)
-			if c.wsAgentActionEnabled() {
-				actions = append(actions, workspaceSelectorCandidate{ID: "run-agent", Description: "start agent session"})
-			}
+			actions = append(actions, workspaceSelectorCandidate{ID: "run-agent", Description: "start agent session"})
 			actions = append(actions,
 				workspaceSelectorCandidate{ID: "add-repo", Description: "add repositories"},
 				workspaceSelectorCandidate{ID: "remove-repo", Description: "remove repositories"},

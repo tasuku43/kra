@@ -61,7 +61,7 @@ Initialize a kra root and filesystem-first runtime metadata.
   - do not overwrite existing file content
 - Create `<root>/AGENTS.md` with a default "how to use kra" guidance (for the no-template MVP)
   - include a short explanation of `notes/` vs `artifacts/`
-  - do not include experimental skillpack/insight guidance by default
+  - do not include auto-seeding guidance for skillpack by default
 - If `<root>` is not a Git repo, run `git init`
 - When `git init` is newly performed by `kra init`, create an initial commit containing:
   - `<root>/.gitignore`

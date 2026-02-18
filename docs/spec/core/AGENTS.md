@@ -41,8 +41,8 @@ Include:
 - Workflow:
   - `kra ws create` -> `kra ws --act add-repo` -> work -> `kra ws --act close`
 - Agent skillpack:
-  - no default guidance in root AGENTS for experimental skillpack features
-  - experimental guidance may be added only when explicitly opted into experiments
+  - no default guidance in root AGENTS for skillpack auto-seeding
+  - project-specific guidance may be added explicitly when needed
 - Insight capture policy:
   - no always-on logs by default
   - propose capture in conversation first

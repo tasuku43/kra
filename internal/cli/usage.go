@@ -190,8 +190,7 @@ Run:
 
 Notes:
 - edit actions for existing workspaces are routed by --act.
-- active actions: go, add-repo, remove-repo, close
-- experimental build adds active action: run-agent
+- active actions: go, run-agent, add-repo, remove-repo, close
 - archived actions: reopen, unlock, purge (applies archived scope automatically)
 - ws --archived --act go|add-repo|remove-repo|close is invalid.
 - kra ws opens action launcher when --act is omitted.

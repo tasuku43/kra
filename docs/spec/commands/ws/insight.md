@@ -11,11 +11,7 @@ Persist one approved high-value insight into workspace-local worklog path.
 
 ## Availability
 
-This command is experimental in phase 1.
-
-- enable by setting environment variable:
-  - `KRA_EXPERIMENTS=insight-capture`
-- when experiment flag is absent, command is unavailable.
+This command is available by default.
 
 ## Behavior
 

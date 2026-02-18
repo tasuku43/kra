@@ -178,7 +178,7 @@ func (c *CLI) runInit(args []string) int {
 	}
 	var bootstrapResult *bootstrapAgentSkillsResult
 	if bootstrapMode == "agent-skills" {
-		bootstrapRunResult, code, bootstrapErr := runBootstrapAgentSkills(result.Root, c.isExperimentEnabled(experimentAgentSkillpack))
+		bootstrapRunResult, code, bootstrapErr := runBootstrapAgentSkills(result.Root)
 		if bootstrapErr != nil {
 			if outputFormat == "json" {
 				return writeJSONError(code, fmt.Sprintf("bootstrap agent-skills: %v", bootstrapErr), exitError)
