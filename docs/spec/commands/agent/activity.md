@@ -17,6 +17,7 @@ runtime visibility and no Git-noise in `KRA_ROOT`.
   - `docs/spec/concepts/agent-runtime.md`
 - Command surface:
   - `kra agent run`
+  - `kra agent attach`
   - `kra agent stop`
   - `kra agent list` (`ls` alias)
   - `kra agent board` (human-first grouped view)
@@ -24,7 +25,8 @@ runtime visibility and no Git-noise in `KRA_ROOT`.
   - `kra agent` is executable directly.
   - root help intentionally does not list `agent`.
 - Runtime state location:
-  - `KRA_HOME/state/agents/<root-hash>/<session-id>.json`
+  - `KRA_HOME/state/agents/<root-hash>/<session-id>.json` (snapshot)
+  - `KRA_HOME/state/agents/<root-hash>/events/<session-id>.jsonl` (append-only events)
   - `KRA_HOME` default is `~/.kra`
   - runtime state is intentionally outside `KRA_ROOT` to avoid Git churn
 
@@ -43,14 +45,22 @@ runtime visibility and no Git-noise in `KRA_ROOT`.
   - `seq` (monotonic increasing per session file)
   - `runtime_state` (`running` | `idle` | `exited` | `unknown`)
   - `exit_code` (nullable; set when `runtime_state=exited`)
+  - `launch_mode` (`default` | `resume` | `continue`)
+  - `attached_clients` (count)
+  - `writer_owner` (nullable client id)
+  - `lease_expires_at` (nullable unix ts)
 
 ## State write rules
 
-- One session = one file.
-- Writes must be atomic:
-  - write to temp file in same directory
-  - `fsync` temp file
-  - rename temp -> target
+- Snapshot:
+  - one session = one file
+  - writes must be atomic:
+    - write to temp file in same directory
+    - `fsync` temp file
+    - rename temp -> target
+- Events:
+  - append-only JSONL per session
+  - event order follows session-local sequence
 - Readers must tolerate partial churn by directory scanning + per-file parse isolation.
 
 ## Runtime state model (operator-facing)
@@ -65,6 +75,10 @@ runtime visibility and no Git-noise in `KRA_ROOT`.
   - `idle` -> `idle`
   - `exited` -> `stopped`
   - `unknown` -> `error`
+- Input ownership:
+  - multiple clients may attach
+  - only current writer lease owner may send input
+  - takeover is allowed and must be event-logged
 
 ## `kra agent list` / `kra agent board`
 
@@ -89,5 +103,4 @@ runtime visibility and no Git-noise in `KRA_ROOT`.
 ## Out of scope (v3 draft)
 
 - Cross-host process supervision guarantees.
-- Append-only event timeline (`events/*.jsonl`) in MVP.
-- Rich request/response control plane (socket IPC) in MVP.
+- Distributed remote control plane across hosts.

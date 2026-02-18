@@ -47,6 +47,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/agent/activity.md`: `kra agent` runtime activity tracking (v3 draft)
   - `commands/agent/logs.md`: `kra agent logs` retirement (v3 draft)
   - `commands/agent/run.md`: `kra agent run` (PTY + interactive target selection)
+  - `commands/agent/attach.md`: `kra agent attach` (session reattach in current scope)
   - `commands/agent/stop.md`: `kra agent stop` (session-oriented)
   - `commands/doctor-fix.md`: `kra doctor --fix --plan|--apply` staged remediation
   - `commands/doctor.md`: `kra doctor`

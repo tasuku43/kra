@@ -7,7 +7,7 @@ status: planned
 
 ## Purpose
 
-Stop one running agent session managed by `kra agent run`.
+Stop one running session managed by the per-root broker runtime.
 
 ## Scope (v3 draft)
 
@@ -22,9 +22,10 @@ Stop one running agent session managed by `kra agent run`.
   - `KRA_HOME/state/agents/<root-hash>/<session-id>.json`
 - Behavior:
   - resolve current `KRA_ROOT`
+  - connect broker socket for the current root hash
   - locate target session
   - if session is already `exited`, return idempotent success
-  - send termination signal to target process
+  - request broker to terminate target process
   - wait bounded grace period, then force kill if still alive
   - persist final runtime state (`exited`) with `updated_at` and `seq` increment
   - print final status line with `session_id`
