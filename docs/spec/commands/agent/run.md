@@ -40,6 +40,7 @@ Start one agent session under broker-managed PTY and register runtime activity u
 - if socket is missing/stale, spawn broker and reconnect
 - resolve run target (workspace scope or repo scope)
 - broker creates new `session_id`, allocates PTY, and starts provider process
+- broker initializes per-session in-memory output replay buffer
 - broker persists snapshot: `KRA_HOME/state/agents/<root-hash>/<session-id>.json`
 - if same target+kind has active session, print warning but still allow start
 - print confirmation line including `session_id`

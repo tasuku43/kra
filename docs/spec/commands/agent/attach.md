@@ -20,7 +20,8 @@ workspace/repo context, not for global manager discovery.
   - resolve current `KRA_ROOT`
   - when `--session` is omitted, resolve current context scope from `cwd`
   - connect broker socket for the root hash
-  - attach terminal stream to selected session PTY stream
+  - broker replays buffered PTY output for selected session
+  - after replay catch-up, switch to live attach stream for selected session PTY
 - Session selection:
   - if `--session` is set:
     - attach directly, fail if not found
@@ -43,6 +44,7 @@ workspace/repo context, not for global manager discovery.
 
 - Success:
   - terminal enters attached stream until session exits or connection closes
+  - replay is emitted first so attached terminal can recover current visual context
 - Errors:
   - clear reason + next action (missing broker, session not found, invalid context)
   - non-zero exit code

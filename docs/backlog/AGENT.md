@@ -71,6 +71,16 @@ status: planned
   - Depends: AGENT-050
   - Serial: yes
 
+- [x] AGENT-070: Attach replay baseline (broker-side output history)
+  - What: add broker-side per-session output history replay so `kra agent attach`
+    can restore terminal-visible context before switching to live stream.
+  - Specs:
+    - `docs/spec/commands/agent/attach.md`
+    - `docs/spec/commands/agent/run.md`
+    - `docs/spec/concepts/agent-runtime.md`
+  - Depends: AGENT-050, AGENT-060
+  - Serial: yes
+
 - [ ] AGENT-100: Lease/takeover control plane and launch abstraction
   - What: implement writer lease/takeover + dangerous-key confirmation +
     snapshot/events dual-write and launch mode abstraction (`--launch` mapping).
@@ -78,5 +88,5 @@ status: planned
     - `docs/spec/commands/agent/run.md`
     - `docs/spec/commands/agent/activity.md`
     - `docs/spec/concepts/agent-runtime.md`
-  - Depends: AGENT-050, AGENT-060
+  - Depends: AGENT-050, AGENT-060, AGENT-070
   - Serial: yes

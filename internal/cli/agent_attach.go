@@ -19,14 +19,29 @@ type agentAttachOptions struct {
 	sessionID string
 }
 
+type agentAttachMode struct {
+	forceRedraw   bool
+	writeBoundary bool
+	flushInput    bool
+	restoreShell  bool
+	clearOnEnter  bool
+}
+
 var errAgentAttachDetached = errors.New("attach detached by user")
 
-const (
-	attachTerminalEnterSeq = "\r\x1b[2J\x1b[H"
-	attachTerminalExitSeq  = "\x1b[0m\x1b[?25h\x1b[?7h\x1b[?2004l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?1049l\r\n"
-)
+var defaultAgentAttachMode = agentAttachMode{
+	forceRedraw:   true,
+	writeBoundary: true,
+	flushInput:    true,
+	restoreShell:  true,
+	clearOnEnter:  true,
+}
 
 func (c *CLI) runAgentAttach(args []string) int {
+	return c.runAgentAttachWithMode(args, defaultAgentAttachMode)
+}
+
+func (c *CLI) runAgentAttachWithMode(args []string, mode agentAttachMode) int {
 	opts, err := parseAgentAttachOptions(args)
 	if err != nil {
 		if err == errHelpRequested {
@@ -58,6 +73,9 @@ func (c *CLI) runAgentAttach(args []string) int {
 	opts, err = c.completeAgentAttachOptionsInteractive(root, wd, opts, records)
 	if err != nil {
 		if errors.Is(err, errSelectorCanceled) {
+			if isTerminalWriter(c.Out) {
+				writeAttachSessionBoundary(c.Out)
+			}
 			return exitOK
 		}
 		fmt.Fprintf(c.Err, "resolve attach target: %v\n", err)
@@ -80,16 +98,25 @@ func (c *CLI) runAgentAttach(args []string) int {
 		return exitError
 	}
 
-	conn, err := attachSessionWithAgentBroker(root, record.SessionID, terminalCols(c.In, c.Out), terminalRows(c.In, c.Out))
+	conn, err := attachSessionWithAgentBroker(
+		root,
+		record.SessionID,
+		terminalCols(c.In, c.Out),
+		terminalRows(c.In, c.Out),
+		mode.forceRedraw,
+	)
 	if err != nil {
 		fmt.Fprintf(c.Err, "attach session via broker: %v\n", err)
 		return exitError
 	}
 	defer func() { _ = conn.Close() }()
 
-	if err := proxyAgentAttachIO(root, record.SessionID, conn, c.In, c.Out); err != nil {
+	if err := proxyAgentAttachIO(root, record.SessionID, conn, c.In, c.Out, mode); err != nil {
 		if errors.Is(err, errAgentAttachDetached) {
-			fmt.Fprintf(c.Out, "detached: session=%s\n", record.SessionID)
+			if mode.restoreShell && isTerminalWriter(c.Out) {
+				writeAttachTerminalRestore(c.Out)
+			}
+			fmt.Fprintf(c.Out, "\r\ndetached: session=%s\n", record.SessionID)
 			return exitOK
 		}
 		fmt.Fprintf(c.Err, "attach session stream: %v\n", err)
@@ -195,21 +222,32 @@ func formatAgentAttachSelectorTitle(scope agentContextScope) string {
 	return fmt.Sprintf("Session to attach (workspace: %s repo:%s):", workspaceID, repoKey)
 }
 
-func proxyAgentAttachIO(root string, sessionID string, conn *net.UnixConn, in io.Reader, out io.Writer) error {
+func proxyAgentAttachIO(root string, sessionID string, conn *net.UnixConn, in io.Reader, out io.Writer, mode agentAttachMode) error {
 	if conn == nil {
 		return fmt.Errorf("broker connection is nil")
 	}
-	if isTerminalWriter(out) {
-		writeAttachTerminalEnter(out)
-		defer writeAttachTerminalExit(out)
+	if mode.clearOnEnter && isTerminalWriter(out) {
+		writeAttachTerminalClear(out)
+	}
+	if mode.writeBoundary && isTerminalWriter(out) {
+		writeAttachSessionBoundary(out)
+	}
+	if mode.flushInput && isTerminalReader(in) {
+		flushTerminalInputBuffer(in)
 	}
 
 	restore, err := maybeEnterRawMode(in, out)
 	if err != nil {
 		return err
 	}
+	if mode.flushInput && isTerminalReader(in) {
+		defer flushTerminalInputBuffer(in)
+	}
 	if restore != nil {
 		defer restore()
+	}
+	if mode.restoreShell && isTerminalWriter(out) {
+		defer writeAttachTerminalRestore(out)
 	}
 
 	stopResizeWatcher := startAttachResizeWatcher(root, sessionID, in, out)
@@ -403,10 +441,14 @@ func isAgentAttachIOError(err error) bool {
 	return !strings.Contains(strings.ToLower(err.Error()), "use of closed network connection")
 }
 
-func writeAttachTerminalEnter(out io.Writer) {
-	_, _ = io.WriteString(out, attachTerminalEnterSeq)
+func writeAttachSessionBoundary(out io.Writer) {
+	_, _ = io.WriteString(out, "\r\n")
 }
 
-func writeAttachTerminalExit(out io.Writer) {
-	_, _ = io.WriteString(out, attachTerminalExitSeq)
+func writeAttachTerminalClear(out io.Writer) {
+	_, _ = io.WriteString(out, "\r\x1b[2J\x1b[H")
+}
+
+func writeAttachTerminalRestore(out io.Writer) {
+	_, _ = io.WriteString(out, "\x1b[0m\x1b[?25h\x1b[?7h\x1b[?2004l\x1b[?1000l\x1b[?1002l\x1b[?1003l\x1b[?1004l\x1b[?1006l\x1b[?1049l")
 }

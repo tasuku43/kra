@@ -62,7 +62,8 @@ type agentBrokerRequest struct {
 	Cols           int    `json:"cols,omitempty"`
 	Rows           int    `json:"rows,omitempty"`
 
-	SessionID string `json:"session_id,omitempty"`
+	SessionID   string `json:"session_id,omitempty"`
+	ForceRedraw bool   `json:"force_redraw,omitempty"`
 }
 
 type agentBrokerResponse struct {
@@ -73,13 +74,24 @@ type agentBrokerResponse struct {
 	PID       int    `json:"pid,omitempty"`
 }
 
+type agentBrokerAttachment struct {
+	conn   *net.UnixConn
+	paused bool
+}
+
+type agentBrokerAttachmentTarget struct {
+	attachID string
+	conn     *net.UnixConn
+}
+
 type agentBrokerSession struct {
-	mu           sync.Mutex
-	cmd          *exec.Cmd
-	ptmx         *os.File
-	record       agentRuntimeSessionRecord
-	attachments  map[string]*net.UnixConn
-	nextAttachID int64
+	mu            sync.Mutex
+	cmd           *exec.Cmd
+	ptmx          *os.File
+	record        agentRuntimeSessionRecord
+	attachments   map[string]*agentBrokerAttachment
+	outputHistory []byte
+	nextAttachID  int64
 }
 
 func (s *agentBrokerSession) snapshot() agentRuntimeSessionRecord {
@@ -96,16 +108,81 @@ func (s *agentBrokerSession) update(mut func(*agentRuntimeSessionRecord)) {
 	_ = saveAgentRuntimeSession(record)
 }
 
-func (s *agentBrokerSession) addAttachment(conn *net.UnixConn) string {
+func (s *agentBrokerSession) addAttachment(conn *net.UnixConn, paused bool) string {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.attachments == nil {
-		s.attachments = map[string]*net.UnixConn{}
+		s.attachments = map[string]*agentBrokerAttachment{}
 	}
 	s.nextAttachID++
 	attachID := fmt.Sprintf("a-%d", s.nextAttachID)
-	s.attachments[attachID] = conn
+	s.attachments[attachID] = &agentBrokerAttachment{
+		conn:   conn,
+		paused: paused,
+	}
 	return attachID
+}
+
+func (s *agentBrokerSession) replayOutputHistory(attachID string) error {
+	attachID = strings.TrimSpace(attachID)
+	if attachID == "" {
+		return fmt.Errorf("attach id is required")
+	}
+	sent := 0
+	for {
+		chunk, conn, done := s.replayChunk(attachID, sent)
+		if done {
+			return nil
+		}
+		if conn == nil {
+			return fmt.Errorf("attach connection closed during replay")
+		}
+		if len(chunk) == 0 {
+			continue
+		}
+		_ = conn.SetWriteDeadline(time.Now().Add(agentBrokerAttachWriteTTL))
+		if err := writeAllUnixConn(conn, chunk); err != nil {
+			_ = conn.SetWriteDeadline(time.Time{})
+			s.removeAttachment(attachID)
+			return err
+		}
+		_ = conn.SetWriteDeadline(time.Time{})
+		sent += len(chunk)
+	}
+}
+
+func (s *agentBrokerSession) replayChunk(attachID string, sent int) ([]byte, *net.UnixConn, bool) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	attachment := s.attachments[attachID]
+	if attachment == nil || attachment.conn == nil {
+		return nil, nil, true
+	}
+	if sent < len(s.outputHistory) {
+		chunk := append([]byte(nil), s.outputHistory[sent:]...)
+		return chunk, attachment.conn, false
+	}
+	attachment.paused = false
+	return nil, attachment.conn, true
+}
+
+func (s *agentBrokerSession) appendOutputAndSnapshotWritable(payload []byte) []agentBrokerAttachmentTarget {
+	s.mu.Lock()
+	if len(payload) > 0 {
+		s.outputHistory = append(s.outputHistory, payload...)
+	}
+	out := make([]agentBrokerAttachmentTarget, 0, len(s.attachments))
+	for attachID, attachment := range s.attachments {
+		if attachment == nil || attachment.conn == nil || attachment.paused {
+			continue
+		}
+		out = append(out, agentBrokerAttachmentTarget{
+			attachID: attachID,
+			conn:     attachment.conn,
+		})
+	}
+	s.mu.Unlock()
+	return out
 }
 
 func (s *agentBrokerSession) removeAttachment(attachID string) {
@@ -114,54 +191,23 @@ func (s *agentBrokerSession) removeAttachment(attachID string) {
 		return
 	}
 	s.mu.Lock()
-	conn := s.attachments[attachID]
+	attachment := s.attachments[attachID]
 	delete(s.attachments, attachID)
 	s.mu.Unlock()
-	if conn != nil {
-		_ = conn.Close()
+	if attachment != nil && attachment.conn != nil {
+		_ = attachment.conn.Close()
 	}
-}
-
-func (s *agentBrokerSession) removeAttachmentByConn(target *net.UnixConn) {
-	if target == nil {
-		return
-	}
-	s.mu.Lock()
-	attachID := ""
-	for id, conn := range s.attachments {
-		if conn == target {
-			attachID = id
-			delete(s.attachments, id)
-			break
-		}
-	}
-	s.mu.Unlock()
-	if attachID != "" {
-		_ = target.Close()
-	}
-}
-
-func (s *agentBrokerSession) snapshotAttachments() []*net.UnixConn {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	out := make([]*net.UnixConn, 0, len(s.attachments))
-	for _, conn := range s.attachments {
-		if conn != nil {
-			out = append(out, conn)
-		}
-	}
-	return out
 }
 
 func (s *agentBrokerSession) closeAllAttachments() {
 	s.mu.Lock()
 	conns := make([]*net.UnixConn, 0, len(s.attachments))
-	for _, conn := range s.attachments {
-		if conn != nil {
-			conns = append(conns, conn)
+	for _, attachment := range s.attachments {
+		if attachment != nil && attachment.conn != nil {
+			conns = append(conns, attachment.conn)
 		}
 	}
-	s.attachments = map[string]*net.UnixConn{}
+	s.attachments = map[string]*agentBrokerAttachment{}
 	s.mu.Unlock()
 	for _, conn := range conns {
 		_ = conn.Close()
@@ -561,7 +607,7 @@ func (s *agentBrokerServer) handleStartRequest(req agentBrokerRequest) agentBrok
 		cmd:         cmd,
 		ptmx:        ptmx,
 		record:      record,
-		attachments: map[string]*net.UnixConn{},
+		attachments: map[string]*agentBrokerAttachment{},
 	}
 	s.addSession(session)
 
@@ -621,13 +667,20 @@ func (s *agentBrokerServer) handleAttachRequest(conn *net.UnixConn, req agentBro
 		_ = json.NewEncoder(conn).Encode(agentBrokerResponse{OK: false, Error: "session not found"})
 		return
 	}
-	applyPTYSize(session.ptmx, req.Cols, req.Rows)
+	if req.ForceRedraw {
+		applyPTYSizeForAttach(session.ptmx, req.Cols, req.Rows)
+	} else {
+		applyPTYSize(session.ptmx, req.Cols, req.Rows)
+	}
 	if err := json.NewEncoder(conn).Encode(agentBrokerResponse{OK: true, SessionID: sessionID}); err != nil {
 		return
 	}
 
-	attachID := session.addAttachment(conn)
+	attachID := session.addAttachment(conn, true)
 	defer session.removeAttachment(attachID)
+	if err := session.replayOutputHistory(attachID); err != nil {
+		return
+	}
 
 	_, _ = io.Copy(session.ptmx, conn)
 }
@@ -638,16 +691,16 @@ func (s *agentBrokerServer) forwardSessionOutput(session *agentBrokerSession) {
 		n, err := session.ptmx.Read(buf)
 		if n > 0 {
 			payload := append([]byte(nil), buf[:n]...)
-			attachments := session.snapshotAttachments()
-			for _, conn := range attachments {
-				if conn == nil {
+			attachments := session.appendOutputAndSnapshotWritable(payload)
+			for _, target := range attachments {
+				if target.conn == nil {
 					continue
 				}
-				_ = conn.SetWriteDeadline(time.Now().Add(agentBrokerAttachWriteTTL))
-				if werr := writeAllUnixConn(conn, payload); werr != nil {
-					session.removeAttachmentByConn(conn)
+				_ = target.conn.SetWriteDeadline(time.Now().Add(agentBrokerAttachWriteTTL))
+				if werr := writeAllUnixConn(target.conn, payload); werr != nil {
+					session.removeAttachment(target.attachID)
 				}
-				_ = conn.SetWriteDeadline(time.Time{})
+				_ = target.conn.SetWriteDeadline(time.Time{})
 			}
 		}
 		if err != nil {
@@ -683,7 +736,7 @@ func (s *agentBrokerServer) waitSessionExit(session *agentBrokerSession) {
 	s.deleteSession(record.SessionID)
 }
 
-func attachSessionWithAgentBroker(root string, sessionID string, cols int, rows int) (*net.UnixConn, error) {
+func attachSessionWithAgentBroker(root string, sessionID string, cols int, rows int, forceRedraw bool) (*net.UnixConn, error) {
 	socketPath, err := agentBrokerSocketPath(root)
 	if err != nil {
 		return nil, fmt.Errorf("resolve broker socket path: %w", err)
@@ -699,10 +752,11 @@ func attachSessionWithAgentBroker(root string, sessionID string, cols int, rows 
 	}
 	_ = conn.SetDeadline(time.Now().Add(3 * time.Second))
 	if err := json.NewEncoder(conn).Encode(agentBrokerRequest{
-		Action:    agentBrokerActionAttach,
-		SessionID: strings.TrimSpace(sessionID),
-		Cols:      cols,
-		Rows:      rows,
+		Action:      agentBrokerActionAttach,
+		SessionID:   strings.TrimSpace(sessionID),
+		Cols:        cols,
+		Rows:        rows,
+		ForceRedraw: forceRedraw,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("send broker attach request: %w", err)
@@ -744,4 +798,24 @@ func applyPTYSize(ptmx *os.File, cols int, rows int) {
 		Cols: uint16(cols),
 		Rows: uint16(rows),
 	})
+}
+
+func applyPTYSizeForAttach(ptmx *os.File, cols int, rows int) {
+	if ptmx == nil || cols <= 0 || rows <= 0 {
+		return
+	}
+	// Force a SIGWINCH-style redraw even when dimensions are unchanged.
+	// Some interactive CLIs keep inline viewport anchors across reattach.
+	if rows > 1 {
+		_ = pty.Setsize(ptmx, &pty.Winsize{
+			Cols: uint16(cols),
+			Rows: uint16(rows - 1),
+		})
+	} else if cols > 1 {
+		_ = pty.Setsize(ptmx, &pty.Winsize{
+			Cols: uint16(cols - 1),
+			Rows: uint16(rows),
+		})
+	}
+	applyPTYSize(ptmx, cols, rows)
 }

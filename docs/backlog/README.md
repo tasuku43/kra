@@ -57,7 +57,7 @@ Backlog is managed by epic/prefix under `docs/backlog/*.md`.
 - [x] `docs/backlog/CTX-ROOT.md` (`4/4` done)
 - [x] `docs/backlog/CONFIG.md` (`6/6` done)
 - [x] `docs/backlog/DOC-QUALITY.md` (`5/5` done)
-- [ ] `docs/backlog/AGENT.md` (`7/8` done)
+- [ ] `docs/backlog/AGENT.md` (`8/9` done)
 - [x] `docs/backlog/TEMPLATE-WS.md` (`4/4` done)
 - [x] `docs/backlog/OPS.md` (`14/14` done)
 - [x] `docs/backlog/PUBLIC.md` (`7/7` done)
