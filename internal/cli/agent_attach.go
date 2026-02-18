@@ -71,7 +71,7 @@ func (c *CLI) runAgentAttach(args []string) int {
 		return exitError
 	}
 
-	conn, err := attachSessionWithAgentBroker(root, record.SessionID)
+	conn, err := attachSessionWithAgentBroker(root, record.SessionID, terminalCols(c.In, c.Out), terminalRows(c.In, c.Out))
 	if err != nil {
 		fmt.Fprintf(c.Err, "attach session via broker: %v\n", err)
 		return exitError
@@ -247,6 +247,32 @@ func isTerminalReader(in io.Reader) bool {
 		return false
 	}
 	return isatty.IsTerminal(inFile.Fd())
+}
+
+func terminalCols(in io.Reader, out io.Writer) int {
+	cols, _ := terminalSize(in, out)
+	return cols
+}
+
+func terminalRows(in io.Reader, out io.Writer) int {
+	_, rows := terminalSize(in, out)
+	return rows
+}
+
+func terminalSize(in io.Reader, out io.Writer) (int, int) {
+	if outFile, ok := out.(*os.File); ok && isatty.IsTerminal(outFile.Fd()) {
+		cols, rows, err := term.GetSize(int(outFile.Fd()))
+		if err == nil && cols > 0 && rows > 0 {
+			return cols, rows
+		}
+	}
+	if inFile, ok := in.(*os.File); ok && isatty.IsTerminal(inFile.Fd()) {
+		cols, rows, err := term.GetSize(int(inFile.Fd()))
+		if err == nil && cols > 0 && rows > 0 {
+			return cols, rows
+		}
+	}
+	return 0, 0
 }
 
 func isAgentAttachIOError(err error) bool {

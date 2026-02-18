@@ -40,6 +40,8 @@ type agentBrokerStartRequest struct {
 	RepoKey        string
 	Kind           string
 	ExecDir        string
+	Cols           int
+	Rows           int
 }
 
 type agentBrokerStartResult struct {
@@ -55,6 +57,8 @@ type agentBrokerRequest struct {
 	RepoKey        string `json:"repo_key,omitempty"`
 	Kind           string `json:"kind,omitempty"`
 	ExecDir        string `json:"exec_dir,omitempty"`
+	Cols           int    `json:"cols,omitempty"`
+	Rows           int    `json:"rows,omitempty"`
 
 	SessionID string `json:"session_id,omitempty"`
 }
@@ -365,6 +369,8 @@ func startSessionWithAgentBroker(root string, req agentBrokerStartRequest) (agen
 		RepoKey:        strings.TrimSpace(req.RepoKey),
 		Kind:           strings.TrimSpace(req.Kind),
 		ExecDir:        strings.TrimSpace(req.ExecDir),
+		Cols:           req.Cols,
+		Rows:           req.Rows,
 	})
 	if err != nil {
 		return agentBrokerStartResult{}, err
@@ -508,6 +514,8 @@ func (s *agentBrokerServer) handleStartRequest(req agentBrokerRequest) agentBrok
 	repoKey := strings.TrimSpace(req.RepoKey)
 	kind := strings.TrimSpace(req.Kind)
 	execDir := strings.TrimSpace(req.ExecDir)
+	cols := req.Cols
+	rows := req.Rows
 	if workspaceID == "" || kind == "" || execDir == "" {
 		return agentBrokerResponse{OK: false, Error: "invalid start request"}
 	}
@@ -522,6 +530,7 @@ func (s *agentBrokerServer) handleStartRequest(req agentBrokerRequest) agentBrok
 	if err != nil {
 		return agentBrokerResponse{OK: false, Error: fmt.Sprintf("start agent process: %v", err)}
 	}
+	applyPTYSize(ptmx, cols, rows)
 
 	now := time.Now()
 	sessionID := newAgentRuntimeSessionID(now, cmd.Process.Pid)
@@ -592,6 +601,7 @@ func (s *agentBrokerServer) handleAttachRequest(conn *net.UnixConn, req agentBro
 		_ = json.NewEncoder(conn).Encode(agentBrokerResponse{OK: false, Error: "session not found"})
 		return
 	}
+	applyPTYSize(session.ptmx, req.Cols, req.Rows)
 	if err := json.NewEncoder(conn).Encode(agentBrokerResponse{OK: true, SessionID: sessionID}); err != nil {
 		return
 	}
@@ -653,7 +663,7 @@ func (s *agentBrokerServer) waitSessionExit(session *agentBrokerSession) {
 	s.deleteSession(record.SessionID)
 }
 
-func attachSessionWithAgentBroker(root string, sessionID string) (*net.UnixConn, error) {
+func attachSessionWithAgentBroker(root string, sessionID string, cols int, rows int) (*net.UnixConn, error) {
 	socketPath, err := agentBrokerSocketPath(root)
 	if err != nil {
 		return nil, fmt.Errorf("resolve broker socket path: %w", err)
@@ -671,6 +681,8 @@ func attachSessionWithAgentBroker(root string, sessionID string) (*net.UnixConn,
 	if err := json.NewEncoder(conn).Encode(agentBrokerRequest{
 		Action:    agentBrokerActionAttach,
 		SessionID: strings.TrimSpace(sessionID),
+		Cols:      cols,
+		Rows:      rows,
 	}); err != nil {
 		_ = conn.Close()
 		return nil, fmt.Errorf("send broker attach request: %w", err)
@@ -689,4 +701,14 @@ func attachSessionWithAgentBroker(root string, sessionID string) (*net.UnixConn,
 	}
 	_ = conn.SetDeadline(time.Time{})
 	return conn, nil
+}
+
+func applyPTYSize(ptmx *os.File, cols int, rows int) {
+	if ptmx == nil || cols <= 0 || rows <= 0 {
+		return
+	}
+	_ = pty.Setsize(ptmx, &pty.Winsize{
+		Cols: uint16(cols),
+		Rows: uint16(rows),
+	})
 }

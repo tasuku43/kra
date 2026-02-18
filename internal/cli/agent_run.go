@@ -135,6 +135,8 @@ func (c *CLI) runAgentRun(args []string) int {
 		RepoKey:        strings.TrimSpace(opts.repoKey),
 		Kind:           cmdName,
 		ExecDir:        execDir,
+		Cols:           terminalCols(c.In, c.Out),
+		Rows:           terminalRows(c.In, c.Out),
 	})
 	if err != nil {
 		fmt.Fprintf(c.Err, "start agent session via broker: %v\n", err)
