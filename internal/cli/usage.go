@@ -491,13 +491,18 @@ Subcommands:
 
 func (c *CLI) printAgentRunUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra agent run --workspace <id> --kind <agent-kind> [--repo <repo-key>]
+  kra agent run [--workspace <id>] [--kind <agent-kind>] [--repo <repo-key>]
 
 Start tracked runtime agent session for one workspace (detached by default).
 
+Resolution:
+  - if --workspace is omitted and cwd is under workspaces/<id>/..., use that workspace
+  - if workspace is still unresolved and stdin is TTY, prompt active workspace selection
+  - if --repo is omitted and stdin is TTY, prompt target selection (workspace or repo)
+
 Options:
-  --workspace       Workspace ID (required)
-  --kind            Agent kind label (required)
+  --workspace       Workspace ID (required only in non-interactive mode when not inferable)
+  --kind            Agent kind label (required only in non-interactive mode)
   --repo            Optional repository key in workspace scope
 `)
 }

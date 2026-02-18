@@ -14,7 +14,9 @@ Start one agent session under broker-managed PTY and register runtime activity u
 - Command:
   - `kra agent run [--workspace <id>] [--repo <repo-key>] [--kind <agent-kind>] [--launch <default|resume|continue>] [--attach]`
 - Interactive behavior:
-  - with no args, command enters interactive selector flow
+  - with no args:
+    - when `cwd` is under `workspaces/<id>/...`, workspace selection is skipped and `<id>` is used
+    - otherwise command enters interactive workspace selector flow
   - workspace selector must include active workspaces only
   - execution target must always be selected when `--repo` is not given:
     - run at workspace scope
@@ -28,6 +30,11 @@ Start one agent session under broker-managed PTY and register runtime activity u
   - `--log-path`
 - Behavior:
   - resolve current `KRA_ROOT`
+  - resolve workspace target by this order:
+    1. explicit `--workspace`
+    2. `cwd` context (`workspaces/<id>/...`)
+    3. interactive selector (TTY only)
+  - fail fast when workspace is unresolved in non-interactive mode
   - connect broker socket: `KRA_HOME/run/agent/<root-hash>.sock`
   - if socket is missing/stale, spawn broker and reconnect
   - resolve run target (workspace scope or repo scope)

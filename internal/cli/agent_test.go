@@ -319,6 +319,68 @@ func TestCLI_AgentRun_RequiresWorkspaceAndKind(t *testing.T) {
 	}
 }
 
+func TestCLI_AgentRun_InferWorkspaceFromWorkspaceDir(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	workspaceDir := filepath.Join(root, "workspaces", "WS-1")
+	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(workspaceDir); err != nil {
+		t.Fatalf("chdir workspace: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origWD)
+	})
+
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	c := New(&out, &stderr)
+
+	code := c.Run([]string{"agent", "run", "--kind", "codex"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, stderr.String())
+	}
+	if !strings.Contains(out.String(), "workspace=WS-1") {
+		t.Fatalf("stdout should include inferred workspace id: %q", out.String())
+	}
+}
+
+func TestCLI_AgentRun_InferWorkspaceFromRepoSubdir(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	repoSubdir := filepath.Join(root, "workspaces", "WS-1", "repos", "repo-a", "pkg")
+	if err := os.MkdirAll(repoSubdir, 0o755); err != nil {
+		t.Fatalf("mkdir repo subdir: %v", err)
+	}
+
+	origWD, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("get cwd: %v", err)
+	}
+	if err := os.Chdir(repoSubdir); err != nil {
+		t.Fatalf("chdir repo subdir: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = os.Chdir(origWD)
+	})
+
+	var out bytes.Buffer
+	var stderr bytes.Buffer
+	c := New(&out, &stderr)
+
+	code := c.Run([]string{"agent", "run", "--kind", "codex"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, stderr.String())
+	}
+	if !strings.Contains(out.String(), "workspace=WS-1") {
+		t.Fatalf("stdout should include inferred workspace id: %q", out.String())
+	}
+}
+
 func TestCLI_AgentRun_RejectsRemovedTaskFlag(t *testing.T) {
 	prepareCurrentRootForTest(t)
 	var out bytes.Buffer

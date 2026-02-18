@@ -42,7 +42,7 @@ func (c *CLI) runAgentRun(args []string) int {
 		return exitError
 	}
 
-	opts, err = c.completeAgentRunOptionsInteractive(root, opts)
+	opts, err = c.completeAgentRunOptionsInteractive(root, wd, opts)
 	if err != nil {
 		fmt.Fprintf(c.Err, "resolve run options: %v\n", err)
 		return exitError
@@ -198,8 +198,13 @@ func parseAgentRunOptions(args []string) (agentRunOptions, error) {
 	return opts, nil
 }
 
-func (c *CLI) completeAgentRunOptionsInteractive(root string, opts agentRunOptions) (agentRunOptions, error) {
+func (c *CLI) completeAgentRunOptionsInteractive(root string, wd string, opts agentRunOptions) (agentRunOptions, error) {
 	interactive := cliInputIsTTY(c.In)
+	if strings.TrimSpace(opts.workspaceID) == "" {
+		if workspaceID, ok := inferWorkspaceIDFromCurrentDir(root, wd); ok {
+			opts.workspaceID = workspaceID
+		}
+	}
 	if strings.TrimSpace(opts.workspaceID) == "" {
 		if !interactive {
 			return agentRunOptions{}, fmt.Errorf("--workspace is required in non-interactive mode")
@@ -261,6 +266,46 @@ func (c *CLI) completeAgentRunOptionsInteractive(root string, opts agentRunOptio
 		opts.agentKind = selected[0]
 	}
 	return opts, nil
+}
+
+func inferWorkspaceIDFromCurrentDir(root string, wd string) (string, bool) {
+	root = filepath.Clean(strings.TrimSpace(root))
+	wd = filepath.Clean(strings.TrimSpace(wd))
+	if root == "" || wd == "" {
+		return "", false
+	}
+	if workspaceID, ok := inferWorkspaceIDByRel(root, wd); ok {
+		return workspaceID, true
+	}
+	rootEval, rootErr := filepath.EvalSymlinks(root)
+	wdEval, wdErr := filepath.EvalSymlinks(wd)
+	if rootErr != nil || wdErr != nil {
+		return "", false
+	}
+	return inferWorkspaceIDByRel(filepath.Clean(rootEval), filepath.Clean(wdEval))
+}
+
+func inferWorkspaceIDByRel(root string, wd string) (string, bool) {
+	rel, err := filepath.Rel(root, wd)
+	if err != nil {
+		return "", false
+	}
+	rel = filepath.Clean(rel)
+	if rel == "." {
+		return "", false
+	}
+	if rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	parts := strings.Split(rel, string(filepath.Separator))
+	if len(parts) < 2 || parts[0] != "workspaces" {
+		return "", false
+	}
+	workspaceID := strings.TrimSpace(parts[1])
+	if workspaceID == "" {
+		return "", false
+	}
+	return workspaceID, true
 }
 
 func cliInputIsTTY(in io.Reader) bool {
