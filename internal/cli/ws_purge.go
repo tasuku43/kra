@@ -575,6 +575,12 @@ func commitPurgeChange(ctx context.Context, root string, workspaceID string) (st
 		resetStaging()
 		return "", err
 	}
+	workspacesOut, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", workspacesArg)
+	if err != nil {
+		resetStaging()
+		return "", err
+	}
+	hasWorkspacesStage := strings.TrimSpace(workspacesOut) != ""
 	staged := strings.Fields(out)
 	hasBaselineStage := false
 	hasWorkStateStage := false
@@ -595,7 +601,10 @@ func commitPurgeChange(ctx context.Context, root string, workspaceID string) (st
 		return "", fmt.Errorf("unexpected staged path outside allowlist: %s", p)
 	}
 
-	commitArgs := []string{"commit", "--allow-empty", "--only", "-m", fmt.Sprintf("purge: %s", workspaceID), "--", archiveArg, workspacesArg}
+	commitArgs := []string{"commit", "--allow-empty", "--only", "-m", fmt.Sprintf("purge: %s", workspaceID), "--", archiveArg}
+	if hasWorkspacesStage {
+		commitArgs = append(commitArgs, workspacesArg)
+	}
 	if hasBaselineStage {
 		commitArgs = append(commitArgs, baselineArg)
 	}

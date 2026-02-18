@@ -1151,7 +1151,9 @@ func commitArchiveChange(ctx context.Context, root string, workspaceID string, e
 	if _, err := gitutil.Run(ctx, root, "add", "-A", "--", archiveArg); err != nil {
 		return "", err
 	}
-	if _, err := gitutil.Run(ctx, root, "add", "-u", "--", workspacesArg); err != nil {
+	// Use `-A` (not `-u`) so deletions are staged reliably after the source
+	// directory was moved away by os.Rename.
+	if _, err := gitutil.Run(ctx, root, "add", "-A", "--", workspacesArg); err != nil {
 		// In an uninitialized git history, `workspaces/<id>` may not be tracked at all yet.
 		// Still allow archiving so the archive can be committed.
 		if !strings.Contains(err.Error(), "did not match any files") && !strings.Contains(err.Error(), "did not match any file") {
@@ -1174,18 +1176,20 @@ func commitArchiveChange(ctx context.Context, root string, workspaceID string, e
 		resetArchiveStaging(ctx, root, resetArgs...)
 		return "", err
 	}
+	workspacesOut, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", workspacesArg)
+	if err != nil {
+		resetArchiveStaging(ctx, root, resetArgs...)
+		return "", err
+	}
+	hasWorkspacesStage := strings.TrimSpace(workspacesOut) != ""
 
 	staged := strings.Fields(out)
 	stagedSet := make(map[string]struct{}, len(staged))
-	hasWorkspacesStage := false
 	hasBaselineStage := false
 	hasWorkStateStage := false
 	for _, p := range staged {
 		p = filepath.Clean(filepath.FromSlash(p))
 		stagedSet[p] = struct{}{}
-		if strings.HasPrefix(p, workspacesPrefix) {
-			hasWorkspacesStage = true
-		}
 		if p == baselinePath {
 			hasBaselineStage = true
 		}

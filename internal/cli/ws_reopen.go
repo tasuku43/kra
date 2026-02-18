@@ -486,7 +486,9 @@ func commitReopenChange(ctx context.Context, root string, workspaceID string) (s
 	if _, err := gitutil.Run(ctx, root, "add", "-A", "--", workspacesArg); err != nil {
 		return "", err
 	}
-	if _, err := gitutil.Run(ctx, root, "add", "-u", "--", archiveArg); err != nil {
+	// Use `-A` (not `-u`) so deletions are staged reliably after the source
+	// directory was moved away by os.Rename.
+	if _, err := gitutil.Run(ctx, root, "add", "-A", "--", archiveArg); err != nil {
 		if !strings.Contains(err.Error(), "did not match any files") && !strings.Contains(err.Error(), "did not match any file") {
 			resetStaging()
 			return "", err

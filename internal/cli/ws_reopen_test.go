@@ -138,6 +138,10 @@ func TestCLI_WS_Reopen_RestoresWorkspaceRecreatesWorktreesAndCanCommitAndUpdates
 	if subj != "reopen: WS1" {
 		t.Fatalf("commit subject = %q, want %q", subj, "reopen: WS1")
 	}
+	archiveStatus := strings.TrimSpace(mustGitOutput(t, env.Root, "status", "--short", "--", filepath.ToSlash(filepath.Join("archive", "WS1"))))
+	if archiveStatus != "" {
+		t.Fatalf("archive/WS1 should not remain as unstaged deletion after reopen commit: %q", archiveStatus)
+	}
 
 }
 

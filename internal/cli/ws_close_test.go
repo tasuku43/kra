@@ -149,6 +149,10 @@ func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *te
 	if subj != "archive: WS1" {
 		t.Fatalf("commit subject = %q, want %q", subj, "archive: WS1")
 	}
+	wsStatus := strings.TrimSpace(mustGitOutput(t, env.Root, "status", "--short", "--", filepath.ToSlash(filepath.Join("workspaces", "WS1"))))
+	if wsStatus != "" {
+		t.Fatalf("workspaces/WS1 should not remain as unstaged deletion after close commit: %q", wsStatus)
+	}
 
 }
 
