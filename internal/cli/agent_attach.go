@@ -48,6 +48,9 @@ func (c *CLI) runAgentAttach(args []string) int {
 
 	opts, err = c.completeAgentAttachOptionsInteractive(root, wd, opts, records)
 	if err != nil {
+		if errors.Is(err, errSelectorCanceled) {
+			return exitOK
+		}
 		fmt.Fprintf(c.Err, "resolve attach target: %v\n", err)
 		c.printAgentAttachUsage(c.Err)
 		return exitUsage
@@ -138,7 +141,8 @@ func (c *CLI) completeAgentAttachOptionsInteractive(root string, wd string, opts
 		})
 	}
 
-	selected, err := c.promptWorkspaceSelectorWithOptionsAndMode("active", "attach", "Session to attach:", "session", selectorItems, true)
+	title := formatAgentAttachSelectorTitle(scope)
+	selected, err := c.promptWorkspaceSelectorWithOptionsAndMode("active", "attach", title, "session", selectorItems, true)
 	if err != nil {
 		return agentAttachOptions{}, err
 	}
@@ -164,6 +168,18 @@ func resolveAgentAttachTarget(records []agentRuntimeSessionRecord, sessionID str
 		}
 	}
 	return agentRuntimeSessionRecord{}, fmt.Errorf("agent session not found: %s", sessionID)
+}
+
+func formatAgentAttachSelectorTitle(scope agentContextScope) string {
+	workspaceID := strings.TrimSpace(scope.workspaceID)
+	repoKey := strings.TrimSpace(scope.repoKey)
+	if workspaceID == "" {
+		return "Session to attach:"
+	}
+	if repoKey == "" {
+		return fmt.Sprintf("Session to attach (workspace: %s):", workspaceID)
+	}
+	return fmt.Sprintf("Session to attach (workspace: %s repo:%s):", workspaceID, repoKey)
 }
 
 func proxyAgentAttachIO(conn *net.UnixConn, in io.Reader, out io.Writer) error {

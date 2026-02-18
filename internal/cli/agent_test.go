@@ -571,6 +571,18 @@ func TestCLI_AgentAttach_BySession_StreamIO(t *testing.T) {
 	}
 }
 
+func TestFormatAgentAttachSelectorTitle(t *testing.T) {
+	if got := formatAgentAttachSelectorTitle(agentContextScope{}); got != "Session to attach:" {
+		t.Fatalf("unexpected title without scope: %q", got)
+	}
+	if got := formatAgentAttachSelectorTitle(agentContextScope{workspaceID: "WS-1"}); got != "Session to attach (workspace: WS-1):" {
+		t.Fatalf("unexpected workspace title: %q", got)
+	}
+	if got := formatAgentAttachSelectorTitle(agentContextScope{workspaceID: "WS-1", repoKey: "repo-a"}); got != "Session to attach (workspace: WS-1 repo:repo-a):" {
+		t.Fatalf("unexpected repo title: %q", got)
+	}
+}
+
 func TestCLI_AgentStop_RequiresSessionOrWorkspace(t *testing.T) {
 	prepareCurrentRootForTest(t)
 	var out bytes.Buffer

@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -50,6 +51,9 @@ func (c *CLI) runAgentStop(args []string) int {
 
 	opts, err = c.completeAgentStopOptionsInteractive(root, wd, opts, records)
 	if err != nil {
+		if errors.Is(err, errSelectorCanceled) {
+			return exitOK
+		}
 		fmt.Fprintf(c.Err, "resolve stop target: %v\n", err)
 		c.printAgentStopUsage(c.Err)
 		return exitUsage

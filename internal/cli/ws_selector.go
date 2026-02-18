@@ -540,6 +540,15 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 		if visiblePos == cursor {
 			focus = ">"
 		}
+		rowLead := ""
+		rowMaxCols := maxCols
+		if rowStyle == selectorRowStyleTarget {
+			rowLead = uiIndent
+			rowMaxCols = maxCols - displayWidth(rowLead)
+			if rowMaxCols < 8 {
+				rowMaxCols = 8
+			}
+		}
 
 		idRaw := truncateDisplay(it.ID, idWidth)
 		idPlain := fmt.Sprintf("%-*s", idWidth, idRaw)
@@ -569,7 +578,7 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 			case selectorRowStyleAction:
 				bodyRaw, prefixPlain = renderActionSelectorRow(markerText, mark, idRaw, it, idWidth, maxCols, useColor)
 			case selectorRowStyleTarget:
-				bodyRaw, prefixPlain = renderTargetSelectorRow(markerText, mark, idRaw, it, idWidth, maxCols, useColor)
+				bodyRaw, prefixPlain = renderTargetSelectorRow(markerText, mark, idRaw, it, idWidth, rowMaxCols, useColor)
 			default:
 				desc := it.secondaryText()
 				if desc == "" {
@@ -583,7 +592,7 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 			}
 		}
 
-		lineRaw := focus + " " + bodyRaw
+		lineRaw := rowLead + focus + " " + bodyRaw
 		lineRaw = truncateDisplay(lineRaw, maxCols)
 
 		line := lineRaw
@@ -603,7 +612,7 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 				}
 				if confirming {
 					// In confirm phase, keep rows stable and avoid extra cursor highlight.
-					line = focus + " " + bodyStyled
+					line = rowLead + focus + " " + bodyStyled
 				} else {
 					// Keep cursor emphasis visible but subtle across light/dark terminal themes.
 					// Preserve existing semantic emphasis (e.g. bold workspace ID) while focused.
@@ -611,10 +620,10 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 						Background(lipgloss.AdaptiveColor{Light: "252", Dark: "236"}).
 						Render(bodyStyled)
 					focusAccent := styleBold(styleTokenize(">", tokenFocus, true), true) + " "
-					line = focusAccent + bodyStyled
+					line = rowLead + focusAccent + bodyStyled
 				}
 			} else {
-				line = focus + " " + bodyStyled
+				line = rowLead + focus + " " + bodyStyled
 			}
 		}
 		bodyLines = append(bodyLines, line)

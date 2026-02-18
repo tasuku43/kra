@@ -682,10 +682,10 @@ func TestRenderWorkspaceSelectorLinesWithFilterView_TargetModeIndentsRepoRows(t 
 		0,
 	)
 	joined := strings.Join(lines, "\n")
-	if !strings.Contains(joined, "\n> ○ workspace") {
-		t.Fatalf("target mode should render workspace row as top-level: %q", joined)
+	if !strings.Contains(joined, "\n  > ○ workspace") {
+		t.Fatalf("target mode should render workspace row with base indent: %q", joined)
 	}
-	if !strings.Contains(joined, "\n    ○ NOIR-Plugins") {
+	if !strings.Contains(joined, "\n      ○ NOIR-Plugins") {
 		t.Fatalf("target mode should indent repo rows: %q", joined)
 	}
 	if strings.Contains(joined, "├─") || strings.Contains(joined, "└─") {

@@ -2,6 +2,7 @@ package cli
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -44,6 +45,9 @@ func (c *CLI) runAgentRun(args []string) int {
 
 	opts, err = c.completeAgentRunOptionsInteractive(root, wd, opts)
 	if err != nil {
+		if errors.Is(err, errSelectorCanceled) {
+			return exitOK
+		}
 		fmt.Fprintf(c.Err, "resolve run options: %v\n", err)
 		return exitError
 	}
@@ -236,7 +240,8 @@ func (c *CLI) completeAgentRunOptionsInteractive(root string, wd string, opts ag
 		if err != nil {
 			return agentRunOptions{}, fmt.Errorf("list workspace targets: %w", err)
 		}
-		selected, err := c.promptWorkspaceSelectorWithOptionsAndMode("active", "run", "Target:", "target", candidates, true)
+		targetTitle := fmt.Sprintf("Target (workspace: %s):", opts.workspaceID)
+		selected, err := c.promptWorkspaceSelectorWithOptionsAndMode("active", "run", targetTitle, "target", candidates, true)
 		if err != nil {
 			return agentRunOptions{}, err
 		}
