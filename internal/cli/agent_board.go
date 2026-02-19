@@ -394,8 +394,37 @@ func (c *CLI) sendPromptToAgentSession(root string, record agentRuntimeSessionRe
 	if prompt == "" {
 		return fmt.Errorf("prompt is empty")
 	}
-	// Send one line and submit immediately.
-	return sendInputToAgentBroker(root, record.SessionID, prompt+"\n")
+	// Send one line and submit immediately (Enter=CR in raw terminal paths).
+	payload := prompt + "\r"
+	if err := sendInputToAgentBroker(root, record.SessionID, payload); err != nil {
+		if strings.Contains(strings.ToLower(err.Error()), "does not support input action") {
+			return sendPromptViaAttachFallback(root, record.SessionID, payload)
+		}
+		return err
+	}
+	return nil
+}
+
+func sendPromptViaAttachFallback(root string, sessionID string, payload string) error {
+	conn, err := attachSessionWithAgentBroker(root, sessionID, 0, 0, false)
+	if err != nil {
+		return fmt.Errorf("attach fallback failed: %w", err)
+	}
+	defer func() { _ = conn.Close() }()
+	done := make(chan struct{})
+	go func() {
+		_, _ = io.Copy(io.Discard, conn)
+		close(done)
+	}()
+	if err := writeAllUnixConn(conn, []byte(payload)); err != nil {
+		return fmt.Errorf("attach fallback write failed: %w", err)
+	}
+	_ = conn.CloseWrite()
+	select {
+	case <-done:
+	case <-time.After(150 * time.Millisecond):
+	}
+	return nil
 }
 
 func printAgentBoardSelectedSession(out io.Writer, record agentRuntimeSessionRecord, useColor bool) {
