@@ -105,9 +105,10 @@ Provide runtime visibility for agent sessions across workspaces with state files
   - `human`:
     - interactive TTY default: selection flow
       - select one session from filtered scope
-      - select action (`show` or `stop`) unless `--act` is provided
+      - select action (`show`, `stop`, or `send`) unless `--act` is provided
       - `show`: prints selected session details
       - `stop`: delegates to stop command behavior for selected session
+      - `send`: prompts one-line instruction and forwards it to session PTY input
     - non-interactive or `--no-select`: workspace-grouped view
   - `tsv`: machine-friendly flat rows
   - deterministic ordering

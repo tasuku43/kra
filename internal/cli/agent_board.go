@@ -178,9 +178,9 @@ func parseAgentBoardOptions(args []string) (agentBoardOptions, error) {
 		return agentBoardOptions{}, fmt.Errorf("unsupported --state: %q (supported: active, running, waiting, waiting_input, idle, exited, unknown)", opts.state)
 	}
 	switch opts.action {
-	case "", "show", "stop":
+	case "", "show", "stop", "send":
 	default:
-		return agentBoardOptions{}, fmt.Errorf("unsupported --act: %q (supported: show, stop)", opts.action)
+		return agentBoardOptions{}, fmt.Errorf("unsupported --act: %q (supported: show, stop, send)", opts.action)
 	}
 	return opts, nil
 }
@@ -233,6 +233,13 @@ func (c *CLI) runAgentBoardInteractive(root string, records []agentRuntimeSessio
 	switch action {
 	case "stop":
 		return c.runAgentStop([]string{"--session", selected.SessionID})
+	case "send":
+		if err := c.sendPromptToAgentSession(root, selected); err != nil {
+			fmt.Fprintf(c.Err, "send prompt: %v\n", err)
+			return exitError
+		}
+		fmt.Fprintf(c.Out, "prompt sent: session=%s\n", selected.SessionID)
+		return exitOK
 	default:
 		printAgentBoardSelectedSession(c.Out, selected, writerSupportsColor(c.Out))
 		return exitOK
@@ -352,18 +359,40 @@ func shortSessionID(sessionID string) string {
 }
 
 func (c *CLI) selectAgentBoardAction() (string, error) {
-	items := []workspaceSelectorCandidate{
-		{ID: "show", Description: "show selected session details"},
-		{ID: "stop", Description: "stop selected active/waiting/idle session"},
-	}
-	selected, err := c.promptWorkspaceSelectorWithOptionsAndMode("active", "run", "Action:", "action", items, true)
+	raw, err := c.promptLine("Action [show/stop/send] (default: show): ")
 	if err != nil {
 		return "", err
 	}
-	if len(selected) != 1 || strings.TrimSpace(selected[0]) == "" {
-		return "", fmt.Errorf("action selection canceled")
+	action := strings.TrimSpace(strings.ToLower(raw))
+	if action == "" {
+		return "show", nil
 	}
-	return strings.TrimSpace(strings.ToLower(selected[0])), nil
+	switch action {
+	case "show", "s":
+		return "show", nil
+	case "stop", "x":
+		return "stop", nil
+	case "send":
+		return "send", nil
+	default:
+		return "", fmt.Errorf("unsupported action: %q (supported: show, stop, send)", action)
+	}
+}
+
+func (c *CLI) sendPromptToAgentSession(root string, record agentRuntimeSessionRecord) error {
+	if record.RuntimeState == "exited" {
+		return fmt.Errorf("session is not active: %s", record.SessionID)
+	}
+	line, err := c.promptLine("Prompt to send: ")
+	if err != nil {
+		return err
+	}
+	prompt := strings.TrimSpace(line)
+	if prompt == "" {
+		return fmt.Errorf("prompt is empty")
+	}
+	// Send one line and submit immediately.
+	return sendInputToAgentBroker(root, record.SessionID, prompt+"\n")
 }
 
 func printAgentBoardSelectedSession(out io.Writer, record agentRuntimeSessionRecord, useColor bool) {

@@ -204,6 +204,16 @@ func TestCLI_AgentBoard_UIRequiresTTY(t *testing.T) {
 	}
 }
 
+func TestParseAgentBoardOptions_AcceptsSendAction(t *testing.T) {
+	opts, err := parseAgentBoardOptions([]string{"--act", "send"})
+	if err != nil {
+		t.Fatalf("parseAgentBoardOptions error: %v", err)
+	}
+	if opts.action != "send" {
+		t.Fatalf("action=%q, want=send", opts.action)
+	}
+}
+
 func TestCLI_AgentBoard_DefaultHidesExited_AndAllShowsExited(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	now := time.Now().Unix()
@@ -401,12 +411,11 @@ func TestCLI_AgentBoard_InteractiveSelection_Show_SSize(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 	c.isInputTTYHook = func() bool { return true }
+	c.In = strings.NewReader("\n")
 	c.selectorPromptRunner = func(status string, action string, title string, itemLabel string, candidates []workspaceSelectorCandidate, single bool) ([]string, error) {
 		switch itemLabel {
 		case "session":
 			return []string{"s-1"}, nil
-		case "action":
-			return []string{"show"}, nil
 		default:
 			t.Fatalf("unexpected selector itemLabel: %s", itemLabel)
 			return nil, nil
@@ -445,12 +454,11 @@ func TestCLI_AgentBoard_InteractiveSelection_Stop_SSize(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 	c.isInputTTYHook = func() bool { return true }
+	c.In = strings.NewReader("stop\n")
 	c.selectorPromptRunner = func(status string, action string, title string, itemLabel string, candidates []workspaceSelectorCandidate, single bool) ([]string, error) {
 		switch itemLabel {
 		case "session":
 			return []string{"s-1"}, nil
-		case "action":
-			return []string{"stop"}, nil
 		default:
 			t.Fatalf("unexpected selector itemLabel: %s", itemLabel)
 			return nil, nil

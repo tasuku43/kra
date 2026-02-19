@@ -28,6 +28,7 @@ const (
 	agentBrokerActionAttach = "attach"
 	agentBrokerActionResize = "resize"
 	agentBrokerActionList   = "sessions"
+	agentBrokerActionInput  = "input"
 
 	agentBrokerDialTimeout       = 300 * time.Millisecond
 	agentBrokerStartupTimeout    = 4 * time.Second
@@ -66,6 +67,7 @@ type agentBrokerRequest struct {
 
 	SessionID   string `json:"session_id,omitempty"`
 	ForceRedraw bool   `json:"force_redraw,omitempty"`
+	Input       string `json:"input,omitempty"`
 }
 
 type agentBrokerResponse struct {
@@ -523,6 +525,15 @@ func stopSessionWithAgentBroker(root string, sessionID string) error {
 	return err
 }
 
+func sendInputToAgentBroker(root string, sessionID string, input string) error {
+	_, err := sendAgentBrokerRequest(root, agentBrokerRequest{
+		Action:    agentBrokerActionInput,
+		SessionID: strings.TrimSpace(sessionID),
+		Input:     input,
+	})
+	return err
+}
+
 func listAgentRuntimeSessionsViaBroker(root string) ([]agentRuntimeSessionRecord, error) {
 	resp, err := sendAgentBrokerRequest(root, agentBrokerRequest{Action: agentBrokerActionList})
 	if err != nil {
@@ -653,6 +664,8 @@ func (s *agentBrokerServer) handleRequest(req agentBrokerRequest) agentBrokerRes
 		return s.handleResizeRequest(req)
 	case agentBrokerActionList:
 		return s.handleListRequest()
+	case agentBrokerActionInput:
+		return s.handleInputRequest(req)
 	case agentBrokerActionAttach:
 		return agentBrokerResponse{OK: false, Error: "attach action requires stream handler"}
 	default:
@@ -785,6 +798,29 @@ func (s *agentBrokerServer) handleResizeRequest(req agentBrokerRequest) agentBro
 		return agentBrokerResponse{OK: false, Error: "session not found"}
 	}
 	applyPTYSize(session.ptmx, req.Cols, req.Rows)
+	return agentBrokerResponse{OK: true}
+}
+
+func (s *agentBrokerServer) handleInputRequest(req agentBrokerRequest) agentBrokerResponse {
+	sessionID := strings.TrimSpace(req.SessionID)
+	if sessionID == "" {
+		return agentBrokerResponse{OK: false, Error: "session_id is required"}
+	}
+	input := req.Input
+	if input == "" {
+		return agentBrokerResponse{OK: false, Error: "input is required"}
+	}
+	session, ok := s.getSession(sessionID)
+	if !ok {
+		return agentBrokerResponse{OK: false, Error: "session not found"}
+	}
+	snapshot := session.snapshot()
+	if snapshot.RuntimeState == "exited" {
+		return agentBrokerResponse{OK: false, Error: "session is exited"}
+	}
+	if err := writeAllFile(session.ptmx, []byte(input)); err != nil {
+		return agentBrokerResponse{OK: false, Error: fmt.Sprintf("write input to pty: %v", err)}
+	}
 	return agentBrokerResponse{OK: true}
 }
 

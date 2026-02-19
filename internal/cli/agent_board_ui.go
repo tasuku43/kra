@@ -139,6 +139,10 @@ func (m agentBoardUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						return m, m.stopCmd(rec)
 					}
 					return m, nil
+				case "i":
+					m.message = "send prompt: use non-UI board action (agent board --act send)"
+					m.msgError = false
+					return m, nil
 				}
 			}
 		}
