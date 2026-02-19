@@ -394,8 +394,9 @@ func (c *CLI) sendPromptToAgentSession(root string, record agentRuntimeSessionRe
 	if prompt == "" {
 		return fmt.Errorf("prompt is empty")
 	}
-	// Send one line and submit immediately (Enter=CR in raw terminal paths).
-	payload := prompt + "\r"
+	// Send one line and submit immediately.
+	// Use CRLF to maximize compatibility across terminal input handlers.
+	payload := prompt + "\r\n"
 	if err := sendInputToAgentBroker(root, record.SessionID, payload); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "does not support input action") {
 			return sendPromptViaAttachFallback(root, record.SessionID, payload)
