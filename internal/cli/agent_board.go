@@ -256,10 +256,18 @@ func (c *CLI) selectAgentBoardSession(records []agentRuntimeSessionRecord, opts 
 	})
 	selectorItems := make([]workspaceSelectorCandidate, 0, len(sorted))
 	for _, r := range sorted {
-		scope := r.WorkspaceID + "  " + locationLabel(r)
+		scope := r.WorkspaceID + " / " + locationLabel(r)
 		selectorItems = append(selectorItems, workspaceSelectorCandidate{
-			ID:          r.SessionID,
-			Description: fmt.Sprintf("%s  %s  state:%s  updated:%s", r.Kind, scope, displayRuntimeStateLabel(r.RuntimeState), formatRelativeAge(r.UpdatedAt)),
+			ID:    r.SessionID,
+			Title: scope,
+			Description: fmt.Sprintf(
+				"%s  %s  state:%s  updated:%s  session:%s",
+				r.Kind,
+				scope,
+				displayRuntimeStateLabel(r.RuntimeState),
+				formatRelativeAge(r.UpdatedAt),
+				shortSessionID(r.SessionID),
+			),
 		})
 	}
 
@@ -284,6 +292,14 @@ func (c *CLI) selectAgentBoardSession(records []agentRuntimeSessionRecord, opts 
 		}
 	}
 	return agentRuntimeSessionRecord{}, fmt.Errorf("selected session not found: %s", sessionID)
+}
+
+func shortSessionID(sessionID string) string {
+	id := strings.TrimSpace(sessionID)
+	if len(id) <= 24 {
+		return id
+	}
+	return id[:16] + "…" + id[len(id)-7:]
 }
 
 func (c *CLI) selectAgentBoardAction() (string, error) {

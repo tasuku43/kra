@@ -574,6 +574,7 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 		}
 		prefix = fmt.Sprintf("%s %s  ", markerText, idText)
 		bodyRaw := prefix
+		subLine := ""
 		if showDesc {
 			switch rowStyle {
 			case selectorRowStyleWorkspace:
@@ -582,6 +583,8 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 				bodyRaw, prefixPlain = renderActionSelectorRow(markerText, mark, idRaw, it, idWidth, maxCols, useColor)
 			case selectorRowStyleTarget:
 				bodyRaw, prefixPlain = renderTargetSelectorRow(markerText, mark, idRaw, it, idWidth, rowMaxCols, useColor)
+			case selectorRowStyleSession:
+				bodyRaw, prefixPlain, subLine = renderSessionSelectorRow(markerText, mark, it, maxCols, useColor)
 			default:
 				desc := it.secondaryText()
 				if desc == "" {
@@ -630,6 +633,11 @@ func renderWorkspaceSelectorLinesWithFilterView(itemLabel string, status string,
 			}
 		}
 		bodyLines = append(bodyLines, line)
+		if rowStyle == selectorRowStyleSession && strings.TrimSpace(subLine) != "" {
+			sub := rowLead + "    " + subLine
+			sub = truncateDisplay(sub, maxCols)
+			bodyLines = append(bodyLines, sub)
+		}
 	}
 
 	sectionBody := make([]string, 0, len(bodyLines)+4)
@@ -745,6 +753,7 @@ const (
 	selectorRowStyleWorkspace selectorRowStyle = "workspace"
 	selectorRowStyleAction    selectorRowStyle = "action"
 	selectorRowStyleTarget    selectorRowStyle = "target"
+	selectorRowStyleSession   selectorRowStyle = "session"
 )
 
 func selectorRowStyleFromContext(itemLabel string, title string, showDesc bool) selectorRowStyle {
@@ -759,6 +768,8 @@ func selectorRowStyleFromContext(itemLabel string, title string, showDesc bool) 
 		return selectorRowStyleAction
 	case "target":
 		return selectorRowStyleTarget
+	case "session":
+		return selectorRowStyleSession
 	}
 	if strings.HasPrefix(strings.ToLower(strings.TrimSpace(title)), "action:") {
 		return selectorRowStyleAction
@@ -871,6 +882,39 @@ func renderTargetSelectorRow(markerText string, mark string, targetRaw string, i
 
 	targetStyled := styleBold(targetPadded, useColor)
 	return fmt.Sprintf("%s%s %s  %s", indent, markerText, targetStyled, descStyled), prefixPlain
+}
+
+func renderSessionSelectorRow(markerText string, mark string, it workspaceSelectorCandidate, maxCols int, useColor bool) (string, string, string) {
+	primary := strings.TrimSpace(it.Title)
+	if primary == "" {
+		primary = strings.TrimSpace(it.ID)
+	}
+	secondary := strings.TrimSpace(it.Description)
+	if secondary == "" {
+		secondary = "(no details)"
+	}
+
+	prefixPlain := fmt.Sprintf("%s ", mark)
+	line1Cols := maxCols - displayWidth(prefixPlain) - 2 // focus + space
+	if line1Cols < 8 {
+		line1Cols = 8
+	}
+	line2Cols := maxCols - 4 // indent for sub line
+	if line2Cols < 8 {
+		line2Cols = 8
+	}
+
+	line1Text := truncateDisplay(primary, line1Cols)
+	line2Text := truncateDisplay(secondary, line2Cols)
+
+	line1Styled := line1Text
+	line2Styled := line2Text
+	if useColor {
+		line1Styled = styleBold(line1Text, true)
+		line2Styled = styleMuted(line2Text, true)
+	}
+	bodyRaw := fmt.Sprintf("%s %s", markerText, line1Styled)
+	return bodyRaw, prefixPlain, line2Styled
 }
 
 func isReducedMotionEnabled() bool {
