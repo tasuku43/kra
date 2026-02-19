@@ -543,13 +543,13 @@ Options:
 
 func (c *CLI) printAgentBoardUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra agent board [--workspace <id>] [--state <active|running|idle|exited|unknown>] [--location <query>] [--kind <agent-kind>] [--all] [--format human|tsv] [--session <id>] [--act <show|stop>] [--no-select]
+  kra agent board [--workspace <id>] [--state <active|running|waiting|waiting_input|idle|exited|unknown>] [--location <query>] [--kind <agent-kind>] [--all] [--format human|tsv] [--session <id>] [--act <show|stop>] [--no-select]
 
 Show runtime activity board. In TTY + human mode, board opens selection flow by default.
 
 Options:
   --workspace       Filter by workspace ID
-  --state           Filter by runtime state (active is alias of running)
+  --state           Filter by runtime state (active->running, waiting->waiting_input)
   --location        Filter by execution location query (workspace or repo:<repo-key>)
   --kind            Filter by agent kind
   --all             Include exited sessions in default view

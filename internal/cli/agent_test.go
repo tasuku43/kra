@@ -131,6 +131,36 @@ func TestCLI_AgentBoard_FilterTSV(t *testing.T) {
 	}
 }
 
+func TestCLI_AgentBoard_StateFilterWaitingAlias(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	if err := saveAgentRuntimeSession(agentRuntimeSessionRecord{
+		SessionID:      "s-wait",
+		RootPath:       root,
+		WorkspaceID:    "WS-1",
+		ExecutionScope: "workspace",
+		Kind:           "codex",
+		PID:            101,
+		StartedAt:      100,
+		UpdatedAt:      110,
+		Seq:            1,
+		RuntimeState:   "waiting_input",
+	}); err != nil {
+		t.Fatalf("save session: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"agent", "board", "--state", "waiting", "--format", "tsv"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "s-wait\tWS-1\tworkspace\t\tcodex\twaiting_input\t100\t110\t101\t-") {
+		t.Fatalf("waiting alias filter row missing: %q", got)
+	}
+}
+
 func TestCLI_AgentBoard_DefaultHidesExited_AndAllShowsExited(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	now := time.Now().Unix()

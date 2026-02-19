@@ -188,6 +188,7 @@ func (s *agentBrokerSession) appendOutputAndSnapshotWritable(payload []byte, now
 			seqEvents := s.seqParser.Feed(payload)
 			if len(seqEvents) > 0 {
 				signalEvents = append(signalEvents, seqEvents...)
+				nextState = applyRuntimeStateHints(nextState, seqEvents)
 			}
 		}
 		if nextState != currentState {

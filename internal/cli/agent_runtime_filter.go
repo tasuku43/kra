@@ -14,10 +14,14 @@ type agentRuntimeQueryOptions struct {
 }
 
 func normalizeAgentStateFilter(v string) string {
-	if strings.TrimSpace(strings.ToLower(v)) == "active" {
+	switch strings.TrimSpace(strings.ToLower(v)) {
+	case "active":
 		return "running"
+	case "waiting":
+		return "waiting_input"
+	default:
+		return strings.TrimSpace(strings.ToLower(v))
 	}
-	return strings.TrimSpace(strings.ToLower(v))
 }
 
 func filterAgentRuntimeSessions(records []agentRuntimeSessionRecord, opts agentRuntimeQueryOptions) []agentRuntimeSessionRecord {

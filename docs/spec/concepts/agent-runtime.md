@@ -185,6 +185,7 @@ Notes:
 Current process state axis:
 
 - `running`
+- `waiting_input`
 - `idle`
 - `exited`
 - `unknown`
@@ -193,7 +194,8 @@ Snapshot updates are atomic and increment session `seq`.
 
 ## Runtime State Inference (implemented)
 
-- broker infers `running/idle` from PTY output activity, not provider-specific
+- broker infers runtime state from PTY output activity plus terminal-sequence
+  completion hints, not provider-specific screen text phrases
   screen text phrases
 - broker keeps I/O directions separate:
   - input path: attached client bytes written into PTY
@@ -202,6 +204,9 @@ Snapshot updates are atomic and increment session `seq`.
   child-process progress
 - `running`:
   - set when PTY output bytes arrive from the child process
+- `waiting_input`:
+  - set when terminal-sequence completion hints are observed (for example
+    `OSC 133;D`, `OSC 9`, `OSC 777 notify`)
 - `idle`:
   - set when PTY output stays silent beyond a short timeout window
 - snapshots are persisted on state transition and periodic output heartbeat

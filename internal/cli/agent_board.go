@@ -7,6 +7,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/tasuku43/kra/internal/infra/paths"
 )
@@ -162,9 +163,9 @@ func parseAgentBoardOptions(args []string) (agentBoardOptions, error) {
 		return agentBoardOptions{}, fmt.Errorf("unsupported --format: %q (supported: human, tsv)", opts.format)
 	}
 	switch opts.state {
-	case "", "running", "idle", "exited", "unknown":
+	case "", "running", "waiting_input", "idle", "exited", "unknown":
 	default:
-		return agentBoardOptions{}, fmt.Errorf("unsupported --state: %q (supported: active, running, idle, exited, unknown)", opts.state)
+		return agentBoardOptions{}, fmt.Errorf("unsupported --state: %q (supported: active, running, waiting, waiting_input, idle, exited, unknown)", opts.state)
 	}
 	switch opts.action {
 	case "", "show", "stop":
@@ -193,7 +194,7 @@ func (c *CLI) runAgentBoardInteractive(root string, records []agentRuntimeSessio
 		return exitOK
 	}
 
-	selected, err := c.selectAgentBoardSession(records, opts)
+	selected, err := c.selectAgentBoardSession(root, records, opts)
 	if err != nil {
 		if errors.Is(err, errSelectorCanceled) {
 			return exitOK
@@ -228,7 +229,7 @@ func (c *CLI) runAgentBoardInteractive(root string, records []agentRuntimeSessio
 	}
 }
 
-func (c *CLI) selectAgentBoardSession(records []agentRuntimeSessionRecord, opts agentBoardOptions) (agentRuntimeSessionRecord, error) {
+func (c *CLI) selectAgentBoardSession(root string, records []agentRuntimeSessionRecord, opts agentBoardOptions) (agentRuntimeSessionRecord, error) {
 	if sessionID := strings.TrimSpace(opts.sessionID); sessionID != "" {
 		for _, r := range records {
 			if r.SessionID == sessionID {
@@ -238,6 +239,62 @@ func (c *CLI) selectAgentBoardSession(records []agentRuntimeSessionRecord, opts 
 		return agentRuntimeSessionRecord{}, fmt.Errorf("session not found in board scope: %s", sessionID)
 	}
 
+	sorted := sortAgentBoardSessions(records)
+	selectorItems := buildAgentBoardSessionSelectorItems(sorted)
+	title := "Session (board):"
+	if ws := strings.TrimSpace(opts.workspaceID); ws != "" {
+		title = fmt.Sprintf("Session (workspace: %s):", ws)
+	}
+	if !c.inputIsTTY() {
+		return agentRuntimeSessionRecord{}, fmt.Errorf("--session is required in non-interactive mode when board selection is enabled")
+	}
+	refreshFn := func() ([]workspaceSelectorCandidate, error) {
+		live, err := loadAgentRuntimeSessionsPreferBroker(root)
+		if err != nil {
+			return nil, err
+		}
+		live = filterAgentRuntimeSessions(live, agentRuntimeQueryOptions{
+			workspaceID: opts.workspaceID,
+			state:       opts.state,
+			location:    opts.location,
+			kind:        opts.kind,
+			all:         opts.all,
+		})
+		return buildAgentBoardSessionSelectorItems(sortAgentBoardSessions(live)), nil
+	}
+	selected, err := c.promptWorkspaceSelectorWithOptionsModeAndRefresh("active", "select", title, "session", selectorItems, true, time.Second, refreshFn)
+	if err != nil {
+		return agentRuntimeSessionRecord{}, err
+	}
+	if len(selected) != 1 || strings.TrimSpace(selected[0]) == "" {
+		return agentRuntimeSessionRecord{}, fmt.Errorf("session selection canceled")
+	}
+	sessionID := strings.TrimSpace(selected[0])
+	for _, r := range sorted {
+		if r.SessionID == sessionID {
+			return r, nil
+		}
+	}
+	// If runtime changed while selecting, resolve from latest snapshot once.
+	live, err := loadAgentRuntimeSessionsPreferBroker(root)
+	if err == nil {
+		live = filterAgentRuntimeSessions(live, agentRuntimeQueryOptions{
+			workspaceID: opts.workspaceID,
+			state:       opts.state,
+			location:    opts.location,
+			kind:        opts.kind,
+			all:         opts.all,
+		})
+		for _, r := range sortAgentBoardSessions(live) {
+			if r.SessionID == sessionID {
+				return r, nil
+			}
+		}
+	}
+	return agentRuntimeSessionRecord{}, fmt.Errorf("selected session not found: %s", sessionID)
+}
+
+func sortAgentBoardSessions(records []agentRuntimeSessionRecord) []agentRuntimeSessionRecord {
 	sorted := append([]agentRuntimeSessionRecord{}, records...)
 	slices.SortFunc(sorted, func(a, b agentRuntimeSessionRecord) int {
 		if cmp := strings.Compare(a.WorkspaceID, b.WorkspaceID); cmp != 0 {
@@ -254,6 +311,10 @@ func (c *CLI) selectAgentBoardSession(records []agentRuntimeSessionRecord, opts 
 		}
 		return strings.Compare(a.SessionID, b.SessionID)
 	})
+	return sorted
+}
+
+func buildAgentBoardSessionSelectorItems(sorted []agentRuntimeSessionRecord) []workspaceSelectorCandidate {
 	selectorItems := make([]workspaceSelectorCandidate, 0, len(sorted))
 	for _, r := range sorted {
 		scope := r.WorkspaceID + " / " + locationLabel(r)
@@ -269,28 +330,7 @@ func (c *CLI) selectAgentBoardSession(records []agentRuntimeSessionRecord, opts 
 			),
 		})
 	}
-
-	title := "Session (board):"
-	if ws := strings.TrimSpace(opts.workspaceID); ws != "" {
-		title = fmt.Sprintf("Session (workspace: %s):", ws)
-	}
-	if !c.inputIsTTY() {
-		return agentRuntimeSessionRecord{}, fmt.Errorf("--session is required in non-interactive mode when board selection is enabled")
-	}
-	selected, err := c.promptWorkspaceSelectorWithOptionsAndMode("active", "select", title, "session", selectorItems, true)
-	if err != nil {
-		return agentRuntimeSessionRecord{}, err
-	}
-	if len(selected) != 1 || strings.TrimSpace(selected[0]) == "" {
-		return agentRuntimeSessionRecord{}, fmt.Errorf("session selection canceled")
-	}
-	sessionID := strings.TrimSpace(selected[0])
-	for _, r := range sorted {
-		if r.SessionID == sessionID {
-			return r, nil
-		}
-	}
-	return agentRuntimeSessionRecord{}, fmt.Errorf("selected session not found: %s", sessionID)
+	return selectorItems
 }
 
 func shortSessionID(sessionID string) string {
@@ -304,7 +344,7 @@ func shortSessionID(sessionID string) string {
 func (c *CLI) selectAgentBoardAction() (string, error) {
 	items := []workspaceSelectorCandidate{
 		{ID: "show", Description: "show selected session details"},
-		{ID: "stop", Description: "stop selected active/idle session"},
+		{ID: "stop", Description: "stop selected active/waiting/idle session"},
 	}
 	selected, err := c.promptWorkspaceSelectorWithOptionsAndMode("active", "run", "Action:", "action", items, true)
 	if err != nil {

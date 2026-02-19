@@ -162,7 +162,9 @@ func normalizeAgentRuntimeSessionRecord(r *agentRuntimeSessionRecord) {
 	r.RepoKey = strings.TrimSpace(r.RepoKey)
 	r.Kind = strings.TrimSpace(r.Kind)
 	r.RuntimeState = strings.TrimSpace(strings.ToLower(r.RuntimeState))
-	if r.RuntimeState == "" {
+	switch r.RuntimeState {
+	case "running", "idle", "waiting_input", "exited", "unknown":
+	default:
 		r.RuntimeState = "unknown"
 	}
 }
@@ -264,10 +266,11 @@ func printAgentRuntimeListHuman(out io.Writer, rows []agentRuntimeSessionRecord,
 	}
 
 	totalByState := map[string]int{
-		"running": 0,
-		"idle":    0,
-		"unknown": 0,
-		"exited":  0,
+		"running":       0,
+		"waiting_input": 0,
+		"idle":          0,
+		"unknown":       0,
+		"exited":        0,
 	}
 	byWorkspace := map[string][]agentRuntimeSessionRecord{}
 	for _, r := range rows {
@@ -277,9 +280,10 @@ func printAgentRuntimeListHuman(out io.Writer, rows []agentRuntimeSessionRecord,
 
 	maxCols := listTerminalWidth()
 	summary := fmt.Sprintf(
-		"%ssummary  active:%d  idle:%d  unknown:%d",
+		"%ssummary  active:%d  waiting:%d  idle:%d  unknown:%d",
 		uiIndent,
 		totalByState["running"],
+		totalByState["waiting_input"],
 		totalByState["idle"],
 		totalByState["unknown"],
 	)
@@ -301,10 +305,11 @@ func printAgentRuntimeListHuman(out io.Writer, rows []agentRuntimeSessionRecord,
 	for _, ws := range workspaceIDs {
 		items := byWorkspace[ws]
 		countByState := map[string]int{
-			"running": 0,
-			"idle":    0,
-			"unknown": 0,
-			"exited":  0,
+			"running":       0,
+			"waiting_input": 0,
+			"idle":          0,
+			"unknown":       0,
+			"exited":        0,
 		}
 		for _, it := range items {
 			countByState[it.RuntimeState]++
@@ -393,9 +398,12 @@ func latestUpdatedAt(rows []agentRuntimeSessionRecord) int64 {
 }
 
 func compactStateCounts(counts map[string]int) string {
-	parts := make([]string, 0, 4)
-	if counts["running"] > 0 || (counts["idle"] == 0 && counts["unknown"] == 0 && counts["exited"] == 0) {
+	parts := make([]string, 0, 5)
+	if counts["running"] > 0 || (counts["waiting_input"] == 0 && counts["idle"] == 0 && counts["unknown"] == 0 && counts["exited"] == 0) {
 		parts = append(parts, fmt.Sprintf("active:%d", counts["running"]))
+	}
+	if counts["waiting_input"] > 0 {
+		parts = append(parts, fmt.Sprintf("waiting:%d", counts["waiting_input"]))
 	}
 	if counts["idle"] > 0 {
 		parts = append(parts, fmt.Sprintf("idle:%d", counts["idle"]))
@@ -410,10 +418,14 @@ func compactStateCounts(counts map[string]int) string {
 }
 
 func displayRuntimeStateLabel(state string) string {
-	if strings.TrimSpace(strings.ToLower(state)) == "running" {
+	switch strings.TrimSpace(strings.ToLower(state)) {
+	case "running":
 		return "active"
+	case "waiting_input":
+		return "waiting"
+	default:
+		return strings.TrimSpace(strings.ToLower(state))
 	}
-	return strings.TrimSpace(strings.ToLower(state))
 }
 
 func hashRootPath(root string) string {

@@ -40,7 +40,7 @@ Provide runtime visibility for agent sessions across workspaces with state files
   - `started_at`
   - `updated_at`
   - `seq`
-  - `runtime_state` (`running` | `idle` | `exited` | `unknown`)
+  - `runtime_state` (`running` | `waiting_input` | `idle` | `exited` | `unknown`)
   - `exit_code` (nullable; set when `runtime_state=exited`)
 
 ## State write rules (implemented)
@@ -52,6 +52,7 @@ Provide runtime visibility for agent sessions across workspaces with state files
 ## Runtime state model (operator-facing)
 
 - `running`: process alive, and recent PTY output activity is observed
+- `waiting_input`: process alive, and terminal-sequence completion hints indicate user input wait
 - `idle`: process alive, and PTY output is quiet for a short window
 - `exited`: process ended
 - `unknown`: runtime could not determine state reliably
@@ -65,6 +66,8 @@ Provide runtime visibility for agent sessions across workspaces with state files
 - runtime state inference uses only output-path activity (PTY read side)
 - `running` is driven by output activity:
   - when PTY output bytes arrive, broker updates the session as `running`
+- `waiting_input` is driven by terminal-sequence completion hints:
+  - when hints like `OSC 133;D`, `OSC 9`, `OSC 777 notify` are observed, broker updates the session as `waiting_input`
 - `idle` is driven by output silence:
   - when output remains silent for a short timeout window, broker updates the
     session as `idle`

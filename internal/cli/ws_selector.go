@@ -67,6 +67,9 @@ type workspaceSelectorModel struct {
 	single        bool
 	confirming    bool
 	reducedMotion bool
+
+	refreshInterval time.Duration
+	refreshFn       func() ([]workspaceSelectorCandidate, error)
 }
 
 func newWorkspaceSelectorModel(candidates []workspaceSelectorCandidate, status string, action string, useColor bool, debugf func(string, ...any)) workspaceSelectorModel {
@@ -109,7 +112,23 @@ func newWorkspaceSelectorModelWithOptionsAndMode(candidates []workspaceSelectorC
 }
 
 func (m workspaceSelectorModel) Init() tea.Cmd {
-	return textinput.Blink
+	cmds := []tea.Cmd{textinput.Blink}
+	if m.refreshFn != nil && m.refreshInterval > 0 {
+		cmds = append(cmds, selectorRefreshTickCmd(m.refreshInterval))
+	}
+	return tea.Batch(cmds...)
+}
+
+type selectorRefreshTickMsg struct{}
+type selectorRefreshLoadedMsg struct {
+	candidates []workspaceSelectorCandidate
+	err        error
+}
+
+func selectorRefreshTickCmd(interval time.Duration) tea.Cmd {
+	return tea.Tick(interval, func(time.Time) tea.Msg {
+		return selectorRefreshTickMsg{}
+	})
 }
 
 func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -129,6 +148,21 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.done = true
 		m.debugf("selector done (confirm) selected=%v", m.selectedIDs())
 		return m, tea.Quit
+	case selectorRefreshTickMsg:
+		if m.refreshFn == nil || m.refreshInterval <= 0 || m.done || m.canceled || m.confirming {
+			return m, nil
+		}
+		return m, func() tea.Msg {
+			rows, err := m.refreshFn()
+			return selectorRefreshLoadedMsg{candidates: rows, err: err}
+		}
+	case selectorRefreshLoadedMsg:
+		if msg.err == nil {
+			m.replaceCandidates(msg.candidates)
+			return m, selectorRefreshTickCmd(m.refreshInterval)
+		}
+		m.debugf("selector refresh failed: %v", msg.err)
+		return m, selectorRefreshTickCmd(m.refreshInterval)
 	case tea.KeyMsg:
 		if m.confirming {
 			// Lock input while showing the selected single item before transition.
@@ -218,6 +252,48 @@ func (m workspaceSelectorModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.filterInput, cmd = m.filterInput.Update(msg)
 	m.syncFilterFromInput()
 	return m, cmd
+}
+
+func (m *workspaceSelectorModel) replaceCandidates(next []workspaceSelectorCandidate) {
+	focusedID := ""
+	visible := m.filteredIndices()
+	if len(visible) > 0 && m.cursor >= 0 && m.cursor < len(visible) {
+		focusedID = strings.TrimSpace(m.candidates[visible[m.cursor]].ID)
+	}
+
+	selectedIDs := map[string]bool{}
+	for i, picked := range m.selected {
+		if !picked || i < 0 || i >= len(m.candidates) {
+			continue
+		}
+		id := strings.TrimSpace(m.candidates[i].ID)
+		if id != "" {
+			selectedIDs[id] = true
+		}
+	}
+
+	m.candidates = append([]workspaceSelectorCandidate{}, next...)
+	m.selected = make(map[int]bool, len(m.candidates))
+	for i, it := range m.candidates {
+		if selectedIDs[strings.TrimSpace(it.ID)] {
+			m.selected[i] = true
+		}
+	}
+
+	m.ensureCursorInFilteredRange()
+	if focusedID == "" {
+		return
+	}
+	visible = m.filteredIndices()
+	for pos, idx := range visible {
+		if idx < 0 || idx >= len(m.candidates) {
+			continue
+		}
+		if strings.TrimSpace(m.candidates[idx].ID) == focusedID {
+			m.cursor = pos
+			return
+		}
+	}
 }
 
 func (m workspaceSelectorModel) View() string {
@@ -401,6 +477,23 @@ func (c *CLI) promptWorkspaceSelectorWithOptionsAndMode(status string, action st
 	return runWorkspaceSelectorWithOptionsAndMode(inFile, c.Err, status, action, title, itemLabel, candidates, single, useColor, c.debugf)
 }
 
+func (c *CLI) promptWorkspaceSelectorWithOptionsModeAndRefresh(status string, action string, title string, itemLabel string, candidates []workspaceSelectorCandidate, single bool, refreshInterval time.Duration, refreshFn func() ([]workspaceSelectorCandidate, error)) ([]string, error) {
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no workspace candidates")
+	}
+	if c.selectorPromptRunner != nil {
+		return c.selectorPromptRunner(status, action, title, itemLabel, candidates, single)
+	}
+
+	inFile, ok := c.In.(*os.File)
+	if !ok || !isatty.IsTerminal(inFile.Fd()) {
+		return nil, fmt.Errorf("interactive workspace selection requires a TTY")
+	}
+
+	useColor := writerSupportsColor(c.Err)
+	return runWorkspaceSelectorWithOptionsAndModeAndRefresh(inFile, c.Err, status, action, title, itemLabel, candidates, single, useColor, c.debugf, refreshInterval, refreshFn)
+}
+
 func runWorkspaceSelector(in *os.File, out io.Writer, status string, action string, candidates []workspaceSelectorCandidate, useColor bool, debugf func(string, ...any)) ([]string, error) {
 	return runWorkspaceSelectorWithOptions(in, out, status, action, "", "workspace", candidates, useColor, debugf)
 }
@@ -410,6 +503,10 @@ func runWorkspaceSelectorWithOptions(in *os.File, out io.Writer, status string, 
 }
 
 func runWorkspaceSelectorWithOptionsAndMode(in *os.File, out io.Writer, status string, action string, title string, itemLabel string, candidates []workspaceSelectorCandidate, single bool, useColor bool, debugf func(string, ...any)) ([]string, error) {
+	return runWorkspaceSelectorWithOptionsAndModeAndRefresh(in, out, status, action, title, itemLabel, candidates, single, useColor, debugf, 0, nil)
+}
+
+func runWorkspaceSelectorWithOptionsAndModeAndRefresh(in *os.File, out io.Writer, status string, action string, title string, itemLabel string, candidates []workspaceSelectorCandidate, single bool, useColor bool, debugf func(string, ...any), refreshInterval time.Duration, refreshFn func() ([]workspaceSelectorCandidate, error)) ([]string, error) {
 	if len(candidates) == 0 {
 		return nil, fmt.Errorf("no workspace candidates")
 	}
@@ -418,6 +515,8 @@ func runWorkspaceSelectorWithOptionsAndMode(in *os.File, out io.Writer, status s
 	}
 
 	model := newWorkspaceSelectorModelWithOptionsAndMode(candidates, status, action, title, itemLabel, single, useColor, debugf)
+	model.refreshInterval = refreshInterval
+	model.refreshFn = refreshFn
 	program := tea.NewProgram(
 		model,
 		tea.WithInput(in),
@@ -948,6 +1047,8 @@ func styleSessionStateValue(state string, useColor bool) string {
 	switch strings.ToLower(strings.TrimSpace(state)) {
 	case "active", "running":
 		return styleAccent(state, useColor)
+	case "waiting", "waiting_input":
+		return styleInfo(state, useColor)
 	case "idle", "exited":
 		return styleMuted(state, useColor)
 	case "unknown":

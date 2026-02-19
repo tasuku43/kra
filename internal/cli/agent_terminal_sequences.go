@@ -113,7 +113,7 @@ func parseOSCPayload(raw []byte) (agentRuntimeSignalEvent, bool) {
 	case "9":
 		return agentRuntimeSignalEvent{
 			Name:      "osc_9_notify",
-			StateHint: "idle",
+			StateHint: "waiting_input",
 			Details:   sanitizeSignalDetails(rest),
 		}, true
 	case "777":
@@ -121,7 +121,7 @@ func parseOSCPayload(raw []byte) (agentRuntimeSignalEvent, bool) {
 		if strings.EqualFold(strings.TrimSpace(sub), "notify") {
 			return agentRuntimeSignalEvent{
 				Name:      "osc_777_notify",
-				StateHint: "idle",
+				StateHint: "waiting_input",
 				Details:   sanitizeSignalDetails(body),
 			}, true
 		}
@@ -141,7 +141,7 @@ func parseOSCPayload(raw []byte) (agentRuntimeSignalEvent, bool) {
 		case "D":
 			return agentRuntimeSignalEvent{
 				Name:      "osc_133_d",
-				StateHint: "idle",
+				StateHint: "waiting_input",
 				Details:   sanitizeSignalDetails(body),
 			}, true
 		case "A":
@@ -165,6 +165,8 @@ func applyRuntimeStateHints(current string, events []agentRuntimeSignalEvent) st
 		switch strings.TrimSpace(strings.ToLower(ev.StateHint)) {
 		case "running":
 			state = "running"
+		case "waiting_input":
+			state = "waiting_input"
 		case "idle":
 			state = "idle"
 		}
@@ -178,6 +180,8 @@ func normalizeAgentRuntimeStateValue(v string) string {
 		return "running"
 	case "idle":
 		return "idle"
+	case "waiting_input":
+		return "waiting_input"
 	case "exited":
 		return "exited"
 	default:

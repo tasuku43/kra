@@ -11,8 +11,8 @@ func TestAgentTerminalSequenceParser_OSC9_BELTerminated(t *testing.T) {
 	if ev[0].Name != "osc_9_notify" {
 		t.Fatalf("event name=%q, want=osc_9_notify", ev[0].Name)
 	}
-	if ev[0].StateHint != "idle" {
-		t.Fatalf("state hint=%q, want=idle", ev[0].StateHint)
+	if ev[0].StateHint != "waiting_input" {
+		t.Fatalf("state hint=%q, want=waiting_input", ev[0].StateHint)
 	}
 }
 
@@ -28,8 +28,8 @@ func TestAgentTerminalSequenceParser_OSC777_STTerminatedAcrossChunks(t *testing.
 	if ev[0].Name != "osc_777_notify" {
 		t.Fatalf("event name=%q, want=osc_777_notify", ev[0].Name)
 	}
-	if ev[0].StateHint != "idle" {
-		t.Fatalf("state hint=%q, want=idle", ev[0].StateHint)
+	if ev[0].StateHint != "waiting_input" {
+		t.Fatalf("state hint=%q, want=waiting_input", ev[0].StateHint)
 	}
 }
 
@@ -42,7 +42,7 @@ func TestAgentTerminalSequenceParser_OSC133_C_And_D(t *testing.T) {
 	if ev[0].Name != "osc_133_c" || ev[0].StateHint != "running" {
 		t.Fatalf("first event unexpected: %+v", ev[0])
 	}
-	if ev[1].Name != "osc_133_d" || ev[1].StateHint != "idle" {
+	if ev[1].Name != "osc_133_d" || ev[1].StateHint != "waiting_input" {
 		t.Fatalf("second event unexpected: %+v", ev[1])
 	}
 }
@@ -50,9 +50,9 @@ func TestAgentTerminalSequenceParser_OSC133_C_And_D(t *testing.T) {
 func TestApplyRuntimeStateHints_LastHintWins(t *testing.T) {
 	state := applyRuntimeStateHints("running", []agentRuntimeSignalEvent{
 		{Name: "osc_133_c", StateHint: "running"},
-		{Name: "osc_9_notify", StateHint: "idle"},
+		{Name: "osc_9_notify", StateHint: "waiting_input"},
 	})
-	if state != "idle" {
-		t.Fatalf("state=%q, want=idle", state)
+	if state != "waiting_input" {
+		t.Fatalf("state=%q, want=waiting_input", state)
 	}
 }
