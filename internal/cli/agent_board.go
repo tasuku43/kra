@@ -261,9 +261,8 @@ func (c *CLI) selectAgentBoardSession(records []agentRuntimeSessionRecord, opts 
 			ID:    r.SessionID,
 			Title: scope,
 			Description: fmt.Sprintf(
-				"%s  %s  state:%s  updated:%s  session:%s",
+				"%s  state:%s  updated:%s  session:%s",
 				r.Kind,
-				scope,
 				displayRuntimeStateLabel(r.RuntimeState),
 				formatRelativeAge(r.UpdatedAt),
 				shortSessionID(r.SessionID),

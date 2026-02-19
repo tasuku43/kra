@@ -911,10 +911,50 @@ func renderSessionSelectorRow(markerText string, mark string, it workspaceSelect
 	line2Styled := line2Text
 	if useColor {
 		line1Styled = styleBold(line1Text, true)
-		line2Styled = styleMuted(line2Text, true)
+		line2Styled = styleSessionMetaLine(line2Text, true)
 	}
 	bodyRaw := fmt.Sprintf("%s %s", markerText, line1Styled)
 	return bodyRaw, prefixPlain, line2Styled
+}
+
+func styleSessionMetaLine(line string, useColor bool) string {
+	if !useColor {
+		return line
+	}
+	parts := strings.Split(line, "  ")
+	if len(parts) == 0 {
+		return styleMuted(line, true)
+	}
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		field := strings.TrimSpace(p)
+		if field == "" {
+			continue
+		}
+		if strings.HasPrefix(field, "state:") {
+			stateVal := strings.TrimSpace(strings.TrimPrefix(field, "state:"))
+			out = append(out, styleMuted("state:", true)+styleSessionStateValue(stateVal, true))
+			continue
+		}
+		out = append(out, styleMuted(field, true))
+	}
+	if len(out) == 0 {
+		return styleMuted(line, true)
+	}
+	return strings.Join(out, "  ")
+}
+
+func styleSessionStateValue(state string, useColor bool) string {
+	switch strings.ToLower(strings.TrimSpace(state)) {
+	case "active", "running":
+		return styleAccent(state, useColor)
+	case "idle", "exited":
+		return styleMuted(state, useColor)
+	case "unknown":
+		return styleWarn(state, useColor)
+	default:
+		return styleMuted(state, useColor)
+	}
 }
 
 func isReducedMotionEnabled() bool {
