@@ -17,6 +17,7 @@ import (
 
 type agentAttachOptions struct {
 	sessionID string
+	renderer  string
 }
 
 type agentAttachMode struct {
@@ -30,6 +31,13 @@ type agentAttachMode struct {
 }
 
 var errAgentAttachDetached = errors.New("attach detached by user")
+var errAgentAttachRendererUnavailable = errors.New("attach renderer is not available in this build")
+
+const (
+	attachRendererRaw   = "raw"
+	attachRendererAuto  = "auto"
+	attachRendererVTerm = "vterm"
+)
 
 var defaultAgentAttachMode = agentAttachMode{
 	forceRedraw:   true,
@@ -115,6 +123,21 @@ func (c *CLI) runAgentAttachWithMode(args []string, mode agentAttachMode) int {
 	}
 	defer func() { _ = conn.Close() }()
 
+	renderer := normalizeAgentAttachRenderer(opts.renderer)
+	if renderer != attachRendererRaw {
+		if err := proxyAgentAttachIOWithRenderer(root, record.SessionID, conn, c.In, c.Out, mode, renderer); err == nil {
+			return exitOK
+		} else if errors.Is(err, errAgentAttachDetached) {
+			fmt.Fprintf(c.Out, "detached: session=%s\n", record.SessionID)
+			return exitOK
+		} else if renderer == attachRendererVTerm {
+			fmt.Fprintf(c.Err, "attach session stream: %v\n", err)
+			return exitError
+		} else if !errors.Is(err, errAgentAttachRendererUnavailable) {
+			fmt.Fprintf(c.Err, "warning: vterm renderer failed, fallback to raw stream: %v\n", err)
+		}
+	}
+
 	if err := proxyAgentAttachIO(root, record.SessionID, conn, c.In, c.Out, mode); err != nil {
 		if errors.Is(err, errAgentAttachDetached) {
 			fmt.Fprintf(c.Out, "detached: session=%s\n", record.SessionID)
@@ -127,7 +150,7 @@ func (c *CLI) runAgentAttachWithMode(args []string, mode agentAttachMode) int {
 }
 
 func parseAgentAttachOptions(args []string) (agentAttachOptions, error) {
-	opts := agentAttachOptions{}
+	opts := agentAttachOptions{renderer: attachRendererAuto}
 	rest := append([]string{}, args...)
 	for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
 		arg := rest[0]
@@ -143,12 +166,26 @@ func parseAgentAttachOptions(args []string) (agentAttachOptions, error) {
 			}
 			opts.sessionID = strings.TrimSpace(rest[1])
 			rest = rest[2:]
+		case strings.HasPrefix(arg, "--renderer="):
+			opts.renderer = strings.TrimSpace(strings.TrimPrefix(arg, "--renderer="))
+			rest = rest[1:]
+		case arg == "--renderer":
+			if len(rest) < 2 {
+				return agentAttachOptions{}, fmt.Errorf("--renderer requires a value")
+			}
+			opts.renderer = strings.TrimSpace(rest[1])
+			rest = rest[2:]
 		default:
 			return agentAttachOptions{}, fmt.Errorf("unknown flag for agent attach: %q", arg)
 		}
 	}
 	if len(rest) > 0 {
 		return agentAttachOptions{}, fmt.Errorf("unexpected args for agent attach: %q", strings.Join(rest, " "))
+	}
+	switch normalizeAgentAttachRenderer(opts.renderer) {
+	case attachRendererAuto, attachRendererRaw, attachRendererVTerm:
+	default:
+		return agentAttachOptions{}, fmt.Errorf("unknown renderer for agent attach: %q", opts.renderer)
 	}
 	return opts, nil
 }
@@ -267,7 +304,17 @@ func proxyAgentAttachIO(root string, sessionID string, conn *net.UnixConn, in io
 		inputResCh <- forwardAttachInput(conn, in, mode.localDetach)
 	}()
 
+	var sigintCh chan os.Signal
+	if mode.localDetach {
+		sigintCh = make(chan os.Signal, 1)
+		signal.Notify(sigintCh, os.Interrupt, syscall.SIGINT)
+		defer signal.Stop(sigintCh)
+	}
+
 	select {
+	case <-sigintCh:
+		_ = conn.Close()
+		return errAgentAttachDetached
 	case inputRes := <-inputResCh:
 		if inputRes.detached {
 			_ = conn.Close()

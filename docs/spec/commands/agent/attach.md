@@ -11,13 +11,19 @@ Attach current terminal to an existing broker-managed agent session.
 ## Scope (implemented)
 
 - Command:
-  - `kra agent attach [--session <id>]`
+  - `kra agent attach [--session <id>] [--renderer <auto|raw|vterm>]`
 - Behavior:
   - validate target session id and scope (workspace/repo context)
   - resolve current `KRA_ROOT`
   - connect broker socket for the root hash
   - broker replays buffered PTY output for selected session
   - after replay catch-up, switch to live attach stream for selected session PTY
+  - renderer selection:
+    - `raw`: byte-stream relay (legacy behavior)
+    - `vterm`: terminal emulator render path (requires `vterm` build tag)
+    - `auto` (default): prefer `vterm` when available, fallback to `raw`
+  - `--renderer vterm` on non-vterm builds returns clear error
+  - vterm build requires system `libvterm` (`pkg-config vterm`)
 - Selection:
   - if `--session` is omitted and stdin is TTY, prompt session selection in scope
   - if `--session` is omitted in non-interactive mode, fail with usage error
