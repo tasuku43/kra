@@ -95,7 +95,13 @@ Provide runtime visibility for agent sessions across workspaces with state files
     - persisted-only rows are retained (for exited history)
   - missing directory means empty persisted rows
 - `board` output contract:
-  - `human`: workspace-grouped view
+  - `human`:
+    - interactive TTY default: selection flow
+      - select one session from filtered scope
+      - select action (`show` or `stop`) unless `--act` is provided
+      - `show`: prints selected session details
+      - `stop`: delegates to stop command behavior for selected session
+    - non-interactive or `--no-select`: workspace-grouped view
   - `tsv`: machine-friendly flat rows
   - deterministic ordering
 - Filtering:
@@ -103,6 +109,7 @@ Provide runtime visibility for agent sessions across workspaces with state files
   - runtime state
   - execution location (`workspace` or `repo:<repo_key>`)
   - kind
+  - explicit session (`--session`)
 
 ## Deferred to AGENT-100
 

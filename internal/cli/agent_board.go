@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -17,6 +18,9 @@ type agentBoardOptions struct {
 	location    string
 	kind        string
 	all         bool
+	sessionID   string
+	action      string
+	noSelect    bool
 }
 
 func (c *CLI) runAgentBoard(args []string) int {
@@ -47,13 +51,18 @@ func (c *CLI) runAgentBoard(args []string) int {
 		fmt.Fprintf(c.Err, "load agent runtime sessions: %v\n", err)
 		return exitError
 	}
-	records = filterAgentRuntimeSessions(records, agentListOptions{
+	records = filterAgentRuntimeSessions(records, agentRuntimeQueryOptions{
 		workspaceID: opts.workspaceID,
 		state:       opts.state,
 		location:    opts.location,
 		kind:        opts.kind,
 		all:         opts.all,
 	})
+
+	if opts.format == "human" && c.shouldRunAgentBoardSelection(opts) {
+		return c.runAgentBoardInteractive(root, records, opts)
+	}
+
 	switch opts.format {
 	case "tsv":
 		printAgentRuntimeListTSV(c.Out, records)
@@ -119,6 +128,27 @@ func parseAgentBoardOptions(args []string) (agentBoardOptions, error) {
 		case arg == "--all":
 			opts.all = true
 			rest = rest[1:]
+		case strings.HasPrefix(arg, "--session="):
+			opts.sessionID = strings.TrimSpace(strings.TrimPrefix(arg, "--session="))
+			rest = rest[1:]
+		case arg == "--session":
+			if len(rest) < 2 {
+				return agentBoardOptions{}, fmt.Errorf("--session requires a value")
+			}
+			opts.sessionID = strings.TrimSpace(rest[1])
+			rest = rest[2:]
+		case strings.HasPrefix(arg, "--act="):
+			opts.action = strings.TrimSpace(strings.ToLower(strings.TrimPrefix(arg, "--act=")))
+			rest = rest[1:]
+		case arg == "--act":
+			if len(rest) < 2 {
+				return agentBoardOptions{}, fmt.Errorf("--act requires a value")
+			}
+			opts.action = strings.TrimSpace(strings.ToLower(rest[1]))
+			rest = rest[2:]
+		case arg == "--no-select":
+			opts.noSelect = true
+			rest = rest[1:]
 		default:
 			return agentBoardOptions{}, fmt.Errorf("unknown flag for agent board: %q", arg)
 		}
@@ -136,7 +166,160 @@ func parseAgentBoardOptions(args []string) (agentBoardOptions, error) {
 	default:
 		return agentBoardOptions{}, fmt.Errorf("unsupported --state: %q (supported: active, running, idle, exited, unknown)", opts.state)
 	}
+	switch opts.action {
+	case "", "show", "stop":
+	default:
+		return agentBoardOptions{}, fmt.Errorf("unsupported --act: %q (supported: show, stop)", opts.action)
+	}
 	return opts, nil
+}
+
+func (c *CLI) shouldRunAgentBoardSelection(opts agentBoardOptions) bool {
+	if opts.format != "human" || opts.noSelect {
+		return false
+	}
+	if strings.TrimSpace(opts.action) != "" {
+		return true
+	}
+	if strings.TrimSpace(opts.sessionID) != "" {
+		return true
+	}
+	return cliInputIsTTY(c.In)
+}
+
+func (c *CLI) runAgentBoardInteractive(root string, records []agentRuntimeSessionRecord, opts agentBoardOptions) int {
+	if len(records) == 0 {
+		printAgentBoardHuman(c.Out, records, writerSupportsColor(c.Out))
+		return exitOK
+	}
+
+	selected, err := c.selectAgentBoardSession(records, opts)
+	if err != nil {
+		if errors.Is(err, errSelectorCanceled) {
+			return exitOK
+		}
+		fmt.Fprintf(c.Err, "resolve board session: %v\n", err)
+		return exitUsage
+	}
+
+	action := strings.TrimSpace(strings.ToLower(opts.action))
+	if action == "" {
+		if !cliInputIsTTY(c.In) {
+			action = "show"
+		}
+	}
+	if action == "" {
+		action, err = c.selectAgentBoardAction()
+		if err != nil {
+			if errors.Is(err, errSelectorCanceled) {
+				return exitOK
+			}
+			fmt.Fprintf(c.Err, "resolve board action: %v\n", err)
+			return exitUsage
+		}
+	}
+
+	switch action {
+	case "stop":
+		return c.runAgentStop([]string{"--session", selected.SessionID})
+	default:
+		printAgentBoardSelectedSession(c.Out, selected, writerSupportsColor(c.Out))
+		return exitOK
+	}
+}
+
+func (c *CLI) selectAgentBoardSession(records []agentRuntimeSessionRecord, opts agentBoardOptions) (agentRuntimeSessionRecord, error) {
+	if sessionID := strings.TrimSpace(opts.sessionID); sessionID != "" {
+		for _, r := range records {
+			if r.SessionID == sessionID {
+				return r, nil
+			}
+		}
+		return agentRuntimeSessionRecord{}, fmt.Errorf("session not found in board scope: %s", sessionID)
+	}
+
+	sorted := append([]agentRuntimeSessionRecord{}, records...)
+	slices.SortFunc(sorted, func(a, b agentRuntimeSessionRecord) int {
+		if cmp := strings.Compare(a.WorkspaceID, b.WorkspaceID); cmp != 0 {
+			return cmp
+		}
+		if cmp := compareExecutionLocation(a, b); cmp != 0 {
+			return cmp
+		}
+		if a.UpdatedAt != b.UpdatedAt {
+			if a.UpdatedAt > b.UpdatedAt {
+				return -1
+			}
+			return 1
+		}
+		return strings.Compare(a.SessionID, b.SessionID)
+	})
+	selectorItems := make([]workspaceSelectorCandidate, 0, len(sorted))
+	for _, r := range sorted {
+		scope := r.WorkspaceID + "  " + locationLabel(r)
+		selectorItems = append(selectorItems, workspaceSelectorCandidate{
+			ID:          r.SessionID,
+			Description: fmt.Sprintf("%s  %s  state:%s  updated:%s", r.Kind, scope, displayRuntimeStateLabel(r.RuntimeState), formatRelativeAge(r.UpdatedAt)),
+		})
+	}
+
+	title := "Session (board):"
+	if ws := strings.TrimSpace(opts.workspaceID); ws != "" {
+		title = fmt.Sprintf("Session (workspace: %s):", ws)
+	}
+	if !cliInputIsTTY(c.In) {
+		return agentRuntimeSessionRecord{}, fmt.Errorf("--session is required in non-interactive mode when board selection is enabled")
+	}
+	selected, err := c.promptWorkspaceSelectorWithOptionsAndMode("active", "select", title, "session", selectorItems, true)
+	if err != nil {
+		return agentRuntimeSessionRecord{}, err
+	}
+	if len(selected) != 1 || strings.TrimSpace(selected[0]) == "" {
+		return agentRuntimeSessionRecord{}, fmt.Errorf("session selection canceled")
+	}
+	sessionID := strings.TrimSpace(selected[0])
+	for _, r := range sorted {
+		if r.SessionID == sessionID {
+			return r, nil
+		}
+	}
+	return agentRuntimeSessionRecord{}, fmt.Errorf("selected session not found: %s", sessionID)
+}
+
+func (c *CLI) selectAgentBoardAction() (string, error) {
+	items := []workspaceSelectorCandidate{
+		{ID: "show", Description: "show selected session details"},
+		{ID: "stop", Description: "stop selected active/idle session"},
+	}
+	selected, err := c.promptWorkspaceSelectorWithOptionsAndMode("active", "run", "Action:", "action", items, true)
+	if err != nil {
+		return "", err
+	}
+	if len(selected) != 1 || strings.TrimSpace(selected[0]) == "" {
+		return "", fmt.Errorf("action selection canceled")
+	}
+	return strings.TrimSpace(strings.ToLower(selected[0])), nil
+}
+
+func printAgentBoardSelectedSession(out io.Writer, record agentRuntimeSessionRecord, useColor bool) {
+	location := locationLabel(record)
+	lines := []string{
+		fmt.Sprintf("%sworkspace: %s", uiIndent, record.WorkspaceID),
+		fmt.Sprintf("%slocation:  %s", uiIndent, location),
+		fmt.Sprintf("%skind:      %s", uiIndent, record.Kind),
+		fmt.Sprintf("%sstate:     %s", uiIndent, displayRuntimeStateLabel(record.RuntimeState)),
+		fmt.Sprintf("%supdated:   %s", uiIndent, formatRelativeAge(record.UpdatedAt)),
+		fmt.Sprintf("%ssession:   %s", uiIndent, record.SessionID),
+	}
+	if useColor {
+		for i := range lines {
+			lines[i] = styleMuted(lines[i], useColor)
+		}
+	}
+	printSection(out, "Agent Session:", lines, sectionRenderOptions{
+		blankAfterHeading: true,
+		trailingBlank:     true,
+	})
 }
 
 func printAgentBoardHuman(out io.Writer, rows []agentRuntimeSessionRecord, useColor bool) {
