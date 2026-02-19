@@ -21,8 +21,6 @@ func (c *CLI) runAgent(args []string) int {
 		return c.runAgentBroker(args[1:])
 	case "stop":
 		return c.runAgentStop(args[1:])
-	case "list", "ls":
-		return c.runAgentList(args[1:])
 	case "board":
 		return c.runAgentBoard(args[1:])
 	default:

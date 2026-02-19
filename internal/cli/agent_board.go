@@ -11,6 +11,7 @@ import (
 )
 
 type agentBoardOptions struct {
+	format      string
 	workspaceID string
 	state       string
 	location    string
@@ -53,18 +54,32 @@ func (c *CLI) runAgentBoard(args []string) int {
 		kind:        opts.kind,
 		all:         opts.all,
 	})
-	printAgentBoardHuman(c.Out, records, writerSupportsColor(c.Out))
+	switch opts.format {
+	case "tsv":
+		printAgentRuntimeListTSV(c.Out, records)
+	default:
+		printAgentBoardHuman(c.Out, records, writerSupportsColor(c.Out))
+	}
 	return exitOK
 }
 
 func parseAgentBoardOptions(args []string) (agentBoardOptions, error) {
-	opts := agentBoardOptions{}
+	opts := agentBoardOptions{format: "human"}
 	rest := append([]string{}, args...)
 	for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
 		arg := rest[0]
 		switch {
 		case arg == "-h" || arg == "--help" || arg == "help":
 			return agentBoardOptions{}, errHelpRequested
+		case strings.HasPrefix(arg, "--format="):
+			opts.format = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
+			rest = rest[1:]
+		case arg == "--format":
+			if len(rest) < 2 {
+				return agentBoardOptions{}, fmt.Errorf("--format requires a value")
+			}
+			opts.format = strings.TrimSpace(rest[1])
+			rest = rest[2:]
 		case strings.HasPrefix(arg, "--workspace="):
 			opts.workspaceID = strings.TrimSpace(strings.TrimPrefix(arg, "--workspace="))
 			rest = rest[1:]
@@ -110,6 +125,11 @@ func parseAgentBoardOptions(args []string) (agentBoardOptions, error) {
 	}
 	if len(rest) > 0 {
 		return agentBoardOptions{}, fmt.Errorf("unexpected args for agent board: %q", strings.Join(rest, " "))
+	}
+	switch opts.format {
+	case "human", "tsv":
+	default:
+		return agentBoardOptions{}, fmt.Errorf("unsupported --format: %q (supported: human, tsv)", opts.format)
 	}
 	switch opts.state {
 	case "", "running", "idle", "exited", "unknown":

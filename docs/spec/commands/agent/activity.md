@@ -15,7 +15,6 @@ Provide runtime visibility for agent sessions across workspaces with state files
 - Command surface:
   - `kra agent run`
   - `kra agent stop`
-  - `kra agent list` (`ls` alias)
   - `kra agent board`
   - internal transport primitive (not exposed as direct CLI subcommand):
     - broker attach stream RPC
@@ -86,7 +85,7 @@ Provide runtime visibility for agent sessions across workspaces with state files
   - `bell`
 - each row contains: `session_id`, `at`, `name`, optional `state_hint`, optional `details`
 
-## `kra agent list` / `kra agent board`
+## `kra agent board`
 
 - Data source:
   - primary: broker `sessions` RPC over root socket (live runtime snapshot)
@@ -95,12 +94,9 @@ Provide runtime visibility for agent sessions across workspaces with state files
     - live rows override same `session_id` persisted rows
     - persisted-only rows are retained (for exited history)
   - missing directory means empty persisted rows
-- `list` output contract:
-  - `tsv` is machine-friendly flat rows
-  - `human` is workspace-first summary + per-session tree rows
-  - child order is deterministic: `workspace` first, then `repo:<repo_key>`
 - `board` output contract:
-  - workspace-grouped human view
+  - `human`: workspace-grouped view
+  - `tsv`: machine-friendly flat rows
   - deterministic ordering
 - Filtering:
   - workspace id

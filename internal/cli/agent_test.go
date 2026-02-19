@@ -27,17 +27,17 @@ func TestCLI_RootHelp_HidesAgent(t *testing.T) {
 	}
 }
 
-func TestCLI_AgentList_AvailableInExperimentalBuild(t *testing.T) {
+func TestCLI_AgentBoard_AvailableInExperimentalBuild(t *testing.T) {
 	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"agent", "list"})
+	code := c.Run([]string{"agent", "board"})
 	if code != exitOK {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
-	if !strings.Contains(out.String(), "Agents:") {
+	if !strings.Contains(out.String(), "Agent Board:") {
 		t.Fatalf("stdout should include agent section: %q", out.String())
 	}
 }
@@ -57,26 +57,29 @@ func TestCLI_Agent_Help(t *testing.T) {
 	if strings.Contains(out.String(), "attach") {
 		t.Fatalf("stdout should not include attach command: %q", out.String())
 	}
+	if strings.Contains(out.String(), "list") || strings.Contains(out.String(), "ls") {
+		t.Fatalf("stdout should not include list/ls commands: %q", out.String())
+	}
 }
 
-func TestCLI_AgentList_Empty(t *testing.T) {
+func TestCLI_AgentBoard_Empty(t *testing.T) {
 	prepareCurrentRootForTest(t)
 
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"agent", "list"})
+	code := c.Run([]string{"agent", "board"})
 	if code != exitOK {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "Agents:") || !strings.Contains(got, "(none)") {
+	if !strings.Contains(got, "Agent Board:") || !strings.Contains(got, "(none)") {
 		t.Fatalf("stdout missing empty agent list: %q", got)
 	}
 }
 
-func TestCLI_AgentList_FilterTSV(t *testing.T) {
+func TestCLI_AgentBoard_FilterTSV(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	if err := saveAgentRuntimeSession(agentRuntimeSessionRecord{
 		SessionID:      "s-1",
@@ -112,7 +115,7 @@ func TestCLI_AgentList_FilterTSV(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	code := c.Run([]string{"agent", "list", "--workspace", "WS-1", "--format", "tsv"})
+	code := c.Run([]string{"agent", "board", "--workspace", "WS-1", "--format", "tsv"})
 	if code != exitOK {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
@@ -128,7 +131,7 @@ func TestCLI_AgentList_FilterTSV(t *testing.T) {
 	}
 }
 
-func TestCLI_AgentList_DefaultHidesExited_AndAllShowsExited(t *testing.T) {
+func TestCLI_AgentBoard_DefaultHidesExited_AndAllShowsExited(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	now := time.Now().Unix()
 	if err := saveAgentRuntimeSession(agentRuntimeSessionRecord{
@@ -163,34 +166,31 @@ func TestCLI_AgentList_DefaultHidesExited_AndAllShowsExited(t *testing.T) {
 	var outDefault bytes.Buffer
 	var errDefault bytes.Buffer
 	cDefault := New(&outDefault, &errDefault)
-	if code := cDefault.Run([]string{"agent", "list", "--workspace", "WS-1"}); code != exitOK {
-		t.Fatalf("default list exit code=%d, want %d (stderr=%q)", code, exitOK, errDefault.String())
+	if code := cDefault.Run([]string{"agent", "board", "--workspace", "WS-1"}); code != exitOK {
+		t.Fatalf("default board exit code=%d, want %d (stderr=%q)", code, exitOK, errDefault.String())
 	}
 	if strings.Contains(outDefault.String(), "session:s-exit") {
-		t.Fatalf("default list should hide exited sessions: %q", outDefault.String())
+		t.Fatalf("default board should hide exited sessions: %q", outDefault.String())
 	}
-	if !strings.Contains(outDefault.String(), "• WS-1  active:1") {
-		t.Fatalf("default list should include workspace summary: %q", outDefault.String())
+	if !strings.Contains(outDefault.String(), "Agent Board:") || !strings.Contains(outDefault.String(), "WS-1") {
+		t.Fatalf("default board should render grouped output: %q", outDefault.String())
 	}
-	if !strings.Contains(outDefault.String(), "└─") || !strings.Contains(outDefault.String(), "session:s-run") {
-		t.Fatalf("default list should render tree session rows: %q", outDefault.String())
+	if !strings.Contains(outDefault.String(), "session:s-run") || !strings.Contains(outDefault.String(), "state:active") {
+		t.Fatalf("default board should include running session row: %q", outDefault.String())
 	}
 
 	var outAll bytes.Buffer
 	var errAll bytes.Buffer
 	cAll := New(&outAll, &errAll)
-	if code := cAll.Run([]string{"agent", "list", "--workspace", "WS-1", "--all"}); code != exitOK {
-		t.Fatalf("all list exit code=%d, want %d (stderr=%q)", code, exitOK, errAll.String())
-	}
-	if !strings.Contains(outAll.String(), "• WS-1  active:1  exited:1") {
-		t.Fatalf("--all should include exited summary count: %q", outAll.String())
+	if code := cAll.Run([]string{"agent", "board", "--workspace", "WS-1", "--all"}); code != exitOK {
+		t.Fatalf("all board exit code=%d, want %d (stderr=%q)", code, exitOK, errAll.String())
 	}
 	if !strings.Contains(outAll.String(), "session:s-exit") || !strings.Contains(outAll.String(), "session:s-run") {
 		t.Fatalf("--all should include both running and exited sessions: %q", outAll.String())
 	}
 }
 
-func TestCLI_AgentList_AutoExpandsWorkspaceWithRepoSessions(t *testing.T) {
+func TestCLI_AgentBoard_AutoExpandsWorkspaceWithRepoSessions(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	now := time.Now().Unix()
 	if err := saveAgentRuntimeSession(agentRuntimeSessionRecord{
@@ -226,18 +226,15 @@ func TestCLI_AgentList_AutoExpandsWorkspaceWithRepoSessions(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	if code := c.Run([]string{"agent", "list", "--workspace", "WS-1"}); code != exitOK {
-		t.Fatalf("list exit code=%d, want %d (stderr=%q)", code, exitOK, err.String())
+	if code := c.Run([]string{"agent", "board", "--workspace", "WS-1"}); code != exitOK {
+		t.Fatalf("board exit code=%d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "• WS-1  active:2") {
-		t.Fatalf("workspace summary missing location counts: %q", got)
+	if !strings.Contains(got, "Agent Board:") || !strings.Contains(got, "WS-1") {
+		t.Fatalf("workspace grouped heading missing: %q", got)
 	}
 	if !strings.Contains(got, "session:s-repo") || !strings.Contains(got, "repo:repo/api") {
 		t.Fatalf("repo workspace should render session rows: %q", got)
-	}
-	if !strings.Contains(got, "├─") || !strings.Contains(got, "└─") {
-		t.Fatalf("repo workspace should render tree branches: %q", got)
 	}
 	wsPos := strings.Index(got, "workspace")
 	repoPos := strings.Index(got, "repo:repo/api")
@@ -246,18 +243,18 @@ func TestCLI_AgentList_AutoExpandsWorkspaceWithRepoSessions(t *testing.T) {
 	}
 }
 
-func TestCLI_AgentLS_AliasOfList(t *testing.T) {
+func TestCLI_AgentList_SubcommandUnavailable(t *testing.T) {
 	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"agent", "ls"})
-	if code != exitOK {
-		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	code := c.Run([]string{"agent", "list"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 	}
-	if !strings.Contains(out.String(), "Agents:") {
-		t.Fatalf("stdout should include agent section: %q", out.String())
+	if !strings.Contains(err.String(), "unknown command: \"agent list\"") {
+		t.Fatalf("stderr should include unknown command error: %q", err.String())
 	}
 }
 
@@ -510,7 +507,7 @@ func TestCLI_AgentRun_DetachedViaBroker_AndStop(t *testing.T) {
 	}
 }
 
-func TestCLI_AgentList_PrefersBrokerLiveStateOverPersistedFile(t *testing.T) {
+func TestCLI_AgentBoard_PrefersBrokerLiveStateOverPersistedFile(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	t.Setenv("KRA_AGENT_RUN_DRY_RUN", "")
 	t.Setenv(agentBrokerEmbeddedEnvKey, "1")
@@ -561,15 +558,15 @@ func TestCLI_AgentList_PrefersBrokerLiveStateOverPersistedFile(t *testing.T) {
 		t.Fatalf("session row not found in persisted state: %s", sessionID)
 	}
 
-	var listOut bytes.Buffer
-	var listErr bytes.Buffer
-	listCLI := New(&listOut, &listErr)
-	listCode := listCLI.Run([]string{"agent", "list", "--workspace", "WS-1", "--state", "running", "--format", "tsv"})
-	if listCode != exitOK {
-		t.Fatalf("list exit code=%d, want=%d (stderr=%q)", listCode, exitOK, listErr.String())
+	var boardOut bytes.Buffer
+	var boardErr bytes.Buffer
+	boardCLI := New(&boardOut, &boardErr)
+	boardCode := boardCLI.Run([]string{"agent", "board", "--workspace", "WS-1", "--state", "running", "--format", "tsv"})
+	if boardCode != exitOK {
+		t.Fatalf("board exit code=%d, want=%d (stderr=%q)", boardCode, exitOK, boardErr.String())
 	}
-	if !strings.Contains(listOut.String(), sessionID+"\tWS-1\tworkspace\t\t"+agentStubPath+"\trunning\t") {
-		t.Fatalf("list should prefer live running state from broker, stdout=%q", listOut.String())
+	if !strings.Contains(boardOut.String(), sessionID+"\tWS-1\tworkspace\t\t"+agentStubPath+"\trunning\t") {
+		t.Fatalf("board should prefer live running state from broker, stdout=%q", boardOut.String())
 	}
 
 	var stopOut bytes.Buffer

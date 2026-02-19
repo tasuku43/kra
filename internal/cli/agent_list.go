@@ -70,8 +70,7 @@ func (c *CLI) runAgentList(args []string) int {
 	case "tsv":
 		printAgentRuntimeListTSV(c.Out, records)
 	default:
-		useColorOut := writerSupportsColor(c.Out)
-		printAgentRuntimeListHuman(c.Out, records, useColorOut)
+		printAgentBoardHuman(c.Out, records, writerSupportsColor(c.Out))
 	}
 	return exitOK
 }

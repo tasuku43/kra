@@ -40,7 +40,7 @@ flowchart LR
   subgraph Client["Client terminals"]
     C1["Terminal A<br>kra agent run"]
     C2["Terminal B<br>manager-side connect path<br>(auxiliary/internal)"]
-    C3["Terminal C<br>kra agent list / board"]
+    C3["Terminal C<br>kra agent board"]
   end
 
   subgraph Runtime["Per KRA_ROOT runtime"]

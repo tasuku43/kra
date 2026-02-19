@@ -482,8 +482,6 @@ func (c *CLI) printAgentUsage(w io.Writer) {
 Subcommands:
   run               Start an agent activity
   stop              Stop a running agent activity
-  list              List agent activities
-  ls                Alias of list
   board             Show workspace-grouped activity view
   help              Show this help
 `)
@@ -545,14 +543,15 @@ Options:
 
 func (c *CLI) printAgentListUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra agent list [--workspace <id>] [--state <running|idle|exited|unknown>] [--location <query>] [--kind <agent-kind>] [--all] [--format human|tsv]
-  kra agent ls [--workspace <id>] [--state <running|idle|exited|unknown>] [--location <query>] [--kind <agent-kind>] [--all] [--format human|tsv]
+  kra agent list [--workspace <id>] [--state <active|running|idle|exited|unknown>] [--location <query>] [--kind <agent-kind>] [--all] [--format human|tsv]
+  kra agent ls [--workspace <id>] [--state <active|running|idle|exited|unknown>] [--location <query>] [--kind <agent-kind>] [--all] [--format human|tsv]
 
 List runtime agent sessions managed by kra in current KRA_ROOT.
+Human format uses the same grouped view as kra agent board.
 
 Options:
   --workspace       Filter by workspace ID
-  --state           Filter by runtime state
+  --state           Filter by runtime state (active is alias of running)
   --location        Filter by execution location query (workspace or repo:<repo-key>)
   --kind            Filter by agent kind
   --all             Include exited sessions in default view
@@ -562,15 +561,16 @@ Options:
 
 func (c *CLI) printAgentBoardUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra agent board [--workspace <id>] [--state <running|idle|exited|unknown>] [--location <query>] [--kind <agent-kind>] [--all]
+  kra agent board [--workspace <id>] [--state <active|running|idle|exited|unknown>] [--location <query>] [--kind <agent-kind>] [--all] [--format human|tsv]
 
 Show workspace-grouped runtime activity view.
 
 Options:
   --workspace       Filter by workspace ID
-  --state           Filter by runtime state
+  --state           Filter by runtime state (active is alias of running)
   --location        Filter by execution location query (workspace or repo:<repo-key>)
   --kind            Filter by agent kind
   --all             Include exited sessions in default view
+  --format          Output format (default: human)
 `)
 }
