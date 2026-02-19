@@ -394,19 +394,26 @@ func (c *CLI) sendPromptToAgentSession(root string, record agentRuntimeSessionRe
 	if prompt == "" {
 		return fmt.Errorf("prompt is empty")
 	}
-	// Send one line and submit immediately.
-	// Use CRLF to maximize compatibility across terminal input handlers.
-	payload := prompt + "\r\n"
-	if err := sendInputToAgentBroker(root, record.SessionID, payload); err != nil {
+	// Send like user keystrokes: text first, then Enter.
+	if err := sendPromptAsKeystrokes(root, record.SessionID, prompt); err != nil {
 		if strings.Contains(strings.ToLower(err.Error()), "does not support input action") {
-			return sendPromptViaAttachFallback(root, record.SessionID, payload)
+			return sendPromptViaAttachFallback(root, record.SessionID, prompt)
 		}
 		return err
 	}
 	return nil
 }
 
-func sendPromptViaAttachFallback(root string, sessionID string, payload string) error {
+func sendPromptAsKeystrokes(root string, sessionID string, prompt string) error {
+	if err := sendInputToAgentBroker(root, sessionID, prompt); err != nil {
+		return err
+	}
+	time.Sleep(40 * time.Millisecond)
+	// Enter key
+	return sendInputToAgentBroker(root, sessionID, "\r")
+}
+
+func sendPromptViaAttachFallback(root string, sessionID string, prompt string) error {
 	conn, err := attachSessionWithAgentBroker(root, sessionID, 0, 0, false)
 	if err != nil {
 		return fmt.Errorf("attach fallback failed: %w", err)
@@ -417,8 +424,12 @@ func sendPromptViaAttachFallback(root string, sessionID string, payload string) 
 		_, _ = io.Copy(io.Discard, conn)
 		close(done)
 	}()
-	if err := writeAllUnixConn(conn, []byte(payload)); err != nil {
+	if err := writeAllUnixConn(conn, []byte(prompt)); err != nil {
 		return fmt.Errorf("attach fallback write failed: %w", err)
+	}
+	time.Sleep(40 * time.Millisecond)
+	if err := writeAllUnixConn(conn, []byte("\r")); err != nil {
+		return fmt.Errorf("attach fallback submit failed: %w", err)
 	}
 	_ = conn.CloseWrite()
 	select {
