@@ -27,13 +27,15 @@ const (
 	agentBrokerActionStop   = "stop"
 	agentBrokerActionAttach = "attach"
 	agentBrokerActionResize = "resize"
+	agentBrokerActionList   = "sessions"
 
-	agentBrokerAcceptDeadline = 1 * time.Second
-	agentBrokerDialTimeout    = 300 * time.Millisecond
-	agentBrokerStartupTimeout = 4 * time.Second
-	agentBrokerIdleTimeout    = 60 * time.Second
-	agentBrokerAttachWriteTTL = 2 * time.Second
-	agentBrokerEmbeddedEnvKey = "KRA_AGENT_BROKER_EMBEDDED"
+	agentBrokerDialTimeout       = 300 * time.Millisecond
+	agentBrokerStartupTimeout    = 4 * time.Second
+	agentBrokerIdleTimeout       = 60 * time.Second
+	agentBrokerAttachWriteTTL    = 2 * time.Second
+	agentRuntimeWriteInterval    = 1 * time.Second
+	agentRuntimeIdleAfterSilence = 3 * time.Second
+	agentBrokerEmbeddedEnvKey    = "KRA_AGENT_BROKER_EMBEDDED"
 )
 
 type agentBrokerStartRequest struct {
@@ -70,8 +72,9 @@ type agentBrokerResponse struct {
 	OK    bool   `json:"ok"`
 	Error string `json:"error,omitempty"`
 
-	SessionID string `json:"session_id,omitempty"`
-	PID       int    `json:"pid,omitempty"`
+	SessionID string                      `json:"session_id,omitempty"`
+	PID       int                         `json:"pid,omitempty"`
+	Sessions  []agentRuntimeSessionRecord `json:"sessions,omitempty"`
 }
 
 type agentBrokerAttachment struct {
@@ -92,6 +95,9 @@ type agentBrokerSession struct {
 	attachments   map[string]*agentBrokerAttachment
 	outputHistory []byte
 	nextAttachID  int64
+	seqParser     *agentTerminalSequenceParser
+	lastWriteAt   time.Time
+	lastOutputAt  time.Time
 }
 
 func (s *agentBrokerSession) snapshot() agentRuntimeSessionRecord {
@@ -166,10 +172,28 @@ func (s *agentBrokerSession) replayChunk(attachID string, sent int) ([]byte, *ne
 	return nil, attachment.conn, true
 }
 
-func (s *agentBrokerSession) appendOutputAndSnapshotWritable(payload []byte) []agentBrokerAttachmentTarget {
+func (s *agentBrokerSession) appendOutputAndSnapshotWritable(payload []byte, now time.Time) ([]agentBrokerAttachmentTarget, *agentRuntimeSessionRecord, []agentRuntimeSignalEvent) {
 	s.mu.Lock()
+	stateChanged := false
+	signalEvents := make([]agentRuntimeSignalEvent, 0)
 	if len(payload) > 0 {
+		s.lastOutputAt = now
 		s.outputHistory = append(s.outputHistory, payload...)
+		currentState := s.record.RuntimeState
+		nextState := currentState
+		if currentState != "exited" && currentState != "running" {
+			nextState = "running"
+		}
+		if s.seqParser != nil {
+			seqEvents := s.seqParser.Feed(payload)
+			if len(seqEvents) > 0 {
+				signalEvents = append(signalEvents, seqEvents...)
+			}
+		}
+		if nextState != currentState {
+			s.record.RuntimeState = nextState
+			stateChanged = true
+		}
 	}
 	out := make([]agentBrokerAttachmentTarget, 0, len(s.attachments))
 	for attachID, attachment := range s.attachments {
@@ -181,8 +205,36 @@ func (s *agentBrokerSession) appendOutputAndSnapshotWritable(payload []byte) []a
 			conn:     attachment.conn,
 		})
 	}
+	var snapshot *agentRuntimeSessionRecord
+	if len(payload) > 0 && (stateChanged || s.lastWriteAt.IsZero() || now.Sub(s.lastWriteAt) >= agentRuntimeWriteInterval) {
+		s.record.Seq++
+		s.record.UpdatedAt = now.Unix()
+		record := s.record
+		snapshot = &record
+		s.lastWriteAt = now
+	}
 	s.mu.Unlock()
-	return out
+	return out, snapshot, signalEvents
+}
+
+func (s *agentBrokerSession) markIdleOnSilence(now time.Time) *agentRuntimeSessionRecord {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.record.RuntimeState != "running" {
+		return nil
+	}
+	if s.lastOutputAt.IsZero() {
+		return nil
+	}
+	if now.Sub(s.lastOutputAt) < agentRuntimeIdleAfterSilence {
+		return nil
+	}
+	s.record.RuntimeState = "idle"
+	s.record.Seq++
+	s.record.UpdatedAt = now.Unix()
+	record := s.record
+	s.lastWriteAt = now
+	return &record
 }
 
 func (s *agentBrokerSession) removeAttachment(attachID string) {
@@ -232,6 +284,24 @@ func newAgentBrokerServer(rootPath string) *agentBrokerServer {
 		rootPath:   strings.TrimSpace(rootPath),
 		lastActive: time.Now(),
 		sessions:   map[string]*agentBrokerSession{},
+	}
+}
+
+func (s *agentBrokerServer) refreshSessionStates(now time.Time) {
+	s.mu.Lock()
+	sessions := make([]*agentBrokerSession, 0, len(s.sessions))
+	for _, session := range s.sessions {
+		sessions = append(sessions, session)
+	}
+	s.mu.Unlock()
+
+	for _, session := range sessions {
+		if session == nil {
+			continue
+		}
+		if snapshot := session.markIdleOnSilence(now); snapshot != nil {
+			_ = saveAgentRuntimeSession(*snapshot)
+		}
 	}
 }
 
@@ -294,16 +364,31 @@ func (c *CLI) runAgentBroker(args []string) int {
 	defer func() { _ = os.Remove(socketPath) }()
 
 	server := newAgentBrokerServer(root)
+	done := make(chan struct{})
+	go func() {
+		ticker := time.NewTicker(1 * time.Second)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				now := time.Now()
+				server.refreshSessionStates(now)
+				if server.shouldExitForIdle(now) {
+					_ = listener.Close()
+					return
+				}
+			case <-done:
+				return
+			}
+		}
+	}()
+	defer close(done)
+
 	for {
-		_ = listener.SetDeadline(time.Now().Add(agentBrokerAcceptDeadline))
 		conn, err := listener.AcceptUnix()
 		if err != nil {
-			var nerr net.Error
-			if errors.As(err, &nerr) && nerr.Timeout() {
-				if server.shouldExitForIdle(time.Now()) {
-					return exitOK
-				}
-				continue
+			if errors.Is(err, net.ErrClosed) {
+				return exitOK
 			}
 			continue
 		}
@@ -437,6 +522,20 @@ func stopSessionWithAgentBroker(root string, sessionID string) error {
 	return err
 }
 
+func listAgentRuntimeSessionsViaBroker(root string) ([]agentRuntimeSessionRecord, error) {
+	resp, err := sendAgentBrokerRequest(root, agentBrokerRequest{Action: agentBrokerActionList})
+	if err != nil {
+		return nil, err
+	}
+	rows := make([]agentRuntimeSessionRecord, 0, len(resp.Sessions))
+	for _, row := range resp.Sessions {
+		normalizeAgentRuntimeSessionRecord(&row)
+		rows = append(rows, row)
+	}
+	sortAgentRuntimeSessions(rows)
+	return rows, nil
+}
+
 func pingAgentBroker(root string) error {
 	_, err := sendAgentBrokerRequest(root, agentBrokerRequest{Action: agentBrokerActionPing})
 	return err
@@ -551,11 +650,42 @@ func (s *agentBrokerServer) handleRequest(req agentBrokerRequest) agentBrokerRes
 		return s.handleStopRequest(req)
 	case agentBrokerActionResize:
 		return s.handleResizeRequest(req)
+	case agentBrokerActionList:
+		return s.handleListRequest()
 	case agentBrokerActionAttach:
 		return agentBrokerResponse{OK: false, Error: "attach action requires stream handler"}
 	default:
 		return agentBrokerResponse{OK: false, Error: "unknown broker action"}
 	}
+}
+
+func (s *agentBrokerServer) handleListRequest() agentBrokerResponse {
+	rows := s.listSessionsSnapshot()
+	return agentBrokerResponse{
+		OK:       true,
+		Sessions: rows,
+	}
+}
+
+func (s *agentBrokerServer) listSessionsSnapshot() []agentRuntimeSessionRecord {
+	s.mu.Lock()
+	sessions := make([]*agentBrokerSession, 0, len(s.sessions))
+	for _, session := range s.sessions {
+		sessions = append(sessions, session)
+	}
+	s.mu.Unlock()
+
+	rows := make([]agentRuntimeSessionRecord, 0, len(sessions))
+	for _, session := range sessions {
+		if session == nil {
+			continue
+		}
+		row := session.snapshot()
+		normalizeAgentRuntimeSessionRecord(&row)
+		rows = append(rows, row)
+	}
+	sortAgentRuntimeSessions(rows)
+	return rows
 }
 
 func (s *agentBrokerServer) handleStartRequest(req agentBrokerRequest) agentBrokerResponse {
@@ -608,6 +738,7 @@ func (s *agentBrokerServer) handleStartRequest(req agentBrokerRequest) agentBrok
 		ptmx:        ptmx,
 		record:      record,
 		attachments: map[string]*agentBrokerAttachment{},
+		seqParser:   newAgentTerminalSequenceParser(),
 	}
 	s.addSession(session)
 
@@ -682,7 +813,37 @@ func (s *agentBrokerServer) handleAttachRequest(conn *net.UnixConn, req agentBro
 		return
 	}
 
-	_, _ = io.Copy(session.ptmx, conn)
+	s.forwardAttachInputToSession(session, conn)
+}
+
+func (s *agentBrokerServer) forwardAttachInputToSession(session *agentBrokerSession, conn *net.UnixConn) {
+	if session == nil || conn == nil || session.ptmx == nil {
+		return
+	}
+	buf := make([]byte, 4096)
+	for {
+		n, err := conn.Read(buf)
+		if n > 0 {
+			chunk := append([]byte(nil), buf[:n]...)
+			if werr := writeAllFile(session.ptmx, chunk); werr != nil {
+				return
+			}
+		}
+		if err != nil {
+			return
+		}
+	}
+}
+
+func writeAllFile(file *os.File, b []byte) error {
+	for len(b) > 0 {
+		n, err := file.Write(b)
+		if err != nil {
+			return err
+		}
+		b = b[n:]
+	}
+	return nil
 }
 
 func (s *agentBrokerServer) forwardSessionOutput(session *agentBrokerSession) {
@@ -691,7 +852,7 @@ func (s *agentBrokerServer) forwardSessionOutput(session *agentBrokerSession) {
 		n, err := session.ptmx.Read(buf)
 		if n > 0 {
 			payload := append([]byte(nil), buf[:n]...)
-			attachments := session.appendOutputAndSnapshotWritable(payload)
+			attachments, snapshot, signalEvents := session.appendOutputAndSnapshotWritable(payload, time.Now())
 			for _, target := range attachments {
 				if target.conn == nil {
 					continue
@@ -701,6 +862,15 @@ func (s *agentBrokerServer) forwardSessionOutput(session *agentBrokerSession) {
 					session.removeAttachment(target.attachID)
 				}
 				_ = target.conn.SetWriteDeadline(time.Time{})
+			}
+			if snapshot != nil {
+				_ = saveAgentRuntimeSession(*snapshot)
+				if len(signalEvents) > 0 {
+					_ = appendAgentRuntimeSignalEvents(*snapshot, signalEvents)
+				}
+			} else if len(signalEvents) > 0 {
+				record := session.snapshot()
+				_ = appendAgentRuntimeSignalEvents(record, signalEvents)
 			}
 		}
 		if err != nil {

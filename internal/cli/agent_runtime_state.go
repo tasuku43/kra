@@ -91,15 +91,7 @@ func loadAgentRuntimeSessions(root string) ([]agentRuntimeSessionRecord, error) 
 		if err := json.Unmarshal(b, &r); err != nil {
 			continue
 		}
-		r.SessionID = strings.TrimSpace(r.SessionID)
-		r.WorkspaceID = strings.TrimSpace(r.WorkspaceID)
-		r.ExecutionScope = strings.TrimSpace(strings.ToLower(r.ExecutionScope))
-		r.RepoKey = strings.TrimSpace(r.RepoKey)
-		r.Kind = strings.TrimSpace(r.Kind)
-		r.RuntimeState = strings.TrimSpace(strings.ToLower(r.RuntimeState))
-		if r.RuntimeState == "" {
-			r.RuntimeState = "unknown"
-		}
+		normalizeAgentRuntimeSessionRecord(&r)
 		r.storagePath = path
 		rows = append(rows, r)
 	}
@@ -113,6 +105,69 @@ func loadAgentRuntimeSessions(root string) ([]agentRuntimeSessionRecord, error) 
 			continue
 		}
 	}
+	sortAgentRuntimeSessions(rows)
+	return rows, nil
+}
+
+func loadAgentRuntimeSessionsPreferBroker(root string) ([]agentRuntimeSessionRecord, error) {
+	liveRows, liveErr := listAgentRuntimeSessionsViaBroker(root)
+	fileRows, fileErr := loadAgentRuntimeSessions(root)
+
+	if liveErr == nil {
+		if fileErr != nil {
+			return liveRows, nil
+		}
+		return mergeRuntimeSessionRows(liveRows, fileRows), nil
+	}
+	if fileErr != nil {
+		return nil, fileErr
+	}
+	return fileRows, nil
+}
+
+func mergeRuntimeSessionRows(liveRows []agentRuntimeSessionRecord, fileRows []agentRuntimeSessionRecord) []agentRuntimeSessionRecord {
+	bySession := map[string]agentRuntimeSessionRecord{}
+	for _, r := range fileRows {
+		id := strings.TrimSpace(r.SessionID)
+		if id == "" {
+			continue
+		}
+		normalizeAgentRuntimeSessionRecord(&r)
+		bySession[id] = r
+	}
+	for _, r := range liveRows {
+		id := strings.TrimSpace(r.SessionID)
+		if id == "" {
+			continue
+		}
+		normalizeAgentRuntimeSessionRecord(&r)
+		bySession[id] = r
+	}
+
+	out := make([]agentRuntimeSessionRecord, 0, len(bySession))
+	for _, r := range bySession {
+		out = append(out, r)
+	}
+	sortAgentRuntimeSessions(out)
+	return out
+}
+
+func normalizeAgentRuntimeSessionRecord(r *agentRuntimeSessionRecord) {
+	if r == nil {
+		return
+	}
+	r.SessionID = strings.TrimSpace(r.SessionID)
+	r.WorkspaceID = strings.TrimSpace(r.WorkspaceID)
+	r.ExecutionScope = strings.TrimSpace(strings.ToLower(r.ExecutionScope))
+	r.RepoKey = strings.TrimSpace(r.RepoKey)
+	r.Kind = strings.TrimSpace(r.Kind)
+	r.RuntimeState = strings.TrimSpace(strings.ToLower(r.RuntimeState))
+	if r.RuntimeState == "" {
+		r.RuntimeState = "unknown"
+	}
+}
+
+func sortAgentRuntimeSessions(rows []agentRuntimeSessionRecord) {
 	slices.SortFunc(rows, func(a, b agentRuntimeSessionRecord) int {
 		if a.UpdatedAt != b.UpdatedAt {
 			if a.UpdatedAt > b.UpdatedAt {
@@ -125,7 +180,6 @@ func loadAgentRuntimeSessions(root string) ([]agentRuntimeSessionRecord, error) 
 		}
 		return strings.Compare(a.SessionID, b.SessionID)
 	})
-	return rows, nil
 }
 
 func pruneExitedRuntimeSessions(rows []agentRuntimeSessionRecord, nowUnix int64) ([]agentRuntimeSessionRecord, []string) {
@@ -223,7 +277,7 @@ func printAgentRuntimeListHuman(out io.Writer, rows []agentRuntimeSessionRecord,
 
 	maxCols := listTerminalWidth()
 	summary := fmt.Sprintf(
-		"%ssummary  running:%d  idle:%d  unknown:%d",
+		"%ssummary  active:%d  idle:%d  unknown:%d",
 		uiIndent,
 		totalByState["running"],
 		totalByState["idle"],
@@ -292,7 +346,7 @@ func printAgentRuntimeListHuman(out io.Writer, rows []agentRuntimeSessionRecord,
 			}
 			line := fmt.Sprintf("%s  %s %-8s %-20s updated:%-7s session:%s", uiIndent, branch, it.Kind, location, formatRelativeAge(it.UpdatedAt), it.SessionID)
 			if it.RuntimeState != "running" {
-				line += fmt.Sprintf(" state:%s", it.RuntimeState)
+				line += fmt.Sprintf(" state:%s", displayRuntimeStateLabel(it.RuntimeState))
 			}
 			if useColor {
 				line = styleMuted(line, useColor)
@@ -341,7 +395,7 @@ func latestUpdatedAt(rows []agentRuntimeSessionRecord) int64 {
 func compactStateCounts(counts map[string]int) string {
 	parts := make([]string, 0, 4)
 	if counts["running"] > 0 || (counts["idle"] == 0 && counts["unknown"] == 0 && counts["exited"] == 0) {
-		parts = append(parts, fmt.Sprintf("running:%d", counts["running"]))
+		parts = append(parts, fmt.Sprintf("active:%d", counts["running"]))
 	}
 	if counts["idle"] > 0 {
 		parts = append(parts, fmt.Sprintf("idle:%d", counts["idle"]))
@@ -353,6 +407,13 @@ func compactStateCounts(counts map[string]int) string {
 		parts = append(parts, fmt.Sprintf("exited:%d", counts["exited"]))
 	}
 	return strings.Join(parts, "  ")
+}
+
+func displayRuntimeStateLabel(state string) string {
+	if strings.TrimSpace(strings.ToLower(state)) == "running" {
+		return "active"
+	}
+	return strings.TrimSpace(strings.ToLower(state))
 }
 
 func hashRootPath(root string) string {

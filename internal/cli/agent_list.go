@@ -59,7 +59,7 @@ func (c *CLI) runAgentList(args []string) int {
 		return exitError
 	}
 
-	records, err := loadAgentRuntimeSessions(root)
+	records, err := loadAgentRuntimeSessionsPreferBroker(root)
 	if err != nil {
 		fmt.Fprintf(c.Err, "load agent runtime sessions: %v\n", err)
 		return exitError
@@ -103,13 +103,13 @@ func parseAgentListOptions(args []string) (agentListOptions, error) {
 			opts.workspaceID = strings.TrimSpace(rest[1])
 			rest = rest[2:]
 		case strings.HasPrefix(arg, "--state="):
-			opts.state = strings.TrimSpace(strings.ToLower(strings.TrimPrefix(arg, "--state=")))
+			opts.state = normalizeAgentStateFilter(strings.TrimSpace(strings.ToLower(strings.TrimPrefix(arg, "--state="))))
 			rest = rest[1:]
 		case arg == "--state":
 			if len(rest) < 2 {
 				return agentListOptions{}, fmt.Errorf("--state requires a value")
 			}
-			opts.state = strings.TrimSpace(strings.ToLower(rest[1]))
+			opts.state = normalizeAgentStateFilter(strings.TrimSpace(strings.ToLower(rest[1])))
 			rest = rest[2:]
 		case strings.HasPrefix(arg, "--location="):
 			opts.location = strings.TrimSpace(strings.TrimPrefix(arg, "--location="))
@@ -147,9 +147,16 @@ func parseAgentListOptions(args []string) (agentListOptions, error) {
 	switch opts.state {
 	case "", "running", "idle", "exited", "unknown":
 	default:
-		return agentListOptions{}, fmt.Errorf("unsupported --state: %q (supported: running, idle, exited, unknown)", opts.state)
+		return agentListOptions{}, fmt.Errorf("unsupported --state: %q (supported: active, running, idle, exited, unknown)", opts.state)
 	}
 	return opts, nil
+}
+
+func normalizeAgentStateFilter(v string) string {
+	if strings.TrimSpace(strings.ToLower(v)) == "active" {
+		return "running"
+	}
+	return strings.TrimSpace(strings.ToLower(v))
 }
 
 func filterAgentRuntimeSessions(records []agentRuntimeSessionRecord, opts agentListOptions) []agentRuntimeSessionRecord {

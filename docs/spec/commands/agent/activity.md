@@ -14,16 +14,19 @@ Provide runtime visibility for agent sessions across workspaces with state files
 - Command boundary: `kra agent ...`
 - Command surface:
   - `kra agent run`
-  - `kra agent attach`
   - `kra agent stop`
   - `kra agent list` (`ls` alias)
   - `kra agent board`
+  - internal transport primitive (not exposed as direct CLI subcommand):
+    - broker attach stream RPC
 - Discoverability policy:
   - `kra agent` is executable directly
   - root help intentionally does not list `agent`
 - Runtime state location:
   - `KRA_HOME/state/agents/<root-hash>/<session-id>.json`
   - `KRA_HOME` default: `~/.kra`
+- Runtime signal events (terminal-sequence subset):
+  - `KRA_HOME/state/agents/<root-hash>/events/<session-id>.jsonl`
 
 ## Runtime record schema (session file)
 
@@ -49,16 +52,49 @@ Provide runtime visibility for agent sessions across workspaces with state files
 
 ## Runtime state model (operator-facing)
 
-- `running`: process alive
-- `idle`: process alive but no recent activity signal
+- `running`: process alive, and recent PTY output activity is observed
+- `idle`: process alive, and PTY output is quiet for a short window
 - `exited`: process ended
 - `unknown`: runtime could not determine state reliably
+
+## Runtime state inference policy (implemented)
+
+- source of truth for live inference is broker-owned PTY output stream
+- broker handles two distinct directions:
+  - input path: attached client -> broker -> PTY write
+  - output path: PTY read -> broker -> attached clients
+- runtime state inference uses only output-path activity (PTY read side)
+- `running` is driven by output activity:
+  - when PTY output bytes arrive, broker updates the session as `running`
+- `idle` is driven by output silence:
+  - when output remains silent for a short timeout window, broker updates the
+    session as `idle`
+- snapshots are updated on state change and periodic output heartbeat
+- terminal control sequences (`OSC 9` / `OSC 777` / `OSC 133`) are captured as
+  signal events for observability, but runtime state is not coupled to
+  provider-specific screen text markers
+- provider history files outside broker runtime (for example
+  `~/.codex/sessions/*.jsonl`) are not read by this command surface
+
+## Runtime signal events (implemented subset)
+
+- broker appends recognized terminal-sequence events to per-session jsonl:
+  - `osc_9_notify`
+  - `osc_777_notify`
+  - `osc_133_c`
+  - `osc_133_d`
+  - `bell`
+- each row contains: `session_id`, `at`, `name`, optional `state_hint`, optional `details`
 
 ## `kra agent list` / `kra agent board`
 
 - Data source:
-  - directory scan of `KRA_HOME/state/agents/<root-hash>/`
-  - missing directory means empty list
+  - primary: broker `sessions` RPC over root socket (live runtime snapshot)
+  - fallback: directory scan of `KRA_HOME/state/agents/<root-hash>/`
+  - merge policy (primary success + fallback readable):
+    - live rows override same `session_id` persisted rows
+    - persisted-only rows are retained (for exited history)
+  - missing directory means empty persisted rows
 - `list` output contract:
   - `tsv` is machine-friendly flat rows
   - `human` is workspace-first summary + per-session tree rows
@@ -75,6 +111,6 @@ Provide runtime visibility for agent sessions across workspaces with state files
 ## Deferred to AGENT-100
 
 - snapshot fields for attach/input ownership (`attached_clients`, `writer_owner`, `lease_expires_at`)
-- append-only runtime events (`events/<session-id>.jsonl`)
+- full runtime lifecycle events (beyond terminal-sequence signal subset)
 - lease/takeover event model
 - launch mode metadata (`launch_mode`)

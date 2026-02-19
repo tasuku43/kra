@@ -54,8 +54,8 @@ func TestCLI_Agent_Help(t *testing.T) {
 	if !strings.Contains(out.String(), "kra agent <subcommand>") {
 		t.Fatalf("stdout missing agent usage: %q", out.String())
 	}
-	if !strings.Contains(out.String(), "attach") {
-		t.Fatalf("stdout should include attach command: %q", out.String())
+	if strings.Contains(out.String(), "attach") {
+		t.Fatalf("stdout should not include attach command: %q", out.String())
 	}
 }
 
@@ -169,7 +169,7 @@ func TestCLI_AgentList_DefaultHidesExited_AndAllShowsExited(t *testing.T) {
 	if strings.Contains(outDefault.String(), "session:s-exit") {
 		t.Fatalf("default list should hide exited sessions: %q", outDefault.String())
 	}
-	if !strings.Contains(outDefault.String(), "• WS-1  running:1") {
+	if !strings.Contains(outDefault.String(), "• WS-1  active:1") {
 		t.Fatalf("default list should include workspace summary: %q", outDefault.String())
 	}
 	if !strings.Contains(outDefault.String(), "└─") || !strings.Contains(outDefault.String(), "session:s-run") {
@@ -182,7 +182,7 @@ func TestCLI_AgentList_DefaultHidesExited_AndAllShowsExited(t *testing.T) {
 	if code := cAll.Run([]string{"agent", "list", "--workspace", "WS-1", "--all"}); code != exitOK {
 		t.Fatalf("all list exit code=%d, want %d (stderr=%q)", code, exitOK, errAll.String())
 	}
-	if !strings.Contains(outAll.String(), "• WS-1  running:1  exited:1") {
+	if !strings.Contains(outAll.String(), "• WS-1  active:1  exited:1") {
 		t.Fatalf("--all should include exited summary count: %q", outAll.String())
 	}
 	if !strings.Contains(outAll.String(), "session:s-exit") || !strings.Contains(outAll.String(), "session:s-run") {
@@ -230,7 +230,7 @@ func TestCLI_AgentList_AutoExpandsWorkspaceWithRepoSessions(t *testing.T) {
 		t.Fatalf("list exit code=%d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "• WS-1  running:2") {
+	if !strings.Contains(got, "• WS-1  active:2") {
 		t.Fatalf("workspace summary missing location counts: %q", got)
 	}
 	if !strings.Contains(got, "session:s-repo") || !strings.Contains(got, "repo:repo/api") {
@@ -510,41 +510,7 @@ func TestCLI_AgentRun_DetachedViaBroker_AndStop(t *testing.T) {
 	}
 }
 
-func TestShouldRunAgentForeground(t *testing.T) {
-	if shouldRunAgentForeground(strings.NewReader(""), &bytes.Buffer{}) {
-		t.Fatalf("non-terminal IO should not trigger foreground run")
-	}
-
-	ptmx, tty, err := pty.Open()
-	if err != nil {
-		t.Fatalf("open pty: %v", err)
-	}
-	defer func() {
-		_ = ptmx.Close()
-		_ = tty.Close()
-	}()
-	if !shouldRunAgentForeground(tty, tty) {
-		t.Fatalf("tty IO should trigger foreground run")
-	}
-}
-
-func TestCLI_AgentAttach_RequiresSessionInNonInteractiveMode(t *testing.T) {
-	prepareCurrentRootForTest(t)
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-	c.In = strings.NewReader("")
-
-	code := c.Run([]string{"agent", "attach"})
-	if code != exitUsage {
-		t.Fatalf("exit code=%d, want=%d", code, exitUsage)
-	}
-	if !strings.Contains(err.String(), "--session is required in non-interactive mode") {
-		t.Fatalf("stderr should include missing session error: %q", err.String())
-	}
-}
-
-func TestCLI_AgentAttach_BySession_StreamIO(t *testing.T) {
+func TestCLI_AgentList_PrefersBrokerLiveStateOverPersistedFile(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	t.Setenv("KRA_AGENT_RUN_DRY_RUN", "")
 	t.Setenv(agentBrokerEmbeddedEnvKey, "1")
@@ -552,114 +518,7 @@ func TestCLI_AgentAttach_BySession_StreamIO(t *testing.T) {
 	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
 		t.Fatalf("mkdir workspace: %v", err)
 	}
-	agentStubPath := filepath.Join(workspaceDir, "agent-echo.sh")
-	agentStub := "#!/bin/sh\nwhile IFS= read -r line; do\n  if [ \"$line\" = \"exit\" ]; then\n    echo \"bye\"\n    exit 0\n  fi\n  echo \"ECHO:$line\"\ndone\n"
-	if err := os.WriteFile(agentStubPath, []byte(agentStub), 0o755); err != nil {
-		t.Fatalf("write agent stub: %v", err)
-	}
-
-	var runOut bytes.Buffer
-	var runErr bytes.Buffer
-	runCLI := New(&runOut, &runErr)
-	startCode := runCLI.Run([]string{"agent", "run", "--workspace", "WS-1", "--kind", agentStubPath})
-	if startCode != exitOK {
-		t.Fatalf("run exit code=%d, want=%d (stderr=%q)", startCode, exitOK, runErr.String())
-	}
-
-	sessionID := extractSessionIDFromAgentStarted(runOut.String())
-	if sessionID == "" {
-		t.Fatalf("session id should be printed, stdout=%q", runOut.String())
-	}
-	if _, ok := waitForSessionRuntimeState(root, sessionID, "running", 5*time.Second); !ok {
-		t.Fatalf("session should transition to running: session=%s", sessionID)
-	}
-
-	var attachOut bytes.Buffer
-	var attachErr bytes.Buffer
-	attachCLI := New(&attachOut, &attachErr)
-	attachCLI.In = strings.NewReader("hello\nexit\n")
-	attachCode := attachCLI.Run([]string{"agent", "attach", "--session", sessionID})
-	if attachCode != exitOK {
-		t.Fatalf("attach exit code=%d, want=%d (stderr=%q)", attachCode, exitOK, attachErr.String())
-	}
-	got := attachOut.String()
-	if !strings.Contains(got, "ECHO:hello") {
-		t.Fatalf("attach output should include echoed input, stdout=%q", got)
-	}
-	if !strings.Contains(got, "bye") {
-		t.Fatalf("attach output should include process exit marker, stdout=%q", got)
-	}
-	if _, ok := waitForSessionRuntimeState(root, sessionID, "exited", 5*time.Second); !ok {
-		t.Fatalf("session should transition to exited: session=%s", sessionID)
-	}
-}
-
-func TestCLI_AgentAttach_ReplaysBufferedOutputOnFirstAttach(t *testing.T) {
-	root := prepareCurrentRootForTest(t)
-	t.Setenv("KRA_AGENT_RUN_DRY_RUN", "")
-	t.Setenv(agentBrokerEmbeddedEnvKey, "1")
-	workspaceDir := filepath.Join(root, "workspaces", "WS-1")
-	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
-		t.Fatalf("mkdir workspace: %v", err)
-	}
-	agentStubPath := filepath.Join(workspaceDir, "agent-ready.sh")
-	agentStub := "#!/bin/sh\necho \"READY\"\nwhile true; do sleep 1; done\n"
-	if err := os.WriteFile(agentStubPath, []byte(agentStub), 0o755); err != nil {
-		t.Fatalf("write agent stub: %v", err)
-	}
-
-	var runOut bytes.Buffer
-	var runErr bytes.Buffer
-	runCLI := New(&runOut, &runErr)
-	startCode := runCLI.Run([]string{"agent", "run", "--workspace", "WS-1", "--kind", agentStubPath})
-	if startCode != exitOK {
-		t.Fatalf("run exit code=%d, want=%d (stderr=%q)", startCode, exitOK, runErr.String())
-	}
-
-	sessionID := extractSessionIDFromAgentStarted(runOut.String())
-	if sessionID == "" {
-		t.Fatalf("session id should be printed, stdout=%q", runOut.String())
-	}
-	if _, ok := waitForSessionRuntimeState(root, sessionID, "running", 5*time.Second); !ok {
-		t.Fatalf("session should transition to running: session=%s", sessionID)
-	}
-
-	stopDone := make(chan struct{})
-	go func() {
-		defer close(stopDone)
-		time.Sleep(300 * time.Millisecond)
-		var stopOut bytes.Buffer
-		var stopErr bytes.Buffer
-		stopCLI := New(&stopOut, &stopErr)
-		code := stopCLI.Run([]string{"agent", "stop", "--session", sessionID})
-		if code != exitOK {
-			t.Errorf("stop exit code=%d, want=%d (stderr=%q)", code, exitOK, stopErr.String())
-		}
-	}()
-
-	var attachOut bytes.Buffer
-	var attachErr bytes.Buffer
-	attachCLI := New(&attachOut, &attachErr)
-	attachCLI.In = strings.NewReader("")
-	attachCode := attachCLI.Run([]string{"agent", "attach", "--session", sessionID})
-	if attachCode != exitOK {
-		t.Fatalf("attach exit code=%d, want=%d (stderr=%q)", attachCode, exitOK, attachErr.String())
-	}
-	<-stopDone
-	if !strings.Contains(attachOut.String(), "READY") {
-		t.Fatalf("attach output should include replayed READY line, stdout=%q", attachOut.String())
-	}
-}
-
-func TestCLI_AgentAttach_CtrlCDetachesSessionKeepsRunning(t *testing.T) {
-	root := prepareCurrentRootForTest(t)
-	t.Setenv("KRA_AGENT_RUN_DRY_RUN", "")
-	t.Setenv(agentBrokerEmbeddedEnvKey, "1")
-	workspaceDir := filepath.Join(root, "workspaces", "WS-1")
-	if err := os.MkdirAll(workspaceDir, 0o755); err != nil {
-		t.Fatalf("mkdir workspace: %v", err)
-	}
-	agentStubPath := filepath.Join(workspaceDir, "agent-sleep.sh")
+	agentStubPath := filepath.Join(workspaceDir, "agent-loop.sh")
 	agentStub := "#!/bin/sh\nwhile true; do sleep 1; done\n"
 	if err := os.WriteFile(agentStubPath, []byte(agentStub), 0o755); err != nil {
 		t.Fatalf("write agent stub: %v", err)
@@ -680,31 +539,79 @@ func TestCLI_AgentAttach_CtrlCDetachesSessionKeepsRunning(t *testing.T) {
 		t.Fatalf("session should transition to running: session=%s", sessionID)
 	}
 
-	var attachOut bytes.Buffer
-	var attachErr bytes.Buffer
-	attachCLI := New(&attachOut, &attachErr)
-	attachCLI.In = strings.NewReader(string([]byte{0x03}))
-	attachCode := attachCLI.Run([]string{"agent", "attach", "--session", sessionID})
-	if attachCode != exitOK {
-		t.Fatalf("attach exit code=%d, want=%d (stderr=%q)", attachCode, exitOK, attachErr.String())
+	rows, loadErr := loadAgentRuntimeSessions(root)
+	if loadErr != nil {
+		t.Fatalf("load runtime sessions: %v", loadErr)
 	}
-	if !strings.Contains(attachOut.String(), "detached: session="+sessionID) {
-		t.Fatalf("attach output should include detach message, stdout=%q", attachOut.String())
+	updated := false
+	for _, row := range rows {
+		if row.SessionID != sessionID {
+			continue
+		}
+		row.RuntimeState = "idle"
+		row.Seq++
+		row.UpdatedAt++
+		if err := saveAgentRuntimeSession(row); err != nil {
+			t.Fatalf("overwrite runtime session as idle: %v", err)
+		}
+		updated = true
+		break
 	}
-	if _, ok := waitForSessionRuntimeState(root, sessionID, "running", 5*time.Second); !ok {
-		t.Fatalf("session should keep running after detach: session=%s", sessionID)
+	if !updated {
+		t.Fatalf("session row not found in persisted state: %s", sessionID)
+	}
+
+	var listOut bytes.Buffer
+	var listErr bytes.Buffer
+	listCLI := New(&listOut, &listErr)
+	listCode := listCLI.Run([]string{"agent", "list", "--workspace", "WS-1", "--state", "running", "--format", "tsv"})
+	if listCode != exitOK {
+		t.Fatalf("list exit code=%d, want=%d (stderr=%q)", listCode, exitOK, listErr.String())
+	}
+	if !strings.Contains(listOut.String(), sessionID+"\tWS-1\tworkspace\t\t"+agentStubPath+"\trunning\t") {
+		t.Fatalf("list should prefer live running state from broker, stdout=%q", listOut.String())
+	}
+
+	var stopOut bytes.Buffer
+	var stopErr bytes.Buffer
+	stopCLI := New(&stopOut, &stopErr)
+	stopCode := stopCLI.Run([]string{"agent", "stop", "--session", sessionID})
+	if stopCode != exitOK {
+		t.Fatalf("stop exit code=%d, want=%d (stderr=%q)", stopCode, exitOK, stopErr.String())
 	}
 }
 
-func TestFormatAgentAttachSelectorTitle(t *testing.T) {
-	if got := formatAgentAttachSelectorTitle(agentContextScope{}); got != "Session to attach:" {
-		t.Fatalf("unexpected title without scope: %q", got)
+func TestShouldRunAgentForeground(t *testing.T) {
+	if shouldRunAgentForeground(strings.NewReader(""), &bytes.Buffer{}) {
+		t.Fatalf("non-terminal IO should not trigger foreground run")
 	}
-	if got := formatAgentAttachSelectorTitle(agentContextScope{workspaceID: "WS-1"}); got != "Session to attach (workspace: WS-1):" {
-		t.Fatalf("unexpected workspace title: %q", got)
+
+	ptmx, tty, err := pty.Open()
+	if err != nil {
+		t.Fatalf("open pty: %v", err)
 	}
-	if got := formatAgentAttachSelectorTitle(agentContextScope{workspaceID: "WS-1", repoKey: "repo-a"}); got != "Session to attach (workspace: WS-1 repo:repo-a):" {
-		t.Fatalf("unexpected repo title: %q", got)
+	defer func() {
+		_ = ptmx.Close()
+		_ = tty.Close()
+	}()
+	if !shouldRunAgentForeground(tty, tty) {
+		t.Fatalf("tty IO should trigger foreground run")
+	}
+}
+
+func TestCLI_AgentAttach_SubcommandUnavailable(t *testing.T) {
+	prepareCurrentRootForTest(t)
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	c.In = strings.NewReader("")
+
+	code := c.Run([]string{"agent", "attach"})
+	if code != exitUsage {
+		t.Fatalf("exit code=%d, want=%d", code, exitUsage)
+	}
+	if !strings.Contains(err.String(), "unknown command: \"agent attach\"") {
+		t.Fatalf("stderr should include unknown command error: %q", err.String())
 	}
 }
 

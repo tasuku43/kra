@@ -1,34 +1,29 @@
 ---
-title: "`kra agent attach` session reattach"
+title: "Agent attach stream primitive (internal)"
 status: implemented
 ---
 
-# `kra agent attach`
+# Agent Attach Stream (internal)
 
 ## Purpose
 
 Attach current terminal to an existing broker-managed agent session.
 
-This command is a reattach helper for returning to an already running session
-from the current workspace/repo context, not for global manager discovery.
+This is an internal app-layer primitive for terminal stream connection and
+reattach. It is currently not exposed as a direct user-facing subcommand.
 Primary daily flow is `kra agent run` foreground execution.
 
 ## Scope (implemented)
 
-- Command:
-  - `kra agent attach [--session <id>]`
-- Behavior:
+- Internal behavior:
+  - validate target session id and scope (workspace/repo context)
   - resolve current `KRA_ROOT`
-  - when `--session` is omitted, resolve current context scope from `cwd`
   - connect broker socket for the root hash
   - broker replays buffered PTY output for selected session
   - after replay catch-up, switch to live attach stream for selected session PTY
-- Session selection:
-  - if `--session` is set:
-    - attach directly, fail if not found
-  - if `--session` is omitted:
-    - non-interactive: fail (`--session is required`)
-    - interactive: select from sessions in current scope
+- Exposure:
+  - not listed in `kra agent` subcommand help
+  - reserved for reuse by manager-side connection paths
 
 ## Context Resolution Rules
 
@@ -44,7 +39,7 @@ Primary daily flow is `kra agent run` foreground execution.
 ## Output Contract
 
 - Success:
-  - terminal enters attached stream until session exits or connection closes
+  - caller terminal enters attached stream until session exits or connection closes
   - replay is emitted first so attached terminal can recover current visual context
 - Errors:
   - clear reason + next action (missing broker, session not found, invalid context)

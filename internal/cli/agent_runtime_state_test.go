@@ -48,3 +48,31 @@ func TestPruneExitedRuntimeSessions_KeepsLatestAndDropsExpired(t *testing.T) {
 		t.Fatalf("unexpected stale paths: %v", stalePaths)
 	}
 }
+
+func TestMergeRuntimeSessionRows_LiveOverridesPersisted(t *testing.T) {
+	fileRows := []agentRuntimeSessionRecord{
+		{SessionID: "s-1", WorkspaceID: "WS-1", RuntimeState: "idle", UpdatedAt: 100},
+		{SessionID: "s-2", WorkspaceID: "WS-1", RuntimeState: "exited", UpdatedAt: 90},
+	}
+	liveRows := []agentRuntimeSessionRecord{
+		{SessionID: "s-1", WorkspaceID: "WS-1", RuntimeState: "running", UpdatedAt: 110},
+		{SessionID: "s-3", WorkspaceID: "WS-2", RuntimeState: "running", UpdatedAt: 120},
+	}
+	merged := mergeRuntimeSessionRows(liveRows, fileRows)
+	if len(merged) != 3 {
+		t.Fatalf("merged len=%d, want=3", len(merged))
+	}
+	byID := map[string]agentRuntimeSessionRecord{}
+	for _, row := range merged {
+		byID[row.SessionID] = row
+	}
+	if byID["s-1"].RuntimeState != "running" {
+		t.Fatalf("live state should override file state: %+v", byID["s-1"])
+	}
+	if byID["s-2"].RuntimeState != "exited" {
+		t.Fatalf("file-only exited row should remain: %+v", byID["s-2"])
+	}
+	if byID["s-3"].RuntimeState != "running" {
+		t.Fatalf("live-only row should be included: %+v", byID["s-3"])
+	}
+}

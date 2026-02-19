@@ -84,7 +84,8 @@ status: planned
 - [x] AGENT-080: Run foreground default (single-owner terminal flow)
   - What: make `kra agent run` foreground by default in interactive TTY
     (start + immediate stream), while keeping broker/socket runtime and
-    detached behavior for non-interactive usage.
+    detached behavior for non-interactive usage. Hide direct `kra agent attach`
+    command path while preserving attach stream logic for manager-side reuse.
   - Specs:
     - `docs/spec/commands/agent/run.md`
     - `docs/spec/commands/agent/attach.md`

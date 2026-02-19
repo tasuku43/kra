@@ -11,7 +11,7 @@ Define a runtime architecture for `kra agent` that:
 
 - supports broker-managed runtime visibility and lifecycle control
 - uses foreground single-terminal execution as the default run experience
-- supports attach/reattach as an auxiliary recovery path
+- keeps attach/reattach as an auxiliary internal recovery path
 - keeps runtime files outside `KRA_ROOT` Git working tree
 
 ## Decision Snapshot (implemented)
@@ -22,6 +22,8 @@ Define a runtime architecture for `kra agent` that:
 - attach replay model: broker keeps per-session PTY output history in memory and replays it on attach before live relay
 - attach scope: workspace/repo context only (root/outside is error)
 - state model: snapshot JSON per session under `KRA_HOME`
+- state inference model: PTY output-activity based (no provider history file dependency)
+- terminal-sequence signal model: selected OSC/BEL parsing from PTY stream
 
 ## Beginner-Friendly Terms
 
@@ -37,7 +39,7 @@ Define a runtime architecture for `kra agent` that:
 flowchart LR
   subgraph Client["Client terminals"]
     C1["Terminal A<br>kra agent run"]
-    C2["Terminal B<br>kra agent attach --session <id><br>(auxiliary path)"]
+    C2["Terminal B<br>manager-side connect path<br>(auxiliary/internal)"]
     C3["Terminal C<br>kra agent list / board"]
   end
 
@@ -54,7 +56,8 @@ flowchart LR
 
   C1 -->|start + foreground stream| B
   C2 -->|attach + replay + live stream| B
-  C3 -->|read snapshots| S
+  C3 -->|primary: broker sessions RPC| B
+  C3 -->|fallback/merge: persisted snapshots| S
   B --> P --> A
   B --> H
   B --> S
@@ -128,17 +131,17 @@ sequenceDiagram
   end
 ```
 
-## Lifecycle: attach / reattach
+## Lifecycle: attach / reattach (internal primitive)
 
 ```mermaid
 sequenceDiagram
   participant U as User
-  participant CLI as kra agent attach
+  participant CLI as manager/connect caller
   participant B as Broker
   participant H as Session history buffer
   participant PTY as Session PTY
 
-  U->>CLI: kra agent attach --session <id>
+  U->>CLI: connect to session <id>
   CLI->>B: attach request
   B->>B: register attachment (paused)
   B-->>CLI: attach accepted + stream open
@@ -188,10 +191,37 @@ Current process state axis:
 
 Snapshot updates are atomic and increment session `seq`.
 
+## Runtime State Inference (implemented)
+
+- broker infers `running/idle` from PTY output activity, not provider-specific
+  screen text phrases
+- broker keeps I/O directions separate:
+  - input path: attached client bytes written into PTY
+  - output path: bytes read from PTY and fanned out to attachments
+- state inference uses output path only, so local typing alone does not count as
+  child-process progress
+- `running`:
+  - set when PTY output bytes arrive from the child process
+- `idle`:
+  - set when PTY output stays silent beyond a short timeout window
+- snapshots are persisted on state transition and periodic output heartbeat
+- selected terminal sequence hints (`OSC 9` / `OSC 777` / `OSC 133`) are still
+  parsed and recorded as runtime signal events for observability, but are not
+  the primary driver of `runtime_state`
+- broker does not read provider-private history files (for example
+  `~/.codex/sessions/*.jsonl`)
+
+## Runtime Signal Events (implemented subset)
+
+- broker appends recognized terminal-sequence events to:
+  - `~/.kra/state/agents/<root-hash>/events/<session-id>.jsonl`
+- this subset is intended for observability and debugging of state hints, not as
+  full lifecycle event sourcing
+
 ## Deferred (AGENT-100)
 
 - writer lease / takeover protocol
 - dangerous key confirmation
-- append-only event log (`events/<session-id>.jsonl`)
+- full lifecycle event sourcing beyond terminal-sequence signal subset
 - launch abstraction (`--launch default|resume|continue`)
 - attach/input ownership fields in snapshot

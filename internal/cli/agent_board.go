@@ -41,7 +41,7 @@ func (c *CLI) runAgentBoard(args []string) int {
 		return exitError
 	}
 
-	records, err := loadAgentRuntimeSessions(root)
+	records, err := loadAgentRuntimeSessionsPreferBroker(root)
 	if err != nil {
 		fmt.Fprintf(c.Err, "load agent runtime sessions: %v\n", err)
 		return exitError
@@ -75,13 +75,13 @@ func parseAgentBoardOptions(args []string) (agentBoardOptions, error) {
 			opts.workspaceID = strings.TrimSpace(rest[1])
 			rest = rest[2:]
 		case strings.HasPrefix(arg, "--state="):
-			opts.state = strings.TrimSpace(strings.ToLower(strings.TrimPrefix(arg, "--state=")))
+			opts.state = normalizeAgentStateFilter(strings.TrimSpace(strings.ToLower(strings.TrimPrefix(arg, "--state="))))
 			rest = rest[1:]
 		case arg == "--state":
 			if len(rest) < 2 {
 				return agentBoardOptions{}, fmt.Errorf("--state requires a value")
 			}
-			opts.state = strings.TrimSpace(strings.ToLower(rest[1]))
+			opts.state = normalizeAgentStateFilter(strings.TrimSpace(strings.ToLower(rest[1])))
 			rest = rest[2:]
 		case strings.HasPrefix(arg, "--location="):
 			opts.location = strings.TrimSpace(strings.TrimPrefix(arg, "--location="))
@@ -114,7 +114,7 @@ func parseAgentBoardOptions(args []string) (agentBoardOptions, error) {
 	switch opts.state {
 	case "", "running", "idle", "exited", "unknown":
 	default:
-		return agentBoardOptions{}, fmt.Errorf("unsupported --state: %q (supported: running, idle, exited, unknown)", opts.state)
+		return agentBoardOptions{}, fmt.Errorf("unsupported --state: %q (supported: active, running, idle, exited, unknown)", opts.state)
 	}
 	return opts, nil
 }
@@ -158,7 +158,7 @@ func printAgentBoardHuman(out io.Writer, rows []agentRuntimeSessionRecord, useCo
 				locationLabel(child),
 				child.SessionID,
 				child.Kind,
-				child.RuntimeState,
+				displayRuntimeStateLabel(child.RuntimeState),
 				formatUnixTS(child.UpdatedAt),
 			)
 			if useColor {

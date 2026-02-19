@@ -481,7 +481,6 @@ func (c *CLI) printAgentUsage(w io.Writer) {
 
 Subcommands:
   run               Start an agent activity
-  attach            Attach to a running agent session
   stop              Stop a running agent activity
   list              List agent activities
   ls                Alias of list
@@ -500,7 +499,7 @@ Resolution:
   - if --workspace is omitted and cwd is under workspaces/<id>/..., use that workspace
   - if workspace is still unresolved and stdin is TTY, prompt active workspace selection
   - if --repo is omitted and stdin is TTY, prompt target selection (workspace or repo)
-  - interactive TTY: start then attach in foreground on the same terminal
+  - interactive TTY: start then connect foreground stream on the same terminal
   - non-interactive: start in detached mode (session id is printed)
 
 Options:

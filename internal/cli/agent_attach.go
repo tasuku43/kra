@@ -93,7 +93,7 @@ func (c *CLI) runAgentAttachWithMode(args []string, mode agentAttachMode) int {
 		return exitError
 	}
 	if record.RuntimeState == "exited" {
-		fmt.Fprintf(c.Err, "session is not running: %s\n", record.SessionID)
+		fmt.Fprintf(c.Err, "session is not active: %s\n", record.SessionID)
 		return exitError
 	}
 
