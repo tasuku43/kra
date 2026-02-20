@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"bytes"
 	"errors"
 	"fmt"
 	"io"
@@ -312,25 +313,40 @@ type attachInputResult struct {
 	err      error
 }
 
+var attachDetachSequences = [][]byte{
+	{0x1d},                  // Ctrl-]
+	{0x1c},                  // Ctrl-\
+	[]byte("\x1b[93;5u"),    // kitty/CSI-u: Ctrl-]
+	[]byte("\x1b[92;5u"),    // kitty/CSI-u: Ctrl-\
+	[]byte("\x1b[27;5;93~"), // modifyOtherKeys: Ctrl-]
+	[]byte("\x1b[27;5;92~"), // modifyOtherKeys: Ctrl-\
+}
+
 func forwardAttachInput(conn *net.UnixConn, in io.Reader, localDetach bool, forward bool, root string, sessionID string, clientID string) attachInputResult {
-	const detachKey byte = 0x1d // Ctrl-]
 	buf := make([]byte, 4096)
+	pending := make([]byte, 0, 16)
 	for {
 		n, err := in.Read(buf)
 		if n > 0 {
-			chunk := buf[:n]
+			chunk := append(append([]byte(nil), pending...), buf[:n]...)
+			pending = pending[:0]
 			start := 0
 			if localDetach {
-				for i, b := range chunk {
-					if b != detachKey { // Ctrl-] -> local detach
-						continue
-					}
+				if i, _ := findAttachDetachTrigger(chunk); i >= 0 {
 					if i > start {
 						if werr := writeAllUnixConn(conn, chunk[start:i]); isAgentAttachIOError(werr) {
 							return attachInputResult{err: werr}
 						}
 					}
 					return attachInputResult{detached: true}
+				}
+				hold := trailingDetachPrefixLength(chunk)
+				if hold > 0 && hold < len(chunk) {
+					pending = append(pending[:0], chunk[len(chunk)-hold:]...)
+					chunk = chunk[:len(chunk)-hold]
+				} else if hold == len(chunk) {
+					pending = append(pending[:0], chunk...)
+					chunk = chunk[:0]
 				}
 			}
 			if start < len(chunk) && !forward {
@@ -352,6 +368,47 @@ func forwardAttachInput(conn *net.UnixConn, in io.Reader, localDetach bool, forw
 			return attachInputResult{err: err}
 		}
 	}
+}
+
+func findAttachDetachTrigger(chunk []byte) (idx int, seqLen int) {
+	idx = -1
+	seqLen = 0
+	for _, seq := range attachDetachSequences {
+		if len(seq) == 0 || len(seq) > len(chunk) {
+			continue
+		}
+		i := bytes.Index(chunk, seq)
+		if i < 0 {
+			continue
+		}
+		if idx < 0 || i < idx {
+			idx = i
+			seqLen = len(seq)
+		}
+	}
+	return idx, seqLen
+}
+
+func trailingDetachPrefixLength(chunk []byte) int {
+	max := 0
+	for _, seq := range attachDetachSequences {
+		if len(seq) <= 1 {
+			continue
+		}
+		limit := len(seq) - 1
+		if limit > len(chunk) {
+			limit = len(chunk)
+		}
+		for n := limit; n > 0; n-- {
+			if bytes.Equal(chunk[len(chunk)-n:], seq[:n]) {
+				if n > max {
+					max = n
+				}
+				break
+			}
+		}
+	}
+	return max
 }
 
 func writeAllUnixConn(conn *net.UnixConn, b []byte) error {
