@@ -1037,13 +1037,7 @@ func (s *agentBrokerServer) forwardAttachInputToSession(session *agentBrokerSess
 	for {
 		n, err := conn.Read(buf)
 		if n > 0 && inputOK {
-			chunk := sanitizeAttachInputChunk(buf[:n])
-			if len(chunk) == 0 {
-				if err != nil {
-					return
-				}
-				continue
-			}
+			chunk := append([]byte(nil), buf[:n]...)
 			if werr := writeAllFile(session.ptmx, chunk); werr != nil {
 				return
 			}
@@ -1052,34 +1046,6 @@ func (s *agentBrokerServer) forwardAttachInputToSession(session *agentBrokerSess
 			return
 		}
 	}
-}
-
-func sanitizeAttachInputChunk(chunk []byte) []byte {
-	if len(chunk) == 0 {
-		return nil
-	}
-	// Ctrl-C is reserved for local detach in attach mode.
-	// Even if it slips through client-side filtering, do not forward it to PTY.
-	if !containsByte(chunk, 0x03) {
-		return append([]byte(nil), chunk...)
-	}
-	filtered := make([]byte, 0, len(chunk))
-	for _, b := range chunk {
-		if b == 0x03 {
-			continue
-		}
-		filtered = append(filtered, b)
-	}
-	return filtered
-}
-
-func containsByte(chunk []byte, target byte) bool {
-	for _, b := range chunk {
-		if b == target {
-			return true
-		}
-	}
-	return false
 }
 
 func writeAllFile(file *os.File, b []byte) error {

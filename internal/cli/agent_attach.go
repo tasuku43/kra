@@ -313,6 +313,7 @@ type attachInputResult struct {
 }
 
 func forwardAttachInput(conn *net.UnixConn, in io.Reader, localDetach bool, forward bool, root string, sessionID string, clientID string) attachInputResult {
+	const detachKey byte = 0x1d // Ctrl-]
 	buf := make([]byte, 4096)
 	for {
 		n, err := in.Read(buf)
@@ -321,7 +322,7 @@ func forwardAttachInput(conn *net.UnixConn, in io.Reader, localDetach bool, forw
 			start := 0
 			if localDetach {
 				for i, b := range chunk {
-					if b != 0x03 { // Ctrl-C -> local detach
+					if b != detachKey { // Ctrl-] -> local detach
 						continue
 					}
 					if i > start {
