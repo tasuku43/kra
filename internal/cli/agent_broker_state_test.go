@@ -204,3 +204,17 @@ func TestAgentBrokerHandleScreenSnapshotRequest(t *testing.T) {
 		t.Fatalf("screen=%q, want=%q", resp.Screen, "b\nc")
 	}
 }
+
+func TestSanitizeAttachInputChunk_RemovesCtrlC(t *testing.T) {
+	got := sanitizeAttachInputChunk([]byte{'a', 0x03, 'b', 0x03, '\n'})
+	if string(got) != "ab\n" {
+		t.Fatalf("sanitized=%q, want=%q", string(got), "ab\n")
+	}
+}
+
+func TestSanitizeAttachInputChunk_KeepWhenNoCtrlC(t *testing.T) {
+	got := sanitizeAttachInputChunk([]byte("hello\n"))
+	if string(got) != "hello\n" {
+		t.Fatalf("sanitized=%q, want=%q", string(got), "hello\n")
+	}
+}
