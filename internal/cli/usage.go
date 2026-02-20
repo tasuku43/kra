@@ -525,7 +525,7 @@ Options:
 
 func (c *CLI) printAgentAttachUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra agent attach [--session <id>] [--renderer <auto|raw|vt10x>]
+  kra agent attach [--session <id>]
 
 Attach current terminal to one running runtime agent session (reattach helper).
 
@@ -540,7 +540,6 @@ Resolution:
 
 Options:
   --session         Session ID (required in non-interactive mode)
-  --renderer        Stream renderer (default: auto; vt10x or raw)
 `)
 }
 

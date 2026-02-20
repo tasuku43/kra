@@ -17,7 +17,6 @@ import (
 
 type agentAttachOptions struct {
 	sessionID string
-	renderer  string
 }
 
 type agentAttachMode struct {
@@ -31,12 +30,6 @@ type agentAttachMode struct {
 }
 
 var errAgentAttachDetached = errors.New("attach detached by user")
-
-const (
-	attachRendererRaw   = "raw"
-	attachRendererAuto  = "auto"
-	attachRendererVT10X = "vt10x"
-)
 
 var defaultAgentAttachMode = agentAttachMode{
 	forceRedraw:   true,
@@ -122,21 +115,6 @@ func (c *CLI) runAgentAttachWithMode(args []string, mode agentAttachMode) int {
 	}
 	defer func() { _ = conn.Close() }()
 
-	renderer := normalizeAgentAttachRenderer(opts.renderer)
-	if renderer != attachRendererRaw {
-		if err := proxyAgentAttachIOWithRenderer(root, record.SessionID, conn, c.In, c.Out, mode, renderer); err == nil {
-			return exitOK
-		} else if errors.Is(err, errAgentAttachDetached) {
-			fmt.Fprintf(c.Out, "detached: session=%s\n", record.SessionID)
-			return exitOK
-		} else if renderer == attachRendererVT10X {
-			fmt.Fprintf(c.Err, "attach session stream: %v\n", err)
-			return exitError
-		} else {
-			fmt.Fprintf(c.Err, "warning: vt10x renderer failed, fallback to raw stream: %v\n", err)
-		}
-	}
-
 	if err := proxyAgentAttachIO(root, record.SessionID, conn, c.In, c.Out, mode); err != nil {
 		if errors.Is(err, errAgentAttachDetached) {
 			fmt.Fprintf(c.Out, "detached: session=%s\n", record.SessionID)
@@ -149,7 +127,7 @@ func (c *CLI) runAgentAttachWithMode(args []string, mode agentAttachMode) int {
 }
 
 func parseAgentAttachOptions(args []string) (agentAttachOptions, error) {
-	opts := agentAttachOptions{renderer: attachRendererAuto}
+	opts := agentAttachOptions{}
 	rest := append([]string{}, args...)
 	for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
 		arg := rest[0]
@@ -165,26 +143,12 @@ func parseAgentAttachOptions(args []string) (agentAttachOptions, error) {
 			}
 			opts.sessionID = strings.TrimSpace(rest[1])
 			rest = rest[2:]
-		case strings.HasPrefix(arg, "--renderer="):
-			opts.renderer = strings.TrimSpace(strings.TrimPrefix(arg, "--renderer="))
-			rest = rest[1:]
-		case arg == "--renderer":
-			if len(rest) < 2 {
-				return agentAttachOptions{}, fmt.Errorf("--renderer requires a value")
-			}
-			opts.renderer = strings.TrimSpace(rest[1])
-			rest = rest[2:]
 		default:
 			return agentAttachOptions{}, fmt.Errorf("unknown flag for agent attach: %q", arg)
 		}
 	}
 	if len(rest) > 0 {
 		return agentAttachOptions{}, fmt.Errorf("unexpected args for agent attach: %q", strings.Join(rest, " "))
-	}
-	switch normalizeAgentAttachRenderer(opts.renderer) {
-	case attachRendererAuto, attachRendererRaw, attachRendererVT10X:
-	default:
-		return agentAttachOptions{}, fmt.Errorf("unknown renderer for agent attach: %q", opts.renderer)
 	}
 	return opts, nil
 }

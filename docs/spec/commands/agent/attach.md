@@ -11,17 +11,13 @@ Attach current terminal to an existing broker-managed agent session.
 ## Scope (implemented)
 
 - Command:
-  - `kra agent attach [--session <id>] [--renderer <auto|raw|vt10x>]`
+  - `kra agent attach [--session <id>]`
 - Behavior:
   - validate target session id and scope (workspace/repo context)
   - resolve current `KRA_ROOT`
   - connect broker socket for the root hash
   - broker replays buffered PTY output for selected session
   - after replay catch-up, switch to live attach stream for selected session PTY
-  - renderer selection:
-    - `raw`: byte-stream relay (legacy behavior)
-    - `vt10x`: pure-Go terminal emulator render path
-    - `auto` (default): prefer `vt10x`, fallback to `raw` when initialization fails
 - Selection:
   - if `--session` is omitted and stdin is TTY, prompt session selection in scope
   - if `--session` is omitted in non-interactive mode, fail with usage error

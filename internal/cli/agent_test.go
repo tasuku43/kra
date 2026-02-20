@@ -808,26 +808,6 @@ func TestCLI_AgentAttach_SubcommandAvailable(t *testing.T) {
 	}
 }
 
-func TestParseAgentAttachOptions_Renderer(t *testing.T) {
-	opts, err := parseAgentAttachOptions([]string{"--session", "s-1", "--renderer", "vt10x"})
-	if err != nil {
-		t.Fatalf("parseAgentAttachOptions error: %v", err)
-	}
-	if opts.renderer != "vt10x" {
-		t.Fatalf("renderer=%q, want=vt10x", opts.renderer)
-	}
-}
-
-func TestParseAgentAttachOptions_RejectsUnknownRenderer(t *testing.T) {
-	_, err := parseAgentAttachOptions([]string{"--session", "s-1", "--renderer", "x"})
-	if err == nil {
-		t.Fatalf("expected renderer parse error")
-	}
-	if !strings.Contains(err.Error(), `unknown renderer for agent attach: "x"`) {
-		t.Fatalf("unexpected error: %v", err)
-	}
-}
-
 func TestCLI_AgentStop_RequiresSessionOrWorkspace(t *testing.T) {
 	prepareCurrentRootForTest(t)
 	var out bytes.Buffer

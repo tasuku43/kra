@@ -19,7 +19,6 @@ Define a runtime architecture for `kra agent` that:
 - launch model: detached by default; optional foreground via `run --attach`
 - connection model: multi-attach view is supported
 - attach replay model: broker keeps per-session PTY output history in memory and replays it on attach before live relay
-- attach renderer model: `attach --renderer auto|raw|vt10x` (`auto` prefers `vt10x`)
 - attach scope: workspace/repo context only (root/outside is error)
 - state model: snapshot JSON per session under `KRA_HOME`
 - state inference model: PTY output-activity based (no provider history file dependency)
