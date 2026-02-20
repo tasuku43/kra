@@ -161,6 +161,27 @@ func TestAgentBrokerHandleResizeRequest_DeniedWhenResizeLeaseDisabled(t *testing
 	}
 }
 
+func TestAgentBrokerHandleResizeRequest_ForceRedrawBypassesLease(t *testing.T) {
+	session := &agentBrokerSession{
+		record:      agentRuntimeSessionRecord{SessionID: "s-1"},
+		attachments: map[string]*agentBrokerAttachment{},
+	}
+	server := &agentBrokerServer{
+		sessions: map[string]*agentBrokerSession{"s-1": session},
+	}
+
+	resp := server.handleResizeRequest(agentBrokerRequest{
+		SessionID:   "s-1",
+		ClientID:    "c-any",
+		Cols:        120,
+		Rows:        40,
+		ForceRedraw: true,
+	})
+	if !resp.OK {
+		t.Fatalf("force redraw resize should succeed: error=%q", resp.Error)
+	}
+}
+
 func TestAgentBrokerSessionScreenSnapshot_TracksLatestLines(t *testing.T) {
 	now := time.Unix(600, 0)
 	session := &agentBrokerSession{

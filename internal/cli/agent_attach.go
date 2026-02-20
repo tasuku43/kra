@@ -262,7 +262,7 @@ func proxyAgentAttachIO(root string, sessionID string, clientID string, conn *ne
 		defer writeAttachTerminalRestore(out)
 	}
 
-	stopResizeWatcher := startAttachResizeWatcher(root, sessionID, clientID, in, out, false)
+	stopResizeWatcher := startAttachResizeWatcher(root, sessionID, clientID, in, out, true)
 	defer stopResizeWatcher()
 
 	readErrCh := make(chan error, 1)
@@ -481,7 +481,7 @@ func startAttachResizeWatcher(root string, sessionID string, clientID string, in
 	}
 	cols, rows := terminalSize(in, out)
 	if cols > 0 && rows > 0 {
-		_ = resizeSessionWithAgentBroker(root, sessionID, clientID, cols, rows)
+		_ = redrawSessionWithAgentBroker(root, sessionID, clientID, cols, rows)
 	}
 
 	sigch := make(chan os.Signal, 1)
@@ -495,7 +495,7 @@ func startAttachResizeWatcher(root string, sessionID string, clientID string, in
 			case <-sigch:
 				cols, rows := terminalSize(in, out)
 				if cols > 0 && rows > 0 {
-					_ = resizeSessionWithAgentBroker(root, sessionID, clientID, cols, rows)
+					_ = redrawSessionWithAgentBroker(root, sessionID, clientID, cols, rows)
 				}
 			}
 		}

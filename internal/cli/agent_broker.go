@@ -919,6 +919,10 @@ func (s *agentBrokerServer) handleResizeRequest(req agentBrokerRequest) agentBro
 	if !ok {
 		return agentBrokerResponse{OK: false, Error: "session not found"}
 	}
+	if req.ForceRedraw {
+		applyPTYSizeForAttach(session.ptmx, req.Cols, req.Rows)
+		return agentBrokerResponse{OK: true}
+	}
 	if !session.canResize(req.ClientID) {
 		return agentBrokerResponse{OK: false, Error: "resize lease denied"}
 	}
@@ -1178,16 +1182,17 @@ func attachSessionWithAgentBroker(root string, sessionID string, cols int, rows 
 	}, nil
 }
 
-func resizeSessionWithAgentBroker(root string, sessionID string, clientID string, cols int, rows int) error {
+func redrawSessionWithAgentBroker(root string, sessionID string, clientID string, cols int, rows int) error {
 	if cols <= 0 || rows <= 0 {
 		return nil
 	}
 	_, err := sendAgentBrokerRequest(root, agentBrokerRequest{
-		Action:    agentBrokerActionResize,
-		SessionID: strings.TrimSpace(sessionID),
-		ClientID:  strings.TrimSpace(clientID),
-		Cols:      cols,
-		Rows:      rows,
+		Action:      agentBrokerActionResize,
+		SessionID:   strings.TrimSpace(sessionID),
+		ClientID:    strings.TrimSpace(clientID),
+		Cols:        cols,
+		Rows:        rows,
+		ForceRedraw: true,
 	})
 	return err
 }
