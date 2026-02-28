@@ -50,7 +50,7 @@ status: planned
   - Depends: CMUX-004
   - Serial: yes
 
-- [ ] CMUX-006: `kra cmux switch` v1
+- [x] CMUX-006: `kra cmux switch` v1
   - What: implement explicit-first resolution and ambiguity fallback:
     `--workspace`/`--cmux` combinations, two-stage selector fallback, non-TTY strict errors,
     and `last_used_at` update on successful switch.

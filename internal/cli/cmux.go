@@ -30,17 +30,6 @@ func (c *CLI) runCMUX(args []string) int {
 	}
 }
 
-func (c *CLI) runCMUXSwitch(args []string) int {
-	if len(args) > 0 {
-		switch args[0] {
-		case "-h", "--help", "help":
-			c.printCMUXSwitchUsage(c.Out)
-			return exitOK
-		}
-	}
-	return c.notImplemented("cmux switch")
-}
-
 func (c *CLI) runCMUXList(args []string) int {
 	if len(args) > 0 {
 		switch args[0] {

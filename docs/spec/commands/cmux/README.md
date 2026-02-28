@@ -22,10 +22,11 @@ existing `kra ws --act go` behavior.
 - `kra cmux --help` prints command-group usage.
 - `kra cmux <subcommand> --help` prints subcommand usage.
 - Unknown subcommands fail with usage (`exitUsage`).
-- `open` is implemented in this phase.
-- `switch` / `list` / `status` remain unimplemented and return
+- `open` and `switch` are implemented in this phase.
+- `list` / `status` remain unimplemented and return
   `not implemented` (`exitNotImplemented`).
 
 ## Notes
 
 - `open` semantics are defined in `docs/spec/commands/cmux/open.md`.
+- `switch` semantics are defined in `docs/spec/commands/cmux/switch.md`.
