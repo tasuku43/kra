@@ -363,7 +363,7 @@ _kra_completion() {
   done
 
   if [[ -z "${cmd}" ]]; then
-    compadd -- "${top[@]}"
+    compadd -V kra_top -- "${top[@]}"
     return 0
   fi
 
@@ -384,7 +384,7 @@ _kra_completion() {
 %s
     esac
     if [[ ${#flags[@]} -gt 0 ]]; then
-      compadd -- "${flags[@]}"
+      compadd -V kra_flags -- "${flags[@]}"
     fi
     return 0
   fi
@@ -395,7 +395,7 @@ _kra_completion() {
 %s
     esac
     if [[ ${#sub[@]} -gt 0 ]] && [[ "${words[CURRENT-1]}" == "$cmd" ]]; then
-      compadd -- "${sub[@]}"
+      compadd -V kra_sub -- "${sub[@]}"
     fi
     return 0
   fi
@@ -407,7 +407,7 @@ _kra_completion() {
 %s
     esac
     if [[ ${#sub2[@]} -gt 0 ]] && [[ "${words[CURRENT-1]}" == "$subcmd" ]]; then
-      compadd -- "${sub2[@]}"
+      compadd -V kra_sub2 -- "${sub2[@]}"
     fi
   fi
 }
@@ -471,7 +471,7 @@ func renderZshTargetSelectorGateCases() string {
 			"      else",
 			fmt.Sprintf("        flags=(%s)", zshQuotedWords(completionRenderableFlags(completionFlagsWithoutTargetSelectors(path)))),
 			"      fi",
-			"      compadd -- \"${flags[@]}\"",
+			"      compadd -V kra_flags -- \"${flags[@]}\"",
 			"      return 0",
 			"      ;;",
 		)
