@@ -15,6 +15,7 @@ Common commands:
 task build
 task test
 task check
+task ci:full
 ```
 
 ## Workflow
@@ -34,6 +35,13 @@ go vet ./...
 go test ./...
 ```
 
+## Optional Security Checks
+
+```sh
+task vuln
+task gosec
+```
+
 ## Pull Requests
 
 Please include:
@@ -42,6 +50,11 @@ Please include:
 - Spec/backlog links
 - Test evidence (commands and key output)
 - Any behavioral or contract changes
+
+## Questions and Support
+
+- Usage questions: `SUPPORT.md` (GitHub Discussions)
+- Bugs/feature requests: GitHub Issues
 
 ## Release Model
 
