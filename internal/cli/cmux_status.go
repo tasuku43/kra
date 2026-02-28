@@ -11,9 +11,11 @@ import (
 	"github.com/tasuku43/kra/internal/infra/paths"
 )
 
-type cmuxStatusClient = cmuxRuntimeClient
+type cmuxStatusClient interface {
+	ListWorkspaces(ctx context.Context) ([]cmuxctl.Workspace, error)
+}
 
-var newCMUXStatusClient = func() cmuxStatusClient { return newCMUXRuntimeClient() }
+var newCMUXStatusClient = func() cmuxStatusClient { return cmuxctl.NewClient() }
 
 func (c *CLI) runCMUXStatus(args []string) int {
 	outputFormat := "human"
