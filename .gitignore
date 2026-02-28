@@ -1,1 +1,28 @@
+# Binaries
 /kra
+/kradev
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+
+# Test and coverage artifacts
+*.test
+*.out
+coverage.*
+*.coverprofile
+profile.cov
+
+# Go workspace file
+go.work
+go.work.sum
+
+# Go build cache (when overridden in sandbox/local runs)
+.gocache/
+
+# Environment files
+.env
+
+# OS/editor noise
+.DS_Store
