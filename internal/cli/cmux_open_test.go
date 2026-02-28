@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/tasuku43/kra/internal/cmuxmap"
+	"github.com/tasuku43/kra/internal/core/cmuxstyle"
 	"github.com/tasuku43/kra/internal/infra/cmuxctl"
 )
 
@@ -159,7 +160,7 @@ func TestCLI_CMUX_Open_JSON_Success_PersistsMapping(t *testing.T) {
 	if fake.selectWorkspace != "CMUX-WS-1" {
 		t.Fatalf("select workspace = %q, want %q", fake.selectWorkspace, "CMUX-WS-1")
 	}
-	if fake.statusWorkspace != "CMUX-WS-1" || fake.statusLabel != "kra" || fake.statusText != "managed by kra" || fake.statusIcon != "tag" || fake.statusColor != "#7C3AED" {
+	if fake.statusWorkspace != "CMUX-WS-1" || fake.statusLabel != "kra" || fake.statusText != "managed by kra" || fake.statusIcon != "tag" || fake.statusColor != cmuxstyle.WorkspaceLabelColor {
 		t.Fatalf("status args = workspace=%q label=%q text=%q icon=%q color=%q", fake.statusWorkspace, fake.statusLabel, fake.statusText, fake.statusIcon, fake.statusColor)
 	}
 	if len(fake.createCmds) != 1 || !strings.Contains(fake.createCmds[0], "cd ") || !strings.Contains(fake.createCmds[0], wsPath) {

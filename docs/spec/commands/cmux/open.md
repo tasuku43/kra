@@ -29,7 +29,7 @@ Open a new cmux workspace for one `kra` workspace using strict integration flow.
   3. format title (`<kra-id> | <kra-title>`)
   4. rename cmux workspace
   5. select cmux workspace
-  6. set workspace status label (`kra`, `"managed by kra"`, `icon=tag`, `color=#7C3AED`)
+  6. set workspace status label (`kra`, `"managed by kra"`, `icon=tag`, `color=#4F46E5`)
   7. persist mapping entry
 
 ## Failure Policy

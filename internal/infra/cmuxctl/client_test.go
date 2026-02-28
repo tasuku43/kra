@@ -6,6 +6,8 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/tasuku43/kra/internal/core/cmuxstyle"
 )
 
 type fakeRunner struct {
@@ -194,13 +196,13 @@ func TestClientSelectWorkspace_RequiresInput(t *testing.T) {
 
 func TestClientSetStatus_RequiresInputs(t *testing.T) {
 	c := &Client{}
-	if err := c.SetStatus(context.Background(), "", "kra", "managed by kra", "tag", "#7C3AED"); err == nil {
+	if err := c.SetStatus(context.Background(), "", "kra", "managed by kra", "tag", cmuxstyle.WorkspaceLabelColor); err == nil {
 		t.Fatalf("SetStatus() with empty workspace should fail")
 	}
-	if err := c.SetStatus(context.Background(), "ws-1", "", "managed by kra", "tag", "#7C3AED"); err == nil {
+	if err := c.SetStatus(context.Background(), "ws-1", "", "managed by kra", "tag", cmuxstyle.WorkspaceLabelColor); err == nil {
 		t.Fatalf("SetStatus() with empty label should fail")
 	}
-	if err := c.SetStatus(context.Background(), "ws-1", "kra", "", "tag", "#7C3AED"); err == nil {
+	if err := c.SetStatus(context.Background(), "ws-1", "kra", "", "tag", cmuxstyle.WorkspaceLabelColor); err == nil {
 		t.Fatalf("SetStatus() with empty text should fail")
 	}
 }
@@ -209,10 +211,10 @@ func TestClientSetStatus_BuildsCommandArgs(t *testing.T) {
 	f := &fakeRunner{stdout: []byte("OK\n")}
 	c := &Client{Runner: f}
 
-	if err := c.SetStatus(context.Background(), "ws-1", "kra", "managed by kra", "tag", "#7C3AED"); err != nil {
+	if err := c.SetStatus(context.Background(), "ws-1", "kra", "managed by kra", "tag", cmuxstyle.WorkspaceLabelColor); err != nil {
 		t.Fatalf("SetStatus() error: %v", err)
 	}
-	wantArgs := []string{"set-status", "kra", "managed by kra", "--workspace", "ws-1", "--icon", "tag", "--color", "#7C3AED"}
+	wantArgs := []string{"set-status", "kra", "managed by kra", "--workspace", "ws-1", "--icon", "tag", "--color", cmuxstyle.WorkspaceLabelColor}
 	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
 		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
 	}

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tasuku43/kra/internal/cmuxmap"
+	"github.com/tasuku43/kra/internal/core/cmuxstyle"
 	"github.com/tasuku43/kra/internal/infra/cmuxctl"
 )
 
@@ -27,7 +28,7 @@ const (
 	defaultWorkspaceStatusLabel = "kra"
 	defaultWorkspaceStatusText  = "managed by kra"
 	defaultWorkspaceStatusIcon  = "tag"
-	defaultWorkspaceStatusColor = "#7C3AED"
+	defaultWorkspaceStatusColor = cmuxstyle.WorkspaceLabelColor
 )
 
 type NewClientFunc func() Client
