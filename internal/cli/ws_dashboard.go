@@ -2,12 +2,9 @@ package cli
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
-	"slices"
 	"strings"
 	"time"
 
@@ -25,19 +22,17 @@ type wsDashboardOptions struct {
 }
 
 type wsDashboardRow struct {
-	ID          string
-	Title       string
-	Status      string
-	RepoCount   int
-	Risk        workspacerisk.WorkspaceRisk
-	AgentStatus string
+	ID        string
+	Title     string
+	Status    string
+	RepoCount int
+	Risk      workspacerisk.WorkspaceRisk
 }
 
 type wsDashboardSummary struct {
-	Active       int
-	Archived     int
-	RunningAgent int
-	RiskTotals   map[string]int
+	Active     int
+	Archived   int
+	RiskTotals map[string]int
 }
 
 type wsDashboardResult struct {
@@ -49,12 +44,6 @@ type wsDashboardResult struct {
 	Workspaces  []wsDashboardRow
 	Warnings    []string
 	Detail      *workspaceRiskDetail
-}
-
-type wsDashboardAgentRecord struct {
-	WorkspaceID string `json:"workspace_id"`
-	Status      string `json:"status"`
-	StartedAt   int64  `json:"started_at"`
 }
 
 func (c *CLI) runWSDashboard(args []string) int {
@@ -205,11 +194,6 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions) (wsDashboardRe
 		warnings = append(warnings, fmt.Sprintf("resolve context: %v", contextErr))
 	}
 
-	agentStatusByWorkspace, runningAgents, agentWarn := loadDashboardAgentStatus(root)
-	if agentWarn != "" {
-		warnings = append(warnings, agentWarn)
-	}
-
 	riskByWorkspace := map[string]workspaceRiskDetail{}
 	if opts.scope == "active" {
 		ids := make([]string, 0, len(rows))
@@ -239,18 +223,13 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions) (wsDashboardRe
 		if detail, ok := riskByWorkspace[row.ID]; ok {
 			risk = detail.risk
 		}
-		agentStatus := "none"
-		if s := strings.TrimSpace(agentStatusByWorkspace[row.ID]); s != "" {
-			agentStatus = s
-		}
 		riskTotals[string(risk)]++
 		items = append(items, wsDashboardRow{
-			ID:          row.ID,
-			Title:       row.Title,
-			Status:      row.Status,
-			RepoCount:   row.RepoCount,
-			Risk:        risk,
-			AgentStatus: agentStatus,
+			ID:        row.ID,
+			Title:     row.Title,
+			Status:    row.Status,
+			RepoCount: row.RepoCount,
+			Risk:      risk,
 		})
 	}
 
@@ -270,10 +249,9 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions) (wsDashboardRe
 		Scope:       opts.scope,
 		GeneratedAt: now,
 		Summary: wsDashboardSummary{
-			Active:       len(activeRows),
-			Archived:     len(archivedRows),
-			RunningAgent: runningAgents,
-			RiskTotals:   riskTotals,
+			Active:     len(activeRows),
+			Archived:   len(archivedRows),
+			RiskTotals: riskTotals,
 		},
 		Workspaces: items,
 		Warnings:   warnings,
@@ -290,61 +268,15 @@ func resolveDashboardContextName(root string) (string, error) {
 	return strings.TrimSpace(current), nil
 }
 
-func loadDashboardAgentStatus(root string) (map[string]string, int, string) {
-	path := filepath.Join(root, ".kra", "state", "agents.json")
-	b, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return map[string]string{}, 0, ""
-		}
-		return map[string]string{}, 0, fmt.Sprintf("read agents.json: %v", err)
-	}
-	if strings.TrimSpace(string(b)) == "" {
-		return map[string]string{}, 0, ""
-	}
-
-	var records []wsDashboardAgentRecord
-	if err := json.Unmarshal(b, &records); err != nil {
-		return map[string]string{}, 0, fmt.Sprintf("parse agents.json: %v", err)
-	}
-	slices.SortFunc(records, func(a, b wsDashboardAgentRecord) int {
-		if a.StartedAt > b.StartedAt {
-			return -1
-		}
-		if a.StartedAt < b.StartedAt {
-			return 1
-		}
-		return strings.Compare(strings.TrimSpace(a.WorkspaceID), strings.TrimSpace(b.WorkspaceID))
-	})
-
-	statusByWorkspace := map[string]string{}
-	running := 0
-	for _, r := range records {
-		workspaceID := strings.TrimSpace(r.WorkspaceID)
-		status := strings.ToLower(strings.TrimSpace(r.Status))
-		if workspaceID == "" {
-			continue
-		}
-		if status == "running" {
-			running++
-		}
-		if _, exists := statusByWorkspace[workspaceID]; !exists {
-			statusByWorkspace[workspaceID] = firstNonEmpty(status, "unknown")
-		}
-	}
-	return statusByWorkspace, running, ""
-}
-
 func writeWSDashboardJSON(out io.Writer, result wsDashboardResult) int {
 	items := make([]map[string]any, 0, len(result.Workspaces))
 	for _, row := range result.Workspaces {
 		items = append(items, map[string]any{
-			"id":           row.ID,
-			"title":        row.Title,
-			"status":       row.Status,
-			"risk":         string(row.Risk),
-			"repo_count":   row.RepoCount,
-			"agent_status": row.AgentStatus,
+			"id":         row.ID,
+			"title":      row.Title,
+			"status":     row.Status,
+			"risk":       string(row.Risk),
+			"repo_count": row.RepoCount,
 		})
 	}
 
@@ -354,10 +286,9 @@ func writeWSDashboardJSON(out io.Writer, result wsDashboardResult) int {
 		"scope":        result.Scope,
 		"generated_at": result.GeneratedAt,
 		"summary": map[string]any{
-			"active":         result.Summary.Active,
-			"archived":       result.Summary.Archived,
-			"running_agents": result.Summary.RunningAgent,
-			"risk_totals":    result.Summary.RiskTotals,
+			"active":      result.Summary.Active,
+			"archived":    result.Summary.Archived,
+			"risk_totals": result.Summary.RiskTotals,
 		},
 		"workspaces": items,
 		"warnings":   result.Warnings,
@@ -398,7 +329,6 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 	summary := []string{
 		fmt.Sprintf("%s%s %s: %d", uiIndent, styleMuted("•", useColor), styleAccent("active", useColor), result.Summary.Active),
 		fmt.Sprintf("%s%s %s: %d", uiIndent, styleMuted("•", useColor), styleMuted("archived", useColor), result.Summary.Archived),
-		fmt.Sprintf("%s%s %s: %d", uiIndent, styleMuted("•", useColor), styleAccent("running_agents", useColor), result.Summary.RunningAgent),
 		fmt.Sprintf("%s%s risk: clean=%d warning=%d danger=%d unknown=%d",
 			uiIndent,
 			styleMuted("•", useColor),
@@ -429,10 +359,6 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 				styleMuted("repos", useColor),
 				row.RepoCount,
 			)
-			normalizedAgent := strings.TrimSpace(strings.ToLower(row.AgentStatus))
-			if normalizedAgent != "" && normalizedAgent != "none" {
-				line += fmt.Sprintf("  %s:%s", styleMuted("agent", useColor), renderDashboardAgentStatus(row.AgentStatus, useColor))
-			}
 			rows = append(rows, line)
 		}
 	}
@@ -474,20 +400,5 @@ func renderDashboardWorkspaceRisk(risk workspacerisk.WorkspaceRisk, useColor boo
 		return styleWarn(string(risk), useColor)
 	default:
 		return styleMuted(string(risk), useColor)
-	}
-}
-
-func renderDashboardAgentStatus(status string, useColor bool) string {
-	switch strings.TrimSpace(strings.ToLower(status)) {
-	case "running":
-		return styleSuccess("running", useColor)
-	case "failed":
-		return styleError("failed", useColor)
-	case "succeeded":
-		return styleInfo("succeeded", useColor)
-	case "none", "":
-		return styleMuted("none", useColor)
-	default:
-		return styleMuted(status, useColor)
 	}
 }
