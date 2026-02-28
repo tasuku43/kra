@@ -71,7 +71,7 @@ status: planned
   - Depends: CMUX-002, CMUX-003
   - Parallel: yes
 
-- [ ] CMUX-008: docs finalization + regression guard
+- [x] CMUX-008: docs finalization + regression guard
   - What: finalize spec status and add regression tests ensuring existing `kra ws --act go`
     behavior/contract remains unchanged.
   - Specs:
