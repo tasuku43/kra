@@ -8,6 +8,7 @@ status: implemented
 ## Purpose
 
 Print shell completion script for `kra`.
+(`kra shell init --with-completion` may embed this script inline.)
 
 ## Inputs
 

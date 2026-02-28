@@ -52,9 +52,63 @@ func TestCLI_Shell_Init_Zsh_PrintsEvalReadyFunction(t *testing.T) {
 }
 
 func TestRenderShellInitScript_UnsupportedShell(t *testing.T) {
-	_, err := renderShellInitScript("nushell")
+	_, err := renderShellInitScript("nushell", false)
 	if err == nil {
 		t.Fatal("expected unsupported shell error")
+	}
+}
+
+func TestCLI_Shell_Init_WithCompletion_Zsh_IncludesCompletionScript(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"shell", "init", "zsh", "--with-completion"})
+	if code != exitOK {
+		t.Fatalf("exit code=%d, want=%d (stderr=%q)", code, exitOK, err.String())
+	}
+	text := out.String()
+	if !strings.Contains(text, "kra() {") {
+		t.Fatalf("missing shell init function: %q", text)
+	}
+	if !strings.Contains(text, "compdef _kra_completion kra") {
+		t.Fatalf("missing zsh completion section: %q", text)
+	}
+}
+
+func TestCLI_Shell_Init_WithCompletion_Bash_IncludesCompletionScript(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"shell", "init", "bash", "--with-completion"})
+	if code != exitOK {
+		t.Fatalf("exit code=%d, want=%d (stderr=%q)", code, exitOK, err.String())
+	}
+	text := out.String()
+	if !strings.Contains(text, "kra() {") {
+		t.Fatalf("missing shell init function: %q", text)
+	}
+	if !strings.Contains(text, "complete -o default -F _kra_completion kra") {
+		t.Fatalf("missing bash completion section: %q", text)
+	}
+}
+
+func TestCLI_Shell_Init_WithCompletion_Fish_IncludesCompletionScript(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"shell", "init", "fish", "--with-completion"})
+	if code != exitOK {
+		t.Fatalf("exit code=%d, want=%d (stderr=%q)", code, exitOK, err.String())
+	}
+	text := out.String()
+	if !strings.Contains(text, "function kra") {
+		t.Fatalf("missing fish init function: %q", text)
+	}
+	if !strings.Contains(text, "complete -c kra -f") {
+		t.Fatalf("missing fish completion section: %q", text)
 	}
 }
 

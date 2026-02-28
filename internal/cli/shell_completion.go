@@ -128,7 +128,7 @@ var kraCompletionPathFlags = map[string][]string{
 	"repo remove":       {"--format", "--help", "-h"},
 	"repo gc":           {"--format", "--yes", "--help", "-h"},
 	"template validate": {"--name", "--help", "-h"},
-	"shell init":        {"--help", "-h"},
+	"shell init":        {"--with-completion", "--help", "-h"},
 	"shell completion":  {"--help", "-h"},
 	"ws create":         {"--no-prompt", "--template", "--format", "--id", "--title", "--jira", "--help", "-h"},
 	"ws import":         {"--help", "-h"},

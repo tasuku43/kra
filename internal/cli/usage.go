@@ -70,15 +70,19 @@ func (c *CLI) printShellUsage(w io.Writer) {
   kra shell <subcommand> [args]
 
 Subcommands:
-  init [shell]      Print shell integration function for eval
+  init [shell] [--with-completion[=true|false]]
+                   Print shell integration function for eval
   completion [shell]
                    Print shell completion script
   help              Show this help
 
 Examples:
   eval "$(kra shell init zsh)"
+  eval "$(kra shell init zsh --with-completion)"
   eval "$(kra shell init bash)"
+  eval "$(kra shell init bash --with-completion)"
   eval (kra shell init fish)
+  eval (kra shell init fish --with-completion)
   source <(kra shell completion bash)
   source <(kra shell completion zsh)
   kra shell completion fish | source

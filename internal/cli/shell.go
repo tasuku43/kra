@@ -29,23 +29,57 @@ func (c *CLI) runShell(args []string) int {
 }
 
 func (c *CLI) runShellInit(args []string) int {
-	if len(args) > 1 {
-		fmt.Fprintf(c.Err, "unexpected args for shell init: %q\n", strings.Join(args[1:], " "))
-		c.printShellUsage(c.Err)
-		return exitUsage
+	shellName := ""
+	withCompletion := false
+	rest := append([]string{}, args...)
+	for len(rest) > 0 {
+		cur := strings.TrimSpace(rest[0])
+		switch cur {
+		case "-h", "--help", "help":
+			c.printShellUsage(c.Out)
+			return exitOK
+		case "--with-completion":
+			withCompletion = true
+			rest = rest[1:]
+		default:
+			if strings.HasPrefix(cur, "--with-completion=") {
+				value := strings.ToLower(strings.TrimSpace(strings.TrimPrefix(cur, "--with-completion=")))
+				switch value {
+				case "1", "true", "yes", "on":
+					withCompletion = true
+				case "0", "false", "no", "off":
+					withCompletion = false
+				default:
+					fmt.Fprintf(c.Err, "invalid --with-completion value: %q (supported: true/false)\n", value)
+					c.printShellUsage(c.Err)
+					return exitUsage
+				}
+				rest = rest[1:]
+				continue
+			}
+			if strings.HasPrefix(cur, "-") {
+				fmt.Fprintf(c.Err, "unknown flag for shell init: %q\n", cur)
+				c.printShellUsage(c.Err)
+				return exitUsage
+			}
+			if shellName != "" {
+				fmt.Fprintf(c.Err, "unexpected args for shell init: %q\n", strings.Join(rest, " "))
+				c.printShellUsage(c.Err)
+				return exitUsage
+			}
+			shellName = cur
+			rest = rest[1:]
+		}
 	}
 
-	shellName := ""
-	if len(args) == 1 {
-		shellName = strings.TrimSpace(args[0])
-	} else {
+	if shellName == "" {
 		shellName = detectShellName()
 	}
 	if shellName == "" {
 		shellName = "zsh"
 	}
 
-	script, err := renderShellInitScript(shellName)
+	script, err := renderShellInitScript(shellName, withCompletion)
 	if err != nil {
 		fmt.Fprintf(c.Err, "render shell init script: %v\n", err)
 		return exitUsage
@@ -88,15 +122,28 @@ func detectShellName() string {
 	return strings.ToLower(strings.TrimSpace(filepath.Base(raw)))
 }
 
-func renderShellInitScript(shellName string) (string, error) {
+func renderShellInitScript(shellName string, withCompletion bool) (string, error) {
+	var initScript string
 	switch strings.ToLower(strings.TrimSpace(shellName)) {
 	case "zsh", "bash", "sh":
-		return renderPOSIXShellInitScript(shellName), nil
+		initScript = renderPOSIXShellInitScript(shellName)
 	case "fish":
-		return renderFishShellInitScript(), nil
+		initScript = renderFishShellInitScript()
 	default:
 		return "", fmt.Errorf("unsupported shell %q (supported: zsh, bash, sh, fish)", shellName)
 	}
+
+	if !withCompletion {
+		return initScript, nil
+	}
+	completionScript, err := renderShellCompletionScript(shellName)
+	if err != nil {
+		return "", err
+	}
+	if strings.HasSuffix(initScript, "\n") {
+		return initScript + "\n" + completionScript, nil
+	}
+	return initScript + "\n\n" + completionScript, nil
 }
 
 func renderPOSIXShellInitScript(shellName string) string {
