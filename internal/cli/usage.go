@@ -223,7 +223,7 @@ Run:
 
 func (c *CLI) printCMUXOpenUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra cmux open [<workspace-id>] [--format human|json]
+  kra cmux open [<workspace-id>] [--workspace <workspace-id> ...] [--multi] [--format human|json]
 
 Open flow for cmux workspace integration.
 `)

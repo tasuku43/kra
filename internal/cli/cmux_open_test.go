@@ -17,6 +17,8 @@ import (
 type fakeCMUXOpenClient struct {
 	capabilities cmuxctl.Capabilities
 	createID     string
+	createIDs    []string
+	createIndex  int
 	createErr    error
 	renameErr    error
 	selectErr    error
@@ -37,6 +39,14 @@ func (f *fakeCMUXOpenClient) Capabilities(context.Context) (cmuxctl.Capabilities
 func (f *fakeCMUXOpenClient) CreateWorkspace(context.Context) (string, error) {
 	if f.createErr != nil {
 		return "", f.createErr
+	}
+	if len(f.createIDs) > 0 {
+		if f.createIndex >= len(f.createIDs) {
+			return f.createID, nil
+		}
+		id := f.createIDs[f.createIndex]
+		f.createIndex++
+		return id, nil
 	}
 	return f.createID, nil
 }
@@ -191,6 +201,97 @@ func TestCLI_CMUX_Open_JSON_FailsWhenCapabilityMissing(t *testing.T) {
 		t.Fatalf("json unmarshal error: %v", uerr)
 	}
 	if resp.OK || resp.Error.Code != "cmux_capability_missing" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+}
+
+func TestCLI_CMUX_Open_JSON_Multi_Success(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	wsPath1 := filepath.Join(root, "workspaces", "WS1")
+	wsPath2 := filepath.Join(root, "workspaces", "WS2")
+	if err := os.MkdirAll(wsPath1, 0o755); err != nil {
+		t.Fatalf("mkdir workspace1: %v", err)
+	}
+	if err := os.MkdirAll(wsPath2, 0o755); err != nil {
+		t.Fatalf("mkdir workspace2: %v", err)
+	}
+	now := time.Now().Unix()
+	if err := writeWorkspaceMetaFile(wsPath1, newWorkspaceMetaFileForCreate("WS1", "alpha", "", now)); err != nil {
+		t.Fatalf("write workspace1 meta: %v", err)
+	}
+	if err := writeWorkspaceMetaFile(wsPath2, newWorkspaceMetaFileForCreate("WS2", "beta", "", now)); err != nil {
+		t.Fatalf("write workspace2 meta: %v", err)
+	}
+
+	fake := &fakeCMUXOpenClient{
+		capabilities: cmuxctl.Capabilities{
+			Methods: map[string]struct{}{
+				"workspace.create":  {},
+				"workspace.rename":  {},
+				"workspace.select":  {},
+				"surface.send_text": {},
+			},
+		},
+		createIDs: []string{"CMUX-WS-1", "CMUX-WS-2"},
+	}
+	prevClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient { return fake }
+	t.Cleanup(func() { newCMUXOpenClient = prevClient })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"cmux", "open", "--format", "json", "--multi", "--workspace", "WS1", "--workspace", "WS2"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, err.String(), out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr should be empty: %q", err.String())
+	}
+	var resp struct {
+		OK     bool   `json:"ok"`
+		Action string `json:"action"`
+		Result struct {
+			Count int `json:"count"`
+			Items []struct {
+				KraWorkspaceID  string `json:"kra_workspace_id"`
+				CMUXWorkspaceID string `json:"cmux_workspace_id"`
+			} `json:"items"`
+		} `json:"result"`
+	}
+	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
+		t.Fatalf("json unmarshal error: %v (out=%q)", uerr, out.String())
+	}
+	if !resp.OK || resp.Action != "cmux.open" || resp.Result.Count != 2 || len(resp.Result.Items) != 2 {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+
+	mapping, lerr := cmuxmap.NewStore(root).Load()
+	if lerr != nil {
+		t.Fatalf("load mapping: %v", lerr)
+	}
+	if len(mapping.Workspaces["WS1"].Entries) != 1 || len(mapping.Workspaces["WS2"].Entries) != 1 {
+		t.Fatalf("mapping entries were not created for both targets: %+v", mapping.Workspaces)
+	}
+}
+
+func TestCLI_CMUX_Open_JSON_MultipleTargetsRequireMulti(t *testing.T) {
+	prepareCurrentRootForTest(t)
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"cmux", "open", "--format", "json", "--workspace", "WS1", "--workspace", "WS2"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr should be empty in json mode: %q", err.String())
+	}
+	var resp testJSONResponse
+	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
+		t.Fatalf("json unmarshal error: %v", uerr)
+	}
+	if resp.OK || resp.Error.Code != "invalid_argument" || !strings.Contains(resp.Error.Message, "multiple targets require --multi") {
 		t.Fatalf("unexpected json response: %+v", resp)
 	}
 }

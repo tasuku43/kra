@@ -27,6 +27,7 @@ existing `kra ws --act go` behavior.
 ## Notes
 
 - `open` semantics are defined in `docs/spec/commands/cmux/open.md`.
+- `open --multi` semantics are defined in `docs/spec/commands/cmux/open-multi.md`.
 - `switch` semantics are defined in `docs/spec/commands/cmux/switch.md`.
 - `list` semantics are defined in `docs/spec/commands/cmux/list.md`.
 - `status` semantics are defined in `docs/spec/commands/cmux/status.md`.

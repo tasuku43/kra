@@ -84,7 +84,7 @@ status: planned
   - Depends: CMUX-005, CMUX-006, CMUX-007
   - Serial: yes
 
-- [ ] CMUX-009: `kra cmux open --multi` v2
+- [x] CMUX-009: `kra cmux open --multi` v2
   - What: add multi-target open flow for batch workspace provisioning.
     Supports multi-selection and explicit repeated `--workspace <id>` inputs.
   - Specs:
