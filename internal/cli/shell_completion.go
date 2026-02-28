@@ -150,6 +150,24 @@ var kraCompletionPathFlags = map[string][]string{
 	"ws insight add":    {"--id", "--ticket", "--session-id", "--what", "--approved", "--context", "--why", "--next", "--tag", "--format", "--help", "-h"},
 }
 
+var kraCompletionTargetRequiredPaths = []string{
+	"ws open",
+	"ws switch",
+	"ws add-repo",
+	"ws remove-repo",
+	"ws close",
+	"ws reopen",
+	"ws purge",
+}
+
+var kraCompletionTargetSelectorFlags = []string{
+	"--id",
+	"--current",
+	"--select",
+	"--help",
+	"-h",
+}
+
 func renderShellCompletionScript(shellName string) (string, error) {
 	switch strings.ToLower(strings.TrimSpace(shellName)) {
 	case "zsh":
@@ -166,7 +184,7 @@ func renderShellCompletionScript(shellName string) (string, error) {
 func renderBashCompletionScript() string {
 	return fmt.Sprintf(`# kra completion (bash)
 _kra_completion() {
-  local cur prev cmd subcmd subcmd2 path i
+  local cur prev cmd subcmd subcmd2 path i j has_target
   COMPREPLY=()
   cur="${COMP_WORDS[COMP_CWORD]}"
   prev=""
@@ -205,6 +223,10 @@ _kra_completion() {
 
     case "${path}" in
 %s
+    esac
+
+    case "${path}" in
+%s
 %s
     esac
     return 0
@@ -227,7 +249,7 @@ _kra_completion() {
   return 0
 }
 complete -o default -F _kra_completion kra
-`, strings.Join(kraCompletionTopWords(), " "), renderBashCommandFlagCases(), renderBashPathFlagCases(), renderBashSubcommandCases(), renderBashPathSubcommandCases())
+`, strings.Join(kraCompletionTopWords(), " "), renderBashTargetSelectorGateCases(), renderBashCommandFlagCases(), renderBashPathFlagCases(), renderBashSubcommandCases(), renderBashPathSubcommandCases())
 }
 
 func renderBashCommandFlagCases() string {
@@ -297,11 +319,34 @@ func renderBashPathSubcommandCases() string {
 	return strings.Join(lines, "\n")
 }
 
+func renderBashTargetSelectorGateCases() string {
+	lines := make([]string, 0, len(kraCompletionTargetRequiredPaths)*12)
+	for _, path := range kraCompletionTargetRequiredPaths {
+		lines = append(lines,
+			fmt.Sprintf("      %q)", path),
+			"        has_target=0",
+			"        for ((j=1; j<COMP_CWORD; j++)); do",
+			"          case \"${COMP_WORDS[j]}\" in",
+			"            --id|--id=*|--current|--select) has_target=1; break ;;",
+			"          esac",
+			"        done",
+			"        if [[ ${has_target} -eq 0 ]]; then",
+			fmt.Sprintf("          COMPREPLY=( $(compgen -W %q -- \"${cur}\") )", strings.Join(kraCompletionTargetSelectorFlags, " ")),
+			"        else",
+			fmt.Sprintf("          COMPREPLY=( $(compgen -W %q -- \"${cur}\") )", strings.Join(completionFlagsWithoutTargetSelectors(path), " ")),
+			"        fi",
+			"        return 0",
+			"        ;;",
+		)
+	}
+	return strings.Join(lines, "\n")
+}
+
 func renderZshCompletionScript() string {
 	return fmt.Sprintf(`# kra completion (zsh)
 _kra_completion() {
   local -a top sub sub2 flags
-  local cmd="" subcmd="" subcmd2="" path="" i
+  local cmd="" subcmd="" subcmd2="" path="" i j has_target
   local current_word="${words[CURRENT]}"
 
   top=(%s)
@@ -331,6 +376,9 @@ _kra_completion() {
     else
       path="${cmd}"
     fi
+    case "$path" in
+%s
+    esac
     flags=()
     case "$path" in
 %s
@@ -365,7 +413,7 @@ _kra_completion() {
   fi
 }
 compdef _kra_completion kra
-`, zshQuotedWords(kraCompletionTopWords()), renderZshCommandFlagCases(), renderZshPathFlagCases(), renderZshSubcommandCases(), renderZshPathSubcommandCases())
+`, zshQuotedWords(kraCompletionTopWords()), renderZshTargetSelectorGateCases(), renderZshCommandFlagCases(), renderZshPathFlagCases(), renderZshSubcommandCases(), renderZshPathSubcommandCases())
 }
 
 func renderZshCommandFlagCases() string {
@@ -406,6 +454,50 @@ func renderZshPathSubcommandCases() string {
 		lines = append(lines, fmt.Sprintf("    %q) sub2=(%s) ;;", path, zshQuotedWords(kraCompletionPathSubcommands[path])))
 	}
 	return strings.Join(lines, "\n")
+}
+
+func renderZshTargetSelectorGateCases() string {
+	lines := make([]string, 0, len(kraCompletionTargetRequiredPaths)*14)
+	for _, path := range kraCompletionTargetRequiredPaths {
+		lines = append(lines,
+			fmt.Sprintf("    %q)", path),
+			"      has_target=0",
+			"      for (( j=2; j<CURRENT; j++ )); do",
+			"        case \"${words[j]}\" in",
+			"          --id|--id=*|--current|--select) has_target=1; break ;;",
+			"        esac",
+			"      done",
+			"      if [[ ${has_target} -eq 0 ]]; then",
+			fmt.Sprintf("        flags=(%s)", zshQuotedWords(kraCompletionTargetSelectorFlags)),
+			"      else",
+			fmt.Sprintf("        flags=(%s)", zshQuotedWords(completionFlagsWithoutTargetSelectors(path))),
+			"      fi",
+			"      compadd -- \"${flags[@]}\"",
+			"      return 0",
+			"      ;;",
+		)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func completionFlagsWithoutTargetSelectors(path string) []string {
+	flags := kraCompletionPathFlags[path]
+	if len(flags) == 0 {
+		return append([]string{}, kraCompletionTargetSelectorFlags...)
+	}
+	out := make([]string, 0, len(flags))
+	for _, flag := range flags {
+		switch flag {
+		case "--id", "--current", "--select":
+			continue
+		default:
+			out = append(out, flag)
+		}
+	}
+	if len(out) == 0 {
+		return []string{"--help", "-h"}
+	}
+	return out
 }
 
 func zshQuotedWords(words []string) string {

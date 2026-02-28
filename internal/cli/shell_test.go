@@ -85,6 +85,15 @@ func TestCLI_Shell_Completion_Zsh_PrintsCompdef(t *testing.T) {
 	if !strings.Contains(text, "\"context create\") flags=(") || !strings.Contains(text, "--path") {
 		t.Fatalf("missing context create flag candidates: %q", text)
 	}
+	if !strings.Contains(text, "\"ws add-repo\")\n      has_target=0") {
+		t.Fatalf("missing target-selector gate for ws add-repo: %q", text)
+	}
+	if !strings.Contains(text, `flags=("--id" "--current" "--select" "--help" "-h")`) {
+		t.Fatalf("missing selector-first candidates: %q", text)
+	}
+	if !strings.Contains(text, `flags=("--format" "--repo" "--branch" "--base-ref" "--yes" "--refresh" "--no-fetch" "--help" "-h")`) {
+		t.Fatalf("missing post-selector candidates: %q", text)
+	}
 }
 
 func TestCLI_Shell_Completion_Bash_PrintsCompleteHook(t *testing.T) {
@@ -113,6 +122,15 @@ func TestCLI_Shell_Completion_Bash_PrintsCompleteHook(t *testing.T) {
 	}
 	if !strings.Contains(text, "\"ws import jira\")") || !strings.Contains(text, "--sprint") {
 		t.Fatalf("missing ws import jira flag candidates: %q", text)
+	}
+	if !strings.Contains(text, "\"ws add-repo\")\n        has_target=0") {
+		t.Fatalf("missing target-selector gate for ws add-repo: %q", text)
+	}
+	if !strings.Contains(text, `"--id --current --select --help -h"`) {
+		t.Fatalf("missing selector-first candidates: %q", text)
+	}
+	if !strings.Contains(text, `"--format --repo --branch --base-ref --yes --refresh --no-fetch --help -h"`) {
+		t.Fatalf("missing post-selector candidates: %q", text)
 	}
 }
 
