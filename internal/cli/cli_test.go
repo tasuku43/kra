@@ -408,12 +408,12 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(root, "AGENTS.md")); statErr != nil {
 		t.Fatalf("AGENTS.md not created: %v", statErr)
 	}
-	agentsContent, readAgentsErr := os.ReadFile(filepath.Join(root, "AGENTS.md"))
-	if readAgentsErr != nil {
-		t.Fatalf("read AGENTS.md: %v", readAgentsErr)
+	guideContent, readGuideErr := os.ReadFile(filepath.Join(root, "AGENTS.md"))
+	if readGuideErr != nil {
+		t.Fatalf("read AGENTS.md: %v", readGuideErr)
 	}
-	if strings.Contains(string(agentsContent), ".agent/skills/") || strings.Contains(string(agentsContent), "kra ws insight add") {
-		t.Fatalf("AGENTS.md should not include experimental skillpack guidance by default: %q", string(agentsContent))
+	if strings.Contains(string(guideContent), "kra ws insight add") {
+		t.Fatalf("AGENTS.md should not include experimental insight guidance by default: %q", string(guideContent))
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "templates", "default", "notes")); statErr != nil {
 		t.Fatalf("default template notes/ not created: %v", statErr)
@@ -666,12 +666,12 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(wsDir, "artifacts")); statErr != nil {
 		t.Fatalf("artifacts/ not created: %v", statErr)
 	}
-	agentsBytes, statErr := os.ReadFile(filepath.Join(wsDir, "AGENTS.md"))
+	guideBytes, statErr := os.ReadFile(filepath.Join(wsDir, "AGENTS.md"))
 	if statErr != nil {
 		t.Fatalf("AGENTS.md not created: %v", statErr)
 	}
-	if strings.TrimSpace(string(agentsBytes)) != "workspace guide" {
-		t.Fatalf("AGENTS.md mismatch: %q", string(agentsBytes))
+	if strings.TrimSpace(string(guideBytes)) != "workspace guide" {
+		t.Fatalf("AGENTS.md mismatch: %q", string(guideBytes))
 	}
 	metaBytes, statErr := os.ReadFile(filepath.Join(wsDir, workspaceMetaFilename))
 	if statErr != nil {

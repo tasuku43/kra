@@ -177,9 +177,9 @@ status: planned
   - Depends: UX-WS-001, UX-WS-003
   - Parallel: yes
 
-- [x] UX-WS-020: Dual-entry architecture spec (`human` interactive vs `agent` non-interactive)
+- [x] UX-WS-020: Dual-entry architecture spec (`human` interactive vs `automation` non-interactive)
   - What: define facade split while keeping a single execution core for workspace actions.
-    Clarify role boundaries: humans use unified launcher flow, agents use operation-fixed commands.
+    Clarify role boundaries: humans use unified launcher flow, automation uses operation-fixed commands.
   - Specs:
     - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/selector.md`
@@ -241,7 +241,7 @@ status: planned
   - Parallel: yes
 
 - [x] UX-WS-026: AI entrypoint contract for operation-fixed commands
-  - What: define strict non-interactive contract for agent-facing commands:
+  - What: define strict non-interactive contract for automation-facing commands:
     required explicit target input, no prompt fallback, stable JSON output, explicit exit-code mapping.
   - Specs:
     - `docs/spec/commands/ws/close.md`

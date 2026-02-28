@@ -3,7 +3,7 @@ title: "`kra init`"
 status: implemented
 ---
 
-# `kra init [--root <path>] [--context <name>] [--bootstrap agent-skills] [--format human|json]`
+# `kra init [--root <path>] [--context <name>] [--format human|json]`
 
 ## Purpose
 
@@ -34,14 +34,7 @@ Initialize a kra root and filesystem-first runtime metadata.
   - `--context` required
 - output envelope follows `docs/spec/concepts/output-contract.md`:
   - success: `ok=true`, `action="init"`, `result.root`, `result.context_name`
-  - with `--bootstrap agent-skills`: `result.bootstrap.agent_skills` includes bootstrap summary arrays
   - failure: `ok=false`, `error.code`, `error.message`
-
-## Bootstrap integration
-
-- `--bootstrap` supports only `agent-skills` in this phase.
-- when specified, run the same flow as `kra bootstrap agent-skills` against the initialized root.
-- on bootstrap conflict/error, `init` fails fast (safe-first; no destructive overwrite).
 
 ## Behavior
 
@@ -84,6 +77,5 @@ Initialize a kra root and filesystem-first runtime metadata.
   - `Result:`
   - `  Initialized: <root>`
   - `  Context selected: <name>`
-  - with `--bootstrap agent-skills`: `  Bootstrap agent-skills: created=<n> linked=<n> skipped=<n>`
 - `Result:` heading style follows shared UI token rules (`text.primary` + bold).
 - Success line should use shared success semantics (`status.success`).

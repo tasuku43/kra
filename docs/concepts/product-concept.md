@@ -1,5 +1,5 @@
 ---
-title: "Product Concept: AI-Agent Driven Knowledge Work"
+title: "Product Concept: AI-Assisted Knowledge Work"
 status: implemented
 date: 2026-02-14
 ---
@@ -13,7 +13,7 @@ who it is for, and the value it should deliver.
 
 ## 2. Problem
 
-Modern knowledge work with AI agents generates large output across coding,
+Modern knowledge work with AI assistants generates large output across coding,
 investigation, incident response, and definition tasks. Speed increases, but
 traceability often degrades.
 
@@ -26,18 +26,18 @@ As a result, workers struggle to:
 
 ## 3. Primary Persona
 
-**AI-Agent Driven Knowledge Worker**
+**AI-Assisted Knowledge Worker**
 
 - Works across implementation and non-implementation tasks
 - Uses external ticket systems (for example Jira) as task source-of-truth
-- Uses AI agents heavily in day-to-day execution
+- Uses AI assistants heavily in day-to-day execution
 - Needs outputs that stay revisitable and explainable later
 
 ## 4. Operating Context
 
 - Task management stays outside `kra`
 - `kra` is a local execution and traceability layer
-- Main interaction is CLI + AI agents
+- Main interaction is CLI + AI assistants
 - Work themes change frequently and are not fixed by job type
 
 ## 5. Core Value Proposition

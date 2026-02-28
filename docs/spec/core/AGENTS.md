@@ -7,7 +7,7 @@ status: implemented
 
 ## Goal
 
-Provide a default, repo-local guide for coding agents (and humans) to understand:
+Provide a default, repo-local guide for coding assistants (and humans) to understand:
 - what `kra` is optimizing for
 - what each directory under `KRA_ROOT` means
 - where to put notes and artifacts
@@ -40,9 +40,6 @@ Include:
   - `archive/<id>/`: archived workspaces (Git-tracked)
 - Workflow:
   - `kra ws create` -> `kra ws add-repo` -> work -> `kra ws close`
-- Agent skillpack:
-  - no default guidance in root AGENTS for experimental skillpack features
-  - experimental guidance may be added only when explicitly opted into experiments
 - Insight capture policy:
   - no always-on logs by default
   - propose capture in conversation first
@@ -67,4 +64,4 @@ If used, recommended content is:
 ## Notes
 
 - `kra` does not define a formal priority/override mechanism between the two files.
-  Agents are expected to load relevant files based on their working directory and file touches.
+  Operators are expected to load relevant files based on their working directory and file touches.

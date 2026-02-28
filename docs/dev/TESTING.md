@@ -15,7 +15,7 @@ status: implemented
 
 The most common failures are not happy-path logic bugs, but drift / inconsistency between these layers.
 
-This spec exists so an agent (e.g. Agen2MD) can extract test requirements and keep coverage honest.
+This spec exists so an automation tool (e.g. Agen2MD) can extract test requirements and keep coverage honest.
 
 ## Core principles
 

@@ -20,7 +20,6 @@ kra ws dashboard
 ## Root commands
 
 - `kra init` - initialize root and context.
-- `kra bootstrap agent-skills` - scaffold project-local agent skill references.
 - `kra context ...` - current/list/create/use/rename/rm context operations.
 - `kra repo ...` - add/discover/remove/gc for repo pool registration.
 - `kra template validate` - validate workspace templates.

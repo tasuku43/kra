@@ -1,11 +1,11 @@
 # kra
 
-`kra` is a local CLI for AI-agent-driven knowledge work.
+`kra` is a local CLI for AI-assisted knowledge work.
 It helps you create reproducible workspaces from tickets, keep context recoverable, and run workspace lifecycle operations with automation-friendly contracts.
 
 ## Who This Is For
 
-- Engineers and operators who work with AI agents every day
+- Engineers and operators who work with AI assistants every day
 - Teams using Jira (or similar external systems) as task source-of-truth
 - People who need to resume work quickly and explain outcomes later
 

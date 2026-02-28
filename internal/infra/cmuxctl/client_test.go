@@ -266,7 +266,7 @@ func TestClientListPanes_JSONMode(t *testing.T) {
 }
 
 func TestClientListPaneSurfaces_JSONMode(t *testing.T) {
-	f := &fakeRunner{stdout: []byte(`{"surfaces":[{"id":"sf-1","ref":"surface:1","index":0,"title":"agent","type":"browser","selected":true,"pane_id":"pane-1"}]}`)}
+	f := &fakeRunner{stdout: []byte(`{"surfaces":[{"id":"sf-1","ref":"surface:1","index":0,"title":"assistant","type":"browser","selected":true,"pane_id":"pane-1"}]}`)}
 	c := &Client{Runner: f}
 
 	got, err := c.ListPaneSurfaces(context.Background(), "ws-1", "pane-1")
