@@ -138,8 +138,6 @@ func (c *CLI) runWS(args []string) int {
 			return exitUsage
 		}
 		return c.runWSInsight(args[1:])
-	case "select":
-		return c.runWSSelect(args[1:])
 	case "lock":
 		return c.runWSLock(args[1:])
 	case "unlock":
@@ -150,8 +148,6 @@ func (c *CLI) runWS(args []string) int {
 		return c.runWSSave(args[1:])
 	case "resume":
 		return c.runWSResume(args[1:])
-	case "switch":
-		return c.runWSSwitch(args[1:])
 	case "add-repo", "remove-repo", "close", "reopen", "purge":
 		return c.runWSActionSubcommand(args[0], args[1:])
 	default:

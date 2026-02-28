@@ -170,7 +170,7 @@ func TestCLI_WS_Select_UnsupportedAction(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "select", "unknown"})
+	code := c.Run([]string{"ws", "--select", "unknown"})
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 	}
@@ -184,11 +184,11 @@ func TestCLI_WS_Select_IDFlagRejected(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "select", "--id", "WS-1"})
+	code := c.Run([]string{"ws", "--select", "--id", "WS-1"})
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 	}
-	if !strings.Contains(err.String(), "ws select does not support --id") {
+	if !strings.Contains(err.String(), "--select and --id cannot be used together") {
 		t.Fatalf("stderr missing --id rejection: %q", err.String())
 	}
 }
@@ -198,7 +198,7 @@ func TestCLI_WS_Select_ActionScopeMismatch(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "select", "--archived", "add-repo"})
+	code := c.Run([]string{"ws", "--select", "--archived", "add-repo"})
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 	}
@@ -212,7 +212,7 @@ func TestCLI_WS_Select_Multi_RequiresAction(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "select", "--multi"})
+	code := c.Run([]string{"ws", "--select", "--multi"})
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 	}
@@ -226,7 +226,7 @@ func TestCLI_WS_Select_Multi_RejectsUnsupportedAction(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "select", "--multi", "go"})
+	code := c.Run([]string{"ws", "--select", "--multi", "go"})
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 	}
@@ -240,7 +240,7 @@ func TestCLI_WS_Select_Multi_CloseWithArchivedRejected(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "select", "--multi", "--archived", "close"})
+	code := c.Run([]string{"ws", "--select", "--multi", "--archived", "close"})
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 	}
@@ -254,7 +254,7 @@ func TestCLI_WS_Select_Multi_ReopenImplicitArchived(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "select", "--multi", "reopen"})
+	code := c.Run([]string{"ws", "--select", "--multi", "reopen"})
 	if code == exitUsage {
 		t.Fatalf("exit code = %d, want not %d (stderr=%q)", code, exitUsage, err.String())
 	}
@@ -331,7 +331,7 @@ func TestCLI_WS_Select_Multi_Purge_PreflightErrorPrintedOnce(t *testing.T) {
 	c := New(&out, &errBuf)
 	c.In = in
 
-	code := c.Run([]string{"ws", "select", "--multi", "purge", "--commit"})
+	code := c.Run([]string{"ws", "--select", "--multi", "purge", "--commit"})
 	if code != exitError {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitError, errBuf.String())
 	}

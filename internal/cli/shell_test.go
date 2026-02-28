@@ -232,3 +232,28 @@ func TestKraCompletionCommandFlags_WS_FocusTargetSelectors(t *testing.T) {
 		t.Fatalf("ws command flags = %v, want %v", got, want)
 	}
 }
+
+func TestKraCompletionSubcommands_WS_ExcludeCompatAlias(t *testing.T) {
+	got := kraCompletionSubcommands["ws"]
+	if !contains(got, "save") || !contains(got, "resume") {
+		t.Fatalf("ws subcommands should include save/resume: %v", got)
+	}
+	if contains(got, "select") {
+		t.Fatalf("ws subcommands should not suggest removed select command: %v", got)
+	}
+	if contains(got, "switch") {
+		t.Fatalf("ws subcommands should not suggest compatibility alias switch: %v", got)
+	}
+	if contains(got, "insight") {
+		t.Fatalf("ws subcommands should not suggest experimental insight by default: %v", got)
+	}
+}
+
+func contains(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}

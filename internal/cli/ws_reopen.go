@@ -90,7 +90,7 @@ func (c *CLI) runWSReopen(args []string) int {
 		if len(args) > 1 {
 			fmt.Fprintf(c.Err, "unexpected args for ws reopen: %q\n", strings.Join(args[1:], " "))
 		}
-		fmt.Fprintln(c.Err, "ws reopen requires <id>; use `kra ws select --archived` for interactive selection")
+		fmt.Fprintln(c.Err, "ws reopen requires <id>; use `kra ws --select --archived reopen` for interactive selection")
 		c.printWSReopenUsage(c.Err)
 		return exitUsage
 	}

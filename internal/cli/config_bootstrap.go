@@ -100,7 +100,7 @@ func shouldBootstrapGlobalConfig(args []string) bool {
 		}
 		action := parseWSAction(args[1:])
 		switch action {
-		case "open", "switch", "save", "resume", "add-repo", "remove-repo", "close", "reopen", "purge":
+		case "open", "save", "resume", "add-repo", "remove-repo", "close", "reopen", "purge":
 			return true
 		default:
 			return false
@@ -126,7 +126,7 @@ func parseWSAction(args []string) string {
 			rest = rest[1:]
 		default:
 			switch cur {
-			case "open", "switch", "save", "resume", "add-repo", "remove-repo", "close", "reopen", "purge", "unlock":
+			case "open", "save", "resume", "add-repo", "remove-repo", "close", "reopen", "purge", "unlock":
 				return cur
 			default:
 				return ""

@@ -127,7 +127,7 @@ parseFlags:
 	if fixedAction == "" && len(args) > 0 {
 		action := strings.TrimSpace(args[0])
 		switch action {
-		case "open", "switch", "add-repo", "remove-repo", "close", "reopen", "purge", "unlock":
+		case "open", "add-repo", "remove-repo", "close", "reopen", "purge", "unlock":
 			fixedAction = action
 			args = args[1:]
 		default:
@@ -137,9 +137,6 @@ parseFlags:
 				return exitUsage
 			}
 		}
-	}
-	if fixedAction == "switch" {
-		fixedAction = "open"
 	}
 	if workspaceID != "" {
 		if err := validateWorkspaceID(workspaceID); err != nil {
@@ -337,9 +334,6 @@ func runWSActionHasHelp(actionArgs []string) bool {
 }
 
 func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archivedScope bool, actionArgs []string) int {
-	if action == "switch" {
-		action = "open"
-	}
 	switch action {
 	case "open", "add-repo", "remove-repo", "close":
 		if archivedScope {
@@ -383,31 +377,6 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 	default:
 		return exitUsage
 	}
-}
-
-func (c *CLI) runWSSelect(args []string) int {
-	if len(args) > 0 && (args[0] == "-h" || args[0] == "--help" || args[0] == "help") {
-		c.printWSUsage(c.Out)
-		return exitOK
-	}
-	hasMulti := false
-	for _, arg := range args {
-		if strings.TrimSpace(arg) == "--multi" {
-			hasMulti = true
-			break
-		}
-	}
-	if hasMulti {
-		return c.runWSSelectMulti(args)
-	}
-	for i := 0; i < len(args); i++ {
-		if args[i] == "--id" || strings.HasPrefix(args[i], "--id=") {
-			fmt.Fprintln(c.Err, "ws select does not support --id (always starts from workspace selection)")
-			c.printWSUsage(c.Err)
-			return exitUsage
-		}
-	}
-	return c.runWSLauncherWithSelectMode(args, true)
 }
 
 func (c *CLI) runWSSelectMulti(args []string) int {
@@ -455,17 +424,17 @@ func (c *CLI) runWSSelectMulti(args []string) int {
 			args = args[1:]
 		default:
 			if cur == "--id" || strings.HasPrefix(cur, "--id=") {
-				fmt.Fprintln(c.Err, "ws select does not support --id (always starts from workspace selection)")
+				fmt.Fprintln(c.Err, "--select mode does not support --id (always starts from workspace selection)")
 				c.printWSUsage(c.Err)
 				return exitUsage
 			}
 			if strings.HasPrefix(cur, "-") {
-				fmt.Fprintf(c.Err, "unknown flag for ws select: %q\n", cur)
+				fmt.Fprintf(c.Err, "unknown flag for ws --select --multi: %q\n", cur)
 				c.printWSUsage(c.Err)
 				return exitUsage
 			}
 			if fixedAction != "" {
-				fmt.Fprintf(c.Err, "unexpected args for ws select --multi: %q\n", strings.Join(args, " "))
+				fmt.Fprintf(c.Err, "unexpected args for ws --select --multi: %q\n", strings.Join(args, " "))
 				c.printWSUsage(c.Err)
 				return exitUsage
 			}
@@ -478,7 +447,7 @@ func (c *CLI) runWSSelectMulti(args []string) int {
 		}
 	}
 	if len(args) > 0 {
-		fmt.Fprintf(c.Err, "unexpected args for ws select --multi: %q\n", strings.Join(args, " "))
+		fmt.Fprintf(c.Err, "unexpected args for ws --select --multi: %q\n", strings.Join(args, " "))
 		c.printWSUsage(c.Err)
 		return exitUsage
 	}
@@ -531,7 +500,7 @@ func (c *CLI) runWSSelectMulti(args []string) int {
 		case errSelectorCanceled:
 			fmt.Fprintln(c.Err, "aborted")
 		default:
-			fmt.Fprintf(c.Err, "run ws select --multi: %v\n", err)
+			fmt.Fprintf(c.Err, "run ws --select --multi: %v\n", err)
 		}
 		return exitError
 	}
@@ -726,7 +695,7 @@ func (c *CLI) promptLauncherAction(target workspaceContextSelection, _ bool) (st
 	switch target.Status {
 	case "active":
 		actions = append(actions,
-			workspaceSelectorCandidate{ID: "open", Description: "open/switch cmux workspace"},
+			workspaceSelectorCandidate{ID: "open", Description: "open workspace runtime"},
 			workspaceSelectorCandidate{ID: "add-repo", Description: "add repositories"},
 			workspaceSelectorCandidate{ID: "remove-repo", Description: "remove repositories"},
 			workspaceSelectorCandidate{ID: "close", Description: "archive this workspace"},

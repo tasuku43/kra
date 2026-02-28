@@ -102,7 +102,7 @@ func (c *CLI) runWSPurge(args []string) int {
 		if len(args) > 1 {
 			fmt.Fprintf(c.Err, "unexpected args for ws purge: %q\n", strings.Join(args[1:], " "))
 		}
-		fmt.Fprintln(c.Err, "ws purge requires <id>; use `kra ws select --archived` for interactive selection")
+		fmt.Fprintln(c.Err, "ws purge requires <id>; use `kra ws --select --archived purge` for interactive selection")
 		c.printWSPurgeUsage(c.Err)
 		return exitUsage
 	}

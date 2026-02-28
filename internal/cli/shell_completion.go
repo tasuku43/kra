@@ -43,12 +43,11 @@ var kraCompletionSubcommands = map[string][]string{
 		"list",
 		"ls",
 		"dashboard",
-		"insight",
-		"select",
+		"save",
+		"resume",
 		"lock",
 		"unlock",
 		"open",
-		"switch",
 		"add-repo",
 		"remove-repo",
 		"close",
@@ -60,12 +59,10 @@ var kraCompletionSubcommands = map[string][]string{
 
 var kraCompletionPathSubcommandOrder = []string{
 	"ws import",
-	"ws insight",
 }
 
 var kraCompletionPathSubcommands = map[string][]string{
-	"ws import":  {"jira", "help"},
-	"ws insight": {"add", "help"},
+	"ws import": {"jira", "help"},
 }
 
 var kraCompletionCommandFlagOrder = []string{
@@ -103,7 +100,6 @@ var kraCompletionPathFlagOrder = []string{
 	"ws ls",
 	"ws dashboard",
 	"ws open",
-	"ws switch",
 	"ws add-repo",
 	"ws remove-repo",
 	"ws close",
@@ -111,9 +107,6 @@ var kraCompletionPathFlagOrder = []string{
 	"ws purge",
 	"ws lock",
 	"ws unlock",
-	"ws select",
-	"ws insight",
-	"ws insight add",
 }
 
 var kraCompletionPathFlags = map[string][]string{
@@ -137,7 +130,6 @@ var kraCompletionPathFlags = map[string][]string{
 	"ws ls":             {"--archived", "--tree", "--format", "--help", "-h"},
 	"ws dashboard":      {"--archived", "--workspace", "--format", "--help", "-h"},
 	"ws open":           {"--id", "--current", "--select", "--multi", "--concurrency", "--format", "--help", "-h"},
-	"ws switch":         {"--id", "--current", "--select", "--multi", "--concurrency", "--format", "--help", "-h"},
 	"ws add-repo":       {"--id", "--current", "--select", "--format", "--repo", "--branch", "--base-ref", "--yes", "--refresh", "--no-fetch", "--help", "-h"},
 	"ws remove-repo":    {"--id", "--current", "--select", "--format", "--repo", "--yes", "--force", "--help", "-h"},
 	"ws close":          {"--id", "--current", "--select", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
@@ -145,14 +137,10 @@ var kraCompletionPathFlags = map[string][]string{
 	"ws purge":          {"--id", "--current", "--select", "--no-prompt", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
 	"ws lock":           {"--format", "--help", "-h"},
 	"ws unlock":         {"--format", "--help", "-h"},
-	"ws select":         {"--select", "--multi", "--archived", "--no-commit", "--help", "-h"},
-	"ws insight":        {"--help", "-h"},
-	"ws insight add":    {"--id", "--ticket", "--session-id", "--what", "--approved", "--context", "--why", "--next", "--tag", "--format", "--help", "-h"},
 }
 
 var kraCompletionTargetRequiredPaths = []string{
 	"ws open",
-	"ws switch",
 	"ws add-repo",
 	"ws remove-repo",
 	"ws close",

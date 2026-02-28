@@ -148,65 +148,42 @@ JSON mode:
 }
 
 func (c *CLI) printWSUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
+	var b strings.Builder
+	b.WriteString(`Usage:
   kra ws [--id <id> | --current | --select]
+  kra ws create [--no-prompt] [--template <name>] [--format human|json] <id>
   kra ws open [--id <id> | --current | --select] [--multi] [--concurrency <n>] [--format human|json]
   kra ws save [--id <id> | --current | --select] [-l <label>] [--no-browser-state] [--format human|json]
   kra ws resume [--id <id> | --current | --select] [--latest] [--strict] [--no-browser] [--format human|json]
-  kra ws <add-repo|remove-repo|close|reopen|purge> [--id <id> | --current | --select] [action-args...]
-  kra ws --select [--archived] [open|close|add-repo|remove-repo|reopen|unlock|purge]
-  kra ws --select --multi [--archived] <close|reopen|purge> [--no-commit]
-  kra ws create [--no-prompt] [--template <name>] [--format human|json] <id>
-  kra ws create [--no-prompt] [--template <name>] [--format human|json] --id <id> [--title "<title>"]
-  kra ws create --jira <ticket-url> [--template <name>] [--format human|json]
-  kra ws import jira (--sprint [<id|name>] [--space <key>|--project <key>] | --jql "<expr>") [--limit <n>] [--apply] [--no-prompt] [--format human|json]
+  kra ws add-repo [--id <id> | --current | --select] [action-args...]
+  kra ws remove-repo [--id <id> | --current | --select] [action-args...]
+  kra ws close [--id <id> | --current | --select] [action-args...]
+  kra ws reopen [--id <id> | --current | --select] [action-args...]
+  kra ws purge [--id <id> | --current | --select] [action-args...]
   kra ws list|ls [--archived] [--tree] [--format human|tsv|json]
   kra ws dashboard [--archived] [--workspace <id>] [--format human|json]
   kra ws lock <id> [--format human|json]
   kra ws unlock <id> [--format human|json]
 
-Subcommands:
-  create            Create a workspace
-  import            Import workspaces from external systems
-  open              Open cmux workspace(s) for selected workspace target
-  save              Save cmux session context for selected workspace target
-  resume            Restore saved cmux session context for selected workspace target
-  add-repo          Add repositories to a workspace
-  remove-repo       Remove repositories from a workspace
-  close             Archive a workspace
-  reopen            Restore an archived workspace
-  purge             Permanently delete an archived workspace
-  list              List workspaces
-  ls                Alias of list
-  dashboard         Show workspace operational dashboard
-  lock              Enable purge guard on workspace metadata
-  unlock            Disable purge guard on workspace metadata
-  help              Show this help
+Target selection:
+  Choose exactly one: --id, --current, or --select
+
+Common flow:
+  kra ws create <id>
+  kra ws add-repo --id <id>
+  kra ws close --id <id>
 
 Run:
   kra ws <subcommand> --help
-
-Notes:
-- edit actions are routed by ws <action> subcommands.
-- active actions: open, save, resume, add-repo, remove-repo, close
-- archived actions: reopen, unlock, purge (applies archived scope automatically)
-- ws --archived with add-repo|remove-repo|close is invalid.
-- kra ws requires explicit target mode: --id, --current, or --select.
-- kra ws does not resolve workspace implicitly from current path unless --current is set.
-- kra ws --select always opens workspace selection first.
-- ws --select --multi requires an action positional argument.
-- ws --select --multi supports only close/reopen/purge.
-- ws --select --multi reopen|purge implies archived scope.
-- ws --select --multi commits by default; use --no-commit to disable lifecycle commits.
-- invalid action/scope combinations fail with usage.
 `)
+	fmt.Fprint(w, b.String())
 }
 
 func (c *CLI) printWSOpenUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws open [--id <id> | --current | --select] [--multi] [--concurrency <n>] [--format human|json]
 
-Open flow for cmux workspace integration.
+Open workspace runtime flow.
 `)
 }
 
@@ -214,7 +191,7 @@ func (c *CLI) printWSSaveUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws save [--id <id> | --current | --select] [-l <label>] [--no-browser-state] [--format human|json]
 
-Save flow for cmux session context.
+Save workspace session context.
 `)
 }
 
@@ -222,35 +199,7 @@ func (c *CLI) printWSResumeUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws resume [--id <id> | --current | --select] [--latest] [--strict] [--no-browser] [--format human|json]
 
-Resume flow for saved cmux session context.
-`)
-}
-
-func (c *CLI) printWSSwitchUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
-  kra ws switch [--id <id> | --current | --select] [--multi] [--concurrency <n>] [--format human|json]
-
-Alias of "kra ws open" for backward compatibility.
-`)
-}
-
-// Legacy internal helpers kept for shared parser/renderer reuse.
-func (c *CLI) printCMUXOpenUsage(w io.Writer)   { c.printWSOpenUsage(w) }
-func (c *CLI) printCMUXSwitchUsage(w io.Writer) { c.printWSSwitchUsage(w) }
-
-func (c *CLI) printCMUXListUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
-  kra ws list [--format human|json]
-
-List mapped cmux workspaces.
-`)
-}
-
-func (c *CLI) printCMUXStatusUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
-  kra ws status [--format human|json]
-
-Show mapping status for cmux integration.
+Resume saved workspace session context.
 `)
 }
 
@@ -500,7 +449,7 @@ Reopen an archived workspace:
 - by default, lifecycle commits run automatically (pre-reopen + reopen).
 - --no-commit: disable lifecycle commits for this command
 
-Use kra ws select --archived for interactive selection.
+Use kra ws --select --archived for interactive selection.
 `)
 }
 
@@ -521,6 +470,6 @@ Options:
   --no-prompt        Do not ask confirmations (requires --force)
   --force            Required with --no-prompt
 
-Use kra ws select --archived for interactive selection.
+Use kra ws --select --archived for interactive selection.
 `)
 }
