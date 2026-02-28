@@ -29,25 +29,3 @@ func (c *CLI) runCMUX(args []string) int {
 		return exitUsage
 	}
 }
-
-func (c *CLI) runCMUXList(args []string) int {
-	if len(args) > 0 {
-		switch args[0] {
-		case "-h", "--help", "help":
-			c.printCMUXListUsage(c.Out)
-			return exitOK
-		}
-	}
-	return c.notImplemented("cmux list")
-}
-
-func (c *CLI) runCMUXStatus(args []string) int {
-	if len(args) > 0 {
-		switch args[0] {
-		case "-h", "--help", "help":
-			c.printCMUXStatusUsage(c.Out)
-			return exitOK
-		}
-	}
-	return c.notImplemented("cmux status")
-}

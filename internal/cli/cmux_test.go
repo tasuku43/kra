@@ -122,36 +122,6 @@ func TestCLI_CMUX_SubcommandHelpRoutes(t *testing.T) {
 	}
 }
 
-func TestCLI_CMUX_Subcommands_NotImplementedYet(t *testing.T) {
-	tests := []struct {
-		name string
-		args []string
-		want string
-	}{
-		{name: "list", args: []string{"cmux", "list"}, want: "cmux list"},
-		{name: "status", args: []string{"cmux", "status"}, want: "cmux status"},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			var out bytes.Buffer
-			var err bytes.Buffer
-			c := New(&out, &err)
-
-			code := c.Run(tc.args)
-			if code != exitNotImplemented {
-				t.Fatalf("exit code = %d, want %d", code, exitNotImplemented)
-			}
-			if out.Len() != 0 {
-				t.Fatalf("stdout should be empty: %q", out.String())
-			}
-			if !strings.Contains(err.String(), "not implemented: "+tc.want) {
-				t.Fatalf("stderr missing not-implemented marker: %q", err.String())
-			}
-		})
-	}
-}
-
 func TestCLI_CMUX_Open_NoRoot_ReturnsError(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -165,6 +135,40 @@ func TestCLI_CMUX_Open_NoRoot_ReturnsError(t *testing.T) {
 		t.Fatalf("stdout should be empty: %q", out.String())
 	}
 	if !strings.Contains(err.String(), "cmux open (WS1): resolve KRA_ROOT:") {
+		t.Fatalf("stderr missing root resolution error: %q", err.String())
+	}
+}
+
+func TestCLI_CMUX_List_NoRoot_ReturnsError(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"cmux", "list"})
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d", code, exitError)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout should be empty: %q", out.String())
+	}
+	if !strings.Contains(err.String(), "cmux list: resolve KRA_ROOT:") {
+		t.Fatalf("stderr missing root resolution error: %q", err.String())
+	}
+}
+
+func TestCLI_CMUX_Status_NoRoot_ReturnsError(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"cmux", "status"})
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d", code, exitError)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout should be empty: %q", out.String())
+	}
+	if !strings.Contains(err.String(), "cmux status: resolve KRA_ROOT:") {
 		t.Fatalf("stderr missing root resolution error: %q", err.String())
 	}
 }

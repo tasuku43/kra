@@ -61,7 +61,7 @@ status: planned
   - Depends: CMUX-002, CMUX-003
   - Serial: yes
 
-- [ ] CMUX-007: `kra cmux list` / `kra cmux status` v1
+- [x] CMUX-007: `kra cmux list` / `kra cmux status` v1
   - What: provide visibility commands for mapping entries and health state in human/json formats,
     including `--workspace` filtering.
   - Specs:
