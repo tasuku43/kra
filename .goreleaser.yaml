@@ -42,6 +42,11 @@ checksum:
 release:
   prerelease: auto
   footer: |
-    ## Docs
-    - README: https://github.com/tasuku43/kra/blob/{{ .Tag }}/README.md
-    - Releasing guide: https://github.com/tasuku43/kra/blob/{{ .Tag }}/docs/ops/RELEASING.md
+    ## Install
+    - docs/guides/INSTALL.md: https://github.com/tasuku43/kra/blob/{{ .Tag }}/docs/guides/INSTALL.md
+
+    ## Compatibility policy
+    - docs/spec/core/COMPATIBILITY.md: https://github.com/tasuku43/kra/blob/{{ .Tag }}/docs/spec/core/COMPATIBILITY.md
+
+    ## Operations
+    - docs/ops/RELEASING.md: https://github.com/tasuku43/kra/blob/{{ .Tag }}/docs/ops/RELEASING.md

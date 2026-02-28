@@ -41,8 +41,14 @@ func New(out io.Writer, err io.Writer) *CLI {
 func (c *CLI) Run(args []string) int {
 	c.inReader = bufio.NewReader(c.In)
 	c.Debug = false
-	args = c.consumeGlobalDebugFlag(args)
+	var versionFlag bool
+	args, versionFlag = c.consumeGlobalFlags(args)
 	defer c.closeDebugLog()
+
+	if versionFlag {
+		fmt.Fprintln(c.Out, c.versionLine())
+		return exitOK
+	}
 
 	if len(args) == 0 {
 		c.printRootUsage(c.Err)
@@ -175,14 +181,18 @@ func (c *CLI) versionLine() string {
 	return strings.Join(parts, " ")
 }
 
-func (c *CLI) consumeGlobalDebugFlag(args []string) []string {
+func (c *CLI) consumeGlobalFlags(args []string) ([]string, bool) {
 	filtered := make([]string, 0, len(args))
+	versionFlag := false
 	for _, arg := range args {
-		if arg == "--debug" {
+		switch arg {
+		case "--debug":
 			c.Debug = true
-			continue
+		case "--version":
+			versionFlag = true
+		default:
+			filtered = append(filtered, arg)
 		}
-		filtered = append(filtered, arg)
 	}
-	return filtered
+	return filtered, versionFlag
 }

@@ -21,12 +21,21 @@ Implementation should reference these specs. When behavior changes, update the s
 - `planned`: spec-first discussion; not implemented yet.
 - `implemented`: implemented and considered current.
 
+## Global CLI behavior
+
+- Command form: `kra [global-flags] <command> [args]`
+- Global flags: `--debug`, `--version`, `--help`/`-h`
+- Version output: `kra version` and `kra --version` print the same build metadata line.
+- Debug logs: enabled by `--debug`, written under `<KRA_ROOT>/.kra/logs/`.
+
 ## Index
 
 - Core
   - `../backlog/README.md`: Implementation backlog index (dependencies, parallelism, spec mapping)
   - `core/DATA_MODEL.md`: State store data model (tables, keys, constraints)
   - `core/AGENTS.md`: AGENTS.md generation and conventions
+  - `core/CLI_GLOBALS.md`: root/global flag behavior (`--debug`, `--version`, help)
+  - `core/COMPATIBILITY.md`: versioning and supported distribution/install policy
 - Concepts
   - `concepts/layout.md`: KRA_ROOT layout and Git tracking policy
   - `concepts/state-store.md`: Optional/rebuildable root index and registry
@@ -41,6 +50,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `concepts/workspace-lifecycle.md`: Workspace lifecycle state machine and transition policy
   - `concepts/output-contract.md`: Shared machine-readable output envelope and error code policy
   - `concepts/worklog-insight.md`: workspace-local approved insight capture model
+  - `concepts/debug-logging.md`: debug logging activation, path, and format policy
 - Commands
   - `commands/bootstrap/agent-skills.md`: `kra bootstrap agent-skills` + `init --bootstrap` integration
   - `commands/agent/activity.md`: `kra agent` activity tracking baseline
@@ -74,6 +84,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/close.md`: `kra ws close`
   - `commands/ws/reopen.md`: `kra ws reopen`
   - `commands/ws/purge.md`: `kra ws purge`
+  - `commands/version.md`: `kra version` and global `kra --version`
 
 - Development
   - `../dev/TESTING.md`: Testing principles (developer guidance)

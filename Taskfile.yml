@@ -40,10 +40,25 @@ tasks:
     cmds:
       - go test ./...
 
+  test:race:
+    desc: Run tests with race detector
+    cmds:
+      - go test -race ./...
+
   vet:
     desc: Run go vet
     cmds:
       - go vet ./...
+
+  vuln:
+    desc: Run govulncheck
+    cmds:
+      - go run golang.org/x/vuln/cmd/govulncheck@v1.1.4 ./...
+
+  gosec:
+    desc: Run gosec
+    cmds:
+      - go run github.com/securego/gosec/v2/cmd/gosec@v2.22.11 -exclude=G304 -- ./...
 
   fmt:
     desc: Format all Go files
@@ -57,6 +72,14 @@ tasks:
       - ./scripts/lint-ui-color.sh
       - go vet ./...
       - go test ./...
+
+  ci:full:
+    desc: Extended CI checks (race/vuln/security)
+    cmds:
+      - task: check
+      - task: test:race
+      - task: vuln
+      - task: gosec
 
   release:preflight:
     desc: Run release preflight checks

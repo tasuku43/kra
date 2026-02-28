@@ -22,7 +22,11 @@ func (c *CLI) printRootUsage(w io.Writer) {
 		"  help              Show this help",
 	)
 
-	fmt.Fprintf(w, "Usage:\n  kra [--debug] <command> [args]\n\nCommands:\n%s\n\nRun:\n  kra <command> --help\n", strings.Join(commands, "\n"))
+	fmt.Fprintf(
+		w,
+		"Usage:\n  kra [global-flags] <command> [args]\n  kra --version\n\nCommands:\n%s\n\nGlobal flags:\n  --debug            Enable debug logging to <KRA_ROOT>/.kra/logs/\n  --version          Print version and exit\n  --help, -h         Show this help\n\nRun:\n  kra <command> --help\n",
+		strings.Join(commands, "\n"),
+	)
 }
 
 func (c *CLI) printBootstrapUsage(w io.Writer) {

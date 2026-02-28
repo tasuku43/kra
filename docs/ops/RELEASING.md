@@ -13,6 +13,9 @@ Releases are triggered automatically by pushing a Git tag.
 - Trigger: push tag `vX.Y.Z` or `vX.Y.Z-rc.N`
 - Workflow: `.github/workflows/release.yml`
 - Build/packaging: `.goreleaser.yaml`
+- Release note links:
+  - `docs/guides/INSTALL.md`
+  - `docs/spec/core/COMPATIBILITY.md`
 - Artifacts:
   - `kra_<tag>_<os>_<arch>.tar.gz`
   - `checksums.txt` (SHA256)
