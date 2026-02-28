@@ -76,7 +76,7 @@ func TestCLI_WSSwitch_NoRoot_ReturnsError(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "switch", "--id", "WS1", "--cmux", "cmux-1"})
+	code := c.Run([]string{"ws", "switch", "--id", "WS1"})
 	if code != exitError {
 		t.Fatalf("exit code = %d, want %d", code, exitError)
 	}
@@ -85,5 +85,19 @@ func TestCLI_WSSwitch_NoRoot_ReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.String(), "cmux open (WS1): resolve KRA_ROOT:") {
 		t.Fatalf("stderr missing root resolution error: %q", err.String())
+	}
+}
+
+func TestCLI_WSSwitch_CMUXFlag_ReturnsUsage(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "switch", "--id", "WS1", "--cmux", "cmux-1"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(err.String(), "--cmux is no longer supported") {
+		t.Fatalf("stderr missing unsupported flag message: %q", err.String())
 	}
 }

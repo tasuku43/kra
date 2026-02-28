@@ -13,23 +13,13 @@ func (c *CLI) runWSSwitch(args []string) int {
 			return exitOK
 		}
 	}
-
-	filtered := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		arg := strings.TrimSpace(args[i])
-		if arg == "--cmux" {
-			if i+1 >= len(args) {
-				fmt.Fprintln(c.Err, "--cmux requires a value")
-				c.printWSSwitchUsage(c.Err)
-				return exitUsage
-			}
-			i++
-			continue
+		if arg == "--cmux" || strings.HasPrefix(arg, "--cmux=") {
+			fmt.Fprintln(c.Err, "--cmux is no longer supported; use kra ws open with workspace target only")
+			c.printWSSwitchUsage(c.Err)
+			return exitUsage
 		}
-		if strings.HasPrefix(arg, "--cmux=") {
-			continue
-		}
-		filtered = append(filtered, arg)
 	}
-	return c.runWSOpen(filtered)
+	return c.runWSOpen(args)
 }
