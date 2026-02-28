@@ -93,7 +93,7 @@ status: planned
   - Depends: CMUX-005
   - Serial: yes
 
-- [ ] CMUX-010: `kra cmux open --multi --concurrency <n>` v2
+- [x] CMUX-010: `kra cmux open --multi --concurrency <n>` v2
   - What: add bounded parallel execution with result aggregation and partial-failure reporting
     for batch open operations.
   - Specs:

@@ -295,3 +295,91 @@ func TestCLI_CMUX_Open_JSON_MultipleTargetsRequireMulti(t *testing.T) {
 		t.Fatalf("unexpected json response: %+v", resp)
 	}
 }
+
+func TestCLI_CMUX_Open_JSON_ConcurrencyRequiresMulti(t *testing.T) {
+	prepareCurrentRootForTest(t)
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"cmux", "open", "--format", "json", "--concurrency", "2", "--workspace", "WS1"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr should be empty in json mode: %q", err.String())
+	}
+	var resp testJSONResponse
+	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
+		t.Fatalf("json unmarshal error: %v", uerr)
+	}
+	if resp.OK || resp.Error.Code != "invalid_argument" || !strings.Contains(resp.Error.Message, "--concurrency requires --multi") {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+}
+
+func TestCLI_CMUX_Open_JSON_MultiConcurrency_PartialFailure(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	wsPath1 := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(wsPath1, 0o755); err != nil {
+		t.Fatalf("mkdir workspace1: %v", err)
+	}
+	now := time.Now().Unix()
+	if err := writeWorkspaceMetaFile(wsPath1, newWorkspaceMetaFileForCreate("WS1", "alpha", "", now)); err != nil {
+		t.Fatalf("write workspace1 meta: %v", err)
+	}
+
+	fake := &fakeCMUXOpenClient{
+		capabilities: cmuxctl.Capabilities{
+			Methods: map[string]struct{}{
+				"workspace.create":  {},
+				"workspace.rename":  {},
+				"workspace.select":  {},
+				"surface.send_text": {},
+			},
+		},
+		createID: "CMUX-WS-1",
+	}
+	prevClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient { return fake }
+	t.Cleanup(func() { newCMUXOpenClient = prevClient })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"cmux", "open", "--format", "json", "--multi", "--concurrency", "2", "--workspace", "WS1", "--workspace", "WS9"})
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d (stderr=%q out=%q)", code, exitError, err.String(), out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr should be empty in json mode: %q", err.String())
+	}
+	var resp struct {
+		OK     bool   `json:"ok"`
+		Action string `json:"action"`
+		Result struct {
+			Count     int `json:"count"`
+			Succeeded int `json:"succeeded"`
+			Failed    int `json:"failed"`
+		} `json:"result"`
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
+		t.Fatalf("json unmarshal error: %v (out=%q)", uerr, out.String())
+	}
+	if resp.OK || resp.Action != "cmux.open" || resp.Error.Code != "partial_failure" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	if resp.Result.Count != 2 || resp.Result.Succeeded != 1 || resp.Result.Failed != 1 {
+		t.Fatalf("unexpected result summary: %+v", resp.Result)
+	}
+
+	mapping, lerr := cmuxmap.NewStore(root).Load()
+	if lerr != nil {
+		t.Fatalf("load mapping: %v", lerr)
+	}
+	if len(mapping.Workspaces["WS1"].Entries) != 1 {
+		t.Fatalf("mapping entries for WS1 = %+v, want 1 entry", mapping.Workspaces["WS1"].Entries)
+	}
+}
