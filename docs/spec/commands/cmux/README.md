@@ -8,7 +8,7 @@ status: implemented
 ## Purpose
 
 Provide a dedicated command group for cmux integration flows without changing
-existing `kra ws --act go` behavior.
+existing workspace action behavior.
 
 ## Subcommands
 

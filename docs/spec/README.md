@@ -59,21 +59,20 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/shell/init.md`: `kra shell init`
   - `commands/state/registry.md`: `kra state` foundation (registry)
   - `commands/ws/selector.md`: Shared inline selector UI for workspace actions
-  - `commands/ws/select.md`: Unified human launcher (`ws select` / context-aware `ws`)
+  - `commands/ws/select.md`: Workspace targeting options (`--id` / `--current` / `--select`)
   - `commands/ws/create.md`: `kra ws create`
-  - `commands/ws/select-multi.md`: `kra ws select --multi`
+  - `commands/ws/select-multi.md`: `kra ws --select --multi`
   - `commands/ws/import/jira.md`: `kra ws import jira`
   - `commands/ws/dashboard.md`: `kra ws dashboard`
-  - `commands/ws/add-repo.md`: `kra ws --act add-repo`
-  - `commands/ws/dry-run.md`: `kra ws --act <close|reopen|purge> --dry-run`
+  - `commands/ws/add-repo.md`: `kra ws add-repo`
+  - `commands/ws/dry-run.md`: `kra ws <close|reopen|purge> --dry-run`
   - `commands/ws/lock.md`: `kra ws lock` / `kra ws unlock`
   - `commands/ws/insight.md`: `kra ws insight add` (experimental)
-  - `commands/ws/remove-repo.md`: `kra ws --act remove-repo`
+  - `commands/ws/remove-repo.md`: `kra ws remove-repo`
   - `commands/ws/list.md`: `kra ws list`
-  - `commands/ws/go.md`: `kra ws --act go`
-  - `commands/ws/close.md`: `kra ws --act close`
-  - `commands/ws/reopen.md`: `kra ws --act reopen`
-  - `commands/ws/purge.md`: `kra ws --act purge`
+  - `commands/ws/close.md`: `kra ws close`
+  - `commands/ws/reopen.md`: `kra ws reopen`
+  - `commands/ws/purge.md`: `kra ws purge`
 
 - Development
   - `../dev/TESTING.md`: Testing principles (developer guidance)

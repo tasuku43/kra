@@ -37,6 +37,6 @@ Disallowed transitions:
 ## UI implications
 
 - Selector-driven commands should present state-specific lists:
-  - close/go: default scope is `active`
+  - add-repo/remove-repo/close: default scope is `active`
   - reopen/purge: default scope is `archived`
-- For visibility, commands may support explicit scope flags (for example `ws go --archived`).
+- For visibility, commands may support explicit scope flags where applicable.

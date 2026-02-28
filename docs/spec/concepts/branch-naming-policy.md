@@ -7,7 +7,7 @@ status: implemented
 
 ## Purpose
 
-Standardize workspace branch names for `ws --act add-repo` while keeping per-repo override flexibility.
+Standardize workspace branch names for `ws add-repo` while keeping per-repo override flexibility.
 
 ## Config model
 
@@ -37,7 +37,7 @@ Supported placeholders (phase 1):
 - unsafe or empty render result is rejected with `invalid_argument`
 - `/` normalization policy follows existing add-repo rules
 
-## Behavior in `ws --act add-repo`
+## Behavior in `ws add-repo`
 
 - interactive input default value uses rendered template result
 - JSON mode default `branch` uses rendered template when `--branch` omitted

@@ -77,7 +77,7 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 ## Modes
 
 - This command is explicit-id mode only.
-- Interactive selection must use `kra ws select --archived`.
+- Interactive selection must use `kra ws reopen --select --archived`.
 - JSON execution in phase 1 is `--dry-run` preflight only.
 
 ## FS metadata behavior

@@ -3,7 +3,7 @@ title: "`kra ws` selector UI"
 status: implemented
 ---
 
-# Selector UI (shared by `ws close` / `ws go` / `ws add-repo` / `ws remove-repo` / `ws reopen` / `ws unlock` / `ws purge`)
+# Selector UI (shared by `ws close` / `ws add-repo` / `ws remove-repo` / `ws reopen` / `ws unlock` / `ws purge`)
 
 ## Purpose
 
@@ -28,7 +28,7 @@ Provide a non-fullscreen interactive selector for frequent workspace operations.
     - `example-org/helmfiles` matches query `c s`.
 - `Backspace` / `Delete`: remove one rune from filter query.
 - Filter text must persist after selection toggle; it is cleared only when the user explicitly deletes it.
-- Single-select mode (`ws go`) uses cursor + confirm (`Enter` or `Space`):
+- Single-select mode uses cursor + confirm (`Enter` or `Space`):
   - selection markers stay visible (`○/●`) for visual parity with multi-select.
   - footer does not show `selected: n/m`.
   - confirmation locks input briefly (`0.2s`) before stage transition.
@@ -48,7 +48,7 @@ Each row should include at least:
 - summary text (for example title)
 
 Header/footer should show:
-- command mode (`close`, `go`, `add-repo`, `remove-repo`, `reopen`, `unlock`, `purge`)
+- command mode (`close`, `add-repo`, `remove-repo`, `reopen`, `unlock`, `purge`)
 - scope (`active` or `archived`)
 - key hints (`Space`, `Enter`, text filter input, `Esc`/`Ctrl+C`)
 - `Enter` hint label should be command-specific action text (for example `enter close` for `ws close`).
@@ -86,7 +86,7 @@ Section body indentation must be controlled by shared global constants (no per-c
   - Preferred terminal style is gray-like ANSI colors (for example `bright black` family).
 - Validation/error messages shown below selector footer must use the shared error token (danger/error color).
 - Do not vary supplemental color semantics by command; the same visual hierarchy must be applied across
-  `ws close/go/add-repo/remove-repo/reopen/unlock/purge`.
+  `ws close/add-repo/remove-repo/reopen/unlock/purge`.
 - Color is optional fallback:
   - when color is unavailable, preserve hierarchy via prefixes/indentation only.
 
@@ -147,7 +147,7 @@ Required shared modules (logical units):
 - `SelectorFrameRenderer`: footer and key-hint renderer
 
 Rules:
-- Command handlers (`ws close/go/add-repo/remove-repo/reopen/unlock/purge`) must not define ad-hoc colors or row formats inline.
+- Command handlers (`ws close/add-repo/remove-repo/reopen/unlock/purge`) must not define ad-hoc colors or row formats inline.
 - Display differences by command should be expressed via data (mode/scope/actions), not bespoke render code.
 - `ws list --tree` should reuse `WorkspaceRowRenderer` and `RepoTreeRenderer` for visual parity with selector flows.
 - Selector-capable command handlers must delegate stage orchestration (`Workspaces -> Risk -> Result`) to the
@@ -174,7 +174,6 @@ Rules:
 ## Scope rules
 
 - `ws close`: default list is `active`
-- `ws go`: default list is `active`
 - `ws reopen`: default list is `archived`
 - `ws purge`: default list is `archived`
 
@@ -219,7 +218,6 @@ Launcher and selector relationship:
 
 ## Selection cardinality
 
-- `ws go`: single selection only (exactly one required)
 - `ws add-repo`: multiple selection allowed
 - `ws remove-repo`: multiple selection allowed
 - `ws close`: multiple selection allowed

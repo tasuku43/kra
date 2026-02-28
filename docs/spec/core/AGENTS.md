@@ -39,7 +39,7 @@ Include:
   - `workspaces/<id>/repos/<alias>/`: git worktrees (NOT Git-tracked)
   - `archive/<id>/`: archived workspaces (Git-tracked)
 - Workflow:
-  - `kra ws create` -> `kra ws --act add-repo` -> work -> `kra ws --act close`
+  - `kra ws create` -> `kra ws add-repo` -> work -> `kra ws close`
 - Agent skillpack:
   - no default guidance in root AGENTS for experimental skillpack features
   - experimental guidance may be added only when explicitly opted into experiments
@@ -62,7 +62,7 @@ If used, recommended content is:
   - where to store artifacts
   - keep code changes inside `repos/` worktrees only
 - Closing:
-  - run `kra ws --act close --id <id>` to archive and remove worktrees
+  - run `kra ws close --id <id>` to archive and remove worktrees
 
 ## Notes
 

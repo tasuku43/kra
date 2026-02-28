@@ -20,10 +20,10 @@ Commands implemented through `MVP-042`:
 - `kra init`
 - `kra template validate`
 - `kra ws create`
-- `kra ws --act add-repo`
-- `kra ws --act close`
-- `kra ws --act reopen`
-- `kra ws --act purge`
+- `kra ws add-repo`
+- `kra ws close`
+- `kra ws reopen`
+- `kra ws purge`
 
 ## Done definition
 
@@ -202,9 +202,8 @@ This section maps the spec scenarios to concrete CLI integration tests.
 ## Non-interactive contract tests (`UX-WS-026`)
 
 - JSON success envelope for:
-  - `ws --act go --format json`
-  - `ws --act close --format json`
+  - `ws close --format json`
 - JSON validation failures:
-  - `ws --act add-repo --format json` without required `--repo`/`--yes`
+  - `ws add-repo --format json` without required `--repo`/`--yes`
 - Exit code policy:
   - JSON mode still returns non-zero exit on failures.

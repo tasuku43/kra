@@ -1,9 +1,9 @@
 ---
-title: "`kra ws select --multi`"
+title: "`kra ws --select --multi`"
 status: implemented
 ---
 
-# `kra ws select --multi <close|reopen|purge> [--archived] [--no-commit] [--commit] [--format human|json] [--yes] [--continue-on-error]`
+# `kra ws --select --multi <close|reopen|purge> [--archived] [--no-commit] [--commit] [--format human|json] [--yes] [--continue-on-error]`
 
 ## Purpose
 
@@ -29,7 +29,7 @@ Add multi-select execution mode to the existing workspace selector entrypoint wi
 ## Validation rules
 
 - `--multi` without action must fail with usage error.
-- `go`, `add-repo`, `remove-repo` are invalid in `--multi` mode.
+- `add-repo`, `remove-repo` are invalid in `--multi` mode.
 - Scope mismatch (`--archived` + `close`) must fail fast.
 
 ## Behavior (MVP)
@@ -43,9 +43,9 @@ Add multi-select execution mode to the existing workspace selector entrypoint wi
 
 - Human mode:
   - selected action prints its own sections per workspace (`Risk:`/`Result:` as defined by each action command).
-  - `ws select --multi` itself does not print an additional aggregate `Result:` block.
+  - `ws --select --multi` itself does not print an additional aggregate `Result:` block.
 - JSON mode:
-  - not implemented in MVP scope for `ws select --multi`.
+  - not implemented in MVP scope for `ws --select --multi`.
 
 ## Safety / commit scope
 

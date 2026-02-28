@@ -30,10 +30,9 @@ Use two complementary layers:
 - `init`
 - `ws create`
 - `ws list`
-- `ws --act go`
-- `ws --act close`
-- `ws --act reopen`
-- `ws --act purge --no-prompt --force`
+- `ws close`
+- `ws reopen`
+- `ws purge --no-prompt --force`
 - `ws list --archived`
 
 ### Component matrix

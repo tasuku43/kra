@@ -35,7 +35,7 @@ the same application use cases.
 - `cli` must not import `statestore`, `paths`, or `gitutil` directly after migration.
 - `cli` calls `app` use cases through explicit request/response structs.
 - `app` depends on interfaces only; concrete adapters live in `infra` and `ui`.
-- Launcher (`kra ws`) and direct operations (`ws --act go`, `ws --act close`, `ws --act add-repo`, ...) must execute through
+- Launcher (`kra ws`) and direct operations (`ws close`, `ws add-repo`, ...) must execute through
   the same `app` use case path to avoid behavior drift.
 - During migration, direct `internal/infra/*` imports under `internal/cli` are controlled by architecture allowlist tests in
   `internal/archguard/layering_test.go` (no silent expansion allowed).
@@ -58,5 +58,5 @@ the same application use cases.
 - Command handlers in `internal/cli` are thin wrappers over `app` use cases.
 - Shared behavior parity is verified by integration tests for:
   - launcher vs direct command execution
-  - `ws select` vs direct id
+  - `ws --select` vs direct id
 - No layering violations according to architecture guard tests.

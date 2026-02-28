@@ -88,7 +88,7 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 
 - This command accepts explicit target by `--id` or positional `<id>`.
 - If no id is provided, resolve from current path under `workspaces/<id>/...`.
-- Interactive selection should use `kra ws select close`.
+- Interactive selection should use `kra ws close --select`.
 - Selector and follow-up output should use section headings:
   - `Workspaces(active):`
   - `Plan:`

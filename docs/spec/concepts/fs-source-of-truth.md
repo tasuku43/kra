@@ -49,7 +49,7 @@ If rebuildable data is missing/corrupt, commands should either:
 - During migration window, command behavior is defined by command specs with explicit precedence.
 - Target steady-state:
   - workspace lifecycle and reopen restore do not require SQL tables.
-  - `ws list` / `ws go` operate from filesystem + meta JSON.
+  - workspace action/list surfaces operate from filesystem + meta JSON.
 
 ## Non-goals (this phase)
 

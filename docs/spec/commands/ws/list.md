@@ -13,11 +13,11 @@ Alias:
 List workspaces with status and summary fields, similar in spirit to `gion manifest ls`.
 
 `ws list` is a read-only listing command.
-`ws list` is read-only. Interactive selection entrypoint is `ws select`.
+`ws list` is read-only. Interactive selection is provided by each workspace action command with `--select`.
 
 ## Role boundary
 
-- `ws select` handles interactive workspace/action selection.
+- Workspace action commands (`ws close`, `ws reopen`, etc.) handle interactive selection via `--select`.
 - Operation commands run with explicit `<id>` after selection.
 
 ## Default display
