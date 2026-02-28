@@ -100,6 +100,53 @@ func (c *Client) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
 			Selected: row.Selected,
 		})
 	}
+	if len(out) > 0 {
+		return out, nil
+	}
+	if fallback, err := c.listWorkspacesFromTree(ctx); err == nil && len(fallback) > 0 {
+		return fallback, nil
+	}
+	return out, nil
+}
+
+func (c *Client) listWorkspacesFromTree(ctx context.Context) ([]Workspace, error) {
+	var payload struct {
+		Windows []struct {
+			Workspaces []struct {
+				ID       string `json:"id"`
+				Ref      string `json:"ref"`
+				Index    int    `json:"index"`
+				Title    string `json:"title"`
+				Selected bool   `json:"selected"`
+				Current  bool   `json:"current"`
+				Active   bool   `json:"active"`
+			} `json:"workspaces"`
+		} `json:"windows"`
+	}
+	if err := c.runJSON(ctx, &payload, "tree", "--all"); err != nil {
+		return nil, err
+	}
+	out := make([]Workspace, 0)
+	seen := make(map[string]struct{})
+	for _, window := range payload.Windows {
+		for _, row := range window.Workspaces {
+			id := strings.TrimSpace(row.ID)
+			if id == "" {
+				continue
+			}
+			if _, ok := seen[id]; ok {
+				continue
+			}
+			seen[id] = struct{}{}
+			out = append(out, Workspace{
+				ID:       id,
+				Ref:      strings.TrimSpace(row.Ref),
+				Index:    row.Index,
+				Title:    strings.TrimSpace(row.Title),
+				Selected: row.Selected || row.Current || row.Active,
+			})
+		}
+	}
 	return out, nil
 }
 

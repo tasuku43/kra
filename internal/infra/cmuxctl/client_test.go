@@ -22,6 +22,25 @@ func (f *fakeRunner) Run(_ context.Context, name string, args ...string) ([]byte
 	return f.stdout, f.stderr, f.err
 }
 
+type fakeRunnerSequence struct {
+	calls []struct {
+		stdout []byte
+		stderr []byte
+		err    error
+	}
+	names [][]string
+}
+
+func (f *fakeRunnerSequence) Run(_ context.Context, name string, args ...string) ([]byte, []byte, error) {
+	f.names = append(f.names, append([]string{name}, args...))
+	if len(f.calls) == 0 {
+		return nil, nil, errors.New("unexpected call")
+	}
+	call := f.calls[0]
+	f.calls = f.calls[1:]
+	return call.stdout, call.stderr, call.err
+}
+
 func TestClientCapabilities_ParsesMethods(t *testing.T) {
 	f := &fakeRunner{stdout: []byte(`{"methods":["workspace.create","workspace.select"]}`)}
 	c := &Client{Runner: f, SocketPath: "/tmp/cmux.sock"}
@@ -87,6 +106,39 @@ func TestClientListWorkspaces_JSONMode(t *testing.T) {
 	wantArgs := []string{"--json", "list-workspaces"}
 	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
 		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
+	}
+}
+
+func TestClientListWorkspaces_FallsBackToTreeWhenCurrentWindowEmpty(t *testing.T) {
+	f := &fakeRunnerSequence{
+		calls: []struct {
+			stdout []byte
+			stderr []byte
+			err    error
+		}{
+			{stdout: []byte(`{"workspaces":[]}`)},
+			{stdout: []byte(`{"windows":[{"workspaces":[{"id":"id2","ref":"workspace:2","index":1,"title":"other","current":true}]}]}`)},
+		},
+	}
+	c := &Client{Runner: f}
+
+	got, err := c.ListWorkspaces(context.Background())
+	if err != nil {
+		t.Fatalf("ListWorkspaces() error: %v", err)
+	}
+	if len(got) != 1 || got[0].ID != "id2" || got[0].Ref != "workspace:2" || !got[0].Selected {
+		t.Fatalf("unexpected fallback workspaces: %+v", got)
+	}
+	if len(f.names) != 2 {
+		t.Fatalf("call count = %d, want 2", len(f.names))
+	}
+	wantFirst := []string{"cmux", "--json", "list-workspaces"}
+	if !reflect.DeepEqual(f.names[0], wantFirst) {
+		t.Fatalf("first call = %v, want %v", f.names[0], wantFirst)
+	}
+	wantSecond := []string{"cmux", "--json", "tree", "--all"}
+	if !reflect.DeepEqual(f.names[1], wantSecond) {
+		t.Fatalf("second call = %v, want %v", f.names[1], wantSecond)
 	}
 }
 
