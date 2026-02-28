@@ -32,6 +32,8 @@ brew install kra
 3. Verify `checksums.txt`.
 4. Place `kra` in your `PATH`.
 
+For complete installation options, see `docs/guides/INSTALL.md`.
+
 ## Quick Start
 
 ```sh
@@ -77,8 +79,35 @@ Not yet. `agent` capabilities are intentionally EXP for now; public-release read
 
 ## Docs
 
+- Docs index: `docs/README.md`
 - Start here: `docs/START_HERE.md`
+- Install: `docs/guides/INSTALL.md`
+- Commands: `docs/guides/COMMANDS.md`
 - Product concept: `docs/concepts/product-concept.md`
 - Specs: `docs/spec/`
 - Backlog: `docs/backlog/README.md`
 - Releasing: `docs/ops/RELEASING.md`
+
+## Contributing
+
+See `CONTRIBUTING.md`.
+
+## Support
+
+See `SUPPORT.md`.
+
+## Security
+
+See `SECURITY.md`.
+
+## Code of Conduct
+
+See `CODE_OF_CONDUCT.md`.
+
+## License
+
+See `LICENSE`.
+
+## Maintainer
+
+- @tasuku43
