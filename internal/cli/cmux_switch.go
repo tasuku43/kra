@@ -105,6 +105,13 @@ func (c *CLI) runCMUXSwitch(args []string) int {
 	if err != nil {
 		return c.writeCMUXSwitchError(outputFormat, "state_write_failed", workspaceID, fmt.Sprintf("load cmux mapping: %v", err), exitError)
 	}
+	if runtime, rerr := newCMUXRuntimeClient().ListWorkspaces(context.Background()); rerr == nil {
+		reconciled, _, _, recErr := reconcileCMUXMappingWithRuntime(store, mapping, runtime, true)
+		if recErr != nil {
+			return c.writeCMUXSwitchError(outputFormat, "state_write_failed", workspaceID, fmt.Sprintf("reconcile cmux mapping: %v", recErr), exitError)
+		}
+		mapping = reconciled
+	}
 
 	resolvedWorkspaceID, resolvedEntry, code, msg := c.resolveCMUXSwitchTarget(mapping, workspaceID, cmuxHandle, outputFormat)
 	if code != "" {

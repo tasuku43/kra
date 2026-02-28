@@ -7,16 +7,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tasuku43/kra/internal/cmuxmap"
-	"github.com/tasuku43/kra/internal/infra/cmuxctl"
 	"github.com/tasuku43/kra/internal/infra/paths"
 )
 
-type cmuxListClient interface {
-	ListWorkspaces(ctx context.Context) ([]cmuxctl.Workspace, error)
-}
+type cmuxListClient = cmuxRuntimeClient
 
-var newCMUXListClient = func() cmuxListClient { return cmuxctl.NewClient() }
+var newCMUXListClient = func() cmuxListClient { return newCMUXRuntimeClient() }
 
 func (c *CLI) runCMUXList(args []string) int {
 	outputFormat := "human"
@@ -98,30 +94,12 @@ func (c *CLI) runCMUXList(args []string) int {
 		runtimeErr = fmt.Sprintf("list cmux workspaces: %v", listErr)
 	} else {
 		runtimeChecked = true
-		exists := map[string]bool{}
-		for _, row := range cmuxList {
-			id := strings.TrimSpace(row.ID)
-			if id != "" {
-				exists[id] = true
-			}
+		reconciled, _, pruned, recErr := reconcileCMUXMappingWithRuntime(store, mapping, cmuxList, true)
+		if recErr != nil {
+			return c.writeCMUXSimpleError("cmux.list", outputFormat, "internal_error", workspaceID, fmt.Sprintf("save cmux mapping: %v", recErr), exitError)
 		}
-		for wsID, ws := range mapping.Workspaces {
-			keep := make([]cmuxmap.Entry, 0, len(ws.Entries))
-			for _, e := range ws.Entries {
-				if exists[strings.TrimSpace(e.CMUXWorkspaceID)] {
-					keep = append(keep, e)
-					continue
-				}
-				prunedCount++
-			}
-			ws.Entries = keep
-			mapping.Workspaces[wsID] = ws
-		}
-		if prunedCount > 0 {
-			if saveErr := store.Save(mapping); saveErr != nil {
-				return c.writeCMUXSimpleError("cmux.list", outputFormat, "internal_error", workspaceID, fmt.Sprintf("save cmux mapping: %v", saveErr), exitError)
-			}
-		}
+		mapping = reconciled
+		prunedCount = pruned
 	}
 
 	type row struct {

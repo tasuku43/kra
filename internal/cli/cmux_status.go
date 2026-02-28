@@ -7,15 +7,12 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/tasuku43/kra/internal/infra/cmuxctl"
 	"github.com/tasuku43/kra/internal/infra/paths"
 )
 
-type cmuxStatusClient interface {
-	ListWorkspaces(ctx context.Context) ([]cmuxctl.Workspace, error)
-}
+type cmuxStatusClient = cmuxRuntimeClient
 
-var newCMUXStatusClient = func() cmuxStatusClient { return cmuxctl.NewClient() }
+var newCMUXStatusClient = func() cmuxStatusClient { return newCMUXRuntimeClient() }
 
 func (c *CLI) runCMUXStatus(args []string) int {
 	outputFormat := "human"
@@ -92,12 +89,9 @@ func (c *CLI) runCMUXStatus(args []string) int {
 	if err != nil {
 		return c.writeCMUXSimpleError("cmux.status", outputFormat, "cmux_list_failed", workspaceID, fmt.Sprintf("list cmux workspaces: %v", err), exitError)
 	}
-	exists := map[string]bool{}
-	for _, row := range cmuxList {
-		id := strings.TrimSpace(row.ID)
-		if id != "" {
-			exists[id] = true
-		}
+	_, exists, _, recErr := reconcileCMUXMappingWithRuntime(newCMUXMapStore(root), mapping, cmuxList, false)
+	if recErr != nil {
+		return c.writeCMUXSimpleError("cmux.status", outputFormat, "internal_error", workspaceID, fmt.Sprintf("reconcile cmux mapping: %v", recErr), exitError)
 	}
 
 	type row struct {

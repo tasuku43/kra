@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tasuku43/kra/internal/cmuxmap"
+	"github.com/tasuku43/kra/internal/infra/cmuxctl"
 )
 
 type fakeCMUXSwitchClient struct {
@@ -23,6 +24,12 @@ func (f *fakeCMUXSwitchClient) SelectWorkspace(_ context.Context, workspace stri
 }
 
 func TestCLI_CMUX_Switch_JSON_Success_WithExplicitWorkspaceAndCMUX(t *testing.T) {
+	prevRuntime := newCMUXRuntimeClient
+	newCMUXRuntimeClient = func() cmuxRuntimeClient {
+		return &fakeCMUXStatusClient{err: context.DeadlineExceeded}
+	}
+	t.Cleanup(func() { newCMUXRuntimeClient = prevRuntime })
+
 	root := prepareCurrentRootForTest(t)
 	store := cmuxmap.NewStore(root)
 	mapping := cmuxmap.File{
@@ -84,6 +91,12 @@ func TestCLI_CMUX_Switch_JSON_Success_WithExplicitWorkspaceAndCMUX(t *testing.T)
 }
 
 func TestCLI_CMUX_Switch_JSON_AmbiguousWithoutWorkspace_Fails(t *testing.T) {
+	prevRuntime := newCMUXRuntimeClient
+	newCMUXRuntimeClient = func() cmuxRuntimeClient {
+		return &fakeCMUXStatusClient{err: context.DeadlineExceeded}
+	}
+	t.Cleanup(func() { newCMUXRuntimeClient = prevRuntime })
+
 	root := prepareCurrentRootForTest(t)
 	store := cmuxmap.NewStore(root)
 	mapping := cmuxmap.File{
@@ -127,6 +140,12 @@ func TestCLI_CMUX_Switch_JSON_AmbiguousWithoutWorkspace_Fails(t *testing.T) {
 }
 
 func TestCLI_CMUX_Switch_JSON_RequiresTargetIfNoFlags(t *testing.T) {
+	prevRuntime := newCMUXRuntimeClient
+	newCMUXRuntimeClient = func() cmuxRuntimeClient {
+		return &fakeCMUXStatusClient{err: context.DeadlineExceeded}
+	}
+	t.Cleanup(func() { newCMUXRuntimeClient = prevRuntime })
+
 	prepareCurrentRootForTest(t)
 
 	var out bytes.Buffer
@@ -164,6 +183,12 @@ func TestFilterCMUXEntries_MatchesIDAndOrdinalHandle(t *testing.T) {
 }
 
 func TestCLI_CMUX_Switch_JSON_NonMappedWorkspace(t *testing.T) {
+	prevRuntime := newCMUXRuntimeClient
+	newCMUXRuntimeClient = func() cmuxRuntimeClient {
+		return &fakeCMUXStatusClient{err: context.DeadlineExceeded}
+	}
+	t.Cleanup(func() { newCMUXRuntimeClient = prevRuntime })
+
 	root := prepareCurrentRootForTest(t)
 	path := filepath.Join(root, ".kra", "state")
 	if err := os.MkdirAll(path, 0o755); err != nil {
@@ -183,5 +208,57 @@ func TestCLI_CMUX_Switch_JSON_NonMappedWorkspace(t *testing.T) {
 	}
 	if resp.OK || resp.Error.Code != "cmux_not_mapped" {
 		t.Fatalf("unexpected json response: %+v", resp)
+	}
+}
+
+func TestCLI_CMUX_Switch_JSON_PrunesStaleBeforeResolve(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	store := cmuxmap.NewStore(root)
+	mapping := cmuxmap.File{
+		Version: cmuxmap.CurrentVersion,
+		Workspaces: map[string]cmuxmap.WorkspaceMapping{
+			"WS1": {
+				NextOrdinal: 3,
+				Entries: []cmuxmap.Entry{
+					{CMUXWorkspaceID: "CMUX-OLD", Ordinal: 1, TitleSnapshot: "WS1 | old [1]"},
+					{CMUXWorkspaceID: "CMUX-NEW", Ordinal: 2, TitleSnapshot: "WS1 | new [2]"},
+				},
+			},
+		},
+	}
+	if err := store.Save(mapping); err != nil {
+		t.Fatalf("save mapping: %v", err)
+	}
+
+	prevRuntime := newCMUXRuntimeClient
+	newCMUXRuntimeClient = func() cmuxRuntimeClient {
+		return &fakeCMUXStatusClient{
+			workspaces: []cmuxctl.Workspace{{ID: "CMUX-NEW"}},
+		}
+	}
+	t.Cleanup(func() { newCMUXRuntimeClient = prevRuntime })
+
+	fake := &fakeCMUXSwitchClient{}
+	prevSwitch := newCMUXSwitchClient
+	newCMUXSwitchClient = func() cmuxSwitchClient { return fake }
+	t.Cleanup(func() { newCMUXSwitchClient = prevSwitch })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"cmux", "switch", "--format", "json", "--workspace", "WS1"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, err.String(), out.String())
+	}
+	if fake.selected != "CMUX-NEW" {
+		t.Fatalf("selected workspace = %q, want %q", fake.selected, "CMUX-NEW")
+	}
+
+	after, lerr := store.Load()
+	if lerr != nil {
+		t.Fatalf("reload mapping: %v", lerr)
+	}
+	if len(after.Workspaces["WS1"].Entries) != 1 || after.Workspaces["WS1"].Entries[0].CMUXWorkspaceID != "CMUX-NEW" {
+		t.Fatalf("mapping should be pruned to CMUX-NEW only: %+v", after.Workspaces["WS1"].Entries)
 	}
 }
