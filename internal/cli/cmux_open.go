@@ -7,8 +7,6 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
-	"sync"
-	"time"
 
 	appcmux "github.com/tasuku43/kra/internal/app/cmux"
 	"github.com/tasuku43/kra/internal/cmuxmap"
@@ -169,11 +167,7 @@ func (c *CLI) runCMUXOpen(args []string) int {
 			}
 			return c.writeCMUXOpenError(outputFormat, code, id, msg, exitError)
 		}
-		targets = append(targets, appcmux.OpenTarget{
-			WorkspaceID:   target.WorkspaceID,
-			WorkspacePath: target.WorkspacePath,
-			Title:         target.Title,
-		})
+		targets = append(targets, target)
 	}
 
 	svc := appcmux.NewService(func() appcmux.Client {
@@ -219,166 +213,20 @@ type cmuxOpenFailure struct {
 	Message     string
 }
 
-type cmuxOpenTarget struct {
-	WorkspaceID   string
-	WorkspacePath string
-	Title         string
-}
-
-func (c *CLI) runCMUXOpenSequential(ctx context.Context, client cmuxOpenClient, root string, targetIDs []string, mapping *cmuxmap.File) ([]cmuxOpenResult, []cmuxOpenFailure) {
-	results := make([]cmuxOpenResult, 0, len(targetIDs))
-	failures := make([]cmuxOpenFailure, 0)
-	var mapMu sync.Mutex
-	for _, workspaceID := range targetIDs {
-		target, code, msg := resolveCMUXOpenTarget(root, workspaceID)
-		if code != "" {
-			failures = append(failures, cmuxOpenFailure{WorkspaceID: workspaceID, Code: code, Message: msg})
-			return results, failures
-		}
-		result, code, msg := c.openOneCMUXWorkspace(ctx, client, target, mapping, &mapMu)
-		if code != "" {
-			failures = append(failures, cmuxOpenFailure{WorkspaceID: workspaceID, Code: code, Message: msg})
-			return results, failures
-		}
-		results = append(results, result)
-	}
-	return results, failures
-}
-
-func (c *CLI) runCMUXOpenConcurrent(ctx context.Context, root string, targetIDs []string, concurrency int, mapping *cmuxmap.File) ([]cmuxOpenResult, []cmuxOpenFailure) {
-	type item struct {
-		index  int
-		target cmuxOpenTarget
-	}
-	tasks := make([]item, 0, len(targetIDs))
-	failures := make([]cmuxOpenFailure, 0)
-	for i, workspaceID := range targetIDs {
-		target, code, msg := resolveCMUXOpenTarget(root, workspaceID)
-		if code != "" {
-			failures = append(failures, cmuxOpenFailure{WorkspaceID: workspaceID, Code: code, Message: msg})
-			continue
-		}
-		tasks = append(tasks, item{index: i, target: target})
-	}
-	if len(tasks) == 0 {
-		return nil, failures
-	}
-
-	type jobResult struct {
-		index  int
-		result cmuxOpenResult
-		fail   *cmuxOpenFailure
-	}
-	jobs := make(chan item)
-	out := make(chan jobResult, len(tasks))
-	var workers sync.WaitGroup
-	var mapMu sync.Mutex
-	for i := 0; i < concurrency; i++ {
-		workers.Add(1)
-		go func() {
-			defer workers.Done()
-			client := newCMUXOpenClient()
-			for job := range jobs {
-				result, code, msg := c.openOneCMUXWorkspace(ctx, client, job.target, mapping, &mapMu)
-				if code != "" {
-					out <- jobResult{
-						index: job.index,
-						fail: &cmuxOpenFailure{
-							WorkspaceID: job.target.WorkspaceID,
-							Code:        code,
-							Message:     msg,
-						},
-					}
-					continue
-				}
-				out <- jobResult{index: job.index, result: result}
-			}
-		}()
-	}
-	go func() {
-		for _, task := range tasks {
-			jobs <- task
-		}
-		close(jobs)
-		workers.Wait()
-		close(out)
-	}()
-
-	collected := make([]jobResult, 0, len(tasks))
-	for item := range out {
-		collected = append(collected, item)
-	}
-	sort.Slice(collected, func(i, j int) bool { return collected[i].index < collected[j].index })
-
-	results := make([]cmuxOpenResult, 0, len(tasks))
-	for _, item := range collected {
-		if item.fail != nil {
-			failures = append(failures, *item.fail)
-			continue
-		}
-		results = append(results, item.result)
-	}
-	return results, failures
-}
-
-func resolveCMUXOpenTarget(root string, workspaceID string) (cmuxOpenTarget, string, string) {
+func resolveCMUXOpenTarget(root string, workspaceID string) (appcmux.OpenTarget, string, string) {
 	wsPath := filepath.Join(root, "workspaces", workspaceID)
 	fi, err := os.Stat(wsPath)
 	if err != nil || !fi.IsDir() {
-		return cmuxOpenTarget{}, "workspace_not_found", fmt.Sprintf("workspace not found: %s", workspaceID)
+		return appcmux.OpenTarget{}, "workspace_not_found", fmt.Sprintf("workspace not found: %s", workspaceID)
 	}
 	title := ""
 	if meta, err := loadWorkspaceMetaFile(wsPath); err == nil {
 		title = strings.TrimSpace(meta.Workspace.Title)
 	}
-	return cmuxOpenTarget{
+	return appcmux.OpenTarget{
 		WorkspaceID:   workspaceID,
 		WorkspacePath: wsPath,
 		Title:         title,
-	}, "", ""
-}
-
-func (c *CLI) openOneCMUXWorkspace(ctx context.Context, client cmuxOpenClient, target cmuxOpenTarget, mapping *cmuxmap.File, mapMu *sync.Mutex) (cmuxOpenResult, string, string) {
-	cmuxWorkspaceID, err := client.CreateWorkspaceWithCommand(ctx, fmt.Sprintf("cd %s", shellQuoteCDPath(target.WorkspacePath)))
-	if err != nil {
-		return cmuxOpenResult{}, "cmux_create_failed", fmt.Sprintf("create cmux workspace: %v", err)
-	}
-
-	mapMu.Lock()
-	ordinal, err := cmuxmap.AllocateOrdinal(mapping, target.WorkspaceID)
-	mapMu.Unlock()
-	if err != nil {
-		return cmuxOpenResult{}, "state_write_failed", fmt.Sprintf("allocate cmux ordinal: %v", err)
-	}
-	cmuxTitle, err := cmuxmap.FormatWorkspaceTitle(target.WorkspaceID, target.Title, ordinal)
-	if err != nil {
-		return cmuxOpenResult{}, "cmux_rename_failed", fmt.Sprintf("format cmux workspace title: %v", err)
-	}
-
-	if err := client.RenameWorkspace(ctx, cmuxWorkspaceID, cmuxTitle); err != nil {
-		return cmuxOpenResult{}, "cmux_rename_failed", fmt.Sprintf("rename cmux workspace: %v", err)
-	}
-	if err := client.SelectWorkspace(ctx, cmuxWorkspaceID); err != nil {
-		return cmuxOpenResult{}, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
-	}
-	now := time.Now().UTC().Format(time.RFC3339)
-	mapMu.Lock()
-	ws := mapping.Workspaces[target.WorkspaceID]
-	ws.Entries = append(ws.Entries, cmuxmap.Entry{
-		CMUXWorkspaceID: cmuxWorkspaceID,
-		Ordinal:         ordinal,
-		TitleSnapshot:   cmuxTitle,
-		CreatedAt:       now,
-		LastUsedAt:      now,
-	})
-	mapping.Workspaces[target.WorkspaceID] = ws
-	mapMu.Unlock()
-	return cmuxOpenResult{
-		WorkspaceID:     target.WorkspaceID,
-		WorkspacePath:   target.WorkspacePath,
-		CMUXWorkspaceID: cmuxWorkspaceID,
-		Ordinal:         ordinal,
-		Title:           cmuxTitle,
 	}, "", ""
 }
 
@@ -595,31 +443,4 @@ func (c *CLI) writeCMUXOpenError(format string, code string, workspaceID string,
 		fmt.Fprintf(c.Err, "cmux open: %s\n", message)
 	}
 	return exitCode
-}
-
-func shellQuoteSingle(s string) string {
-	if s == "" {
-		return "''"
-	}
-	return "'" + strings.ReplaceAll(s, "'", `'"'"'`) + "'"
-}
-
-func shellEscapeForDoubleQuotes(s string) string {
-	replacer := strings.NewReplacer(`\`, `\\`, `"`, `\"`, "$", `\$`, "`", "\\`")
-	return replacer.Replace(s)
-}
-
-func shellQuoteCDPath(path string) string {
-	home, err := os.UserHomeDir()
-	if err == nil {
-		if path == home {
-			return `"$HOME"`
-		}
-		prefix := home + string(os.PathSeparator)
-		if strings.HasPrefix(path, prefix) {
-			suffix := strings.TrimPrefix(path, prefix)
-			return `"$HOME/` + shellEscapeForDoubleQuotes(suffix) + `"`
-		}
-	}
-	return shellQuoteSingle(path)
 }

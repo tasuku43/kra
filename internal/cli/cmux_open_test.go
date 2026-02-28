@@ -368,15 +368,3 @@ func TestCLI_CMUX_Open_JSON_MultiConcurrency_PartialFailure(t *testing.T) {
 		t.Fatalf("mapping entries for WS1 = %+v, want 1 entry", mapping.Workspaces["WS1"].Entries)
 	}
 }
-
-func TestShellQuoteCDPath_UsesHomeVariableWhenUnderHome(t *testing.T) {
-	home, err := os.UserHomeDir()
-	if err != nil || strings.TrimSpace(home) == "" {
-		t.Skip("home dir is not available")
-	}
-	got := shellQuoteCDPath(filepath.Join(home, "work/root/workspaces/SREP-4084"))
-	want := `"$HOME/work/root/workspaces/SREP-4084"`
-	if got != want {
-		t.Fatalf("shellQuoteCDPath() = %q, want %q", got, want)
-	}
-}
