@@ -13,6 +13,8 @@ Define explicit workspace targeting modes shared by workspace action commands.
 
 - Targeting options apply to workspace action commands such as:
   - `kra ws open`
+  - `kra ws save`
+  - `kra ws resume`
   - `kra ws add-repo`
   - `kra ws remove-repo`
   - `kra ws close`

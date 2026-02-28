@@ -57,6 +57,7 @@ type Surface struct {
 	Ref      string
 	Index    int
 	Title    string
+	Type     string
 	Selected bool
 	PaneID   string
 }
@@ -322,6 +323,7 @@ func (c *Client) ListPaneSurfaces(ctx context.Context, workspace string, pane st
 			Ref      string `json:"ref"`
 			Index    int    `json:"index"`
 			Title    string `json:"title"`
+			Type     string `json:"type"`
 			Selected bool   `json:"selected"`
 			PaneID   string `json:"pane_id"`
 		} `json:"surfaces"`
@@ -336,11 +338,65 @@ func (c *Client) ListPaneSurfaces(ctx context.Context, workspace string, pane st
 			Ref:      strings.TrimSpace(row.Ref),
 			Index:    row.Index,
 			Title:    strings.TrimSpace(row.Title),
+			Type:     strings.TrimSpace(row.Type),
 			Selected: row.Selected,
 			PaneID:   strings.TrimSpace(row.PaneID),
 		})
 	}
 	return out, nil
+}
+
+func (c *Client) FocusPane(ctx context.Context, pane string, workspace string) error {
+	pane = strings.TrimSpace(pane)
+	workspace = strings.TrimSpace(workspace)
+	if pane == "" {
+		return fmt.Errorf("pane is required")
+	}
+	args := []string{"focus-pane", "--pane", pane}
+	if workspace != "" {
+		args = append(args, "--workspace", workspace)
+	}
+	_, stderr, err := c.run(ctx, false, false, args...)
+	if err != nil {
+		return commandError("focus-pane", stderr, err)
+	}
+	return nil
+}
+
+func (c *Client) BrowserStateSave(ctx context.Context, workspace string, surface string, path string) error {
+	_ = strings.TrimSpace(workspace) // browser subcommands route by surface; keep arg for adapter symmetry.
+	surface = strings.TrimSpace(surface)
+	path = strings.TrimSpace(path)
+	if surface == "" {
+		return fmt.Errorf("surface is required")
+	}
+	if path == "" {
+		return fmt.Errorf("path is required")
+	}
+	args := []string{"browser", "--surface", surface, "state", "save", path}
+	_, stderr, err := c.run(ctx, false, false, args...)
+	if err != nil {
+		return commandError("browser state save", stderr, err)
+	}
+	return nil
+}
+
+func (c *Client) BrowserStateLoad(ctx context.Context, workspace string, surface string, path string) error {
+	_ = strings.TrimSpace(workspace) // browser subcommands route by surface; keep arg for adapter symmetry.
+	surface = strings.TrimSpace(surface)
+	path = strings.TrimSpace(path)
+	if surface == "" {
+		return fmt.Errorf("surface is required")
+	}
+	if path == "" {
+		return fmt.Errorf("path is required")
+	}
+	args := []string{"browser", "--surface", surface, "state", "load", path}
+	_, stderr, err := c.run(ctx, false, false, args...)
+	if err != nil {
+		return commandError("browser state load", stderr, err)
+	}
+	return nil
 }
 
 func (c *Client) ReadScreen(ctx context.Context, workspace string, surface string, lines int, scrollback bool) (string, error) {

@@ -168,6 +168,8 @@ func (c *CLI) printWSUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws [--id <id> | --current | --select]
   kra ws open [--id <id> | --current | --select] [--multi] [--concurrency <n>] [--format human|json]
+  kra ws save [--id <id> | --current | --select] [-l <label>] [--no-browser-state] [--format human|json]
+  kra ws resume [--id <id> | --current | --select] [--latest] [--strict] [--no-browser] [--format human|json]
   kra ws <add-repo|remove-repo|close|reopen|purge> [--id <id> | --current | --select] [action-args...]
   kra ws --select [--archived] [open|close|add-repo|remove-repo|reopen|unlock|purge]
   kra ws --select --multi [--archived] <close|reopen|purge> [--no-commit]
@@ -184,6 +186,8 @@ Subcommands:
   create            Create a workspace
   import            Import workspaces from external systems
   open              Open cmux workspace(s) for selected workspace target
+  save              Save cmux session context for selected workspace target
+  resume            Restore saved cmux session context for selected workspace target
   add-repo          Add repositories to a workspace
   remove-repo       Remove repositories from a workspace
   close             Archive a workspace
@@ -201,7 +205,7 @@ Run:
 
 Notes:
 - edit actions are routed by ws <action> subcommands.
-- active actions: open, add-repo, remove-repo, close
+- active actions: open, save, resume, add-repo, remove-repo, close
 - archived actions: reopen, unlock, purge (applies archived scope automatically)
 - ws --archived with add-repo|remove-repo|close is invalid.
 - kra ws requires explicit target mode: --id, --current, or --select.
@@ -220,6 +224,22 @@ func (c *CLI) printWSOpenUsage(w io.Writer) {
   kra ws open [--id <id> | --current | --select] [--multi] [--concurrency <n>] [--format human|json]
 
 Open flow for cmux workspace integration.
+`)
+}
+
+func (c *CLI) printWSSaveUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws save [--id <id> | --current | --select] [-l <label>] [--no-browser-state] [--format human|json]
+
+Save flow for cmux session context.
+`)
+}
+
+func (c *CLI) printWSResumeUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws resume [--id <id> | --current | --select] [--latest] [--strict] [--no-browser] [--format human|json]
+
+Resume flow for saved cmux session context.
 `)
 }
 

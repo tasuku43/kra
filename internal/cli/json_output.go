@@ -16,6 +16,7 @@ type cliJSONResponse struct {
 	Action      string        `json:"action"`
 	WorkspaceID string        `json:"workspace_id,omitempty"`
 	Result      any           `json:"result,omitempty"`
+	Warnings    any           `json:"warnings,omitempty"`
 	Error       *cliJSONError `json:"error,omitempty"`
 }
 

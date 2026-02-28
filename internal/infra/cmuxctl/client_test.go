@@ -266,17 +266,56 @@ func TestClientListPanes_JSONMode(t *testing.T) {
 }
 
 func TestClientListPaneSurfaces_JSONMode(t *testing.T) {
-	f := &fakeRunner{stdout: []byte(`{"surfaces":[{"id":"sf-1","ref":"surface:1","index":0,"title":"agent","selected":true,"pane_id":"pane-1"}]}`)}
+	f := &fakeRunner{stdout: []byte(`{"surfaces":[{"id":"sf-1","ref":"surface:1","index":0,"title":"agent","type":"browser","selected":true,"pane_id":"pane-1"}]}`)}
 	c := &Client{Runner: f}
 
 	got, err := c.ListPaneSurfaces(context.Background(), "ws-1", "pane-1")
 	if err != nil {
 		t.Fatalf("ListPaneSurfaces() error: %v", err)
 	}
-	if len(got) != 1 || got[0].ID != "sf-1" || got[0].PaneID != "pane-1" || !got[0].Selected {
+	if len(got) != 1 || got[0].ID != "sf-1" || got[0].PaneID != "pane-1" || !got[0].Selected || got[0].Type != "browser" {
 		t.Fatalf("unexpected surfaces: %+v", got)
 	}
 	wantArgs := []string{"--json", "--id-format", "both", "list-pane-surfaces", "--workspace", "ws-1", "--pane", "pane-1"}
+	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
+		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
+	}
+}
+
+func TestClientFocusPane_BuildsCommandArgs(t *testing.T) {
+	f := &fakeRunner{stdout: []byte("OK\n")}
+	c := &Client{Runner: f}
+
+	if err := c.FocusPane(context.Background(), "pane-1", "ws-1"); err != nil {
+		t.Fatalf("FocusPane() error: %v", err)
+	}
+	wantArgs := []string{"focus-pane", "--pane", "pane-1", "--workspace", "ws-1"}
+	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
+		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
+	}
+}
+
+func TestClientBrowserStateSave_BuildsCommandArgs(t *testing.T) {
+	f := &fakeRunner{stdout: []byte("OK\n")}
+	c := &Client{Runner: f}
+
+	if err := c.BrowserStateSave(context.Background(), "ws-1", "surface:2", "/tmp/state.json"); err != nil {
+		t.Fatalf("BrowserStateSave() error: %v", err)
+	}
+	wantArgs := []string{"browser", "--surface", "surface:2", "state", "save", "/tmp/state.json"}
+	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
+		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
+	}
+}
+
+func TestClientBrowserStateLoad_BuildsCommandArgs(t *testing.T) {
+	f := &fakeRunner{stdout: []byte("OK\n")}
+	c := &Client{Runner: f}
+
+	if err := c.BrowserStateLoad(context.Background(), "ws-1", "surface:2", "/tmp/state.json"); err != nil {
+		t.Fatalf("BrowserStateLoad() error: %v", err)
+	}
+	wantArgs := []string{"browser", "--surface", "surface:2", "state", "load", "/tmp/state.json"}
 	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
 		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
 	}
