@@ -128,7 +128,6 @@ func TestCLI_CMUX_Subcommands_NotImplementedYet(t *testing.T) {
 		args []string
 		want string
 	}{
-		{name: "open", args: []string{"cmux", "open", "WS1"}, want: "cmux open"},
 		{name: "switch", args: []string{"cmux", "switch", "--workspace", "WS1"}, want: "cmux switch"},
 		{name: "list", args: []string{"cmux", "list"}, want: "cmux list"},
 		{name: "status", args: []string{"cmux", "status"}, want: "cmux status"},
@@ -151,5 +150,22 @@ func TestCLI_CMUX_Subcommands_NotImplementedYet(t *testing.T) {
 				t.Fatalf("stderr missing not-implemented marker: %q", err.String())
 			}
 		})
+	}
+}
+
+func TestCLI_CMUX_Open_NoRoot_ReturnsError(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"cmux", "open", "WS1"})
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d", code, exitError)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout should be empty: %q", out.String())
+	}
+	if !strings.Contains(err.String(), "cmux open (WS1): resolve KRA_ROOT:") {
+		t.Fatalf("stderr missing root resolution error: %q", err.String())
 	}
 }

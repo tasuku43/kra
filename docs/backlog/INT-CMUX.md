@@ -38,7 +38,7 @@ status: planned
   - Depends: CMUX-002, CMUX-003
   - Serial: yes
 
-- [ ] CMUX-005: `kra cmux open` v1
+- [x] CMUX-005: `kra cmux open` v1
   - What: implement strict open flow:
     resolve kra workspace -> create cmux workspace -> rename -> select -> cwd sync (`cd <path>` send)
     -> persist mapping update.

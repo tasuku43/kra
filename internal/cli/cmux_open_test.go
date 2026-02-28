@@ -1,0 +1,196 @@
+package cli
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/tasuku43/kra/internal/cmuxmap"
+	"github.com/tasuku43/kra/internal/infra/cmuxctl"
+)
+
+type fakeCMUXOpenClient struct {
+	capabilities cmuxctl.Capabilities
+	createID     string
+	createErr    error
+	renameErr    error
+	selectErr    error
+	sendErr      error
+
+	renameWorkspace string
+	renameTitle     string
+	selectWorkspace string
+	sendWorkspace   string
+	sendSurface     string
+	sendText        string
+}
+
+func (f *fakeCMUXOpenClient) Capabilities(context.Context) (cmuxctl.Capabilities, error) {
+	return f.capabilities, nil
+}
+
+func (f *fakeCMUXOpenClient) CreateWorkspace(context.Context) (string, error) {
+	if f.createErr != nil {
+		return "", f.createErr
+	}
+	return f.createID, nil
+}
+
+func (f *fakeCMUXOpenClient) RenameWorkspace(_ context.Context, workspace string, title string) error {
+	f.renameWorkspace = workspace
+	f.renameTitle = title
+	return f.renameErr
+}
+
+func (f *fakeCMUXOpenClient) SelectWorkspace(_ context.Context, workspace string) error {
+	f.selectWorkspace = workspace
+	return f.selectErr
+}
+
+func (f *fakeCMUXOpenClient) SendText(_ context.Context, workspace string, surface string, text string) error {
+	f.sendWorkspace = workspace
+	f.sendSurface = surface
+	f.sendText = text
+	return f.sendErr
+}
+
+func TestCLI_CMUX_Open_JSON_RequiresWorkspaceIDWhenOmitted(t *testing.T) {
+	prepareCurrentRootForTest(t)
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"cmux", "open", "--format", "json"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr should be empty in json mode: %q", err.String())
+	}
+	var resp testJSONResponse
+	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
+		t.Fatalf("json unmarshal error: %v (out=%q)", uerr, out.String())
+	}
+	if resp.OK || resp.Action != "cmux.open" || resp.Error.Code != "invalid_argument" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+}
+
+func TestCLI_CMUX_Open_JSON_Success_PersistsMapping(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	wsPath := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	now := time.Now().Unix()
+	if err := writeWorkspaceMetaFile(wsPath, newWorkspaceMetaFileForCreate("WS1", "hello world", "", now)); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+
+	fake := &fakeCMUXOpenClient{
+		capabilities: cmuxctl.Capabilities{
+			Methods: map[string]struct{}{
+				"workspace.create":  {},
+				"workspace.rename":  {},
+				"workspace.select":  {},
+				"surface.send_text": {},
+			},
+		},
+		createID: "CMUX-WS-1",
+	}
+	prevClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient { return fake }
+	t.Cleanup(func() { newCMUXOpenClient = prevClient })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"cmux", "open", "--format", "json", "WS1"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, err.String(), out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr should be empty: %q", err.String())
+	}
+
+	var resp testJSONResponse
+	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
+		t.Fatalf("json unmarshal error: %v (out=%q)", uerr, out.String())
+	}
+	if !resp.OK || resp.Action != "cmux.open" || resp.WorkspaceID != "WS1" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	if fake.renameWorkspace != "CMUX-WS-1" {
+		t.Fatalf("rename workspace = %q, want %q", fake.renameWorkspace, "CMUX-WS-1")
+	}
+	if !strings.Contains(fake.renameTitle, "WS1 | hello world [1]") {
+		t.Fatalf("rename title = %q, want to contain %q", fake.renameTitle, "WS1 | hello world [1]")
+	}
+	if fake.selectWorkspace != "CMUX-WS-1" {
+		t.Fatalf("select workspace = %q, want %q", fake.selectWorkspace, "CMUX-WS-1")
+	}
+	if fake.sendWorkspace != "CMUX-WS-1" || fake.sendSurface != "" {
+		t.Fatalf("send target = (%q,%q), want (%q,%q)", fake.sendWorkspace, fake.sendSurface, "CMUX-WS-1", "")
+	}
+	if !strings.Contains(fake.sendText, "cd ") || !strings.Contains(fake.sendText, wsPath) {
+		t.Fatalf("send text = %q, want cd to workspace path", fake.sendText)
+	}
+
+	mapping, lerr := cmuxmap.NewStore(root).Load()
+	if lerr != nil {
+		t.Fatalf("load mapping: %v", lerr)
+	}
+	ws, ok := mapping.Workspaces["WS1"]
+	if !ok {
+		t.Fatalf("mapping for WS1 not found: %+v", mapping.Workspaces)
+	}
+	if ws.NextOrdinal != 2 {
+		t.Fatalf("next_ordinal = %d, want 2", ws.NextOrdinal)
+	}
+	if len(ws.Entries) != 1 || ws.Entries[0].CMUXWorkspaceID != "CMUX-WS-1" || ws.Entries[0].Ordinal != 1 {
+		t.Fatalf("entries = %+v, want one entry with id=CMUX-WS-1 ordinal=1", ws.Entries)
+	}
+}
+
+func TestCLI_CMUX_Open_JSON_FailsWhenCapabilityMissing(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	wsPath := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	fake := &fakeCMUXOpenClient{
+		capabilities: cmuxctl.Capabilities{
+			Methods: map[string]struct{}{
+				"workspace.create": {},
+			},
+		},
+		createID: "CMUX-WS-1",
+	}
+	prevClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient { return fake }
+	t.Cleanup(func() { newCMUXOpenClient = prevClient })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"cmux", "open", "--format", "json", "WS1"})
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d", code, exitError)
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr should be empty in json mode: %q", err.String())
+	}
+	var resp testJSONResponse
+	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
+		t.Fatalf("json unmarshal error: %v", uerr)
+	}
+	if resp.OK || resp.Error.Code != "cmux_capability_missing" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+}
