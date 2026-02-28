@@ -183,12 +183,14 @@ func TestCLI_CMUX_Open_JSON_Success_PersistsMapping(t *testing.T) {
 	}
 }
 
-func TestCLI_CMUX_Open_JSON_FailsWhenCapabilityMissing(t *testing.T) {
+func TestCLI_CMUX_Open_JSON_FallbacksToDirectoryWhenCapabilityMissing(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	wsPath := filepath.Join(root, "workspaces", "WS1")
 	if err := os.MkdirAll(wsPath, 0o755); err != nil {
 		t.Fatalf("mkdir workspace: %v", err)
 	}
+	actionFile := filepath.Join(t.TempDir(), "action.sh")
+	t.Setenv(shellActionFileEnv, actionFile)
 
 	fake := &fakeCMUXOpenClient{
 		capabilities: cmuxctl.Capabilities{
@@ -206,6 +208,64 @@ func TestCLI_CMUX_Open_JSON_FailsWhenCapabilityMissing(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 	code := c.Run([]string{"ws", "open", "--format", "json", "--id", "WS1"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d", code, exitOK)
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr should be empty in json mode: %q", err.String())
+	}
+	var resp testJSONResponse
+	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
+		t.Fatalf("json unmarshal error: %v", uerr)
+	}
+	if !resp.OK || resp.Action != "cmux.open" || resp.WorkspaceID != "WS1" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	mode, _ := resp.Result["mode"].(string)
+	if mode != "fallback-cd" {
+		t.Fatalf("mode = %q, want %q (result=%+v)", mode, "fallback-cd", resp.Result)
+	}
+	cmuxAvailable, ok := resp.Result["cmux_available"].(bool)
+	if !ok || cmuxAvailable {
+		t.Fatalf("cmux_available = %v, want false", resp.Result["cmux_available"])
+	}
+
+	action, readErr := os.ReadFile(actionFile)
+	if readErr != nil {
+		t.Fatalf("read action file: %v", readErr)
+	}
+	if !strings.HasPrefix(string(action), "cd ") || !strings.Contains(string(action), wsPath) {
+		t.Fatalf("unexpected shell action: %q", string(action))
+	}
+}
+
+func TestCLI_CMUX_Open_JSON_CapabilityMissing_MultiTargetRemainsError(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	wsPath1 := filepath.Join(root, "workspaces", "WS1")
+	wsPath2 := filepath.Join(root, "workspaces", "WS2")
+	if err := os.MkdirAll(wsPath1, 0o755); err != nil {
+		t.Fatalf("mkdir workspace1: %v", err)
+	}
+	if err := os.MkdirAll(wsPath2, 0o755); err != nil {
+		t.Fatalf("mkdir workspace2: %v", err)
+	}
+
+	fake := &fakeCMUXOpenClient{
+		capabilities: cmuxctl.Capabilities{
+			Methods: map[string]struct{}{
+				"workspace.create": {},
+			},
+		},
+		createID: "CMUX-WS-1",
+	}
+	prevClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient { return fake }
+	t.Cleanup(func() { newCMUXOpenClient = prevClient })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "open", "--format", "json", "--id", "WS1", "--multi", "--workspace", "WS1", "--workspace", "WS2"})
 	if code != exitError {
 		t.Fatalf("exit code = %d, want %d", code, exitError)
 	}
@@ -218,6 +278,51 @@ func TestCLI_CMUX_Open_JSON_FailsWhenCapabilityMissing(t *testing.T) {
 	}
 	if resp.OK || resp.Error.Code != "cmux_capability_missing" {
 		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	if !strings.Contains(resp.Error.Message, "single target only") {
+		t.Fatalf("error message should mention fallback limit: %q", resp.Error.Message)
+	}
+}
+
+func TestCLI_CMUX_Open_Human_FallbacksToDirectoryWhenCapabilityMissing(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	wsPath := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	actionFile := filepath.Join(t.TempDir(), "action.sh")
+	t.Setenv(shellActionFileEnv, actionFile)
+
+	fake := &fakeCMUXOpenClient{
+		capabilities: cmuxctl.Capabilities{
+			Methods: map[string]struct{}{
+				"workspace.create": {},
+			},
+		},
+	}
+	prevClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient { return fake }
+	t.Cleanup(func() { newCMUXOpenClient = prevClient })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "open", "--id", "WS1"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, err.String(), out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr should be empty in human fallback mode: %q", err.String())
+	}
+	if !strings.Contains(out.String(), "fallback-cd") {
+		t.Fatalf("stdout should mention fallback mode: %q", out.String())
+	}
+	action, readErr := os.ReadFile(actionFile)
+	if readErr != nil {
+		t.Fatalf("read action file: %v", readErr)
+	}
+	if !strings.HasPrefix(string(action), "cd ") || !strings.Contains(string(action), wsPath) {
+		t.Fatalf("unexpected shell action: %q", string(action))
 	}
 }
 

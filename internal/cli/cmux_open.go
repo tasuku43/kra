@@ -177,6 +177,9 @@ func (c *CLI) runCMUXOpen(args []string) int {
 	}, newCMUXMapStore)
 	openResult, code, msg := svc.Open(context.Background(), root, targets, concurrency, multi)
 	if code != "" {
+		if code == "cmux_capability_missing" {
+			return c.writeCMUXOpenCDFallback(outputFormat, workspaceHint, targets, multi, msg)
+		}
 		return c.writeCMUXOpenError(outputFormat, code, workspaceHint, msg, exitError)
 	}
 	results := make([]cmuxOpenResult, 0, len(openResult.Results))
@@ -200,6 +203,52 @@ func (c *CLI) runCMUXOpen(args []string) int {
 	}
 	failures = append(failures, preFailures...)
 	return c.writeCMUXOpenResult(outputFormat, multi, results, failures)
+}
+
+func (c *CLI) writeCMUXOpenCDFallback(format string, workspaceHint string, targets []appcmux.OpenTarget, multi bool, reason string) int {
+	trimmedReason := strings.TrimSpace(reason)
+	if trimmedReason == "" {
+		trimmedReason = "cmux is not available"
+	}
+	if len(targets) != 1 {
+		message := fmt.Sprintf("%s; directory fallback supports a single target only", trimmedReason)
+		return c.writeCMUXOpenError(format, "cmux_capability_missing", workspaceHint, message, exitError)
+	}
+	target := targets[0]
+	if err := emitShellActionCD(target.WorkspacePath); err != nil {
+		return c.writeCMUXOpenError(format, "internal_error", target.WorkspaceID, fmt.Sprintf("write shell action: %v", err), exitError)
+	}
+
+	if format == "json" {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          true,
+			Action:      "cmux.open",
+			WorkspaceID: target.WorkspaceID,
+			Result: map[string]any{
+				"kra_workspace_id":   target.WorkspaceID,
+				"kra_workspace_path": target.WorkspacePath,
+				"mode":               "fallback-cd",
+				"cwd_synced":         true,
+				"cmux_available":     false,
+				"fallback_reason":    trimmedReason,
+			},
+		})
+		return exitOK
+	}
+
+	useColor := writerSupportsColor(c.Out)
+	body := []string{
+		fmt.Sprintf("%s%s", uiIndent, styleSuccess("Opened 1 / 1", useColor)),
+		fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("mode", useColor), "fallback-cd"),
+		fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleAccent("kra", useColor), target.WorkspaceID),
+		fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("cwd", useColor), target.WorkspacePath),
+		fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("note", useColor), trimmedReason),
+	}
+	printSection(c.Out, renderResultTitle(useColor), body, sectionRenderOptions{
+		blankAfterHeading: false,
+		trailingBlank:     true,
+	})
+	return exitOK
 }
 
 type cmuxOpenResult struct {
