@@ -83,6 +83,7 @@ func TestCLIDirectInfraImportsAreAllowlisted(t *testing.T) {
 		"ws_launcher.go":            {},
 		"ws_list.go":                {},
 		"ws_lock.go":                {},
+		"ws_open.go":                {},
 		"ws_purge.go":               {},
 		"ws_remove_repo.go":         {},
 		"ws_reopen.go":              {},

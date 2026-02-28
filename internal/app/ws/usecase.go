@@ -14,8 +14,8 @@ const (
 type Action string
 
 const (
-	ActionGo      Action = "go"
 	ActionAddRepo Action = "add-repo"
+	ActionOpen    Action = "open"
 	ActionRemove  Action = "remove-repo"
 	ActionClose   Action = "close"
 	ActionReopen  Action = "reopen"

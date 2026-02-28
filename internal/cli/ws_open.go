@@ -87,6 +87,11 @@ func (c *CLI) runWSOpen(args []string) int {
 	if targetID != "" {
 		passthrough = append(passthrough, "--workspace", targetID)
 	}
+	if !useCurrent && !selectMode && targetID == "" {
+		fmt.Fprintln(c.Err, "ws open requires one of --id <id>, --current, or --select")
+		c.printWSOpenUsage(c.Err)
+		return exitUsage
+	}
 	return c.runCMUXOpen(passthrough)
 }
 
@@ -97,21 +102,4 @@ func flagNeedsValue(arg string) bool {
 	default:
 		return false
 	}
-}
-
-func hasWorkspaceTargetArg(args []string) bool {
-	for i := 0; i < len(args); i++ {
-		a := strings.TrimSpace(args[i])
-		if a == "--workspace" {
-			return true
-		}
-		if strings.HasPrefix(a, "--workspace=") {
-			return true
-		}
-		if strings.HasPrefix(a, "-") {
-			continue
-		}
-		return true
-	}
-	return false
 }

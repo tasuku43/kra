@@ -51,6 +51,7 @@ type OpenResultItem struct {
 	CMUXWorkspaceID string
 	Ordinal         int
 	Title           string
+	ReusedExisting  bool
 }
 
 type OpenFailure struct {
@@ -187,6 +188,45 @@ func (s *Service) openConcurrent(ctx context.Context, targets []OpenTarget, conc
 }
 
 func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget, mapping *cmuxmap.File, mapMu *sync.Mutex) (OpenResultItem, string, string) {
+	// 1:1 policy: if mapping already exists and runtime workspace is reachable, switch to it.
+	mapMu.Lock()
+	existingEntries := append([]cmuxmap.Entry{}, mapping.Workspaces[target.WorkspaceID].Entries...)
+	mapMu.Unlock()
+	if len(existingEntries) > 0 {
+		existing := existingEntries[0]
+		_, ierr := client.Identify(ctx, existing.CMUXWorkspaceID, "")
+		if ierr == nil {
+			if err := client.SelectWorkspace(ctx, existing.CMUXWorkspaceID); err != nil {
+				return OpenResultItem{}, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
+			}
+			now := s.Now().UTC().Format(time.RFC3339)
+			mapMu.Lock()
+			ws := mapping.Workspaces[target.WorkspaceID]
+			ws.Entries = []cmuxmap.Entry{existing}
+			ws.Entries[0].LastUsedAt = now
+			mapping.Workspaces[target.WorkspaceID] = ws
+			mapMu.Unlock()
+			return OpenResultItem{
+				WorkspaceID:     target.WorkspaceID,
+				WorkspacePath:   target.WorkspacePath,
+				CMUXWorkspaceID: existing.CMUXWorkspaceID,
+				Ordinal:         existing.Ordinal,
+				Title:           existing.TitleSnapshot,
+				ReusedExisting:  true,
+			}, "", ""
+		}
+		if !IsNotFoundError(ierr) {
+			return OpenResultItem{}, "cmux_identify_failed", fmt.Sprintf("identify cmux workspace: %v", ierr)
+		}
+		// stale mapping entry: clear and recreate with ordinal reset.
+		mapMu.Lock()
+		ws := mapping.Workspaces[target.WorkspaceID]
+		ws.Entries = nil
+		ws.NextOrdinal = 1
+		mapping.Workspaces[target.WorkspaceID] = ws
+		mapMu.Unlock()
+	}
+
 	cmuxWorkspaceID, err := client.CreateWorkspaceWithCommand(ctx, fmt.Sprintf("cd %s", shellQuoteCDPath(target.WorkspacePath)))
 	if err != nil {
 		return OpenResultItem{}, "cmux_create_failed", fmt.Sprintf("create cmux workspace: %v", err)
@@ -210,13 +250,13 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 	now := s.Now().UTC().Format(time.RFC3339)
 	mapMu.Lock()
 	ws := mapping.Workspaces[target.WorkspaceID]
-	ws.Entries = append(ws.Entries, cmuxmap.Entry{
+	ws.Entries = []cmuxmap.Entry{{
 		CMUXWorkspaceID: cmuxWorkspaceID,
 		Ordinal:         ordinal,
 		TitleSnapshot:   cmuxTitle,
 		CreatedAt:       now,
 		LastUsedAt:      now,
-	})
+	}}
 	mapping.Workspaces[target.WorkspaceID] = ws
 	mapMu.Unlock()
 	return OpenResultItem{
@@ -225,6 +265,7 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 		CMUXWorkspaceID: cmuxWorkspaceID,
 		Ordinal:         ordinal,
 		Title:           cmuxTitle,
+		ReusedExisting:  false,
 	}, "", ""
 }
 

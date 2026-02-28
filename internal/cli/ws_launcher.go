@@ -127,7 +127,7 @@ parseFlags:
 	if fixedAction == "" && len(args) > 0 {
 		action := strings.TrimSpace(args[0])
 		switch action {
-		case "add-repo", "remove-repo", "close", "reopen", "purge", "unlock":
+		case "open", "switch", "add-repo", "remove-repo", "close", "reopen", "purge", "unlock":
 			fixedAction = action
 			args = args[1:]
 		default:
@@ -138,6 +138,9 @@ parseFlags:
 			}
 		}
 	}
+	if fixedAction == "switch" {
+		fixedAction = "open"
+	}
 	if workspaceID != "" {
 		if err := validateWorkspaceID(workspaceID); err != nil {
 			fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
@@ -146,7 +149,7 @@ parseFlags:
 	}
 	if fixedAction != "" {
 		switch fixedAction {
-		case "add-repo", "remove-repo", "close":
+		case "open", "add-repo", "remove-repo", "close":
 			if archivedScope {
 				fmt.Fprintf(c.Err, "action %s cannot be used with --archived\n", fixedAction)
 				c.printWSUsage(c.Err)
@@ -282,6 +285,8 @@ parseFlags:
 	c.debugf("ws launcher selected workspace=%s status=%s action=%s", target.ID, target.Status, action)
 
 	switch action {
+	case "open":
+		return c.runWSOpen([]string{"--id", target.ID})
 	case "add-repo":
 		return c.runWSAddRepo([]string{target.ID})
 	case "remove-repo":
@@ -332,8 +337,11 @@ func runWSActionHasHelp(actionArgs []string) bool {
 }
 
 func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archivedScope bool, actionArgs []string) int {
+	if action == "switch" {
+		action = "open"
+	}
 	switch action {
-	case "add-repo", "remove-repo", "close":
+	case "open", "add-repo", "remove-repo", "close":
 		if archivedScope {
 			c.printWSUsage(c.Err)
 			return exitUsage
@@ -347,7 +355,7 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 
 	opArgs := append([]string{}, actionArgs...)
 	switch action {
-	case "add-repo", "remove-repo", "close":
+	case "open", "add-repo", "remove-repo", "close":
 		if workspaceID != "" && !runWSActionHasIDArg(opArgs) && !runWSActionHasPositional(opArgs) {
 			opArgs = append([]string{"--id", workspaceID}, opArgs...)
 		}
@@ -358,6 +366,8 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 	}
 
 	switch action {
+	case "open":
+		return c.runWSOpen(opArgs)
 	case "add-repo":
 		return c.runWSAddRepo(opArgs)
 	case "remove-repo":
@@ -716,6 +726,7 @@ func (c *CLI) promptLauncherAction(target workspaceContextSelection, _ bool) (st
 	switch target.Status {
 	case "active":
 		actions = append(actions,
+			workspaceSelectorCandidate{ID: "open", Description: "open/switch cmux workspace"},
 			workspaceSelectorCandidate{ID: "add-repo", Description: "add repositories"},
 			workspaceSelectorCandidate{ID: "remove-repo", Description: "remove repositories"},
 			workspaceSelectorCandidate{ID: "close", Description: "archive this workspace"},

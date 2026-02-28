@@ -13,7 +13,6 @@ Define explicit workspace targeting modes shared by workspace action commands.
 
 - Targeting options apply to workspace action commands such as:
   - `kra ws open`
-  - `kra ws switch`
   - `kra ws add-repo`
   - `kra ws remove-repo`
   - `kra ws close`
@@ -30,7 +29,7 @@ Define explicit workspace targeting modes shared by workspace action commands.
 - `--id <id>` resolves target explicitly by id.
 - `--current` resolves target from current path only when explicitly set.
 - `--select` always starts from workspace selection.
-- `--select --archived open|switch|add-repo|remove-repo|close` must fail with usage error.
+- `--select --archived open|add-repo|remove-repo|close` must fail with usage error.
 - `--select --multi` requires action.
 - `--select --multi <close|reopen|purge>` enables multi-selection and executes the fixed action for each
   selected workspace.
@@ -38,7 +37,7 @@ Define explicit workspace targeting modes shared by workspace action commands.
 - `--select --multi reopen|purge` implicitly switches to archived scope.
 - `--select --multi` runs lifecycle commits by default; `--no-commit` disables commits for selected action.
 - `--select --multi --commit` is accepted for backward compatibility and keeps default behavior.
-- `open|switch|add-repo|remove-repo` are not supported in `--multi` mode.
+- `open|add-repo|remove-repo` are not supported in `--multi` mode.
 - Commands must not auto-resolve workspace from current path unless `--current` is explicitly set.
 
 ## Selection flow

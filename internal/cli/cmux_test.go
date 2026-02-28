@@ -83,7 +83,7 @@ func TestCLI_WSSwitch_NoRoot_ReturnsError(t *testing.T) {
 	if out.Len() != 0 {
 		t.Fatalf("stdout should be empty: %q", out.String())
 	}
-	if !strings.Contains(err.String(), "cmux switch (WS1): resolve KRA_ROOT:") {
+	if !strings.Contains(err.String(), "cmux open (WS1): resolve KRA_ROOT:") {
 		t.Fatalf("stderr missing root resolution error: %q", err.String())
 	}
 }

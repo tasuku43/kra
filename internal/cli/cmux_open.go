@@ -19,6 +19,7 @@ type cmuxOpenClient interface {
 	CreateWorkspaceWithCommand(ctx context.Context, command string) (string, error)
 	RenameWorkspace(ctx context.Context, workspace string, title string) error
 	SelectWorkspace(ctx context.Context, workspace string) error
+	Identify(ctx context.Context, workspace string, surface string) (map[string]any, error)
 }
 
 var newCMUXOpenClient = func() cmuxOpenClient { return cmuxctl.NewClient() }
@@ -185,6 +186,7 @@ func (c *CLI) runCMUXOpen(args []string) int {
 			CMUXWorkspaceID: r.CMUXWorkspaceID,
 			Ordinal:         r.Ordinal,
 			Title:           r.Title,
+			ReusedExisting:  r.ReusedExisting,
 		})
 	}
 	failures := make([]cmuxOpenFailure, 0, len(openResult.Failures))
@@ -205,6 +207,7 @@ type cmuxOpenResult struct {
 	CMUXWorkspaceID string
 	Ordinal         int
 	Title           string
+	ReusedExisting  bool
 }
 
 type cmuxOpenFailure struct {
@@ -245,6 +248,7 @@ func (c *CLI) writeCMUXOpenResult(format string, multi bool, results []cmuxOpenR
 					"ordinal":            result.Ordinal,
 					"title":              result.Title,
 					"cwd_synced":         true,
+					"reused_existing":    result.ReusedExisting,
 				},
 			})
 			return exitOK
@@ -258,6 +262,7 @@ func (c *CLI) writeCMUXOpenResult(format string, multi bool, results []cmuxOpenR
 				"ordinal":            result.Ordinal,
 				"title":              result.Title,
 				"cwd_synced":         true,
+				"reused_existing":    result.ReusedExisting,
 			})
 		}
 		failureItems := make([]map[string]any, 0, len(failures))
@@ -296,6 +301,7 @@ func (c *CLI) writeCMUXOpenResult(format string, multi bool, results []cmuxOpenR
 		useColor := writerSupportsColor(c.Out)
 		body := []string{
 			fmt.Sprintf("%s%s", uiIndent, styleSuccess("Opened 1 / 1", useColor)),
+			fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("mode", useColor), map[bool]string{true: "switched", false: "created"}[result.ReusedExisting]),
 			fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleAccent("kra", useColor), result.WorkspaceID),
 			fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleAccent("cmux", useColor), result.CMUXWorkspaceID),
 			fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("title", useColor), result.Title),
@@ -314,6 +320,7 @@ func (c *CLI) writeCMUXOpenResult(format string, multi bool, results []cmuxOpenR
 	sort.Slice(results, func(i, j int) bool { return results[i].WorkspaceID < results[j].WorkspaceID })
 	for _, result := range results {
 		body = append(body, fmt.Sprintf("%s%s %s => %s", uiIndent, styleSuccess("✔", useColor), result.WorkspaceID, result.CMUXWorkspaceID))
+		body = append(body, fmt.Sprintf("%s%s %s", uiIndent+uiIndent, styleMuted("mode:", useColor), map[bool]string{true: "switched", false: "created"}[result.ReusedExisting]))
 		body = append(body, fmt.Sprintf("%s%s %s", uiIndent+uiIndent, styleMuted("title:", useColor), result.Title))
 		body = append(body, fmt.Sprintf("%s%s %s", uiIndent+uiIndent, styleMuted("cwd:", useColor), result.WorkspacePath))
 	}
@@ -420,8 +427,8 @@ func (a cmuxOpenClientAdapter) ListWorkspaces(context.Context) ([]cmuxctl.Worksp
 	return nil, fmt.Errorf("unsupported")
 }
 
-func (a cmuxOpenClientAdapter) Identify(context.Context, string, string) (map[string]any, error) {
-	return nil, fmt.Errorf("unsupported")
+func (a cmuxOpenClientAdapter) Identify(ctx context.Context, workspace string, surface string) (map[string]any, error) {
+	return a.inner.Identify(ctx, workspace, surface)
 }
 
 func (c *CLI) writeCMUXOpenError(format string, code string, workspaceID string, message string, exitCode int) int {

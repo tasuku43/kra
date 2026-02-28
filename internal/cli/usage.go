@@ -164,9 +164,8 @@ func (c *CLI) printWSUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws [--id <id> | --current | --select]
   kra ws open [--id <id> | --current | --select] [--multi] [--concurrency <n>] [--format human|json]
-  kra ws switch [--id <id> | --current | --select] [--cmux <id|ref>] [--format human|json]
   kra ws <add-repo|remove-repo|close|reopen|purge> [--id <id> | --current | --select] [action-args...]
-  kra ws --select [--archived] [close|add-repo|remove-repo|reopen|unlock|purge]
+  kra ws --select [--archived] [open|close|add-repo|remove-repo|reopen|unlock|purge]
   kra ws --select --multi [--archived] <close|reopen|purge> [--no-commit]
   kra ws create [--no-prompt] [--template <name>] [--format human|json] <id>
   kra ws create [--no-prompt] [--template <name>] [--format human|json] --id <id> [--title "<title>"]
@@ -181,7 +180,6 @@ Subcommands:
   create            Create a workspace
   import            Import workspaces from external systems
   open              Open cmux workspace(s) for selected workspace target
-  switch            Switch to mapped cmux workspace
   add-repo          Add repositories to a workspace
   remove-repo       Remove repositories from a workspace
   close             Archive a workspace
@@ -199,7 +197,7 @@ Run:
 
 Notes:
 - edit actions are routed by ws <action> subcommands.
-- active actions: add-repo, remove-repo, close
+- active actions: open, add-repo, remove-repo, close
 - archived actions: reopen, unlock, purge (applies archived scope automatically)
 - ws --archived with add-repo|remove-repo|close is invalid.
 - kra ws requires explicit target mode: --id, --current, or --select.
@@ -223,9 +221,9 @@ Open flow for cmux workspace integration.
 
 func (c *CLI) printWSSwitchUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws switch [--id <id> | --current | --select] [--cmux <id|ref>] [--format human|json]
+  kra ws switch [same options as "kra ws open"]
 
-Switch to an existing mapped cmux workspace.
+Alias of "kra ws open" for backward compatibility.
 `)
 }
 
