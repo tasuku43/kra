@@ -39,7 +39,6 @@ Backlog is managed by epic/prefix under `docs/backlog/*.md`.
 - `docs/backlog/CTX-ROOT.md`: context and root management
 - `docs/backlog/CONFIG.md`: global/root config and runtime path policy
 - `docs/backlog/DOC-QUALITY.md`: documentation and quality hardening
-- `docs/backlog/AGENT.md`: agent execution visibility
 - `docs/backlog/TEMPLATE-WS.md`: workspace template lifecycle and validation
 - `docs/backlog/OPS.md`: operational resilience and automation ergonomics
 - `docs/backlog/PUBLIC.md`: public release readiness
@@ -59,7 +58,6 @@ Backlog is managed by epic/prefix under `docs/backlog/*.md`.
 - [x] `docs/backlog/CTX-ROOT.md` (`4/4` done)
 - [x] `docs/backlog/CONFIG.md` (`6/6` done)
 - [x] `docs/backlog/DOC-QUALITY.md` (`5/5` done)
-- [ ] `docs/backlog/AGENT.md` (`5/8` done)
 - [x] `docs/backlog/TEMPLATE-WS.md` (`4/4` done)
 - [x] `docs/backlog/OPS.md` (`14/14` done)
 - [x] `docs/backlog/PUBLIC.md` (`7/7` done)

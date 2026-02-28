@@ -73,10 +73,6 @@ No. Jira (or other external systems) remains the task source-of-truth. `kra` is 
 
 Workspace data is filesystem-first under your selected root (`workspaces/`, `archive/`, metadata files). Additional registries are maintained under `.kra/`.
 
-### Is the `agent` command GA?
-
-Not yet. `agent` capabilities are intentionally EXP for now; public-release readiness focuses on stable core workspace workflows.
-
 ## Docs
 
 - Docs index: `docs/README.md`

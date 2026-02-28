@@ -52,10 +52,6 @@ func TestCLIDirectInfraImportsAreAllowlisted(t *testing.T) {
 	// - New files cannot start importing infra unless added here intentionally.
 	// - cmux commands are excluded because the command group is planned for removal.
 	allowed := map[string]struct{}{
-		"agent_list.go":             {},
-		"agent_logs.go":             {},
-		"agent_run.go":              {},
-		"agent_stop.go":             {},
 		"bootstrap_agent_skills.go": {},
 		"config.go":                 {},
 		"config_bootstrap.go":       {},

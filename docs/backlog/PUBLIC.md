@@ -7,7 +7,6 @@ status: implemented
 
 Derived from `docs/public-readiness-gap-analysis.md`.
 This backlog tracks release-readiness work item by item.
-`agent` command GA work is out of scope here because agent capabilities remain EXP by design.
 
 ## P0: Must be completed before public release
 

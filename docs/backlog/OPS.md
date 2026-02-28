@@ -77,12 +77,11 @@ status: planned
   - Parallel: yes
 
 - [x] OPS-008: `kra ws dashboard` operational overview
-  - What: add one-screen read-only dashboard combining workspace risk/context/agent signals with JSON contract.
+  - What: add one-screen read-only dashboard combining workspace risk/context signals with JSON contract.
   - Specs:
     - `docs/spec/commands/ws/dashboard.md`
-    - `docs/spec/commands/agent/activity.md`
     - `docs/spec/concepts/output-contract.md`
-  - Depends: AGENT-001, OPS-003
+  - Depends: OPS-003
   - Parallel: yes
 
 - [x] OPS-009: `kra bootstrap agent-skills` foundation + `init` integration

@@ -84,8 +84,6 @@ func (c *CLI) Run(args []string) int {
 		return c.runWS(args[1:])
 	case "doctor":
 		return c.runDoctor(args[1:])
-	case "agent":
-		return c.runAgent(args[1:])
 	default:
 		fmt.Fprintf(c.Err, "unknown command: %q\n", args[0])
 		c.printRootUsage(c.Err)
