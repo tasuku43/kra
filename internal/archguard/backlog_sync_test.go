@@ -16,7 +16,7 @@ var (
 )
 
 func TestBacklogReadmeFileStatusMatchesBacklogFiles(t *testing.T) {
-	readmePath := filepath.Join("..", "..", "docs", "backlog", "README.md")
+	readmePath := filepath.Join("..", "..", "docs", "dev", "backlog", "README.md")
 	lines := readLines(t, readmePath)
 
 	type statusSpec struct {
