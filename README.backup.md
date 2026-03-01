@@ -196,10 +196,10 @@ Risk labels:
 
 For command-specific details, see:
 
-- `docs/spec/commands/ws/close.md`
-- `docs/spec/commands/ws/reopen.md`
-- `docs/spec/commands/ws/purge.md`
-- `docs/spec/concepts/workspace-lifecycle.md`
+- `docs/dev/spec/commands/ws/close.md`
+- `docs/dev/spec/commands/ws/reopen.md`
+- `docs/dev/spec/commands/ws/purge.md`
+- `docs/dev/spec/concepts/workspace-lifecycle.md`
 
 ## Repo pool, alias, and branch model
 
@@ -218,8 +218,8 @@ Operational notes:
 
 See:
 
-- `docs/spec/commands/repo/add.md`
-- `docs/spec/commands/ws/add-repo.md`
+- `docs/dev/spec/commands/repo/add.md`
+- `docs/dev/spec/commands/ws/add-repo.md`
 
 ## cmux minimal recipe
 
@@ -271,7 +271,7 @@ To create from Jira (`kra ws create --jira <ticket-url>`), configure:
 - `KRA_JIRA_EMAIL`
 - `KRA_JIRA_API_TOKEN`
 
-See `docs/spec/commands/ws/create.md` and `docs/spec/commands/ws/import/jira.md` for exact behavior.
+See `docs/dev/spec/commands/ws/create.md` and `docs/dev/spec/commands/ws/import/jira.md` for exact behavior.
 
 ### Build from source
 
@@ -306,15 +306,15 @@ Example (`kra ws create --format json --id TASK-1234 --title "API retry hardenin
 
 ## User guides
 
-- Start here: `docs/START_HERE.md`
-- Install guide: `docs/guides/INSTALL.md`
-- Command reference: `docs/guides/COMMANDS.md`
+- Start here: `docs/user/START_HERE.md`
+- Install guide: `docs/user/guides/INSTALL.md`
+- Command reference: `docs/user/guides/COMMANDS.md`
 
 ## Development and operations references
 
 - Product concept: `docs/concepts/product-concept.md`
-- Specs: `docs/spec/README.md`
-- Releasing: `docs/ops/RELEASING.md`
+- Specs: `docs/dev/spec/README.md`
+- Releasing: `docs/dev/ops/RELEASING.md`
 
 ## Contributing
 

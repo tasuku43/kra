@@ -9,7 +9,7 @@ date: 2026-02-14
 This directory stores product-level concept documents.
 
 - Scope: problem statement, target users, value proposition, and non-goals
-- Out of scope: executable specs (`docs/spec/**`) and implementation backlog (`docs/backlog/**`)
+- Out of scope: executable specs (`docs/dev/spec/**`) and implementation backlog (`docs/dev/backlog/**`)
 
 ## Files
 

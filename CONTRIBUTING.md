@@ -20,8 +20,8 @@ task ci:full
 
 ## Workflow
 
-1. Read `AGENTS.md` and `docs/backlog/README.md`.
-2. Confirm or update the relevant spec in `docs/spec/**` first.
+1. Read `AGENTS.md` and `docs/dev/backlog/README.md`.
+2. Confirm or update the relevant spec in `docs/dev/spec/**` first.
 3. Implement in small, ticket-aligned slices.
 4. Add tests (including non-happy paths where relevant).
 5. Run quality checks before opening a PR.

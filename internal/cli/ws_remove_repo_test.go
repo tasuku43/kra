@@ -268,8 +268,8 @@ func TestPrintRemoveRepoPlan_ShowsFilesSectionForDirtyRepo(t *testing.T) {
 			behind:    0,
 			unstaged:  2,
 			files: []string{
-				" M docs/backlog/README.md",
-				" M docs/backlog/UX-WS.md",
+				" M docs/dev/backlog/README.md",
+				" M docs/dev/backlog/UX-WS.md",
 			},
 		},
 	}
@@ -282,10 +282,10 @@ func TestPrintRemoveRepoPlan_ShowsFilesSectionForDirtyRepo(t *testing.T) {
 	if !strings.Contains(got, "(branch: DEMO-0000)") {
 		t.Fatalf("plan should include branch on repo line: %q", got)
 	}
-	if !strings.Contains(got, "M docs/backlog/README.md") {
+	if !strings.Contains(got, "M docs/dev/backlog/README.md") {
 		t.Fatalf("plan should include changed file line: %q", got)
 	}
-	if !strings.Contains(got, "M docs/backlog/UX-WS.md") {
+	if !strings.Contains(got, "M docs/dev/backlog/UX-WS.md") {
 		t.Fatalf("plan should include changed file line: %q", got)
 	}
 }

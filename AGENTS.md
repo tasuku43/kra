@@ -8,12 +8,12 @@
 
 When starting a new session, do this first:
 
-- Read `docs/backlog/README.md`
+- Read `docs/dev/backlog/README.md`
 - For each backlog item, open the linked spec files and implement spec-first
 
 ## Autonomous Execution Policy
 
-When working from `docs/backlog/README.md`:
+When working from `docs/dev/backlog/README.md`:
 
 - Once you start a backlog item, continue implementing until it satisfies the project's "done" definition
   (code + tests + spec `status: implemented`). Do not pause mid-item even if it takes 10-20 minutes.
@@ -22,9 +22,9 @@ When working from `docs/backlog/README.md`:
 
 ## Backlog Management
 
-- Backlog is managed under `docs/backlog/` by epic/prefix (`docs/backlog/*.md`).
-- Always start from `docs/backlog/README.md` (index + file status).
-- Keep `docs/backlog/README.md` `File Status` in sync when ticket checkboxes change in any backlog file.
+- Backlog is managed under `docs/dev/backlog/` by epic/prefix (`docs/dev/backlog/*.md`).
+- Always start from `docs/dev/backlog/README.md` (index + file status).
+- Keep `docs/dev/backlog/README.md` `File Status` in sync when ticket checkboxes change in any backlog file.
 
 ## Git Commit Scope Policy (no unrelated changes)
 
@@ -65,7 +65,7 @@ If any check fails, fix it before pushing.
 
 To keep CLI/TUI output consistent across sessions:
 
-- Follow `docs/spec/concepts/ui-color.md` for all user-facing output.
+- Follow `docs/dev/spec/concepts/ui-color.md` for all user-facing output.
 - Do not introduce raw ANSI color codes outside `internal/cli/ws_ui_common.go`.
 - Do not introduce direct `lipgloss.Color(...)` usage in command handlers/renderers.
 - Use shared semantic style helpers (`styleTokenize`, `styleMuted`, `styleAccent`, etc.) from
