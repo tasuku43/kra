@@ -7,14 +7,14 @@ The default template includes `notes/` and `artifacts/`, and you can define your
 `kra` works standalone for workspace lifecycle operations, and becomes even more valuable when paired with `cmux` for agent runtime/workspace integration.
 Ticket providers are designed to be extensible; currently, Jira is supported.
 
-`<KRA_ROOT>` stores task workspaces and archives, while `$KRA_HOME` stores shared state such as config and the repo pool.
+`<KRA_ROOT>` stores task workspaces and `archive/`, while `$KRA_HOME` (default: `~/.kra/`) stores shared state such as config and the repo pool.
 
 ## One-minute mental model
 
 - `kra ws create TASK-1234` creates a task workspace under `workspaces/TASK-1234/`.
 - `kra ws add-repo --id TASK-1234` attaches only the needed repositories as worktrees under `repos/`.
 - `kra ws open --id TASK-1234` opens that task-scoped execution context (and can align with `cmux` runtime workflow).
-- `kra ws close --id TASK-1234` archives task outputs and removes workspace worktrees from active area.
+- `kra ws close --id TASK-1234` moves task outputs to `archive/` and removes workspace worktrees from active area.
 
 ## Shell integration
 
@@ -30,6 +30,9 @@ eval "$(kra shell init bash)"
 # fish
 eval (kra shell init fish)
 ```
+
+To persist this, add the corresponding `eval ...` line to your shell rc file (`~/.zshrc`, `~/.bashrc`, or `~/.config/fish/config.fish`).
+`kra shell init <shell>` prints shell code to stdout; review it first if you prefer.
 
 Without shell integration, `kra` still runs commands but cannot mutate your parent shell `cwd`.
 
@@ -103,7 +106,7 @@ External ticket systems remain the source of truth for task management, while `k
   - pair that workspace with `cmux` runtime workspace(s) as an operational model
 - State-first lifecycle operations with explicit transitions:
   - create, open, close, reopen, purge with clear state rules
-  - archive completed workspaces by default instead of destructive deletion
+  - move completed workspaces to `archive/` by default instead of destructive deletion
 - Guardrails for risky operations:
   - evaluate workspace risk (`dirty`, `unpushed`, `diverged`, `unknown`)
   - apply confirmation gates for destructive flows
@@ -131,11 +134,12 @@ kra ws open --id TASK-1234
 # 6) inspect current state
 kra ws dashboard
 
-# 7) close when done (archives notes/artifacts, removes worktrees)
+# 7) close when done (moves notes/artifacts to archive/, removes worktrees)
 kra ws close --id TASK-1234
 ```
 
 `kra init`, `kra ws create`, and `kra ws add-repo` will guide you with prompts in this quickstart flow.
+With shell integration enabled, `kra ws open` can synchronize your shell `cwd`; without it, `kra` still runs but cannot mutate parent shell `cwd`.
 You can also use interactive selection for workspace-targeted commands (for example: `kra ws open --select`, `kra ws close --select`).
 
 After this flow, your task context and artifacts remain reviewable under `archive/<id>/`, while active workspace area stays clean.
@@ -178,9 +182,17 @@ State model:
 - `kra` removes worktrees under `workspaces/<id>/repos/`, then moves remaining workspace outputs (`notes/`, `artifacts/`, `.kra.meta.json`) to `archive/<id>/` (not copied).
 - Non-clean repo risk (`dirty`, `unpushed`, `diverged`, `unknown`) triggers a safety gate before applying.
 
+Risk labels:
+
+- `dirty`: workspace worktree has local file changes.
+- `unpushed`: local branch is ahead of upstream.
+- `diverged`: local and upstream both advanced.
+- `unknown`: risk state could not be determined.
+
 `reopen` behavior (important):
 
 - `kra ws reopen` restores workspace-side repository attachments from `repos_restore` in `.kra.meta.json`.
+- In normal operation, `close` and `reopen` are the standard round-trip between active and archived work.
 
 For command-specific details, see:
 
@@ -199,7 +211,7 @@ For command-specific details, see:
 Operational notes:
 
 - `repo pool` stores managed bare repositories and root-level registration state.
-- Physical shared pool location is `$KRA_HOME/repo-pool/` (default: `~/.kra/repo-pool/`).
+- Physical shared pool location is `$KRA_HOME/repo-pool/` (default: `~/.kra/repo-pool/`; `$KRA_HOME` default is `~/.kra/`).
 - `kra repo add` creates/updates shared bare mirrors in this pool, and `ws add-repo` uses them to create workspace worktrees.
 - Worktree alias is derived from repository identity and must be unique per workspace.
 - `ws add-repo` prompts for `base_ref` and `branch` (with defaults), so branch context is explicit and reproducible per task.
