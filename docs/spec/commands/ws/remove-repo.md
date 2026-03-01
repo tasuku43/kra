@@ -3,7 +3,7 @@ title: "`kra ws remove-repo`"
 status: implemented
 ---
 
-# `kra ws remove-repo [--id <workspace-id>] [<workspace-id>] [--format human|json]`
+# `kra ws remove-repo [--id <workspace-id>] [--current] [--select] [--format human|json]`
 
 ## Purpose
 
@@ -13,9 +13,8 @@ This command is the operational counterpart of `kra ws add-repo`.
 
 ## Inputs
 
-- `workspace-id` (optional): existing active workspace ID
+- target workspace id (optional): existing active workspace ID (use `--id` or `--current`)
 - `--id <workspace-id>` (optional): explicit workspace ID flag
-  - cannot be combined with positional `workspace-id`
   - if omitted, current working directory must be under `KRA_ROOT/workspaces/<id>/`
   - otherwise the command fails fast
 - interactive selection is handled by `kra ws remove-repo --select`.

@@ -112,8 +112,8 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 		c.printWSRemoveRepoUsage(c.Err)
 		return exitUsage
 	}
-	if len(args) > 1 {
-		fmt.Fprintf(c.Err, "unexpected args for ws remove-repo: %q\n", strings.Join(args[1:], " "))
+	if len(args) > 0 {
+		fmt.Fprintln(c.Err, "positional <workspace-id> is not supported; use --id <workspace-id>, --current, or --select")
 		c.printWSRemoveRepoUsage(c.Err)
 		return exitUsage
 	}
@@ -135,11 +135,6 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 	workspaceID := ""
 	resolveArgs := append([]string{}, args...)
 	if idFromFlag != "" {
-		if len(resolveArgs) > 0 {
-			fmt.Fprintln(c.Err, "--id and positional <workspace-id> cannot be used together")
-			c.printWSRemoveRepoUsage(c.Err)
-			return exitUsage
-		}
 		resolveArgs = []string{idFromFlag}
 	}
 	workspaceID, err = resolveWorkspaceIDForAddRepo(root, wd, resolveArgs)

@@ -127,7 +127,7 @@ parseFlags:
 	if fixedAction == "" && len(args) > 0 {
 		action := strings.TrimSpace(args[0])
 		switch action {
-		case "open", "add-repo", "remove-repo", "close", "reopen", "purge", "unlock":
+		case "open", "add-repo", "remove-repo", "close", "reopen", "purge", "lock", "unlock":
 			fixedAction = action
 			args = args[1:]
 		default:
@@ -152,8 +152,10 @@ parseFlags:
 				c.printWSUsage(c.Err)
 				return exitUsage
 			}
-		case "reopen", "purge", "unlock":
+		case "reopen", "purge":
 			archivedScope = true
+		case "lock", "unlock":
+			// lock/unlock can target both active and archived workspaces.
 		default:
 			fmt.Fprintf(c.Err, "unsupported action: %q\n", fixedAction)
 			c.printWSUsage(c.Err)
@@ -225,7 +227,7 @@ parseFlags:
 				archivedScope = true
 			}
 		}
-		if workspaceID == "" && !runWSActionHasHelp(actionArgs) && !runWSActionHasIDArg(actionArgs) && !runWSActionHasPositional(actionArgs) {
+		if workspaceID == "" && !runWSActionHasHelp(actionArgs) && !runWSActionHasIDArg(actionArgs) {
 			fmt.Fprintln(c.Err, "ws action requires one of --id <id>, --current, --select, or explicit action target")
 			c.printWSUsage(c.Err)
 			return exitUsage
@@ -285,17 +287,19 @@ parseFlags:
 	case "open":
 		return c.runWSOpen([]string{"--id", target.ID})
 	case "add-repo":
-		return c.runWSAddRepo([]string{target.ID})
+		return c.runWSAddRepo([]string{"--id", target.ID})
 	case "remove-repo":
-		return c.runWSRemoveRepo([]string{target.ID})
+		return c.runWSRemoveRepo([]string{"--id", target.ID})
 	case "close":
-		return c.runWSClose([]string{target.ID})
+		return c.runWSClose([]string{"--id", target.ID})
 	case "reopen":
-		return c.runWSReopen([]string{target.ID})
+		return c.runWSReopen([]string{"--id", target.ID})
+	case "lock":
+		return c.runWSLock([]string{"--id", target.ID})
 	case "unlock":
-		return c.runWSUnlock([]string{target.ID})
+		return c.runWSUnlock([]string{"--id", target.ID})
 	case "purge":
-		return c.runWSPurge([]string{target.ID})
+		return c.runWSPurge([]string{"--id", target.ID})
 	default:
 		return exitError
 	}
@@ -353,9 +357,9 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 		if workspaceID != "" && !runWSActionHasIDArg(opArgs) {
 			opArgs = append([]string{"--id", workspaceID}, opArgs...)
 		}
-	case "reopen", "purge", "unlock":
+	case "reopen", "purge", "lock", "unlock":
 		if workspaceID != "" {
-			opArgs = append(opArgs, workspaceID)
+			opArgs = append([]string{"--id", workspaceID}, opArgs...)
 		}
 	}
 
@@ -370,6 +374,8 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 		return c.runWSClose(opArgs)
 	case "reopen":
 		return c.runWSReopen(opArgs)
+	case "lock":
+		return c.runWSLock(opArgs)
 	case "unlock":
 		return c.runWSUnlock(opArgs)
 	case "purge":
@@ -534,13 +540,13 @@ func (c *CLI) runWSSelectMultiActionByID(action string, workspaceID string, doCo
 		}
 		return c.runWSClose(args)
 	case "reopen":
-		args := []string{workspaceID}
+		args := []string{"--id", workspaceID}
 		if doCommit {
 			args = append([]string{"--commit"}, args...)
 		}
 		return c.runWSReopen(args)
 	case "purge":
-		args := []string{workspaceID}
+		args := []string{"--id", workspaceID}
 		if doCommit {
 			args = append([]string{"--commit"}, args...)
 		}

@@ -146,13 +146,10 @@ func (c *CLI) runWSClose(args []string) int {
 	}
 	useColorOut := writerSupportsColor(c.Out)
 
-	if len(args) == 1 {
-		if directWorkspaceID != "" {
-			fmt.Fprintln(c.Err, "--id and positional <id> cannot be used together")
-			c.printWSCloseUsage(c.Err)
-			return exitUsage
-		}
-		directWorkspaceID = strings.TrimSpace(args[0])
+	if len(args) > 0 {
+		fmt.Fprintln(c.Err, "positional <id> is not supported; use --id <id>, --current, or --select")
+		c.printWSCloseUsage(c.Err)
+		return exitUsage
 	}
 	if directWorkspaceID != "" {
 		if err := validateWorkspaceID(directWorkspaceID); err != nil {
@@ -166,7 +163,7 @@ func (c *CLI) runWSClose(args []string) int {
 				Action: "close",
 				Error: &cliJSONError{
 					Code:    "invalid_argument",
-					Message: "ws close requires --id <id> or positional <id> in --format json mode",
+					Message: "ws close requires --id <id> in --format json mode",
 				},
 			})
 			return exitUsage

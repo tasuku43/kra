@@ -20,6 +20,7 @@ func (c *CLI) runWSUnlock(args []string) int {
 
 func (c *CLI) runWSPurgeGuardSet(args []string, enabled bool) int {
 	outputFormat := "human"
+	workspaceID := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
@@ -36,7 +37,19 @@ func (c *CLI) runWSPurgeGuardSet(args []string, enabled bool) int {
 			}
 			outputFormat = strings.TrimSpace(args[1])
 			args = args[2:]
+		case "--id":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--id requires a value")
+				return exitUsage
+			}
+			workspaceID = strings.TrimSpace(args[1])
+			args = args[2:]
 		default:
+			if strings.HasPrefix(args[0], "--id=") {
+				workspaceID = strings.TrimSpace(strings.TrimPrefix(args[0], "--id="))
+				args = args[1:]
+				continue
+			}
 			if strings.HasPrefix(args[0], "--format=") {
 				outputFormat = strings.TrimSpace(strings.TrimPrefix(args[0], "--format="))
 				args = args[1:]
@@ -52,7 +65,8 @@ func (c *CLI) runWSPurgeGuardSet(args []string, enabled bool) int {
 		fmt.Fprintf(c.Err, "unsupported --format: %q (supported: human, json)\n", outputFormat)
 		return exitUsage
 	}
-	if len(args) != 1 {
+	if len(args) > 0 {
+		fmt.Fprintln(c.Err, "positional <id> is not supported; use --id <id>")
 		if enabled {
 			c.printWSLockUsage(c.Err)
 		} else {
@@ -60,7 +74,15 @@ func (c *CLI) runWSPurgeGuardSet(args []string, enabled bool) int {
 		}
 		return exitUsage
 	}
-	workspaceID := strings.TrimSpace(args[0])
+	if strings.TrimSpace(workspaceID) == "" {
+		fmt.Fprintln(c.Err, "workspace id is required: use --id <id>")
+		if enabled {
+			c.printWSLockUsage(c.Err)
+		} else {
+			c.printWSUnlockUsage(c.Err)
+		}
+		return exitUsage
+	}
 	if err := validateWorkspaceID(workspaceID); err != nil {
 		fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
 		return exitUsage

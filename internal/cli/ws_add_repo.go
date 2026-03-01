@@ -226,8 +226,8 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		c.printWSAddRepoUsage(c.Err)
 		return exitUsage
 	}
-	if len(args) > 1 {
-		fmt.Fprintf(c.Err, "unexpected args for ws add-repo: %q\n", strings.Join(args[1:], " "))
+	if len(args) > 0 {
+		fmt.Fprintln(c.Err, "positional <workspace-id> is not supported; use --id <workspace-id>, --current, or --select")
 		c.printWSAddRepoUsage(c.Err)
 		return exitUsage
 	}
@@ -279,11 +279,6 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	var resolveErr error
 	resolveArgs := append([]string{}, args...)
 	if idFromFlag != "" {
-		if len(resolveArgs) > 0 {
-			fmt.Fprintln(c.Err, "--id and positional <workspace-id> cannot be used together")
-			c.printWSAddRepoUsage(c.Err)
-			return exitUsage
-		}
 		resolveArgs = []string{idFromFlag}
 	}
 	workspaceID, resolveErr = resolveWorkspaceIDForAddRepo(root, wd, resolveArgs)

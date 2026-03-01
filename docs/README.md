@@ -13,6 +13,11 @@ status: implemented
 
 - `docs/guides/INSTALL.md`
 - `docs/guides/COMMANDS.md`
+- `docs/guides/SHELL_INTEGRATION.md`
+- `docs/guides/WORKSPACE_LIFECYCLE.md`
+- `docs/guides/CMUX.md`
+- `docs/guides/REPO_WORKTREE.md`
+- `docs/guides/AUTOMATION_JSON.md`
 
 ## Specs (contracts)
 

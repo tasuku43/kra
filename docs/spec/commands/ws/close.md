@@ -3,8 +3,8 @@ title: "`kra ws close`"
 status: implemented
 ---
 
-# `kra ws close [--id <id>] [--force] [--format human|json] [--no-commit] [--commit] [<id>]`
-# `kra ws close --dry-run --format json [--id <id>|<id>]`
+# `kra ws close [--id <id>] [--current] [--select] [--force] [--format human|json] [--no-commit] [--commit]`
+# `kra ws close --dry-run --format json --id <id>`
 
 ## Purpose
 
@@ -95,8 +95,8 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 
 ## Modes and selector behavior
 
-- This command accepts explicit target by `--id` or positional `<id>`.
-- If no id is provided, resolve from current path under `workspaces/<id>/...`.
+- This command accepts explicit target by `--id`.
+- If no id is provided, resolve from current path under `workspaces/<id>/...` or use `--current`.
 - Interactive selection should use `kra ws close --select`.
 - Selector and follow-up output should use section headings:
   - `Workspaces(active):`
@@ -126,7 +126,7 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 ### Non-interactive JSON safety gate
 
 - `--format json` enables non-interactive execution contract.
-- In JSON mode, cwd fallback is not allowed; target must be explicit (`--id` or positional id).
+- In JSON mode, cwd fallback is not allowed; target must be explicit (`--id`).
 - If non-clean risk exists, execution requires `--force`; otherwise command returns non-zero with JSON error.
 - `--dry-run --format json` must not mutate filesystem/git/state and should return executable/risk/planned-effects envelope.
 

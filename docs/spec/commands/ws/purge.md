@@ -3,8 +3,8 @@ title: "`kra ws purge`"
 status: implemented
 ---
 
-# `kra ws purge [--no-prompt --force] [--no-commit] [--commit] <id>`
-# `kra ws purge --dry-run --format json <id>`
+# `kra ws purge [--id <id>] [--current] [--select] [--no-prompt --force] [--no-commit] [--commit]`
+# `kra ws purge --dry-run --format json --id <id>`
 
 ## Purpose
 
@@ -69,7 +69,7 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 
 ## Modes
 
-- This command is explicit-id mode only.
+- This command supports `--id`, `--current`, and `--select`.
 - Interactive selection must use `kra ws purge --select --archived`.
 - JSON execution in phase 1 is `--dry-run` preflight only.
 

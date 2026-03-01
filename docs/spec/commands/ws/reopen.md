@@ -3,8 +3,8 @@ title: "`kra ws reopen`"
 status: implemented
 ---
 
-# `kra ws reopen [--no-commit] [--commit] <id>`
-# `kra ws reopen --dry-run --format json <id>`
+# `kra ws reopen [--id <id>] [--current] [--select] [--no-commit] [--commit]`
+# `kra ws reopen --dry-run --format json --id <id>`
 
 ## Purpose
 
@@ -76,7 +76,7 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 
 ## Modes
 
-- This command is explicit-id mode only.
+- This command supports `--id`, `--current`, and `--select`.
 - Interactive selection must use `kra ws reopen --select --archived`.
 - JSON execution in phase 1 is `--dry-run` preflight only.
 

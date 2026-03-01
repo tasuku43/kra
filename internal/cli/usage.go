@@ -205,8 +205,8 @@ func (c *CLI) printWSUsage(w io.Writer) {
   kra ws purge [--id <id> | --current | --select] [action-args...]
   kra ws list|ls [--archived] [--tree] [--format human|tsv|json]
   kra ws dashboard [--archived] [--workspace <id>] [--format human|json]
-  kra ws lock <id> [--format human|json]
-  kra ws unlock <id> [--format human|json]
+  kra ws lock [--id <id> | --current | --select] [--format human|json]
+  kra ws unlock [--id <id> | --current | --select] [--format human|json]
 
 Target selection:
   Choose exactly one: --id, --current, or --select
@@ -232,7 +232,7 @@ Open workspace runtime flow.
 
 func (c *CLI) printWSLockUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws lock <id> [--format human|json]
+  kra ws lock [--id <id> | --current | --select] [--format human|json]
 
 Enable purge guard for the target workspace.
 `)
@@ -266,7 +266,7 @@ Show operational dashboard for workspaces.
 
 func (c *CLI) printWSUnlockUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws unlock <id> [--format human|json]
+  kra ws unlock [--id <id> | --current | --select] [--format human|json]
 
 Disable purge guard for the target workspace.
 `)
@@ -397,7 +397,7 @@ Options:
 
 func (c *CLI) printWSAddRepoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws add-repo [--id <workspace-id> | --current | --select] [<workspace-id>] [--format human|json] [--refresh] [--no-fetch]
+  kra ws add-repo [--id <workspace-id> | --current | --select] [--format human|json] [--refresh] [--no-fetch]
   kra ws add-repo --format json --id <workspace-id> --repo <repo-key> [--repo <repo-key> ...] [--branch <name>] [--base-ref <origin/branch>] [--refresh] [--no-fetch] [--yes]
 
 Add repositories from the repo pool to a workspace.
@@ -417,7 +417,7 @@ Behavior:
 
 func (c *CLI) printWSRemoveRepoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws remove-repo [--id <workspace-id> | --current | --select] [<workspace-id>] [--format human|json]
+  kra ws remove-repo [--id <workspace-id> | --current | --select] [--format human|json]
   kra ws remove-repo --format json --id <workspace-id> --repo <repo-key> [--repo <repo-key> ...] [--yes] [--force]
 
 Remove repositories from a workspace (binding + worktree).
@@ -436,8 +436,8 @@ Behavior:
 
 func (c *CLI) printWSCloseUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws close [--id <id> | --current | --select] [--force] [--format human|json] [--no-commit] [<id>]
-  kra ws close --dry-run --format json [--id <id>|<id>]
+  kra ws close [--id <id> | --current | --select] [--force] [--format human|json] [--no-commit]
+  kra ws close --dry-run --format json --id <id>
 
 Close (archive) a workspace:
 - inspect repo risk (live) and prompt if not clean
@@ -452,8 +452,8 @@ If ID is omitted, current directory must resolve to an active workspace.
 
 func (c *CLI) printWSReopenUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws reopen [--id <id> | --current | --select] [--no-commit] [<id>]
-  kra ws reopen --dry-run --format json [--id <id>|<id>]
+  kra ws reopen [--id <id> | --current | --select] [--no-commit]
+  kra ws reopen --dry-run --format json --id <id>
 
 Reopen an archived workspace:
 - move archive/<id>/ to workspaces/<id>/ atomically
@@ -467,8 +467,8 @@ Use kra ws --select --archived for interactive selection.
 
 func (c *CLI) printWSPurgeUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws purge [--id <id> | --current | --select] [--no-prompt --force] [--no-commit] [<id>]
-  kra ws purge --dry-run --format json [--id <id>|<id>]
+  kra ws purge [--id <id> | --current | --select] [--no-prompt --force] [--no-commit]
+  kra ws purge --dry-run --format json --id <id>
 
 Purge (permanently delete) a workspace:
 - always asks confirmation in interactive mode

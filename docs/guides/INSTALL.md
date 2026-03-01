@@ -10,8 +10,6 @@ Supported platforms (release artifacts):
 - macOS: `amd64`, `arm64`
 - Linux: `amd64`, `arm64`
 
-For compatibility policy, see `docs/spec/core/COMPATIBILITY.md`.
-
 ## Install via GitHub Releases (manual)
 
 1. Download a release archive for your OS/arch from GitHub Releases.
