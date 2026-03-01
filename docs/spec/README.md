@@ -54,6 +54,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/doctor-fix.md`: `kra doctor --fix --plan|--apply` staged remediation
   - `commands/doctor.md`: `kra doctor`
   - `commands/context.md`: `kra context`
+  - `commands/root.md`: `kra root`
   - `commands/init.md`: `kra init`
   - `commands/repo/add.md`: `kra repo add`
   - `commands/repo/discover.md`: `kra repo discover`

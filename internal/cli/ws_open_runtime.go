@@ -280,6 +280,7 @@ func resolveWSOpenTarget(root string, workspaceID string) (appcmux.OpenTarget, s
 		WorkspaceID:   workspaceID,
 		WorkspacePath: wsPath,
 		Title:         title,
+		StatusText:    "kra:workspace",
 	}, "", ""
 }
 

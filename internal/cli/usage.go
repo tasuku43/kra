@@ -10,6 +10,7 @@ func (c *CLI) printRootUsage(w io.Writer) {
 	commands := []string{
 		"  init              Initialize KRA_ROOT",
 		"  context           Context commands",
+		"  root              Root commands",
 		"  repo              Repository pool commands",
 		"  template          Workspace template commands",
 		"  shell             Shell integration commands",
@@ -49,6 +50,19 @@ Subcommands:
 
 Notes:
   - context use/rm in --format json mode require explicit <name> (non-interactive)
+`)
+}
+
+func (c *CLI) printRootCommandUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra root <subcommand> [args]
+
+Subcommands:
+  current [--format human|json]
+                   Print conceptual KRA_ROOT resolved for current execution context
+  open [--format human|json]
+                   Open KRA_ROOT as a cmux workspace (single target)
+  help              Show this help
 `)
 }
 

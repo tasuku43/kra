@@ -8,6 +8,7 @@ import (
 var kraCompletionRootCommands = []string{
 	"init",
 	"context",
+	"root",
 	"repo",
 	"template",
 	"shell",
@@ -26,6 +27,7 @@ var kraCompletionGlobalFlags = []string{
 
 var kraCompletionSubcommandOrder = []string{
 	"context",
+	"root",
 	"repo",
 	"template",
 	"shell",
@@ -34,6 +36,7 @@ var kraCompletionSubcommandOrder = []string{
 
 var kraCompletionSubcommands = map[string][]string{
 	"context":  {"current", "list", "create", "use", "rename", "rm", "help"},
+	"root":     {"current", "open", "help"},
 	"repo":     {"add", "discover", "remove", "gc", "help"},
 	"template": {"create", "remove", "rm", "validate", "help"},
 	"shell":    {"init", "completion", "help"},
@@ -84,6 +87,8 @@ var kraCompletionPathFlagOrder = []string{
 	"context use",
 	"context rename",
 	"context rm",
+	"root current",
+	"root open",
 	"repo add",
 	"repo discover",
 	"repo remove",
@@ -117,6 +122,8 @@ var kraCompletionPathFlags = map[string][]string{
 	"context use":       {"--format", "--help", "-h"},
 	"context rename":    {"--format", "--help", "-h"},
 	"context rm":        {"--format", "--help", "-h"},
+	"root current":      {"--format", "--help", "-h"},
+	"root open":         {"--format", "--help", "-h"},
 	"repo add":          {"--format", "--help", "-h"},
 	"repo discover":     {"--org", "--provider", "--help", "-h"},
 	"repo remove":       {"--format", "--help", "-h"},

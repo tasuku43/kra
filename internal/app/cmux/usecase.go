@@ -26,7 +26,7 @@ type Client interface {
 
 const (
 	defaultWorkspaceStatusLabel = "kra"
-	defaultWorkspaceStatusText  = "managed by kra"
+	defaultWorkspaceStatusText  = "kra:workspace"
 	defaultWorkspaceStatusIcon  = "tag"
 	defaultWorkspaceStatusColor = cmuxstyle.WorkspaceLabelColor
 )
@@ -52,6 +52,7 @@ type OpenTarget struct {
 	WorkspaceID   string
 	WorkspacePath string
 	Title         string
+	StatusText    string
 }
 
 type OpenResultItem struct {
@@ -268,7 +269,11 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 	if err := client.SelectWorkspace(ctx, cmuxWorkspaceID); err != nil {
 		return OpenResultItem{}, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
 	}
-	if err := client.SetStatus(ctx, cmuxWorkspaceID, defaultWorkspaceStatusLabel, defaultWorkspaceStatusText, defaultWorkspaceStatusIcon, defaultWorkspaceStatusColor); err != nil {
+	statusText := defaultWorkspaceStatusText
+	if strings.TrimSpace(target.StatusText) != "" {
+		statusText = strings.TrimSpace(target.StatusText)
+	}
+	if err := client.SetStatus(ctx, cmuxWorkspaceID, defaultWorkspaceStatusLabel, statusText, defaultWorkspaceStatusIcon, defaultWorkspaceStatusColor); err != nil {
 		return OpenResultItem{}, "cmux_set_status_failed", fmt.Sprintf("set cmux workspace status: %v", err)
 	}
 	now := s.Now().UTC().Format(time.RFC3339)
