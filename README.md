@@ -16,6 +16,23 @@ Ticket providers are designed to be extensible; currently, Jira is supported.
 - `kra ws open --id TASK-1234` opens that task-scoped execution context (and can align with `cmux` runtime workflow).
 - `kra ws close --id TASK-1234` archives task outputs and removes workspace worktrees from active area.
 
+## Shell integration
+
+If you want `kra` to synchronize your parent shell `cwd` (for example fallback `cd` behavior in `ws open`), enable shell integration:
+
+```sh
+# zsh
+eval "$(kra shell init zsh)"
+
+# bash
+eval "$(kra shell init bash)"
+
+# fish
+eval (kra shell init fish)
+```
+
+Without shell integration, `kra` still runs commands but cannot mutate your parent shell `cwd`.
+
 ## cmux integration
 
 `kra` provides an operational framework for using `cmux` in ticket-driven, filesystem-based workflows.
@@ -35,7 +52,7 @@ This gives you an operational 1:1:1 mapping across ticket, task workspace, and r
 - `kra ws open --id <id>`:
   - if no `cmux` mapping exists for the workspace, `kra` creates/selects a `cmux` workspace and persists the mapping.
   - if a mapping already exists and runtime workspace is reachable, `kra` reuses it (switch/select) instead of creating another one.
-  - single-target open (for example `kra ws open --id <id>` or `--current`) falls back to shell `cd` synchronization when `cmux` capabilities are unavailable.
+  - single-target open (for example `kra ws open --id <id>` or `--current`; `--current` resolves workspace from current directory) falls back to shell `cd` synchronization when `cmux` capabilities are unavailable.
 - `kra ws close --id <id>`:
   - after archive/workspace close operations, `kra` closes the mapped `cmux` workspace on a best-effort basis.
   - `cmux` close failures do not roll back successful archive results.
