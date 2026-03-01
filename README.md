@@ -6,6 +6,40 @@ It is useful standalone for workspace lifecycle operations, and becomes more val
 The default workspace template starts with `notes/` and `artifacts/`, and you can extend it with your own files (for example `AGENTS.md`) and directories.
 `<KRA_ROOT>` stores active/archived task workspaces, while `$KRA_HOME` (default: `~/.kra/`) stores shared state such as config and the repo pool.
 
+## Filesystem Model (At a Glance)
+
+`kra` is built around filesystem-based workspace management under `<KRA_ROOT>`.
+
+### ASCII (3-layer view)
+
+```text
+[Layer 1: Root]
+<KRA_ROOT>/
+├── templates/default/
+├── workspaces/
+│   └── <TASK_ID>/
+└── archive/
+    └── <TASK_ID>/
+
+[Layer 2: Active Workspace (example when using template: default)]
+<KRA_ROOT>/workspaces/<TASK_ID>/
+├── notes/
+├── artifacts/
+└── repos/
+    ├── app/      (git worktree)
+    └── infra/    (git worktree)
+
+[Layer 3: Shared State]
+$KRA_HOME/ (default: ~/.kra/)
+├── config.yaml
+└── repo-pool/    (shared repo pool)
+```
+
+- `kra ws create <ID>`: creates `<KRA_ROOT>/workspaces/<ID>/`
+- `kra ws close --id <ID>`: archives to `<KRA_ROOT>/archive/<ID>/`
+- `kra ws reopen --id <ID>`: moves `<ID>` from `archive/` back to `workspaces/`
+- `kra ws purge --id <ID>`: permanently removes an archived workspace
+
 ## Quickstart
 
 ```sh
@@ -19,8 +53,9 @@ In single-target open, if `cmux` capabilities are unavailable, `kra` falls back 
 
 For day-to-day operations (`repo add`, `ws add-repo`, `ws close`), see:
 
-- `docs/guides/INSTALL.md`
-- `docs/guides/COMMANDS.md`
+- `docs/user/guides/INSTALL.md`
+- `docs/user/guides/COMMANDS.md`
+- `docs/user/guides/CONFIG.md`
 
 ## Shell Integration (Recommended)
 
@@ -30,7 +65,7 @@ This prevents staying in a deleted directory after closing a workspace from insi
 
 Setup and details:
 
-- `docs/guides/SHELL_INTEGRATION.md`
+- `docs/user/guides/SHELL_INTEGRATION.md`
 
 ## Core Features
 
@@ -43,7 +78,7 @@ Example:
 kra ws close --id TASK-1234
 ```
 
-Guide: `docs/guides/WORKSPACE_LIFECYCLE.md`
+Guide: `docs/user/guides/WORKSPACE_LIFECYCLE.md`
 
 ### 2) cmux integration
 When using `cmux`, `kra ws open` creates and opens the corresponding `cmux` workspace if it does not exist, and moves to it if it already exists. `kra ws close` closes mapped `cmux` workspace(s) on a best-effort basis after archive operations.
@@ -54,7 +89,7 @@ Example:
 kra ws open --id TASK-1234
 ```
 
-Guide: `docs/guides/CMUX.md`
+Guide: `docs/user/guides/CMUX.md`
 
 ### 3) Per-task worktree attach/remove
 Register repositories in the shared repo pool, then attach and remove only the repositories needed per task as worktrees so each workspace keeps only the required repo context.
@@ -67,7 +102,7 @@ kra ws add-repo --id TASK-1234
 
 Details:
 
-- `docs/guides/REPO_WORKTREE.md`
+- `docs/user/guides/REPO_WORKTREE.md`
 
 ## Installation
 
@@ -117,19 +152,20 @@ To create from Jira (`kra ws create --jira <ticket-url>`), configure:
 
 Details:
 
-- `docs/guides/COMMANDS.md`
+- `docs/user/guides/COMMANDS.md`
 
 ## Documentation
 
-- Install guide: `docs/guides/INSTALL.md`
-- Command reference: `docs/guides/COMMANDS.md`
-- Workspace lifecycle guide: `docs/guides/WORKSPACE_LIFECYCLE.md`
-- cmux integration guide: `docs/guides/CMUX.md`
-- Shell integration guide: `docs/guides/SHELL_INTEGRATION.md`
-- Repo/worktree guide: `docs/guides/REPO_WORKTREE.md`
-- Automation JSON guide: `docs/guides/AUTOMATION_JSON.md`
+- Install guide: `docs/user/guides/INSTALL.md`
+- Command reference: `docs/user/guides/COMMANDS.md`
+- Config guide: `docs/user/guides/CONFIG.md`
+- Workspace lifecycle guide: `docs/user/guides/WORKSPACE_LIFECYCLE.md`
+- cmux integration guide: `docs/user/guides/CMUX.md`
+- Shell integration guide: `docs/user/guides/SHELL_INTEGRATION.md`
+- Repo/worktree guide: `docs/user/guides/REPO_WORKTREE.md`
+- Automation JSON guide: `docs/user/guides/AUTOMATION_JSON.md`
 - Docs index: `docs/README.md`
-- Developer specs (implementation contracts): `docs/spec/README.md`
+- Developer specs (implementation contracts): `docs/dev/spec/README.md`
 
 ## Project Meta
 
