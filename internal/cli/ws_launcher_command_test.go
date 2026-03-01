@@ -112,7 +112,7 @@ func TestCLI_WS_Launcher_PurgeAcceptsIDWithNoPromptForce(t *testing.T) {
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "unlock", "WS1"}); code != exitOK {
+		if code := c.Run([]string{"ws", "unlock", "--id", "WS1"}); code != exitOK {
 			t.Fatalf("ws unlock exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}

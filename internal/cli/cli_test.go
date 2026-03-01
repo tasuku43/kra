@@ -840,7 +840,7 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 		_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 		c.In = strings.NewReader(addRepoSelectionInput("", "MVP-020/test"))
 
-		code := c.Run([]string{"ws", "add-repo", "MVP-020"})
+		code := c.Run([]string{"ws", "add-repo", "--id", "MVP-020"})
 		if code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
@@ -960,7 +960,7 @@ func TestCLI_WS_AddRepo_DBUnavailable_FallsBackToFilesystem(t *testing.T) {
 		c := New(&out, &err)
 		c.In = strings.NewReader(addRepoSelectionInput("", "MVP-021/test"))
 
-		code := c.Run([]string{"ws", "add-repo", "MVP-021"})
+		code := c.Run([]string{"ws", "add-repo", "--id", "MVP-021"})
 		if code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}

@@ -52,7 +52,7 @@ func TestCLI_WS_RemoveRepo_JSON_RemovesBindingAndWorktree(t *testing.T) {
 		var err bytes.Buffer
 		c := New(&out, &err)
 		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-		if code := c.Run([]string{"ws", "add-repo", "WS1"}); code != exitOK {
+		if code := c.Run([]string{"ws", "add-repo", "--id", "WS1"}); code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
@@ -121,7 +121,7 @@ func TestCLI_WS_RemoveRepo_JSON_RiskyRequiresForce(t *testing.T) {
 		var err bytes.Buffer
 		c := New(&out, &err)
 		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-		if code := c.Run([]string{"ws", "add-repo", "WS1"}); code != exitOK {
+		if code := c.Run([]string{"ws", "add-repo", "--id", "WS1"}); code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
@@ -174,7 +174,7 @@ func TestCLI_WS_RemoveRepo_JSON_ShiftsCWDWhenInsideTargetWorkspace(t *testing.T)
 		var err bytes.Buffer
 		c := New(&out, &err)
 		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-		if code := c.Run([]string{"ws", "add-repo", "WS1"}); code != exitOK {
+		if code := c.Run([]string{"ws", "add-repo", "--id", "WS1"}); code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}

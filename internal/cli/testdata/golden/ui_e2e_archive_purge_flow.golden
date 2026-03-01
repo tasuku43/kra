@@ -17,7 +17,7 @@ Result:
   path: <ROOT>/workspaces/UI-200
 
 
-$ kra ws close UI-200
+$ kra ws close --id UI-200
 exit: 0
 stdout:
 Result:
@@ -28,7 +28,7 @@ Result:
     3/3 commit(post): archive: UI-200 <SHA>
 
 
-$ kra ws reopen UI-200
+$ kra ws reopen --id UI-200
 exit: 0
 stdout:
 Result:
@@ -39,7 +39,7 @@ Result:
     3/3 commit(post): reopen: UI-200 <SHA>
 
 
-$ kra ws close UI-200
+$ kra ws close --id UI-200
 exit: 0
 stdout:
 Result:
@@ -50,7 +50,7 @@ Result:
     3/3 commit(post): archive: UI-200 <SHA>
 
 
-$ kra ws unlock UI-200
+$ kra ws unlock --id UI-200
 exit: 0
 stdout:
 
@@ -58,7 +58,7 @@ Result:
   purge guard disabled: UI-200
 
 
-$ kra ws purge --no-prompt --force UI-200
+$ kra ws purge --no-prompt --force --id UI-200
 exit: 0
 stdout:
 Result:

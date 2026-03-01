@@ -33,7 +33,7 @@ Workspaces(active):
   • UI-100: (no title)
 
 
-$ kra ws close UI-100
+$ kra ws close --id UI-100
 exit: 0
 stdout:
 Result:

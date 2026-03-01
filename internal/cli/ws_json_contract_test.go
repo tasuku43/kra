@@ -173,7 +173,7 @@ func TestCLI_WS_ActReopen_DryRun_JSON_Success(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	code := c.Run([]string{"ws", "reopen", "--dry-run", "--format", "json", "WS1"})
+	code := c.Run([]string{"ws", "reopen", "--dry-run", "--format", "json", "--id", "WS1"})
 	if code != exitOK {
 		t.Fatalf("ws reopen --dry-run --format json exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
@@ -199,7 +199,7 @@ func TestCLI_WS_ActPurge_DryRun_JSON_ArchivedOnly(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	code := c.Run([]string{"ws", "purge", "--dry-run", "--format", "json", "WS1"})
+	code := c.Run([]string{"ws", "purge", "--dry-run", "--format", "json", "--id", "WS1"})
 	if code != exitError {
 		t.Fatalf("ws purge --dry-run --format json exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
 	}

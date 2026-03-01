@@ -51,7 +51,7 @@ func TestCLI_WSDashboard_JSON_ArchivedScope(t *testing.T) {
 		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
 			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
-		if code := c.Run([]string{"ws", "close", "WS1"}); code != exitOK {
+		if code := c.Run([]string{"ws", "close", "--id", "WS1"}); code != exitOK {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}

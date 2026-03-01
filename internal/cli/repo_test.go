@@ -454,7 +454,7 @@ func TestCLI_RepoRemove_FailsWhenRepoBoundToWorkspace(t *testing.T) {
 		var err bytes.Buffer
 		c := New(&out, &err)
 		c.In = strings.NewReader(addRepoSelectionInput("", "TEST-200"))
-		if code := c.Run([]string{"ws", "add-repo", "TEST-200"}); code != exitOK {
+		if code := c.Run([]string{"ws", "add-repo", "--id", "TEST-200"}); code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
@@ -511,7 +511,7 @@ func TestCLI_RepoRemove_JSON_BlockedWhenRepoBound(t *testing.T) {
 		var err bytes.Buffer
 		c := New(&out, &err)
 		c.In = strings.NewReader(addRepoSelectionInput("", "TEST-201"))
-		if code := c.Run([]string{"ws", "add-repo", "TEST-201"}); code != exitOK {
+		if code := c.Run([]string{"ws", "add-repo", "--id", "TEST-201"}); code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
@@ -692,7 +692,7 @@ func TestCLI_RepoGC_FailsWhenNoEligibleCandidates(t *testing.T) {
 		var err bytes.Buffer
 		c := New(&out, &err)
 		c.In = strings.NewReader(addRepoSelectionInput("", "WS-GC"))
-		if code := c.Run([]string{"ws", "add-repo", "WS-GC"}); code != exitOK {
+		if code := c.Run([]string{"ws", "add-repo", "--id", "WS-GC"}); code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
@@ -750,7 +750,7 @@ func TestCLI_RepoGC_JSON_BlockedWhenNotEligible(t *testing.T) {
 		var err bytes.Buffer
 		c := New(&out, &err)
 		c.In = strings.NewReader(addRepoSelectionInput("", "WS-GC-JSON"))
-		if code := c.Run([]string{"ws", "add-repo", "WS-GC-JSON"}); code != exitOK {
+		if code := c.Run([]string{"ws", "add-repo", "--id", "WS-GC-JSON"}); code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
@@ -808,7 +808,7 @@ func TestCLI_RepoGC_BlockedByArchiveMetadataReference(t *testing.T) {
 		var err bytes.Buffer
 		c := New(&out, &err)
 		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-		if code := c.Run([]string{"ws", "add-repo", "WS1"}); code != exitOK {
+		if code := c.Run([]string{"ws", "add-repo", "--id", "WS1"}); code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
@@ -816,7 +816,7 @@ func TestCLI_RepoGC_BlockedByArchiveMetadataReference(t *testing.T) {
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "close", "WS1"}); code != exitOK {
+		if code := c.Run([]string{"ws", "close", "--id", "WS1"}); code != exitOK {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
