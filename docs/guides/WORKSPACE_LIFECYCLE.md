@@ -31,7 +31,7 @@ kra ws close --id TASK-1234
 When reopened later:
 
 ```sh
-kra ws reopen TASK-1234
+kra ws reopen --id TASK-1234
 ```
 
 ## What `close` does

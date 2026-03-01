@@ -3,6 +3,8 @@
 `kra` is a local CLI for ticket-driven development workflows on your filesystem.
 It creates an isolated workspace per task, attaches only the repositories you need as Git worktrees, and closes work safely into `archive/` when done.
 It is useful standalone for workspace lifecycle operations, and becomes more valuable with `cmux` by aligning ticket, `kra` workspace, and `cmux` workspace in a 1:1:1 operating model.
+The default workspace template starts with `notes/` and `artifacts/`, and you can extend it with your own files (for example `AGENTS.md`) and directories.
+`<KRA_ROOT>` stores active/archived task workspaces, while `$KRA_HOME` (default: `~/.kra/`) stores shared state such as config and the repo pool.
 
 ## Quickstart
 
@@ -13,6 +15,7 @@ kra ws open --id TASK-1234
 ```
 
 When using `cmux`, `kra ws open` creates and opens the corresponding `cmux` workspace if it does not exist, and moves to it if it already exists.
+In single-target open, if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior; with shell integration, it can also sync parent shell `cwd`.
 
 For day-to-day operations (`repo add`, `ws add-repo`, `ws close`), see:
 
@@ -88,6 +91,8 @@ go build -o kra ./cmd/kra
 ```
 
 ### Jira setup (optional)
+
+Ticket providers are designed to be extensible; current documented support is Jira.
 
 You can always create a workspace with a plain ID:
 

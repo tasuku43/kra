@@ -24,7 +24,7 @@ This 1:1:1 mapping helps avoid context drift across tools.
 - selects or creates the mapped `cmux` workspace when mapping is missing
 - reuses existing mapping when the mapped `cmux` workspace is reachable
 
-In single-target open, if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior.
+In single-target open (`--id` or `--current`), if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior. With shell integration enabled, this can synchronize parent shell `cwd`.
 
 ## Close behavior
 
@@ -44,13 +44,6 @@ kra ws open --id TASK-1234
 # run your agent in this task workspace
 kra ws close --id TASK-1234
 ```
-
-## Boundaries
-
-- `kra` is not a replacement for Jira or other ticket systems.
-- `kra` is not an agent session manager.
-- `kra` is not a GUI planning tool.
-- `kra` focuses on workspace lifecycle and coordination.
 
 ## Related docs
 
