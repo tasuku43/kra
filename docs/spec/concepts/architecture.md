@@ -39,7 +39,7 @@ the same application use cases.
   the same `app` use case path to avoid behavior drift.
 - During migration, direct `internal/infra/*` imports under `internal/cli` are controlled by architecture allowlist tests in
   `internal/archguard/layering_test.go` (no silent expansion allowed).
-- `cmux` command handlers are currently treated as a temporary exception while the command group is being phased out.
+- `cmux` is exposed only via workspace entrypoints (`kra ws open`); no dedicated top-level command group exists.
 
 ## Migration strategy
 

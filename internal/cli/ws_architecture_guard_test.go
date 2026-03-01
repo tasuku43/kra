@@ -19,7 +19,6 @@ type wsRunFunctionShape struct {
 }
 
 var wsFlowRequiredHandlers = []string{
-	"runWSGo",
 	"runWSClose",
 	"runWSReopen",
 	"runWSPurge",

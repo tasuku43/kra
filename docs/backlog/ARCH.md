@@ -28,12 +28,12 @@ status: planned
   - Depends: ARCH-002
   - Serial: yes
 
-- [x] ARCH-004: Migrate `ws` launcher + `ws go` to app layer
+- [x] ARCH-004: Migrate `ws` launcher + `ws open` to app layer
   - What: route launcher and go through shared app use case path.
   - Specs:
     - `docs/spec/concepts/architecture.md`
     - `docs/spec/commands/ws/select.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
   - Depends: ARCH-003
   - Serial: yes
 

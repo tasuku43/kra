@@ -45,11 +45,11 @@ status: planned
   - Depends: FS-STATE-004
   - Serial: yes
 
-- [x] FS-STATE-006: logical work-state (`todo`/`in-progress`) in `ws list`/`ws go`
+- [x] FS-STATE-006: logical work-state (`todo`/`in-progress`) in `ws list`/`ws open`
   - What: derive logical state at read time from filesystem + git signals, without DB persistence.
   - Specs:
     - `docs/spec/commands/ws/list.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
     - `docs/spec/concepts/fs-source-of-truth.md`
   - Depends: FS-STATE-005
   - Parallel: yes

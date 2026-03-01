@@ -16,11 +16,11 @@ status: planned
   - Parallel: yes
 
 - [x] UX-CORE-002: Shell integration bootstrap (`kra shell init`)
-  - What: add shell integration command that prints eval-ready wrapper function and align `ws go` default output
+  - What: add shell integration command that prints eval-ready wrapper function and align `ws open` default output
     to shell snippet mode.
   - Specs:
     - `docs/spec/commands/shell/init.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
   - Depends: UX-WS-003
   - Parallel: yes
 

@@ -350,12 +350,12 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 	opArgs := append([]string{}, actionArgs...)
 	switch action {
 	case "open", "add-repo", "remove-repo", "close":
-		if workspaceID != "" && !runWSActionHasIDArg(opArgs) && !runWSActionHasPositional(opArgs) {
+		if workspaceID != "" && !runWSActionHasIDArg(opArgs) {
 			opArgs = append([]string{"--id", workspaceID}, opArgs...)
 		}
 	case "reopen", "purge", "unlock":
-		if workspaceID != "" && !runWSActionHasPositional(opArgs) {
-			opArgs = append([]string{workspaceID}, opArgs...)
+		if workspaceID != "" {
+			opArgs = append(opArgs, workspaceID)
 		}
 	}
 

@@ -44,7 +44,7 @@ kra init --root ~/kra
 kra ws create --no-prompt TASK-1234
 
 # 3) go to workspace
-kra ws --id TASK-1234 --act go
+kra ws open --id TASK-1234
 
 # 4) inspect status
 kra ws dashboard

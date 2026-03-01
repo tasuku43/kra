@@ -151,20 +151,6 @@ func TestCLI_WS_SelectFlagSupported(t *testing.T) {
 	}
 }
 
-func TestCLI_WS_GoSubcommandRemoved(t *testing.T) {
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-
-	code := c.Run([]string{"ws", "go"})
-	if code != exitUsage {
-		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
-	}
-	if !strings.Contains(err.String(), "unknown command") {
-		t.Fatalf("stderr missing unknown command message: %q", err.String())
-	}
-}
-
 func TestCLI_WS_Select_UnsupportedAction(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -226,7 +212,7 @@ func TestCLI_WS_Select_Multi_RejectsUnsupportedAction(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "--select", "--multi", "go"})
+	code := c.Run([]string{"ws", "--select", "--multi", "open"})
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 	}

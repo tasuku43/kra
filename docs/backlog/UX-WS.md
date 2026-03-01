@@ -24,11 +24,11 @@ status: planned
   - Depends: UX-WS-001, MVP-040
   - Serial: yes
 
-- [x] UX-WS-003: `kra ws go` command (start-work flow)
-  - What: add `ws go` with selector/direct mode, default `active` scope, optional `--archived`, and `--emit-cd`
-    output for shell function integration.
+- [x] UX-WS-003: `kra ws open` command (start-work flow)
+  - What: add `ws open` with selector/direct mode, default `active` scope, optional `--archived`,
+    and shell-integration-based cwd synchronization.
   - Specs:
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
     - `docs/spec/commands/ws/selector.md`
   - Depends: UX-WS-001, MVP-020
   - Parallel: yes (with UX-WS-002)
@@ -168,12 +168,12 @@ status: planned
   - Depends: MVP-031, UX-WS-013
   - Parallel: yes
 
-- [x] UX-WS-019: `ws go` single-select UI mode
-  - What: switch `ws go` selector to cursor-confirm single-select mode (no checkbox markers, no selected summary).
+- [x] UX-WS-019: `ws open` single-select UI mode
+  - What: switch `ws open` selector to cursor-confirm single-select mode (no checkbox markers, no selected summary).
   - Specs:
     - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/selector.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
   - Depends: UX-WS-001, UX-WS-003
   - Parallel: yes
 
@@ -184,7 +184,7 @@ status: planned
     - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/selector.md`
     - `docs/spec/commands/ws/close.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
     - `docs/spec/commands/ws/add-repo.md`
     - `docs/spec/README.md`
   - Depends: UX-WS-019, UX-CORE-002, ARCH-001
@@ -195,7 +195,7 @@ status: planned
     For operation commands, add shared `--select` option to select workspace first, then run command.
   - Specs:
     - `docs/spec/commands/ws/selector.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
     - `docs/spec/commands/ws/close.md`
     - `docs/spec/commands/ws/add-repo.md`
   - Depends: UX-WS-020
@@ -207,7 +207,7 @@ status: planned
     inside workspace -> skip workspace selection and open action menu for current workspace.
   - Specs:
     - `docs/spec/commands/ws/selector.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
     - `docs/spec/commands/ws/close.md`
     - `docs/spec/commands/ws/add-repo.md`
   - Depends: UX-WS-021
@@ -220,7 +220,7 @@ status: planned
     - `docs/spec/commands/ws/selector.md`
     - `docs/spec/commands/ws/add-repo.md`
     - `docs/spec/commands/ws/close.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
   - Depends: UX-WS-022
   - Serial: yes
 
@@ -236,7 +236,7 @@ status: planned
     command-internal branching can still trigger safe `cd` in parent shell.
   - Specs:
     - `docs/spec/commands/shell/init.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
   - Depends: UX-WS-022
   - Parallel: yes
 
@@ -245,7 +245,7 @@ status: planned
     required explicit target input, no prompt fallback, stable JSON output, explicit exit-code mapping.
   - Specs:
     - `docs/spec/commands/ws/close.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
     - `docs/spec/commands/ws/add-repo.md`
     - `docs/spec/testing/integration.md`
   - Depends: UX-WS-020
@@ -259,7 +259,7 @@ status: planned
     - `docs/spec/commands/ws/list.md`
     - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/selector.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
     - `docs/spec/commands/ws/close.md`
     - `docs/spec/commands/ws/add-repo.md`
     - `docs/spec/commands/ws/reopen.md`
@@ -273,7 +273,7 @@ status: planned
   - Specs:
     - `docs/spec/commands/ws/select.md`
     - `docs/spec/commands/ws/list.md`
-    - `docs/spec/commands/ws/go.md`
+    - `docs/spec/commands/ws/open.md`
     - `docs/spec/commands/ws/close.md`
     - `docs/spec/commands/ws/add-repo.md`
   - Depends: UX-WS-027

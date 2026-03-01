@@ -389,21 +389,6 @@ Behavior:
 `)
 }
 
-func (c *CLI) printWSGoUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
-  kra ws go [--archived] [--id <id> | --current | --select] [--ui] [--format human|json] [<id>]
-
-Resolve a workspace directory target:
-- active target: workspaces/<id>/
-- archived target (--archived): archive/<id>/
-
-Options:
-  --archived        Use archived workspace scope
-  --id              Explicit workspace ID
-  --ui              Print human-readable Result section
-`)
-}
-
 func (c *CLI) printWSCloseUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws close [--id <id> | --current | --select] [--force] [--format human|json] [--no-commit] [<id>]

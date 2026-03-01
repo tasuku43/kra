@@ -13,7 +13,7 @@ For exact behavior contracts, see `docs/spec/commands/`.
 ```sh
 kra init --root ~/kra --context main
 kra ws create --no-prompt TASK-1234
-kra ws --id TASK-1234 --act go
+kra ws open --id TASK-1234
 kra ws dashboard
 ```
 

@@ -81,7 +81,6 @@ func TestShouldBootstrapGlobalConfig_WSActPolicy(t *testing.T) {
 		{name: "ws create", args: []string{"ws", "create", "--no-prompt", "WS1"}, want: true},
 		{name: "ws act close", args: []string{"ws", "close", "--id", "WS1"}, want: true},
 		{name: "ws act remove-repo", args: []string{"ws", "remove-repo", "--id", "WS1"}, want: true},
-		{name: "ws act go", args: []string{"ws", "go", "--id", "WS1"}, want: false},
 		{name: "ws act save removed", args: []string{"ws", "save", "--id", "WS1"}, want: false},
 		{name: "ws act resume removed", args: []string{"ws", "resume", "--id", "WS1", "--latest"}, want: false},
 		{name: "ws list", args: []string{"ws", "list"}, want: false},

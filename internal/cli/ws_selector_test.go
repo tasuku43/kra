@@ -333,7 +333,7 @@ func TestRenderWorkspaceSelectorLines_UsesActionLabelInFooter(t *testing.T) {
 func TestRenderWorkspaceSelectorLines_UsesColonBetweenIDAndTitle(t *testing.T) {
 	lines := renderWorkspaceSelectorLines(
 		"active",
-		"go",
+		"open",
 		[]workspaceSelectorCandidate{{ID: "TEST-100", Title: "Kwsの申請", Risk: workspacerisk.WorkspaceRiskClean}},
 		map[int]bool{},
 		0,
@@ -352,7 +352,7 @@ func TestRenderWorkspaceSelectorLines_UsesColonBetweenIDAndTitle(t *testing.T) {
 func TestRenderWorkspaceSelectorLines_WorkspaceIDBoldOnlyOnFocusedRow(t *testing.T) {
 	lines := renderWorkspaceSelectorLines(
 		"active",
-		"go",
+		"open",
 		[]workspaceSelectorCandidate{
 			{ID: "TEST-002", Title: "", Risk: workspacerisk.WorkspaceRiskClean},
 			{ID: "TEST-003", Title: "has title", Risk: workspacerisk.WorkspaceRiskClean},
@@ -466,7 +466,7 @@ func TestRenderWorkspaceSelectorLinesWithOptions_SingleModeShowsSelectionMarkerA
 	lines := renderWorkspaceSelectorLinesWithOptions(
 		"active",
 		"",
-		"go",
+		"open",
 		[]workspaceSelectorCandidate{
 			{ID: "WS1", Title: "desc", Risk: workspacerisk.WorkspaceRiskClean},
 		},
@@ -489,7 +489,7 @@ func TestRenderWorkspaceSelectorLinesWithOptions_SingleModeShowsSelectionMarkerA
 	if strings.Contains(joined, "selected:") {
 		t.Fatalf("single mode footer should not show selected summary: %q", joined)
 	}
-	if !strings.Contains(joined, "space/enter go") {
+	if !strings.Contains(joined, "space/enter open") {
 		t.Fatalf("single mode footer should show space/enter action hint: %q", joined)
 	}
 }
@@ -528,7 +528,7 @@ func TestRenderWorkspaceSelectorLinesWithOptions_WorkspaceSectionsShownWithCount
 	lines := renderWorkspaceSelectorLinesWithOptions(
 		"active",
 		"",
-		"go",
+		"open",
 		[]workspaceSelectorCandidate{
 			{ID: "WS-IP-1", Title: "ip1", Risk: workspacerisk.WorkspaceRiskClean, WorkState: workspaceWorkStateInProgress},
 			{ID: "WS-IP-2", Title: "ip2", Risk: workspacerisk.WorkspaceRiskClean, WorkState: workspaceWorkStateInProgress},
@@ -559,9 +559,9 @@ func TestRenderWorkspaceSelectorLinesWithOptions_ActionModeDoesNotShowWorkspaceS
 	lines := renderWorkspaceSelectorLinesWithOptions(
 		"active",
 		"Action:",
-		"go",
+		"open",
 		[]workspaceSelectorCandidate{
-			{ID: "go", Title: "switch", Risk: workspacerisk.WorkspaceRiskClean, WorkState: workspaceWorkStateInProgress},
+			{ID: "open", Title: "switch", Risk: workspacerisk.WorkspaceRiskClean, WorkState: workspaceWorkStateInProgress},
 			{ID: "close", Title: "archive", Risk: workspacerisk.WorkspaceRiskClean, WorkState: workspaceWorkStateTodo},
 		},
 		map[int]bool{},
@@ -662,7 +662,7 @@ func TestWorkspaceSelectorModel_SingleModeEnterSelectsCurrent(t *testing.T) {
 			{ID: "WS2", Risk: workspacerisk.WorkspaceRiskClean},
 		},
 		"active",
-		"go",
+		"open",
 		"",
 		"workspace",
 		true,
@@ -707,7 +707,7 @@ func TestWorkspaceSelectorModel_SingleModeSpaceSelectsCurrent(t *testing.T) {
 			{ID: "WS2", Risk: workspacerisk.WorkspaceRiskClean},
 		},
 		"active",
-		"go",
+		"open",
 		"",
 		"workspace",
 		true,
@@ -740,7 +740,7 @@ func TestWorkspaceSelectorModel_SingleModeFullWidthSpaceSelectsCurrent(t *testin
 			{ID: "WS2", Risk: workspacerisk.WorkspaceRiskClean},
 		},
 		"active",
-		"go",
+		"open",
 		"",
 		"workspace",
 		true,
@@ -820,7 +820,7 @@ func TestWorkspaceSelectorModel_SingleModeLocksInputWhileConfirming(t *testing.T
 			{ID: "WS2", Risk: workspacerisk.WorkspaceRiskClean},
 		},
 		"active",
-		"go",
+		"open",
 		"",
 		"workspace",
 		true,
@@ -855,7 +855,7 @@ func TestWorkspaceSelectorModel_ViewHidesAssistRowsWhileConfirming(t *testing.T)
 			{ID: "WS2", Risk: workspacerisk.WorkspaceRiskClean},
 		},
 		"active",
-		"go",
+		"open",
 		"",
 		"workspace",
 		true,
@@ -959,7 +959,7 @@ func TestWorkspaceSelectorModel_SingleModeReducedMotionSkipsConfirmDelay(t *test
 			{ID: "WS2", Risk: workspacerisk.WorkspaceRiskClean},
 		},
 		"active",
-		"go",
+		"open",
 		"",
 		"workspace",
 		true,
@@ -988,7 +988,7 @@ func TestRenderWorkspaceSelectorLinesWithOptions_SingleConfirmingMutesNonSelecte
 	lines := renderWorkspaceSelectorLinesWithOptions(
 		"active",
 		"",
-		"go",
+		"open",
 		[]workspaceSelectorCandidate{
 			{ID: "WS1", Title: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
 			{ID: "WS2", Title: "beta", Risk: workspacerisk.WorkspaceRiskClean},
@@ -1062,7 +1062,7 @@ func TestRenderWorkspaceSelectorLinesWithOptions_WorkspaceConfirmingMutesTitleOn
 	lines := renderWorkspaceSelectorLinesWithOptions(
 		"active",
 		"",
-		"go",
+		"open",
 		[]workspaceSelectorCandidate{
 			{ID: "WS1", Title: "alpha", Risk: workspacerisk.WorkspaceRiskClean},
 			{ID: "WS2", Title: "beta", Risk: workspacerisk.WorkspaceRiskClean},
