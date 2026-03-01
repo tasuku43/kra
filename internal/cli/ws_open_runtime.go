@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sort"
 	"strings"
 
@@ -30,13 +31,14 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 	outputFormat := "human"
 	multi := false
 	concurrency := 1
+	concurrencyExplicit := false
 	targetIDs := make([]string, 0, 4)
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
 		case "-h", "--help", "help":
 			c.printWSOpenUsage(c.Out)
 			return exitOK
-		case "--multi":
+		case "--multi-select":
 			multi = true
 			args = args[1:]
 		case "--format":
@@ -60,6 +62,7 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 				return exitUsage
 			}
 			concurrency = n
+			concurrencyExplicit = true
 			args = args[2:]
 		case "--workspace":
 			if len(args) < 2 {
@@ -88,6 +91,7 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 					return exitUsage
 				}
 				concurrency = n
+				concurrencyExplicit = true
 				args = args[1:]
 				continue
 			}
@@ -116,13 +120,13 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 		return c.writeWSOpenError(outputFormat, "invalid_argument", "", "--concurrency must be >= 1", exitUsage)
 	}
 	if concurrency > 1 && !multi {
-		return c.writeWSOpenError(outputFormat, "invalid_argument", "", "--concurrency requires --multi", exitUsage)
+		return c.writeWSOpenError(outputFormat, "invalid_argument", "", "--concurrency requires --multi-select", exitUsage)
 	}
 	if !multi && len(targetIDs) > 1 {
-		return c.writeWSOpenError(outputFormat, "invalid_argument", "", "multiple targets require --multi", exitUsage)
+		return c.writeWSOpenError(outputFormat, "invalid_argument", "", "multiple targets require --multi-select", exitUsage)
 	}
 	if multi && len(targetIDs) == 0 && outputFormat == "json" {
-		return c.writeWSOpenError(outputFormat, "non_interactive_selection_required", "", "open --multi requires explicit targets in --format json mode", exitUsage)
+		return c.writeWSOpenError(outputFormat, "non_interactive_selection_required", "", "open --multi-select requires explicit targets in --format json mode", exitUsage)
 	}
 	for _, workspaceID := range targetIDs {
 		if err := validateWorkspaceID(workspaceID); err != nil {
@@ -152,6 +156,9 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 			return c.writeWSOpenError(outputFormat, "workspace_not_found", "", selErr.Error(), exitError)
 		}
 		targetIDs = selectedIDs
+	}
+	if multi && !concurrencyExplicit {
+		concurrency = defaultWSOpenConcurrency(len(targetIDs))
 	}
 
 	targets := make([]appcmux.OpenTarget, 0, len(targetIDs))
@@ -410,6 +417,20 @@ func parseIntArg(raw string, name string) (int, error) {
 		return 0, fmt.Errorf("%s must be >= 1", name)
 	}
 	return n, nil
+}
+
+func defaultWSOpenConcurrency(targetCount int) int {
+	if targetCount <= 1 {
+		return 1
+	}
+	workerLimit := runtime.GOMAXPROCS(0)
+	if workerLimit < 2 {
+		workerLimit = 2
+	}
+	if targetCount < workerLimit {
+		return targetCount
+	}
+	return workerLimit
 }
 
 func dedupeNonEmpty(ids []string) []string {

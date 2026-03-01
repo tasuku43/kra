@@ -68,6 +68,7 @@ func (c *CLI) runWSLauncherWithSelectModeAndAction(args []string, forceSelect bo
 	workspaceID := ""
 	useCurrent := false
 	selectMode := forceSelect
+	multiSelectMode := false
 parseFlags:
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
@@ -76,6 +77,9 @@ parseFlags:
 			args = args[1:]
 		case "--select":
 			selectMode = true
+			args = args[1:]
+		case "--multi-select":
+			multiSelectMode = true
 			args = args[1:]
 		case "--current":
 			useCurrent = true
@@ -102,6 +106,17 @@ parseFlags:
 					return exitUsage
 				}
 				selectMode = true
+				args = args[1:]
+				continue
+			}
+			if strings.HasPrefix(args[0], "--multi-select=") {
+				v := strings.TrimSpace(strings.TrimPrefix(args[0], "--multi-select="))
+				if v != "" {
+					fmt.Fprintln(c.Err, "--multi-select does not take a value")
+					c.printWSUsage(c.Err)
+					return exitUsage
+				}
+				multiSelectMode = true
 				args = args[1:]
 				continue
 			}
@@ -188,6 +203,16 @@ parseFlags:
 		c.printWSUsage(c.Err)
 		return exitUsage
 	}
+	if multiSelectMode && workspaceID != "" {
+		fmt.Fprintln(c.Err, "--multi-select and --id cannot be used together")
+		c.printWSUsage(c.Err)
+		return exitUsage
+	}
+	if multiSelectMode && useCurrent {
+		fmt.Fprintln(c.Err, "--multi-select and --current cannot be used together")
+		c.printWSUsage(c.Err)
+		return exitUsage
+	}
 
 	wd, err := os.Getwd()
 	if err != nil {
@@ -220,6 +245,16 @@ parseFlags:
 		currentResolved = true
 	}
 
+	if fixedAction != "" && multiSelectMode {
+		multiArgs := make([]string, 0, len(actionArgs)+3)
+		multiArgs = append(multiArgs, "--multi-select")
+		if archivedScope {
+			multiArgs = append(multiArgs, "--archived")
+		}
+		multiArgs = append(multiArgs, fixedAction)
+		multiArgs = append(multiArgs, actionArgs...)
+		return c.runWSSelectMulti(multiArgs)
+	}
 	if fixedAction != "" && !selectMode {
 		if currentResolved {
 			workspaceID = currentSelection.ID
@@ -227,7 +262,7 @@ parseFlags:
 				archivedScope = true
 			}
 		}
-		if workspaceID == "" && !runWSActionHasHelp(actionArgs) && !runWSActionHasIDArg(actionArgs) {
+		if workspaceID == "" && !runWSActionHasHelp(actionArgs) && !runWSActionHasIDArg(actionArgs) && !runWSActionHasPositional(actionArgs) {
 			fmt.Fprintln(c.Err, "ws action requires one of --id <id>, --current, --select, or explicit action target")
 			c.printWSUsage(c.Err)
 			return exitUsage
@@ -338,12 +373,21 @@ func runWSActionHasHelp(actionArgs []string) bool {
 }
 
 func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archivedScope bool, actionArgs []string) int {
+	if action == "unlock" && workspaceID == "" {
+		if positionalID, rest, ok := extractFirstPositionalArg(actionArgs); ok {
+			workspaceID = positionalID
+			actionArgs = rest
+		}
+	}
+
 	switch action {
 	case "open", "add-repo", "remove-repo", "close":
 		if archivedScope {
 			c.printWSUsage(c.Err)
 			return exitUsage
 		}
+	case "lock":
+		// lock can target both active and archived scopes.
 	case "reopen", "purge", "unlock":
 		archivedScope = true
 	default:
@@ -385,27 +429,31 @@ func (c *CLI) runWSFixedActionDirect(action string, workspaceID string, archived
 	}
 }
 
+func extractFirstPositionalArg(args []string) (string, []string, bool) {
+	for i, arg := range args {
+		trimmed := strings.TrimSpace(arg)
+		if strings.HasPrefix(trimmed, "-") {
+			continue
+		}
+		rest := append([]string{}, args[:i]...)
+		rest = append(rest, args[i+1:]...)
+		return trimmed, rest, true
+	}
+	return "", append([]string{}, args...), false
+}
+
 func (c *CLI) runWSSelectMulti(args []string) int {
 	archivedScope := false
 	fixedAction := ""
 	doCommit := true
 	commitModeExplicit := ""
-	parseAction := func(next string) (string, bool) {
-		v := strings.TrimSpace(next)
-		if v == "" {
-			fmt.Fprintln(c.Err, "action is required")
-			c.printWSUsage(c.Err)
-			return "", false
-		}
-		return v, true
-	}
 
 	for len(args) > 0 {
 		cur := strings.TrimSpace(args[0])
 		switch cur {
 		case "--select":
 			args = args[1:]
-		case "--multi":
+		case "--multi-select":
 			args = args[1:]
 		case "--commit":
 			if commitModeExplicit == "no-commit" {
@@ -430,50 +478,65 @@ func (c *CLI) runWSSelectMulti(args []string) int {
 			args = args[1:]
 		default:
 			if cur == "--id" || strings.HasPrefix(cur, "--id=") {
-				fmt.Fprintln(c.Err, "--select mode does not support --id (always starts from workspace selection)")
+				fmt.Fprintln(c.Err, "--multi-select mode does not support --id (always starts from workspace selection)")
 				c.printWSUsage(c.Err)
 				return exitUsage
 			}
 			if strings.HasPrefix(cur, "-") {
-				fmt.Fprintf(c.Err, "unknown flag for ws --select --multi: %q\n", cur)
+				fmt.Fprintf(c.Err, "unknown flag for ws --multi-select: %q\n", cur)
 				c.printWSUsage(c.Err)
 				return exitUsage
 			}
 			if fixedAction != "" {
-				fmt.Fprintf(c.Err, "unexpected args for ws --select --multi: %q\n", strings.Join(args, " "))
+				fmt.Fprintf(c.Err, "unexpected args for ws --multi-select: %q\n", strings.Join(args, " "))
 				c.printWSUsage(c.Err)
 				return exitUsage
 			}
-			v, ok := parseAction(cur)
-			if !ok {
-				return exitUsage
-			}
-			fixedAction = v
+			fixedAction = cur
 			args = args[1:]
 		}
 	}
 	if len(args) > 0 {
-		fmt.Fprintf(c.Err, "unexpected args for ws --select --multi: %q\n", strings.Join(args, " "))
+		fmt.Fprintf(c.Err, "unexpected args for ws --multi-select: %q\n", strings.Join(args, " "))
 		c.printWSUsage(c.Err)
 		return exitUsage
 	}
 
+	status := "active"
+	if archivedScope {
+		status = "archived"
+	}
 	if fixedAction == "" {
-		fmt.Fprintln(c.Err, "--multi requires action")
+		action, err := c.promptLauncherActionForStatus(status, true)
+		if err != nil {
+			if err == errSelectorCanceled {
+				fmt.Fprintln(c.Err, "aborted")
+				return exitError
+			}
+			fmt.Fprintf(c.Err, "select multi action: %v\n", err)
+			return exitError
+		}
+		fixedAction = action
+	}
+	if !wsActionSupportsMultiSelect(fixedAction) {
+		fmt.Fprintf(c.Err, "action %s does not support --multi-select\n", fixedAction)
 		c.printWSUsage(c.Err)
 		return exitUsage
 	}
-	switch fixedAction {
-	case "close":
-		if archivedScope {
-			fmt.Fprintln(c.Err, "action close cannot be used with --archived in --multi mode")
-			c.printWSUsage(c.Err)
-			return exitUsage
+	if fixedAction == "reopen" || fixedAction == "purge" {
+		status = "archived"
+	}
+	if !wsActionAllowedForStatus(fixedAction, status) {
+		if fixedAction == "close" && archivedScope {
+			fmt.Fprintln(c.Err, "action close cannot be used with --archived in --multi-select mode")
+		} else {
+			fmt.Fprintf(c.Err, "action %s is not allowed for %s scope\n", fixedAction, status)
 		}
-	case "reopen", "purge":
-		archivedScope = true
-	default:
-		fmt.Fprintf(c.Err, "action %s does not support --multi\n", fixedAction)
+		c.printWSUsage(c.Err)
+		return exitUsage
+	}
+	if commitModeExplicit != "" && !wsActionSupportsCommitMode(fixedAction) {
+		fmt.Fprintf(c.Err, "--%s is not supported for action %s in --multi-select mode\n", commitModeExplicit, fixedAction)
 		c.printWSUsage(c.Err)
 		return exitUsage
 	}
@@ -492,10 +555,6 @@ func (c *CLI) runWSSelectMulti(args []string) int {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
 
-	status := "active"
-	if archivedScope {
-		status = "archived"
-	}
 	ids, err := c.selectWorkspaceIDsByStatus(root, status, fixedAction)
 	if err != nil {
 		switch err {
@@ -506,7 +565,7 @@ func (c *CLI) runWSSelectMulti(args []string) int {
 		case errSelectorCanceled:
 			fmt.Fprintln(c.Err, "aborted")
 		default:
-			fmt.Fprintf(c.Err, "run ws --select --multi: %v\n", err)
+			fmt.Fprintf(c.Err, "run ws --multi-select: %v\n", err)
 		}
 		return exitError
 	}
@@ -533,6 +592,8 @@ func (c *CLI) runWSSelectMulti(args []string) int {
 
 func (c *CLI) runWSSelectMultiActionByID(action string, workspaceID string, doCommit bool) int {
 	switch action {
+	case "open":
+		return c.runWSOpen([]string{"--id", workspaceID})
 	case "close":
 		args := []string{"--id", workspaceID}
 		if doCommit {
@@ -545,6 +606,10 @@ func (c *CLI) runWSSelectMultiActionByID(action string, workspaceID string, doCo
 			args = append([]string{"--commit"}, args...)
 		}
 		return c.runWSReopen(args)
+	case "lock":
+		return c.runWSLock([]string{"--id", workspaceID})
+	case "unlock":
+		return c.runWSUnlock([]string{"--id", workspaceID})
 	case "purge":
 		args := []string{"--id", workspaceID}
 		if doCommit {
@@ -573,6 +638,45 @@ func preflightWSSelectMultiAction(ctx context.Context, action string, root strin
 		return nil
 	default:
 		return nil
+	}
+}
+
+func wsActionSupportsMultiSelect(action string) bool {
+	switch strings.TrimSpace(action) {
+	case "open", "close", "reopen", "purge", "lock", "unlock":
+		return true
+	default:
+		return false
+	}
+}
+
+func wsActionSupportsCommitMode(action string) bool {
+	switch strings.TrimSpace(action) {
+	case "close", "reopen", "purge":
+		return true
+	default:
+		return false
+	}
+}
+
+func wsActionAllowedForStatus(action string, status string) bool {
+	switch strings.TrimSpace(status) {
+	case "active":
+		switch strings.TrimSpace(action) {
+		case "open", "close", "lock":
+			return true
+		default:
+			return false
+		}
+	case "archived":
+		switch strings.TrimSpace(action) {
+		case "reopen", "unlock", "purge":
+			return true
+		default:
+			return false
+		}
+	default:
+		return false
 	}
 }
 
@@ -697,7 +801,7 @@ func lookupWorkspaceStatusByID(ctx context.Context, root string, workspaceID str
 }
 
 func (c *CLI) promptLauncherAction(target workspaceContextSelection, _ bool) (string, error) {
-	actions := make([]workspaceSelectorCandidate, 0, 3)
+	actions := make([]workspaceSelectorCandidate, 0, 4)
 	switch target.Status {
 	case "active":
 		actions = append(actions,
@@ -715,10 +819,48 @@ func (c *CLI) promptLauncherAction(target workspaceContextSelection, _ bool) (st
 	default:
 		return "", fmt.Errorf("unsupported workspace status: %s", target.Status)
 	}
-
 	useColor := writerSupportsColor(c.Err)
 	title := renderActionSelectorTitle(target.ID, useColor)
 	ids, err := c.promptWorkspaceSelectorWithOptionsAndMode(target.Status, "run", title, "action", actions, true)
+	if err != nil {
+		return "", err
+	}
+	return ids[0], nil
+}
+
+func (c *CLI) promptLauncherActionForStatus(status string, multi bool) (string, error) {
+	actions := make([]workspaceSelectorCandidate, 0, 3)
+	switch status {
+	case "active":
+		if multi {
+			actions = append(actions,
+				workspaceSelectorCandidate{ID: "open", Description: "open workspace runtime"},
+				workspaceSelectorCandidate{ID: "close", Description: "archive selected workspaces"},
+				workspaceSelectorCandidate{ID: "lock", Description: "enable purge guard"},
+			)
+		} else {
+			actions = append(actions,
+				workspaceSelectorCandidate{ID: "open", Description: "open workspace runtime"},
+				workspaceSelectorCandidate{ID: "add-repo", Description: "add repositories"},
+				workspaceSelectorCandidate{ID: "remove-repo", Description: "remove repositories"},
+				workspaceSelectorCandidate{ID: "close", Description: "archive this workspace"},
+			)
+		}
+	case "archived":
+		actions = append(actions,
+			workspaceSelectorCandidate{ID: "reopen", Description: "restore workspace"},
+			workspaceSelectorCandidate{ID: "unlock", Description: "disable purge guard"},
+			workspaceSelectorCandidate{ID: "purge", Description: "delete permanently"},
+		)
+	default:
+		return "", fmt.Errorf("unsupported workspace status: %s", status)
+	}
+
+	title := "Action (multi-select):"
+	if !multi {
+		title = "Action:"
+	}
+	ids, err := c.promptWorkspaceSelectorWithOptionsAndMode(status, "run", title, "action", actions, true)
 	if err != nil {
 		return "", err
 	}

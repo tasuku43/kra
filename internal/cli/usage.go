@@ -195,21 +195,21 @@ JSON mode:
 func (c *CLI) printWSUsage(w io.Writer) {
 	var b strings.Builder
 	b.WriteString(`Usage:
-  kra ws [--id <id> | --current | --select]
+  kra ws [--id <id> | --current | --select | --multi-select]
   kra ws create [--no-prompt] [--template <name>] [--format human|json] <id>
-  kra ws open [--id <id> | --current | --select] [--multi] [--concurrency <n>] [--format human|json]
+  kra ws open [--id <id> | --current | --select | --multi-select] [--concurrency <n>] [--format human|json]
   kra ws add-repo [--id <id> | --current | --select] [action-args...]
   kra ws remove-repo [--id <id> | --current | --select] [action-args...]
-  kra ws close [--id <id> | --current | --select] [action-args...]
+  kra ws close [--id <id> | --current | --select | --multi-select] [action-args...]
   kra ws reopen [--id <id> | --current | --select] [action-args...]
   kra ws purge [--id <id> | --current | --select] [action-args...]
   kra ws list|ls [--archived] [--tree] [--format human|tsv|json]
   kra ws dashboard [--archived] [--workspace <id>] [--format human|json]
-  kra ws lock [--id <id> | --current | --select] [--format human|json]
-  kra ws unlock [--id <id> | --current | --select] [--format human|json]
+  kra ws lock [--id <id> | --current | --select | --multi-select] [--format human|json]
+  kra ws unlock [--id <id> | --current | --select | --multi-select] [--format human|json]
 
 Target selection:
-  Choose exactly one: --id, --current, or --select
+  Choose exactly one: --id, --current, --select, or --multi-select
 
 Common flow:
   kra ws create <id>
@@ -224,7 +224,7 @@ Run:
 
 func (c *CLI) printWSOpenUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws open [--id <id> | --current | --select] [--multi] [--concurrency <n>] [--format human|json]
+  kra ws open [--id <id> | --current | --select | --multi-select] [--concurrency <n>] [--format human|json]
 
 Open workspace runtime flow.
 `)
@@ -232,7 +232,7 @@ Open workspace runtime flow.
 
 func (c *CLI) printWSLockUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws lock [--id <id> | --current | --select] [--format human|json]
+  kra ws lock [--id <id> | --current | --select | --multi-select] [--format human|json]
 
 Enable purge guard for the target workspace.
 `)
@@ -266,7 +266,7 @@ Show operational dashboard for workspaces.
 
 func (c *CLI) printWSUnlockUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws unlock [--id <id> | --current | --select] [--format human|json]
+  kra ws unlock [--id <id> | --current | --select | --multi-select] [--format human|json]
 
 Disable purge guard for the target workspace.
 `)
@@ -436,7 +436,7 @@ Behavior:
 
 func (c *CLI) printWSCloseUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws close [--id <id> | --current | --select] [--force] [--format human|json] [--no-commit]
+  kra ws close [--id <id> | --current | --select | --multi-select] [--force] [--format human|json] [--no-commit]
   kra ws close --dry-run --format json --id <id>
 
 Close (archive) a workspace:

@@ -19,6 +19,11 @@ kra ws open --id TASK-1234
 kra ws dashboard
 ```
 
+Notes:
+
+- `kra ws create` uses the default workspace template unless you pass `--template`; the baseline template starts with `notes/` and `artifacts/`.
+- Ticket provider integrations are designed to be extensible; current documented support is Jira (`kra ws create --jira`, `kra ws import jira`).
+
 ## Root commands
 
 - `kra init` - initialize root and context.
@@ -41,36 +46,38 @@ kra ws dashboard
 - `kra ws import jira [--sprint ... | --jql ...]`
 - `kra ws list --format human|tsv|json`
 - `kra ws dashboard --format human|json`
-- `kra ws open [--id <id> | --current | --select] [--multi] [--concurrency <n>]`
+- `kra ws open [--id <id> | --current | --select | --multi-select] [--concurrency <n>]`
 - `kra ws add-repo [--id <id> | --current | --select]`
 - `kra ws remove-repo [--id <id> | --current | --select]`
-- `kra ws close [--id <id> | --current | --select]`
+- `kra ws close [--id <id> | --current | --select | --multi-select]`
 - `kra ws reopen [--id <id> | --current | --select]`
 - `kra ws purge [--id <id> | --current | --select]`
-- `kra ws lock [--id <id> | --current | --select]`
-- `kra ws unlock [--id <id> | --current | --select]`
+- `kra ws lock [--id <id> | --current | --select | --multi-select]`
+- `kra ws unlock [--id <id> | --current | --select | --multi-select]`
 
-## Workspace target model (`--id` / `--current` / `--select`)
+## Workspace target model (`--id` / `--current` / `--select` / `--multi-select`)
 
 Many workspace actions share a common target model:
 
 - `--id <id>`: explicit workspace target (recommended for scripts)
 - `--current`: resolve workspace from your current directory context
 - `--select`: choose target interactively from the workspace selector
+- `--multi-select`: choose multiple targets interactively and run one supported action for all selected workspaces
 
 Typical examples:
 
-- `kra ws open [--id <id> | --current | --select]`
-- `kra ws close [--id <id> | --current | --select]`
+- `kra ws open [--id <id> | --current | --select | --multi-select]`
+- `kra ws close [--id <id> | --current | --select | --multi-select]`
 - `kra ws add-repo [--id <id> | --current | --select]`
 - `kra ws remove-repo [--id <id> | --current | --select]`
-- `kra ws lock [--id <id> | --current | --select]`
-- `kra ws unlock [--id <id> | --current | --select]`
+- `kra ws lock [--id <id> | --current | --select | --multi-select]`
+- `kra ws unlock [--id <id> | --current | --select | --multi-select]`
 
 Notes:
 
-- Not every workspace command supports all three forms.
+- Not every workspace command supports all four forms.
 - `ws close` / `ws add-repo` / `ws remove-repo` support `--current` in current implementation.
+- `--multi-select` support is action-dependent; current support includes `open`, `close`, `lock`, `unlock`, `reopen`, `purge`.
 - Positional workspace id arguments are intentionally not supported for these actions.
 - For non-interactive automation, prefer explicit `--id`.
 

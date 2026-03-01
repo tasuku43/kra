@@ -97,18 +97,14 @@ func (c *CLI) runWS(args []string) int {
 	}
 
 	if strings.HasPrefix(args[0], "-") {
-		hasSelect := false
-		hasMulti := false
+		hasMultiSelect := false
 		for _, arg := range args {
 			v := strings.TrimSpace(arg)
-			if v == "--select" {
-				hasSelect = true
-			}
-			if v == "--multi" {
-				hasMulti = true
+			if v == "--multi-select" {
+				hasMultiSelect = true
 			}
 		}
-		if hasSelect && hasMulti {
+		if hasMultiSelect {
 			return c.runWSSelectMulti(args)
 		}
 		switch args[0] {

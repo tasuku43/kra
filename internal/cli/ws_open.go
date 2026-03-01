@@ -12,6 +12,7 @@ func (c *CLI) runWSOpen(args []string) int {
 	targetID := ""
 	useCurrent := false
 	selectMode := false
+	multiSelectMode := false
 	passthrough := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		arg := strings.TrimSpace(args[i])
@@ -31,6 +32,10 @@ func (c *CLI) runWSOpen(args []string) int {
 			useCurrent = true
 		case "--select":
 			selectMode = true
+		case "--multi-select":
+			selectMode = true
+			multiSelectMode = true
+			passthrough = append(passthrough, "--multi-select")
 		default:
 			if strings.HasPrefix(arg, "--id=") {
 				targetID = strings.TrimSpace(strings.TrimPrefix(arg, "--id="))
@@ -49,12 +54,20 @@ func (c *CLI) runWSOpen(args []string) int {
 		return exitUsage
 	}
 	if selectMode && targetID != "" {
-		fmt.Fprintln(c.Err, "--select and --id cannot be used together")
+		flagName := "--select"
+		if multiSelectMode {
+			flagName = "--multi-select"
+		}
+		fmt.Fprintf(c.Err, "%s and --id cannot be used together\n", flagName)
 		c.printWSOpenUsage(c.Err)
 		return exitUsage
 	}
 	if selectMode && useCurrent {
-		fmt.Fprintln(c.Err, "--select and --current cannot be used together")
+		flagName := "--select"
+		if multiSelectMode {
+			flagName = "--multi-select"
+		}
+		fmt.Fprintf(c.Err, "%s and --current cannot be used together\n", flagName)
 		c.printWSOpenUsage(c.Err)
 		return exitUsage
 	}
@@ -88,7 +101,7 @@ func (c *CLI) runWSOpen(args []string) int {
 		passthrough = append(passthrough, "--workspace", targetID)
 	}
 	if !useCurrent && !selectMode && targetID == "" {
-		fmt.Fprintln(c.Err, "ws open requires one of --id <id>, --current, or --select")
+		fmt.Fprintln(c.Err, "ws open requires one of --id <id>, --current, --select, or --multi-select")
 		c.printWSOpenUsage(c.Err)
 		return exitUsage
 	}

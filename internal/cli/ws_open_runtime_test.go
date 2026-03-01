@@ -103,7 +103,7 @@ func TestCLI_CMUX_Open_JSON_RequiresWorkspaceIDWhenOmitted(t *testing.T) {
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d", code, exitUsage)
 	}
-	if !strings.Contains(err.String(), "ws open requires one of --id <id>, --current, or --select") {
+	if !strings.Contains(err.String(), "ws open requires one of --id <id>, --current, --select, or --multi-select") {
 		t.Fatalf("stderr should explain missing target mode: %q", err.String())
 	}
 }
@@ -265,7 +265,7 @@ func TestCLI_CMUX_Open_JSON_CapabilityMissing_MultiTargetRemainsError(t *testing
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	code := c.Run([]string{"ws", "open", "--format", "json", "--id", "WS1", "--multi", "--workspace", "WS1", "--workspace", "WS2"})
+	code := c.Run([]string{"ws", "open", "--format", "json", "--multi-select", "--workspace", "WS1", "--workspace", "WS2"})
 	if code != exitError {
 		t.Fatalf("exit code = %d, want %d", code, exitError)
 	}
@@ -361,7 +361,7 @@ func TestCLI_CMUX_Open_JSON_Multi_Success(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	code := c.Run([]string{"ws", "open", "--format", "json", "--id", "WS1", "--multi", "--workspace", "WS1", "--workspace", "WS2"})
+	code := c.Run([]string{"ws", "open", "--format", "json", "--multi-select", "--workspace", "WS1", "--workspace", "WS2"})
 	if code != exitOK {
 		t.Fatalf("exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, err.String(), out.String())
 	}
@@ -411,7 +411,7 @@ func TestCLI_CMUX_Open_JSON_MultipleTargetsRequireMulti(t *testing.T) {
 	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
 		t.Fatalf("json unmarshal error: %v", uerr)
 	}
-	if resp.OK || resp.Error.Code != "invalid_argument" || !strings.Contains(resp.Error.Message, "multiple targets require --multi") {
+	if resp.OK || resp.Error.Code != "invalid_argument" || !strings.Contains(resp.Error.Message, "multiple targets require --multi-select") {
 		t.Fatalf("unexpected json response: %+v", resp)
 	}
 }
@@ -432,8 +432,25 @@ func TestCLI_CMUX_Open_JSON_ConcurrencyRequiresMulti(t *testing.T) {
 	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
 		t.Fatalf("json unmarshal error: %v", uerr)
 	}
-	if resp.OK || resp.Error.Code != "invalid_argument" || !strings.Contains(resp.Error.Message, "--concurrency requires --multi") {
+	if resp.OK || resp.Error.Code != "invalid_argument" || !strings.Contains(resp.Error.Message, "--concurrency requires --multi-select") {
 		t.Fatalf("unexpected json response: %+v", resp)
+	}
+}
+
+func TestCLI_CMUX_Open_JSON_LegacyMultiFlagRejected(t *testing.T) {
+	prepareCurrentRootForTest(t)
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "open", "--format", "json", "--id", "WS1", "--multi"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(err.String(), "unknown flag for ws open: \"--multi\"") {
+		t.Fatalf("stderr should mention unknown legacy flag: %q", err.String())
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout should be empty for usage error: %q", out.String())
 	}
 }
 
@@ -465,7 +482,7 @@ func TestCLI_CMUX_Open_JSON_MultiConcurrency_PartialFailure(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
-	code := c.Run([]string{"ws", "open", "--format", "json", "--id", "WS1", "--multi", "--concurrency", "2", "--workspace", "WS1", "--workspace", "WS9"})
+	code := c.Run([]string{"ws", "open", "--format", "json", "--multi-select", "--concurrency", "2", "--workspace", "WS1", "--workspace", "WS9"})
 	if code != exitError {
 		t.Fatalf("exit code = %d, want %d (stderr=%q out=%q)", code, exitError, err.String(), out.String())
 	}

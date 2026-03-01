@@ -77,7 +77,7 @@ var kraCompletionCommandFlags = map[string][]string{
 	"init":    {"--root", "--context", "--format", "--help", "-h"},
 	"doctor":  {"--format", "--fix", "--plan", "--apply", "--help", "-h"},
 	"version": {"--help", "-h"},
-	"ws":      {"--id", "--current", "--select", "--help", "-h"},
+	"ws":      {"--id", "--current", "--select", "--multi-select", "--help", "-h"},
 }
 
 var kraCompletionPathFlagOrder = []string{
@@ -140,14 +140,14 @@ var kraCompletionPathFlags = map[string][]string{
 	"ws list":           {"--archived", "--tree", "--format", "--help", "-h"},
 	"ws ls":             {"--archived", "--tree", "--format", "--help", "-h"},
 	"ws dashboard":      {"--archived", "--workspace", "--format", "--help", "-h"},
-	"ws open":           {"--id", "--current", "--select", "--multi", "--concurrency", "--format", "--help", "-h"},
+	"ws open":           {"--id", "--current", "--select", "--multi-select", "--concurrency", "--format", "--help", "-h"},
 	"ws add-repo":       {"--id", "--current", "--select", "--format", "--repo", "--branch", "--base-ref", "--yes", "--refresh", "--no-fetch", "--help", "-h"},
 	"ws remove-repo":    {"--id", "--current", "--select", "--format", "--repo", "--yes", "--force", "--help", "-h"},
-	"ws close":          {"--id", "--current", "--select", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
+	"ws close":          {"--id", "--current", "--select", "--multi-select", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
 	"ws reopen":         {"--id", "--current", "--select", "--format", "--no-commit", "--dry-run", "--help", "-h"},
 	"ws purge":          {"--id", "--current", "--select", "--no-prompt", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
-	"ws lock":           {"--format", "--help", "-h"},
-	"ws unlock":         {"--format", "--help", "-h"},
+	"ws lock":           {"--id", "--current", "--select", "--multi-select", "--format", "--help", "-h"},
+	"ws unlock":         {"--id", "--current", "--select", "--multi-select", "--format", "--help", "-h"},
 }
 
 var kraCompletionTargetRequiredPaths = []string{
@@ -163,6 +163,7 @@ var kraCompletionTargetSelectorFlags = []string{
 	"--id",
 	"--current",
 	"--select",
+	"--multi-select",
 	"--help",
 }
 

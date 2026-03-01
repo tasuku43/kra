@@ -1,9 +1,9 @@
 ---
-title: "`kra ws --select --multi`"
+title: "`kra ws --multi-select`"
 status: implemented
 ---
 
-# `kra ws --select --multi <close|reopen|purge> [--archived] [--no-commit] [--commit] [--format human|json] [--yes] [--continue-on-error]`
+# `kra ws --multi-select [<action>] [--archived] [--no-commit] [--commit] [--format human|json] [--yes] [--continue-on-error]`
 
 ## Purpose
 
@@ -11,8 +11,8 @@ Add multi-select execution mode to the existing workspace selector entrypoint wi
 
 ## Inputs
 
-- `--multi` (required for this mode)
-- action (required): one of `close`, `reopen`, `purge`
+- `--multi-select` (required for this mode)
+- action (optional): one of `open`, `close`, `reopen`, `lock`, `unlock`, `purge`
 - `--archived` (optional):
   - implied automatically by archived actions (`reopen`, `purge`)
   - invalid with active action (`close`)
@@ -28,13 +28,13 @@ Add multi-select execution mode to the existing workspace selector entrypoint wi
 
 ## Validation rules
 
-- `--multi` without action must fail with usage error.
-- `add-repo`, `remove-repo` are invalid in `--multi` mode.
+- when action is omitted, prompt Action selector and show only `--multi-select` supported actions for current scope.
+- `add-repo`, `remove-repo` are invalid in `--multi-select` mode.
 - Scope mismatch (`--archived` + `close`) must fail fast.
 
 ## Behavior (MVP)
 
-1. Open shared selector in multi-select mode for workspace rows.
+1. Resolve action (explicit or selector) and open shared selector in multi-select mode for workspace rows.
 2. Confirm selected set (empty selection aborts with non-zero exit).
 3. Execute the selected action per workspace using existing flow/orchestrator.
 4. Aggregate per-workspace outcomes: `success`, `failed`, `skipped` (+ reason).
@@ -43,9 +43,9 @@ Add multi-select execution mode to the existing workspace selector entrypoint wi
 
 - Human mode:
   - selected action prints its own sections per workspace (`Risk:`/`Result:` as defined by each action command).
-  - `ws --select --multi` itself does not print an additional aggregate `Result:` block.
+  - `ws --multi-select` itself does not print an additional aggregate `Result:` block.
 - JSON mode:
-  - not implemented in MVP scope for `ws --select --multi`.
+  - not implemented in MVP scope for `ws --multi-select`.
 
 ## Safety / commit scope
 

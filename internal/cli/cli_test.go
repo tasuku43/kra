@@ -193,17 +193,17 @@ func TestCLI_WS_Select_ActionScopeMismatch(t *testing.T) {
 	}
 }
 
-func TestCLI_WS_Select_Multi_RequiresAction(t *testing.T) {
+func TestCLI_WS_MultiSelect_NoAction_StartsSelectorFlow(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "--select", "--multi"})
-	if code != exitUsage {
-		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
+	code := c.Run([]string{"ws", "--multi-select"})
+	if code == exitUsage {
+		t.Fatalf("exit code = %d, want not %d (stderr=%q)", code, exitUsage, err.String())
 	}
-	if !strings.Contains(err.String(), "--multi requires action") {
-		t.Fatalf("stderr missing action required message: %q", err.String())
+	if !strings.Contains(err.String(), "interactive workspace selection requires a TTY") {
+		t.Fatalf("stderr should report interactive selector requirement, got: %q", err.String())
 	}
 }
 
@@ -212,11 +212,11 @@ func TestCLI_WS_Select_Multi_RejectsUnsupportedAction(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "--select", "--multi", "open"})
+	code := c.Run([]string{"ws", "--multi-select", "add-repo"})
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 	}
-	if !strings.Contains(err.String(), "does not support --multi") {
+	if !strings.Contains(err.String(), "does not support --multi-select") {
 		t.Fatalf("stderr missing unsupported multi action message: %q", err.String())
 	}
 }
@@ -226,7 +226,7 @@ func TestCLI_WS_Select_Multi_CloseWithArchivedRejected(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "--select", "--multi", "--archived", "close"})
+	code := c.Run([]string{"ws", "--multi-select", "--archived", "close"})
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
 	}
@@ -240,12 +240,26 @@ func TestCLI_WS_Select_Multi_ReopenImplicitArchived(t *testing.T) {
 	var err bytes.Buffer
 	c := New(&out, &err)
 
-	code := c.Run([]string{"ws", "--select", "--multi", "reopen"})
+	code := c.Run([]string{"ws", "--multi-select", "reopen"})
 	if code == exitUsage {
 		t.Fatalf("exit code = %d, want not %d (stderr=%q)", code, exitUsage, err.String())
 	}
 	if !strings.Contains(err.String(), "resolve KRA_ROOT:") {
 		t.Fatalf("stderr should continue to runtime root resolution, got: %q", err.String())
+	}
+}
+
+func TestCLI_WS_LegacyMultiFlagRejected(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "--select", "--multi", "reopen"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitUsage, err.String())
+	}
+	if !strings.Contains(err.String(), "unknown flag for ws") {
+		t.Fatalf("stderr should mention unknown legacy flag: %q", err.String())
 	}
 }
 
@@ -311,7 +325,7 @@ func TestCLI_WS_Select_Multi_Purge_PreflightErrorPrintedOnce(t *testing.T) {
 	c := New(&out, &errBuf)
 	c.In = in
 
-	code := c.Run([]string{"ws", "--select", "--multi", "purge", "--commit"})
+	code := c.Run([]string{"ws", "--multi-select", "purge", "--commit"})
 	if code != exitError {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitError, errBuf.String())
 	}

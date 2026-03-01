@@ -30,20 +30,20 @@ Define explicit workspace targeting modes shared by workspace action commands.
 - `--current` resolves target from current path only when explicitly set.
 - `--select` always starts from workspace selection.
 - `--select --archived open|add-repo|remove-repo|close` must fail with usage error.
-- `--select --multi` requires action.
-- `--select --multi <close|reopen|purge>` enables multi-selection and executes the fixed action for each
+- `--multi-select` enters multi-selection mode.
+- `--multi-select <action>` executes the fixed action for each selected workspace.
   selected workspace.
-- `--select --multi close` is active-scope only (`--archived` is invalid).
-- `--select --multi reopen|purge` implicitly switches to archived scope.
-- `--select --multi` runs lifecycle commits by default; `--no-commit` disables commits for selected action.
-- `--select --multi --commit` is accepted for backward compatibility and keeps default behavior.
-- `open|add-repo|remove-repo` are not supported in `--multi` mode.
+- `--multi-select close` is active-scope only (`--archived` is invalid).
+- `--multi-select reopen|purge` implicitly switches to archived scope.
+- `--multi-select` runs lifecycle commits by default for lifecycle actions; `--no-commit` disables commits for selected action.
+- `--multi-select --commit` is accepted for backward compatibility and keeps default behavior.
+- `add-repo|remove-repo` are not supported in `--multi-select` mode.
 - Commands must not auto-resolve workspace from current path unless `--current` is explicitly set.
 
 ## Selection flow
 
 - Stage 1: select exactly one workspace from list scope.
-- Stage 1 (multi): select one or more workspaces from list scope when `--multi` is set.
+- Stage 1 (multi): select one or more workspaces from list scope when `--multi-select` is set.
 - Stage 2: select workspace for the current action command.
 - Stage 3: dispatch to operation command with explicit target id.
 - Stage 3 (multi): dispatch selected fixed action for each selected workspace id.
