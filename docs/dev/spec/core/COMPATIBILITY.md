@@ -24,6 +24,7 @@ Supported:
 
 - GitHub Releases (binaries)
 - Homebrew (stable releases via `tasuku43/homebrew-kra`)
+- mise (GitHub Releases backend)
 - Build from source (for contributors/operators)
 
 Not supported as an end-user distribution contract:

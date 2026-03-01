@@ -113,6 +113,22 @@ brew tap tasuku43/kra
 brew install kra
 ```
 
+### mise
+
+`mise` can install `kra` from GitHub Releases.
+
+```sh
+# pin a version
+mise use -g github:tasuku43/kra@v0.1.0
+
+# track latest
+mise use -g github:tasuku43/kra@latest
+```
+
+Verify:
+
+- `kra version` (or `kra --version`)
+
 ### GitHub Releases (manual)
 
 1. Download the archive for your OS/arch from GitHub Releases.
