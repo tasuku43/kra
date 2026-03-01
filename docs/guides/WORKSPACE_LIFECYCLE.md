@@ -18,6 +18,20 @@ A workspace moves through these states:
 
 `close` is the normal way to finish a task. `purge` is a destructive cleanup operation.
 
+```mermaid
+stateDiagram-v2
+  [*] --> Active: create
+  Active --> Archived: close
+  Archived --> Active: reopen
+  Active --> Purged: purge
+  Archived --> Purged: purge
+  Purged --> [*]
+```
+
+- purge guard is `locked` by default on `ws create`
+- to run `ws purge`, unlock first with `kra ws unlock`
+- lock state is preserved across `ws close` and `ws reopen`
+
 ## Typical daily flow
 
 ```sh
@@ -92,3 +106,4 @@ Treat non-clean states as a review gate before destructive operations.
 
 - Command overview: `docs/guides/COMMANDS.md`
 - Command contracts: `docs/spec/commands/ws/close.md`, `docs/spec/commands/ws/reopen.md`, `docs/spec/commands/ws/purge.md`
+- Purge guard contract: `docs/spec/commands/ws/lock.md`

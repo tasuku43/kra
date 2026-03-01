@@ -22,7 +22,13 @@ For day-to-day operations (`repo add`, `ws add-repo`, `ws close`), see:
 - `docs/guides/INSTALL.md`
 - `docs/guides/COMMANDS.md`
 
-If you want `kra` to sync your parent shell `cwd` on `ws open`, see shell integration:
+## Shell Integration (Recommended)
+
+If you use `kra ws open` / `kra ws close` as your primary workspace navigation flow, enable shell integration to sync your parent shell `cwd`.
+
+This prevents staying in a deleted directory after closing a workspace from inside that workspace path.
+
+Setup and details:
 
 - `docs/guides/SHELL_INTEGRATION.md`
 
