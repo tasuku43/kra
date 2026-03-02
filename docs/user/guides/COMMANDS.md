@@ -55,6 +55,37 @@ Notes:
 - `kra ws lock [--id <id> | --current | --select | --multi-select]`
 - `kra ws unlock [--id <id> | --current | --select | --multi-select]`
 
+## Jira import quickstart
+
+Use this flow when you want to create multiple workspaces from Jira issues.
+
+If `integration.jira.defaults.*` is set in `config.yaml`, most flags can be omitted:
+
+```sh
+kra ws import jira
+```
+
+1. Configure Jira base URL and credentials.
+2. Run import in `--sprint` mode (by scope + sprint) or `--jql` mode (explicit query).
+3. Review the plan output and use `--apply` to create workspaces.
+
+Examples:
+
+```sh
+# Sprint mode (scope from CLI)
+kra ws import jira --sprint --space PROJ
+
+# Sprint mode (explicit sprint + project alias)
+kra ws import jira --sprint "Sprint 42" --project PROJ --apply --no-prompt
+
+# JQL mode
+kra ws import jira --jql "project = PROJ AND statusCategory != Done" --limit 20
+```
+
+For setup and default behavior:
+
+- `docs/user/guides/CONFIG.md`
+
 ## Workspace target model (`--id` / `--current` / `--select` / `--multi-select`)
 
 Many workspace actions share a common target model:

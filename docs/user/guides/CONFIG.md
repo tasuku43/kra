@@ -102,11 +102,12 @@ workspace:
 integration:
   jira:
     defaults:
-      space: SREP
+      space: TEST
 ```
 
 With this setup:
 
 - `kra ws create TASK-1234` uses template `backend` in this root.
 - `kra ws add-repo --id TASK-1234` proposes branch names from `feat/{{workspace_id}}/{{repo_name}}`.
-- `kra ws import jira` defaults to sprint mode scoped to `SREP` unless CLI/env overrides it.
+- `kra ws import jira` defaults to sprint mode scoped to `TEST` unless CLI/env overrides it.
+- This means `kra ws import jira` can run with no mode/scope flags in the common case.

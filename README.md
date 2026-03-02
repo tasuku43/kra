@@ -157,7 +157,7 @@ You can always create a workspace with a plain ID:
 kra ws create TASK-1234
 ```
 
-To create from Jira (`kra ws create --jira <ticket-url>`), configure:
+To create/import from Jira (`kra ws create --jira <ticket-url>`, `kra ws import jira`), configure:
 
 - base URL:
   - `KRA_JIRA_BASE_URL`, or
@@ -166,9 +166,25 @@ To create from Jira (`kra ws create --jira <ticket-url>`), configure:
   - `KRA_JIRA_EMAIL`
   - `KRA_JIRA_API_TOKEN`
 
+Then choose one of these entry points:
+
+```sh
+# Single issue -> one workspace
+kra ws create --jira https://jira.example.com/browse/PROJ-123
+
+# Config-first import (defaults in config.yaml -> flags can be omitted)
+kra ws import jira
+
+# Multiple issues -> plan/apply import
+kra ws import jira --sprint --space PROJ
+# or
+kra ws import jira --jql "project = PROJ AND statusCategory != Done"
+```
+
 Details:
 
 - `docs/user/guides/COMMANDS.md`
+- `docs/user/guides/CONFIG.md`
 
 ## Documentation
 

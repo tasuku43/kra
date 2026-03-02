@@ -12,8 +12,8 @@ func TestShellQuoteCDPath_UsesHomeVariableWhenUnderHome(t *testing.T) {
 	if err != nil || strings.TrimSpace(home) == "" {
 		t.Skip("home dir is not available")
 	}
-	got := shellQuoteCDPath(filepath.Join(home, "work/root/workspaces/SREP-4084"))
-	want := `"$HOME/work/root/workspaces/SREP-4084"`
+	got := shellQuoteCDPath(filepath.Join(home, "work/root/workspaces/TEST-4084"))
+	want := `"$HOME/work/root/workspaces/TEST-4084"`
 	if got != want {
 		t.Fatalf("shellQuoteCDPath() = %q, want %q", got, want)
 	}
