@@ -73,7 +73,6 @@ Create a workspace from a root-local template.
   - staging allowlist:
     - `workspaces/<id>/`
     - `.kra/state/workspace-baselines/<id>.json`
-    - `.kra/state/workspace-workstate.json`
   - if staged paths contain entries outside the allowlist, abort.
 - `ws create` must initialize workspace baseline state at:
   - `.kra/state/workspace-baselines/<id>.json`
@@ -105,6 +104,7 @@ Create a workspace from a root-local template.
 - Initial file content must include:
   - `schema_version`
   - `workspace` object (`id`, `title`(stored as `title` for compatibility), `source_url`, `status=active`, timestamps)
+    - include `work_state=todo`
   - `repos_restore` as an empty array
   - `protection.purge_guard.enabled=true`
 - File write must be atomic (`temp + rename`).

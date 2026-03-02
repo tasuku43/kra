@@ -463,7 +463,7 @@ func (c *CLI) purgeWorkspace(ctx context.Context, root string, workspaceID strin
 	if err := os.RemoveAll(archivePath); err != nil {
 		return purgeCommitTrace{}, fmt.Errorf("delete archive dir: %w", err)
 	}
-	if err := removeWorkspaceBaselineAndWorkState(root, workspaceID); err != nil {
+	if err := removeWorkspaceBaseline(root, workspaceID); err != nil {
 		c.debugf("purge workspace baseline cleanup failed workspace=%s err=%v", workspaceID, err)
 	}
 
@@ -549,16 +549,11 @@ func commitPurgeChange(ctx context.Context, root string, workspaceID string) (st
 	archiveArg := filepath.ToSlash(filepath.Join("archive", workspaceID))
 	workspacesArg := filepath.ToSlash(filepath.Join("workspaces", workspaceID))
 	baselineArg := filepath.ToSlash(filepath.Join(".kra", "state", workspaceBaselineDirName, workspaceID+".json"))
-	workStateArg := filepath.ToSlash(filepath.Join(".kra", "state", workspaceWorkStateCacheFilename))
 	baselinePath, err := toGitTopLevelPath(ctx, root, filepath.Join(".kra", "state", workspaceBaselineDirName, workspaceID+".json"))
 	if err != nil {
 		return "", err
 	}
-	workStatePath, err := toGitTopLevelPath(ctx, root, filepath.Join(".kra", "state", workspaceWorkStateCacheFilename))
-	if err != nil {
-		return "", err
-	}
-	resetArgs := []string{archiveArg, workspacesArg, baselineArg, workStateArg}
+	resetArgs := []string{archiveArg, workspacesArg, baselineArg}
 	resetStaging := func() {
 		cmd := append([]string{"reset", "-q", "--"}, resetArgs...)
 		_, _ = gitutil.Run(ctx, root, cmd...)
@@ -575,7 +570,7 @@ func commitPurgeChange(ctx context.Context, root string, workspaceID string) (st
 			return "", err
 		}
 	}
-	for _, arg := range []string{baselineArg, workStateArg} {
+	for _, arg := range []string{baselineArg} {
 		if _, err := gitutil.Run(ctx, root, "add", "-A", "--", arg); err != nil {
 			if strings.Contains(err.Error(), "did not match any files") || strings.Contains(err.Error(), "did not match any file") {
 				continue
@@ -585,7 +580,7 @@ func commitPurgeChange(ctx context.Context, root string, workspaceID string) (st
 		}
 	}
 
-	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", archiveArg, workspacesArg, baselineArg, workStateArg)
+	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", archiveArg, workspacesArg, baselineArg)
 	if err != nil {
 		resetStaging()
 		return "", err
@@ -598,7 +593,6 @@ func commitPurgeChange(ctx context.Context, root string, workspaceID string) (st
 	hasWorkspacesStage := strings.TrimSpace(workspacesOut) != ""
 	staged := strings.Fields(out)
 	hasBaselineStage := false
-	hasWorkStateStage := false
 	for _, p := range staged {
 		p = filepath.Clean(filepath.FromSlash(p))
 		if strings.HasPrefix(p, archivePrefix) || strings.HasPrefix(p, workspacesPrefix) {
@@ -606,10 +600,6 @@ func commitPurgeChange(ctx context.Context, root string, workspaceID string) (st
 		}
 		if p == baselinePath {
 			hasBaselineStage = true
-			continue
-		}
-		if p == workStatePath {
-			hasWorkStateStage = true
 			continue
 		}
 		resetStaging()
@@ -622,9 +612,6 @@ func commitPurgeChange(ctx context.Context, root string, workspaceID string) (st
 	}
 	if hasBaselineStage {
 		commitArgs = append(commitArgs, baselineArg)
-	}
-	if hasWorkStateStage {
-		commitArgs = append(commitArgs, workStateArg)
 	}
 	if _, err := gitutil.Run(ctx, root, commitArgs...); err != nil {
 		resetStaging()

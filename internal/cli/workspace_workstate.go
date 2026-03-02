@@ -25,20 +25,8 @@ const (
 )
 
 const (
-	workspaceWorkStateCacheFilename = "workspace-workstate.json"
-	workspaceBaselineDirName        = "workspace-baselines"
+	workspaceBaselineDirName = "workspace-baselines"
 )
-
-type workspaceWorkStateCacheEntry struct {
-	State          workspaceWorkState `json:"state"`
-	FirstDerivedAt int64              `json:"first_derived_at,omitempty"`
-	DerivedFrom    string             `json:"derived_from,omitempty"`
-}
-
-type workspaceWorkStateCache struct {
-	Version    int                                     `json:"version"`
-	Workspaces map[string]workspaceWorkStateCacheEntry `json:"workspaces,omitempty"`
-}
 
 type workspaceBaselineRepo struct {
 	BaselineHead string `json:"baseline_head,omitempty"`
@@ -54,79 +42,6 @@ type workspaceBaseline struct {
 
 func workspaceBaselinePath(root string, workspaceID string) string {
 	return filepath.Join(root, ".kra", "state", workspaceBaselineDirName, workspaceID+".json")
-}
-
-func loadWorkspaceWorkStateCache(root string) (workspaceWorkStateCache, error) {
-	path := filepath.Join(root, ".kra", "state", workspaceWorkStateCacheFilename)
-	b, err := os.ReadFile(path)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return workspaceWorkStateCache{
-				Version:    1,
-				Workspaces: map[string]workspaceWorkStateCacheEntry{},
-			}, nil
-		}
-		return workspaceWorkStateCache{}, err
-	}
-	if strings.TrimSpace(string(b)) == "" {
-		return workspaceWorkStateCache{
-			Version:    1,
-			Workspaces: map[string]workspaceWorkStateCacheEntry{},
-		}, nil
-	}
-
-	var cache workspaceWorkStateCache
-	if err := json.Unmarshal(b, &cache); err != nil {
-		return workspaceWorkStateCache{}, err
-	}
-	if cache.Version <= 0 {
-		cache.Version = 1
-	}
-	if cache.Workspaces == nil {
-		cache.Workspaces = map[string]workspaceWorkStateCacheEntry{}
-	}
-	return cache, nil
-}
-
-func saveWorkspaceWorkStateCache(root string, cache workspaceWorkStateCache) error {
-	stateDir := filepath.Join(root, ".kra", "state")
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
-		return err
-	}
-	path := filepath.Join(stateDir, workspaceWorkStateCacheFilename)
-	if cache.Version <= 0 {
-		cache.Version = 1
-	}
-	if cache.Workspaces == nil {
-		cache.Workspaces = map[string]workspaceWorkStateCacheEntry{}
-	}
-	b, err := json.MarshalIndent(cache, "", "  ")
-	if err != nil {
-		return err
-	}
-
-	tmp, err := os.CreateTemp(stateDir, ".workspace-workstate-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	cleanup := func() {
-		_ = os.Remove(tmpPath)
-	}
-	if _, err := tmp.Write(append(b, '\n')); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		cleanup()
-		return err
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		cleanup()
-		return err
-	}
-	return nil
 }
 
 func loadWorkspaceBaseline(root string, workspaceID string) (workspaceBaseline, error) {
@@ -198,21 +113,6 @@ func saveWorkspaceBaseline(root string, workspaceID string, baseline workspaceBa
 	return nil
 }
 
-func clearWorkspaceWorkStateCacheEntry(root string, workspaceID string) error {
-	cache, err := loadWorkspaceWorkStateCache(root)
-	if err != nil {
-		if os.IsNotExist(err) {
-			return nil
-		}
-		return err
-	}
-	if _, ok := cache.Workspaces[workspaceID]; !ok {
-		return nil
-	}
-	delete(cache.Workspaces, workspaceID)
-	return saveWorkspaceWorkStateCache(root, cache)
-}
-
 func createOrRefreshWorkspaceBaseline(ctx context.Context, root string, workspaceID string, now int64) error {
 	wsPath := filepath.Join(root, "workspaces", workspaceID)
 	meta, _ := loadWorkspaceMetaFile(wsPath)
@@ -251,14 +151,23 @@ func createOrRefreshWorkspaceBaseline(ctx context.Context, root string, workspac
 	if err := saveWorkspaceBaseline(root, workspaceID, baseline); err != nil {
 		return err
 	}
-	return clearWorkspaceWorkStateCacheEntry(root, workspaceID)
+	return nil
 }
 
-func removeWorkspaceBaselineAndWorkState(root string, workspaceID string) error {
+func ensureWorkspaceBaselineExists(ctx context.Context, root string, workspaceID string, now int64) error {
+	if _, err := os.Stat(workspaceBaselinePath(root, workspaceID)); err == nil {
+		return nil
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+	return createOrRefreshWorkspaceBaseline(ctx, root, workspaceID, now)
+}
+
+func removeWorkspaceBaseline(root string, workspaceID string) error {
 	if err := os.Remove(workspaceBaselinePath(root, workspaceID)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
-	return clearWorkspaceWorkStateCacheEntry(root, workspaceID)
+	return nil
 }
 
 func resolveWorkspaceWorkState(
@@ -267,16 +176,9 @@ func resolveWorkspaceWorkState(
 	scope string,
 	workspaceID string,
 	repos []statestore.WorkspaceRepo,
-	cache *workspaceWorkStateCache,
-	now int64,
-) (workspaceWorkState, bool) {
+) workspaceWorkState {
 	if scope != "active" {
-		return workspaceWorkStateTodo, false
-	}
-	if cache != nil {
-		if cached, ok := cache.Workspaces[workspaceID]; ok && cached.State == workspaceWorkStateInProgress {
-			return workspaceWorkStateInProgress, false
-		}
+		return workspaceWorkStateTodo
 	}
 
 	state, err := deriveWorkspaceWorkStateFromBaseline(ctx, root, workspaceID, repos)
@@ -284,18 +186,7 @@ func resolveWorkspaceWorkState(
 		// Baseline is rebuildable data; fail closed for work-state and continue.
 		state = workspaceWorkStateInProgress
 	}
-	if cache == nil || state != workspaceWorkStateInProgress {
-		return state, false
-	}
-	if cache.Workspaces == nil {
-		cache.Workspaces = map[string]workspaceWorkStateCacheEntry{}
-	}
-	cache.Workspaces[workspaceID] = workspaceWorkStateCacheEntry{
-		State:          workspaceWorkStateInProgress,
-		FirstDerivedAt: now,
-		DerivedFrom:    "hybrid-baseline",
-	}
-	return workspaceWorkStateInProgress, true
+	return state
 }
 
 func deriveWorkspaceWorkStateFromBaseline(ctx context.Context, root string, workspaceID string, repos []statestore.WorkspaceRepo) (workspaceWorkState, error) {

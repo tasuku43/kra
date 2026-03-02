@@ -328,8 +328,7 @@ func commitCreateWorkspace(ctx context.Context, root string, workspaceID string)
 	}
 	workspaceArg := filepath.ToSlash(filepath.Join("workspaces", workspaceID))
 	baselineArg := filepath.ToSlash(filepath.Join(".kra", "state", workspaceBaselineDirName, workspaceID+".json"))
-	workStateArg := filepath.ToSlash(filepath.Join(".kra", "state", workspaceWorkStateCacheFilename))
-	args := []string{workspaceArg, baselineArg, workStateArg}
+	args := []string{workspaceArg, baselineArg}
 
 	workspacePrefix, err := toGitTopLevelPath(ctx, root, filepath.Join("workspaces", workspaceID))
 	if err != nil {
@@ -340,11 +339,6 @@ func commitCreateWorkspace(ctx context.Context, root string, workspaceID string)
 	if err != nil {
 		return "", err
 	}
-	workStatePath, err := toGitTopLevelPath(ctx, root, filepath.Join(".kra", "state", workspaceWorkStateCacheFilename))
-	if err != nil {
-		return "", err
-	}
-
 	for _, arg := range args {
 		if _, err := gitutil.Run(ctx, root, "add", "-A", "--", arg); err != nil {
 			if strings.Contains(err.Error(), "did not match any files") || strings.Contains(err.Error(), "did not match any file") {
@@ -354,13 +348,12 @@ func commitCreateWorkspace(ctx context.Context, root string, workspaceID string)
 			return "", err
 		}
 	}
-	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", workspaceArg, baselineArg, workStateArg)
+	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", workspaceArg, baselineArg)
 	if err != nil {
 		resetCreateStaging(ctx, root, args)
 		return "", err
 	}
 	hasBaselineStage := false
-	hasWorkStateStage := false
 	for _, p := range strings.Fields(out) {
 		p = filepath.Clean(filepath.FromSlash(p))
 		if strings.HasPrefix(p, workspacePrefix) {
@@ -370,19 +363,12 @@ func commitCreateWorkspace(ctx context.Context, root string, workspaceID string)
 			hasBaselineStage = true
 			continue
 		}
-		if p == workStatePath {
-			hasWorkStateStage = true
-			continue
-		}
 		resetCreateStaging(ctx, root, args)
 		return "", fmt.Errorf("unexpected staged path outside allowlist: %s", p)
 	}
 	commitArgs := []string{"commit", "--only", "-m", fmt.Sprintf("create: %s", workspaceID), "--", workspaceArg}
 	if hasBaselineStage {
 		commitArgs = append(commitArgs, baselineArg)
-	}
-	if hasWorkStateStage {
-		commitArgs = append(commitArgs, workStateArg)
 	}
 	if _, err := gitutil.Run(ctx, root, commitArgs...); err != nil {
 		resetCreateStaging(ctx, root, args)

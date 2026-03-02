@@ -22,6 +22,7 @@ Metadata schema (v1):
   - `title`
   - `source_url`
   - `status` (`active` / `archived`)
+  - `work_state` (`todo` / `in-progress`, monotonic)
   - `created_at`
   - `updated_at`
 - `repos_restore[]`
@@ -36,7 +37,6 @@ Metadata schema (v1):
 
 The following should be computed at read time, not persisted as canonical state:
 
-- logical work state (`todo` / `in-progress`)
 - live risk (`clean` / `dirty` / `unpushed` / `diverged` / `unknown`)
 - current worktree existence and drift state
 

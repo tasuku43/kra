@@ -169,12 +169,6 @@ func buildWSListRows(ctx context.Context, root string, scope string, now int64, 
 }
 
 func listRowsFromFilesystem(ctx context.Context, root string, scope string, includeRepos bool) ([]wsListRow, error) {
-	cache, err := loadWorkspaceWorkStateCache(root)
-	if err != nil {
-		return nil, err
-	}
-	cacheDirty := false
-
 	baseDir := filepath.Join(root, "workspaces")
 	if scope == "archived" {
 		baseDir = filepath.Join(root, "archive")
@@ -226,9 +220,14 @@ func listRowsFromFilesystem(ctx context.Context, root string, scope string, incl
 
 		workState := workspaceWorkStateTodo
 		if scope == "active" {
-			if cached, ok := cache.Workspaces[id]; ok && cached.State == workspaceWorkStateInProgress {
-				workState = workspaceWorkStateInProgress
+			workStateRaw := strings.TrimSpace(meta.Workspace.WorkState)
+			workState = normalizeWorkspaceWorkState(workspaceWorkState(workStateRaw))
+			if workState == workspaceWorkStateInProgress {
+				// Monotonic state: once in-progress, skip re-derivation.
 			} else {
+				if err := ensureWorkspaceBaselineExists(ctx, root, id, time.Now().Unix()); err != nil {
+					return nil, err
+				}
 				reposForState := repos
 				if reposForState == nil {
 					reposForState, err = listWorkspaceReposFromFilesystem(ctx, root, scope, id, meta)
@@ -236,10 +235,15 @@ func listRowsFromFilesystem(ctx context.Context, root string, scope string, incl
 						return nil, err
 					}
 				}
-				var changed bool
-				workState, changed = resolveWorkspaceWorkState(ctx, root, scope, id, reposForState, &cache, time.Now().Unix())
-				if changed {
-					cacheDirty = true
+				workState = resolveWorkspaceWorkState(ctx, root, scope, id, reposForState)
+				if metaErr == nil && workState == workspaceWorkStateInProgress {
+					if _, err := setWorkspaceMetaWorkState(wsPath, workspaceWorkStateInProgress, time.Now().Unix()); err != nil {
+						return nil, err
+					}
+				} else if metaErr == nil && workStateRaw == "" {
+					if _, err := setWorkspaceMetaWorkState(wsPath, workspaceWorkStateTodo, time.Now().Unix()); err != nil {
+						return nil, err
+					}
 				}
 			}
 		}
@@ -274,11 +278,6 @@ func listRowsFromFilesystem(ctx context.Context, root string, scope string, incl
 		}
 		return strings.Compare(a.ID, b.ID)
 	})
-	if cacheDirty {
-		if err := saveWorkspaceWorkStateCache(root, cache); err != nil {
-			return nil, err
-		}
-	}
 	return rows, nil
 }
 

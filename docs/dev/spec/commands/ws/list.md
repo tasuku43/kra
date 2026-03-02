@@ -85,6 +85,10 @@ List workspaces with status and summary fields, similar in spirit to `gion manif
 - Filesystem metadata (`.kra.meta.json`) is the primary source of desired/current state.
 - Directory existence under `KRA_ROOT/workspaces/` and `KRA_ROOT/archive/` is treated as physical truth.
 - Logical work-state derivation (`active` scope):
+  - source of truth: `.kra.meta.json.workspace.work_state`
+  - `in-progress` is final for display ordering (skip re-derivation)
+  - only `todo` workspaces are eligible for runtime re-derivation
+  - if baseline file is missing, command must create baseline from current workspace snapshot first
   - runtime baseline file: `.kra/state/workspace-baselines/<id>.json`
   - repo signals under `repos/**`:
     - `dirty` -> `in-progress`
@@ -92,8 +96,8 @@ List workspaces with status and summary fields, similar in spirit to `gion manif
   - non-repo FS signals:
     - compare current file hash map with baseline `fs` map (exclude `repos/**`, `.kra.meta.json`)
   - if any signal differs, classify as `in-progress`; otherwise `todo`
-  - once a workspace is derived as `in-progress`, cache it in `.kra/state/workspace-workstate.json`
-    and keep monotonic `todo -> in-progress` semantics.
+  - when derived as `in-progress`, persist to `.kra.meta.json.workspace.work_state`
+    with monotonic `todo -> in-progress` semantics.
 
 ### Drift repair (MVP)
 

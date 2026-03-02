@@ -18,6 +18,7 @@ status: implemented
 Workspace metadata file (`.kra.meta.json`) must contain:
 
 - workspace identity and lifecycle status (`active` / `archived`)
+- logical work-state (`todo` / `in-progress`) with monotonic transition
 - user-facing fields (`title`, `source_url`)
 - reopen restore payload (`repos_restore`)
 - timestamps (`created_at`, `updated_at`)

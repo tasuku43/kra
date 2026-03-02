@@ -17,7 +17,9 @@ This spec defines the current canonical model.
 ## Principles
 
 - Canonical state lives under `KRA_ROOT` as files/directories.
-- Runtime-derived values (risk, logical todo/in-progress) are not persisted.
+- Runtime-derived risk is not persisted.
+- Workspace logical-state (`todo` / `in-progress`) is persisted in workspace metadata
+  as monotonic `workspace.work_state`.
 - Root-external data under XDG is treated as cache/index unless explicitly required otherwise.
 - Commands must continue to be safe under partial failure (atomic writes, strict allowlists, rollback where possible).
 
@@ -30,6 +32,7 @@ This spec defines the current canonical model.
   - `archive/<id>/`
 - workspace metadata and repo restore metadata:
   - `.kra.meta.json` stored inside workspace/archive directories
+  - includes `workspace.work_state` (`todo` / `in-progress`)
 
 ### Rebuildable (can be recreated)
 
@@ -38,7 +41,6 @@ This spec defines the current canonical model.
 - cross-root scan caches
 - workspace logical-state baseline/cache:
   - `.kra/state/workspace-baselines/<id>.json`
-  - `.kra/state/workspace-workstate.json`
 
 If rebuildable data is missing/corrupt, commands should either:
 - rebuild automatically, or

@@ -23,6 +23,7 @@ type workspaceMetaWorkspace struct {
 	Title     string `json:"title"`
 	SourceURL string `json:"source_url"`
 	Status    string `json:"status"`
+	WorkState string `json:"work_state,omitempty"`
 	CreatedAt int64  `json:"created_at"`
 	UpdatedAt int64  `json:"updated_at"`
 }
@@ -54,6 +55,7 @@ func newWorkspaceMetaFileForCreate(id string, title string, sourceURL string, no
 			Title:     title,
 			SourceURL: sourceURL,
 			Status:    "active",
+			WorkState: string(workspaceWorkStateTodo),
 			CreatedAt: now,
 			UpdatedAt: now,
 		},
@@ -118,10 +120,53 @@ func loadWorkspaceMetaFile(wsPath string) (workspaceMetaFile, error) {
 	if strings.TrimSpace(meta.Workspace.ID) == "" {
 		return workspaceMetaFile{}, fmt.Errorf("workspace.id is required in %s", metaPath)
 	}
+	switch strings.TrimSpace(meta.Workspace.WorkState) {
+	case "", string(workspaceWorkStateTodo):
+		// legacy files may omit this key; caller may backfill lazily.
+	case string(workspaceWorkStateInProgress):
+		// keep
+	default:
+		return workspaceMetaFile{}, fmt.Errorf("workspace.work_state must be one of: todo, in-progress")
+	}
 	if meta.ReposRestore == nil {
 		meta.ReposRestore = make([]workspaceMetaRepoRestore, 0)
 	}
 	return meta, nil
+}
+
+func setWorkspaceMetaWorkState(wsPath string, next workspaceWorkState, now int64) (bool, error) {
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		return false, err
+	}
+	curRaw := strings.TrimSpace(meta.Workspace.WorkState)
+	cur := normalizeWorkspaceWorkState(workspaceWorkState(strings.TrimSpace(meta.Workspace.WorkState)))
+	target := normalizeWorkspaceWorkState(next)
+	if cur == target {
+		if curRaw == "" && target == workspaceWorkStateTodo {
+			meta.Workspace.WorkState = string(target)
+			if now > 0 {
+				meta.Workspace.UpdatedAt = now
+			}
+			if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+				return false, err
+			}
+			return true, nil
+		}
+		return false, nil
+	}
+	// Work-state is monotonic by design.
+	if cur == workspaceWorkStateInProgress && target == workspaceWorkStateTodo {
+		return false, nil
+	}
+	meta.Workspace.WorkState = string(target)
+	if now > 0 {
+		meta.Workspace.UpdatedAt = now
+	}
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		return false, err
+	}
+	return true, nil
 }
 
 func upsertWorkspaceMetaReposRestore(wsPath string, repos []workspaceMetaRepoRestore, now int64) error {

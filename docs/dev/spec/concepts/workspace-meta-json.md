@@ -25,6 +25,7 @@ This file is canonical and stored in:
     "title": "",
     "source_url": "",
     "status": "active",
+    "work_state": "todo",
     "created_at": 1730000000,
     "updated_at": 1730000000
   },
@@ -53,9 +54,13 @@ This file is canonical and stored in:
 - `workspace.status`:
   - `active`: file is under `workspaces/<id>/`
   - `archived`: file is under `archive/<id>/`
+- `workspace.work_state`:
+  - `todo` or `in-progress`
+  - monotonic transition only (`todo -> in-progress`)
+  - `in-progress` is treated as stable (no downgrade during `ws list`/selector rendering)
 - `repos_restore` is the authoritative input for worktree reconstruction on `ws reopen`.
 - `protection.purge_guard.enabled` controls whether purge is blocked.
-- Runtime-only states (`risk`, `todo`, `in-progress`) are not stored.
+- Runtime-only `risk` is not stored.
 
 ## Write rules
 
@@ -69,6 +74,7 @@ This file is canonical and stored in:
 
 - `ws create`:
   - create `.kra.meta.json` with empty `repos_restore`.
+  - initialize `workspace.work_state=todo`.
 - `ws add-repo`:
   - update `repos_restore` entries for added/bound repos.
 - `ws close`:
@@ -77,6 +83,7 @@ This file is canonical and stored in:
 - `ws reopen`:
   - recreate worktrees from `repos_restore`.
   - set `workspace.status=active`.
+  - reset `workspace.work_state=todo`.
 - `ws purge`:
   - remove workspace/archive directories (metadata removed with them).
 
@@ -87,4 +94,6 @@ This file is canonical and stored in:
 - Duplicate `alias` in `repos_restore`:
   - fail validation.
 - Missing required keys:
+  - fail validation.
+- Invalid `workspace.work_state`:
   - fail validation.

@@ -64,7 +64,6 @@ For each recorded workspace repo entry:
   - `workspaces/<id>/` (excluding `repos/**`, which is ignored)
   - removal of `archive/<id>/`
   - `.kra/state/workspace-baselines/<id>.json`
-  - `.kra/state/workspace-workstate.json`
 
 If post-reopen commit fails, do not auto-rollback filesystem rename; keep reopened state and return error.
 In default commit mode, unrelated changes must not be included in lifecycle commits.
@@ -86,6 +85,6 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
   `repos_restore`.
 - Reopen flow must not require index-only rows to rebuild worktrees.
 - On success, update `.kra.meta.json.workspace.status` to `active` atomically.
+- On success, reset `.kra.meta.json.workspace.work_state` to `todo`.
 - On successful reopen, refresh runtime baseline/cache for `<id>`:
   - recreate `.kra/state/workspace-baselines/<id>.json` from reopened state
-  - clear `.kra/state/workspace-workstate.json` entry for `<id>` (state restarts from `todo`)

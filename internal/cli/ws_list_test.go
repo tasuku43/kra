@@ -453,17 +453,10 @@ func TestListRowsFromFilesystem_ActiveSortsInProgressFirst(t *testing.T) {
 	if err := writeWorkspaceMetaFile(filepath.Join(root, "workspaces", "WS-TODO"), newWorkspaceMetaFileForCreate("WS-TODO", "todo", "", 300)); err != nil {
 		t.Fatalf("write WS-TODO meta: %v", err)
 	}
-	if err := writeWorkspaceMetaFile(filepath.Join(root, "workspaces", "WS-IP"), newWorkspaceMetaFileForCreate("WS-IP", "in progress", "", 100)); err != nil {
+	metaIP := newWorkspaceMetaFileForCreate("WS-IP", "in progress", "", 100)
+	metaIP.Workspace.WorkState = string(workspaceWorkStateInProgress)
+	if err := writeWorkspaceMetaFile(filepath.Join(root, "workspaces", "WS-IP"), metaIP); err != nil {
 		t.Fatalf("write WS-IP meta: %v", err)
-	}
-	cache := workspaceWorkStateCache{
-		Version: 1,
-		Workspaces: map[string]workspaceWorkStateCacheEntry{
-			"WS-IP": {State: workspaceWorkStateInProgress},
-		},
-	}
-	if err := saveWorkspaceWorkStateCache(root, cache); err != nil {
-		t.Fatalf("save workstate cache: %v", err)
 	}
 
 	rows, err := listRowsFromFilesystem(context.Background(), root, "active", false)
@@ -475,6 +468,142 @@ func TestListRowsFromFilesystem_ActiveSortsInProgressFirst(t *testing.T) {
 	}
 	if rows[0].ID != "WS-IP" || rows[0].WorkState != workspaceWorkStateInProgress {
 		t.Fatalf("first row should be in-progress workspace, got id=%s state=%s", rows[0].ID, rows[0].WorkState)
+	}
+}
+
+func TestListRowsFromFilesystem_BackfillsMissingMetaWorkStateAsTodo(t *testing.T) {
+	root := t.TempDir()
+	wsPath := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir WS1: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
+		t.Fatalf("mkdir archive: %v", err)
+	}
+	raw := `{
+  "schema_version": 1,
+  "workspace": {
+    "id": "WS1",
+    "title": "title",
+    "source_url": "",
+    "status": "active",
+    "created_at": 100,
+    "updated_at": 100
+  },
+  "repos_restore": []
+}
+`
+	if err := os.WriteFile(filepath.Join(wsPath, workspaceMetaFilename), []byte(raw), 0o644); err != nil {
+		t.Fatalf("write raw meta: %v", err)
+	}
+
+	rows, err := listRowsFromFilesystem(context.Background(), root, "active", false)
+	if err != nil {
+		t.Fatalf("listRowsFromFilesystem() error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("row count = %d, want 1", len(rows))
+	}
+	if rows[0].WorkState != workspaceWorkStateTodo {
+		t.Fatalf("work_state = %s, want todo", rows[0].WorkState)
+	}
+	updated, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load meta: %v", err)
+	}
+	if updated.Workspace.WorkState != string(workspaceWorkStateTodo) {
+		t.Fatalf("meta work_state = %q, want %q", updated.Workspace.WorkState, workspaceWorkStateTodo)
+	}
+}
+
+func TestListRowsFromFilesystem_BackfillsMissingMetaWorkStateAsInProgress(t *testing.T) {
+	root := t.TempDir()
+	wsPath := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(filepath.Join(wsPath, "repos", "r"), 0o755); err != nil {
+		t.Fatalf("mkdir repos: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
+		t.Fatalf("mkdir archive: %v", err)
+	}
+	raw := `{
+  "schema_version": 1,
+  "workspace": {
+    "id": "WS1",
+    "title": "title",
+    "source_url": "",
+    "status": "active",
+    "created_at": 100,
+    "updated_at": 100
+  },
+  "repos_restore": [
+    {
+      "repo_uid": "github.com/o/r",
+      "repo_key": "o/r",
+      "remote_url": "git@github.com:o/r.git",
+      "alias": "r",
+      "branch": "main",
+      "base_ref": "origin/main"
+    }
+  ]
+}
+`
+	if err := os.WriteFile(filepath.Join(wsPath, workspaceMetaFilename), []byte(raw), 0o644); err != nil {
+		t.Fatalf("write raw meta: %v", err)
+	}
+	baseline := workspaceBaseline{
+		Version:     1,
+		WorkspaceID: "WS1",
+		CreatedAt:   100,
+		Repos: map[string]workspaceBaselineRepo{
+			"r": {BaselineHead: "deadbeef"},
+		},
+		FS: map[string]string{},
+	}
+	if err := saveWorkspaceBaseline(root, "WS1", baseline); err != nil {
+		t.Fatalf("save baseline: %v", err)
+	}
+
+	rows, err := listRowsFromFilesystem(context.Background(), root, "active", false)
+	if err != nil {
+		t.Fatalf("listRowsFromFilesystem() error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("row count = %d, want 1", len(rows))
+	}
+	if rows[0].WorkState != workspaceWorkStateInProgress {
+		t.Fatalf("work_state = %s, want in-progress", rows[0].WorkState)
+	}
+	updated, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load meta: %v", err)
+	}
+	if updated.Workspace.WorkState != string(workspaceWorkStateInProgress) {
+		t.Fatalf("meta work_state = %q, want %q", updated.Workspace.WorkState, workspaceWorkStateInProgress)
+	}
+}
+
+func TestListRowsFromFilesystem_CreatesBaselineWhenMissing(t *testing.T) {
+	root := t.TempDir()
+	wsPath := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir WS1: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
+		t.Fatalf("mkdir archive: %v", err)
+	}
+	meta := newWorkspaceMetaFileForCreate("WS1", "title", "", 100)
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write meta: %v", err)
+	}
+	if _, err := os.Stat(workspaceBaselinePath(root, "WS1")); !os.IsNotExist(err) {
+		t.Fatalf("baseline should not exist before list, err=%v", err)
+	}
+
+	if _, err := listRowsFromFilesystem(context.Background(), root, "active", false); err != nil {
+		t.Fatalf("listRowsFromFilesystem() error: %v", err)
+	}
+	if _, err := os.Stat(workspaceBaselinePath(root, "WS1")); err != nil {
+		t.Fatalf("baseline should be created, err=%v", err)
 	}
 }
 
