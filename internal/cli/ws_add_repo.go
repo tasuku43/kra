@@ -935,9 +935,12 @@ func isProcessAlive(pid int) bool {
 
 func listAddRepoPoolCandidates(ctx context.Context, root string, repoPoolPath string, workspaceID string, now time.Time, debugf func(string, ...any)) ([]addRepoPoolCandidate, error) {
 	_ = now
-	baseCandidates, err := scanRepoPoolCandidatesFromFilesystem(ctx, repoPoolPath, debugf)
+	registered, err := loadRootRepoRegistry(root)
 	if err != nil {
 		return nil, err
+	}
+	if len(registered) == 0 {
+		return nil, nil
 	}
 
 	bound, err := listWorkspaceReposForClose(ctx, root, workspaceID)
@@ -949,79 +952,43 @@ func listAddRepoPoolCandidates(ctx context.Context, root string, repoPoolPath st
 		boundRepoUID[r.RepoUID] = true
 	}
 
-	out := make([]addRepoPoolCandidate, 0, len(baseCandidates))
-	for _, it := range baseCandidates {
-		if boundRepoUID[it.RepoUID] {
+	out := make([]addRepoPoolCandidate, 0, len(registered))
+	for _, it := range registered {
+		repoUID := strings.TrimSpace(it.RepoUID)
+		repoKey := strings.TrimSpace(it.RepoKey)
+		remoteURL := strings.TrimSpace(it.RemoteURL)
+		if repoUID == "" || repoKey == "" || remoteURL == "" {
 			continue
 		}
-		spec, err := repospec.Normalize(it.RemoteURL)
+		if boundRepoUID[repoUID] {
+			continue
+		}
+		spec, err := repospec.Normalize(remoteURL)
 		if err != nil {
 			if debugf != nil {
-				debugf("skip repo candidate: normalize failed repo_uid=%s err=%v", it.RepoUID, err)
+				debugf("skip repo candidate: normalize failed repo_uid=%s err=%v", repoUID, err)
 			}
 			continue
 		}
 		barePath := repostore.StorePath(repoPoolPath, spec)
 		if fi, err := os.Stat(barePath); err != nil || !fi.IsDir() {
 			if debugf != nil {
-				debugf("skip repo candidate: bare not found repo_uid=%s path=%s", it.RepoUID, barePath)
+				debugf("skip repo candidate: bare not found repo_uid=%s path=%s", repoUID, barePath)
 			}
 			continue
 		}
 		out = append(out, addRepoPoolCandidate{
-			RepoUID:   it.RepoUID,
-			RepoKey:   it.RepoKey,
-			RemoteURL: it.RemoteURL,
-			Alias:     deriveAliasFromRepoKey(it.RepoKey),
+			RepoUID:   repoUID,
+			RepoKey:   repoKey,
+			RemoteURL: remoteURL,
+			Alias:     deriveAliasFromRepoKey(repoKey),
 			BarePath:  barePath,
 		})
 	}
-	return out, nil
-}
-
-func scanRepoPoolCandidatesFromFilesystem(ctx context.Context, repoPoolPath string, debugf func(string, ...any)) ([]addRepoPoolCandidate, error) {
-	items := make([]addRepoPoolCandidate, 0, 16)
-	err := filepath.WalkDir(repoPoolPath, func(path string, d os.DirEntry, err error) error {
-		if err != nil {
-			return err
-		}
-		if !d.IsDir() || !strings.HasSuffix(path, ".git") {
-			return nil
-		}
-		remoteURL, err := gitutil.RunBare(ctx, path, "config", "--get", "remote.origin.url")
-		if err != nil {
-			if debugf != nil {
-				debugf("skip bare repo without origin url path=%s err=%v", path, err)
-			}
-			return nil
-		}
-		if missingPath, missing := missingLocalFileRemotePath(strings.TrimSpace(remoteURL)); missing {
-			if debugf != nil {
-				debugf("skip bare repo with missing local file remote path=%s remote_path=%s", path, missingPath)
-			}
-			return nil
-		}
-		spec, err := repospec.Normalize(strings.TrimSpace(remoteURL))
-		if err != nil {
-			if debugf != nil {
-				debugf("skip bare repo normalize failed path=%s err=%v", path, err)
-			}
-			return nil
-		}
-		repoKey := fmt.Sprintf("%s/%s", spec.Owner, spec.Repo)
-		items = append(items, addRepoPoolCandidate{
-			RepoUID:   fmt.Sprintf("%s/%s", spec.Host, repoKey),
-			RepoKey:   repoKey,
-			RemoteURL: strings.TrimSpace(remoteURL),
-			Alias:     spec.Repo,
-			BarePath:  path,
-		})
-		return filepath.SkipDir
+	slices.SortFunc(out, func(a, b addRepoPoolCandidate) int {
+		return strings.Compare(a.RepoKey, b.RepoKey)
 	})
-	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return nil, err
-	}
-	return items, nil
+	return out, nil
 }
 
 func missingLocalFileRemotePath(remote string) (string, bool) {

@@ -400,14 +400,14 @@ func (c *CLI) printWSAddRepoUsage(w io.Writer) {
   kra ws add-repo [--id <workspace-id> | --current | --select] [--format human|json] [--refresh] [--no-fetch]
   kra ws add-repo --format json --id <workspace-id> --repo <repo-key> [--repo <repo-key> ...] [--branch <name>] [--base-ref <origin/branch>] [--refresh] [--no-fetch] [--yes]
 
-Add repositories from the repo pool to a workspace.
+Add repositories from current-root registered repo pool entries to a workspace.
 
 Inputs:
   workspace-id       Existing active workspace ID (optional when running under workspaces/<id>/)
   --id               Explicit workspace ID
 
 Behavior:
-  - Select one or more repos from the existing bare repo pool.
+  - Select one or more repos registered by kra repo add in the current root.
   - For each selected repo, input base_ref and branch.
   - base_ref accepts: origin/<branch>, <branch>, /<branch>.
   - Smart fetch runs for selected repos only (TTL=5m; --refresh forces, --no-fetch skips).

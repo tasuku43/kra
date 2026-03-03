@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/tasuku43/kra/internal/app/repocmd"
+	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/infra/appports"
 )
 
@@ -99,6 +100,17 @@ func (c *CLI) runRepoAdd(args []string) int {
 	}
 	if outputFormat == "json" {
 		outcomes := applyRepoPoolAdds(ctx, session.RepoPoolPath, requests, repoPoolAddDefaultWorkers, c.debugf, nil)
+		if err := syncRootRepoRegistryFromPoolAddRequests(session.Root, requests, outcomes); err != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.add",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("update root repo registry: %v", err),
+				},
+			})
+			return exitError
+		}
 		items := make([]map[string]any, 0, len(outcomes))
 		success := 0
 		for _, o := range outcomes {
@@ -142,9 +154,43 @@ func (c *CLI) runRepoAdd(args []string) int {
 	useColorOut := writerSupportsColor(c.Out)
 	printRepoPoolSection(c.Out, requests, useColorOut)
 	outcomes := applyRepoPoolAddsWithProgress(ctx, session.RepoPoolPath, requests, repoPoolAddDefaultWorkers, c.debugf, c.Out, useColorOut)
+	if err := syncRootRepoRegistryFromPoolAddRequests(session.Root, requests, outcomes); err != nil {
+		fmt.Fprintf(c.Err, "update root repo registry: %v\n", err)
+		return exitError
+	}
 	printRepoPoolAddResult(c.Out, outcomes, useColorOut)
 	if repoPoolAddHadFailure(outcomes) {
 		return exitError
 	}
 	return exitOK
+}
+
+func syncRootRepoRegistryFromPoolAddRequests(root string, requests []repoPoolAddRequest, outcomes []repoPoolAddOutcome) error {
+	if len(requests) == 0 || len(outcomes) == 0 {
+		return nil
+	}
+	additions := make([]rootRepoRegistryEntry, 0, len(outcomes))
+	limit := len(outcomes)
+	if len(requests) < limit {
+		limit = len(requests)
+	}
+	for i := 0; i < limit; i++ {
+		if !outcomes[i].Success {
+			continue
+		}
+		spec, err := repospec.Normalize(strings.TrimSpace(requests[i].RepoSpecInput))
+		if err != nil {
+			continue
+		}
+		repoKey := fmt.Sprintf("%s/%s", spec.Owner, spec.Repo)
+		additions = append(additions, rootRepoRegistryEntry{
+			RepoUID:   fmt.Sprintf("%s/%s", spec.Host, repoKey),
+			RepoKey:   repoKey,
+			RemoteURL: strings.TrimSpace(requests[i].RepoSpecInput),
+		})
+	}
+	if len(additions) == 0 {
+		return nil
+	}
+	return upsertRootRepoRegistryEntries(root, additions)
 }

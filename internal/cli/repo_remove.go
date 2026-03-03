@@ -11,8 +11,9 @@ import (
 	"strings"
 
 	"github.com/tasuku43/kra/internal/app/repocmd"
+	"github.com/tasuku43/kra/internal/core/repospec"
+	"github.com/tasuku43/kra/internal/core/repostore"
 	"github.com/tasuku43/kra/internal/infra/appports"
-	"github.com/tasuku43/kra/internal/infra/gitutil"
 	"github.com/tasuku43/kra/internal/infra/statestore"
 )
 
@@ -191,6 +192,27 @@ func (c *CLI) runRepoRemove(args []string) int {
 		fmt.Fprintln(c.Err, "aborted")
 		return exitError
 	}
+	removedUIDs := make([]string, 0, len(selected))
+	for _, it := range selected {
+		if uid := strings.TrimSpace(it.RepoUID); uid != "" {
+			removedUIDs = append(removedUIDs, uid)
+		}
+	}
+	if err := removeRootRepoRegistryEntries(session.Root, removedUIDs); err != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.remove",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("update root repo registry: %v", err),
+				},
+			})
+			return exitError
+		}
+		fmt.Fprintf(c.Err, "update root repo registry: %v\n", err)
+		return exitError
+	}
 
 	blocked := make([]string, 0)
 	for _, it := range selected {
@@ -244,28 +266,40 @@ func (c *CLI) runRepoRemove(args []string) int {
 }
 
 func listRootRepoCandidatesFromFilesystem(ctx context.Context, root string, repoPoolPath string) ([]statestore.RootRepoCandidate, error) {
-	bareRepos, err := listRepoPoolBareRepos(repoPoolPath)
+	registered, err := loadRootRepoRegistry(root)
 	if err != nil {
 		return nil, err
+	}
+	if len(registered) == 0 {
+		return nil, nil
 	}
 	workspaceRefs, err := listWorkspaceRepoRefCountFromFilesystem(ctx, root)
 	if err != nil {
 		return nil, err
 	}
 
-	candidates := make([]statestore.RootRepoCandidate, 0, len(bareRepos))
-	seen := make(map[string]bool, len(bareRepos))
-	for _, barePath := range bareRepos {
-		remoteURL, _ := gitutil.RunBare(ctx, barePath, "config", "--get", "remote.origin.url")
-		repoUID, repoKey, ok := resolveRepoIdentityForGC(repoPoolPath, barePath, strings.TrimSpace(remoteURL))
-		if !ok || seen[repoUID] {
+	candidates := make([]statestore.RootRepoCandidate, 0, len(registered))
+	seen := make(map[string]bool, len(registered))
+	for _, it := range registered {
+		repoUID := strings.TrimSpace(it.RepoUID)
+		repoKey := strings.TrimSpace(it.RepoKey)
+		remoteURL := strings.TrimSpace(it.RemoteURL)
+		if repoUID == "" || repoKey == "" || remoteURL == "" || seen[repoUID] {
+			continue
+		}
+		spec, err := repospec.Normalize(remoteURL)
+		if err != nil {
+			continue
+		}
+		barePath := repostore.StorePath(repoPoolPath, spec)
+		if fi, err := os.Stat(barePath); err != nil || !fi.IsDir() {
 			continue
 		}
 		seen[repoUID] = true
 		candidates = append(candidates, statestore.RootRepoCandidate{
 			RepoUID:           repoUID,
 			RepoKey:           repoKey,
-			RemoteURL:         strings.TrimSpace(remoteURL),
+			RemoteURL:         remoteURL,
 			WorkspaceRefCount: workspaceRefs[repoUID],
 		})
 	}
