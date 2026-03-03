@@ -2,7 +2,6 @@
 title: "Repo pool and worktree guide"
 status: implemented
 ---
-
 # Repo pool and worktree guide
 
 This guide explains repository registration and per-task attachment.
@@ -15,6 +14,16 @@ This guide explains repository registration and per-task attachment.
 2. `kra ws add-repo --id <id>` attaches selected repositories as worktrees in that workspace.
 
 This keeps active workspace context minimal and task-scoped.
+
+```text
+Repo Pool ($KRA_HOME/repo-pool)       Picked Workspace (KRA_ROOT)
+---------------------------------      -----------------------------
+backend.git   (bare)   ---\            workspaces/PROJ-1236/
+frontend.git  (bare)   ----+--------->   └─ repos/
+infra.git     (bare)   ---/                 ├─ backend/   (worktree)
+                                            ├─ frontend/  (worktree)
+                                            └─ infra/     (worktree)
+```
 
 ## Where data is stored
 

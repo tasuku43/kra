@@ -85,30 +85,7 @@ Guide: `docs/user/guides/WORKSPACE_LIFECYCLE.md`
 
 ### 2) cmux integration
 When using `cmux`, `kra ws open` creates and opens the corresponding `cmux` workspace if it does not exist, and moves to it if it already exists. `kra ws close` closes mapped `cmux` workspace(s) on a best-effort basis after archive operations.
-
-```text
-Ticket System     Filesystem (KRA_ROOT)       cmux
----------------   --------------------------   -----------------------
-PROJ-1234  --->   workspaces/PROJ-1234/ --->  workspace: PROJ-1234
-                  ├─ repos/
-                  │  (no repo attached)
-                  ├─ notes/
-                  └─ artifacts/
-
-PROJ-1235  --->   workspaces/PROJ-1235/ --->  workspace: PROJ-1235
-                  ├─ repos/
-                  │  └─ backend/
-                  ├─ notes/
-                  └─ artifacts/
-
-PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
-                  ├─ repos/
-                  │  ├─ api/
-                  │  ├─ web/
-                  │  └─ infra/
-                  ├─ notes/
-                  └─ artifacts/
-```
+Conceptual mapping is shown in "Filesystem Model (At a Glance)".
 
 Example:
 
