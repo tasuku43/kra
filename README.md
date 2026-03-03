@@ -10,30 +10,33 @@ The default workspace template starts with `notes/` and `artifacts/`, and you ca
 
 `kra` is built around filesystem-based workspace management under `<KRA_ROOT>`.
 
-### ASCII (3-layer view)
+### Conceptual mapping
 
 ```text
-[Layer 1: Root]
-<KRA_ROOT>/
-├── templates/default/
-├── workspaces/
-│   └── <TASK_ID>/
-└── archive/
-    └── <TASK_ID>/
+Ticket System     Filesystem (KRA_ROOT)       cmux
+---------------   --------------------------   -----------------------
+PROJ-1234  --->   workspaces/PROJ-1234/ --->  workspace: PROJ-1234
+                  ├─ repos/
+                  │  (no repo attached)
+                  ├─ notes/
+                  └─ artifacts/
 
-[Layer 2: Active Workspace (example when using template: default)]
-<KRA_ROOT>/workspaces/<TASK_ID>/
-├── notes/
-├── artifacts/
-└── repos/
-    ├── app/      (git worktree)
-    └── infra/    (git worktree)
+PROJ-1235  --->   workspaces/PROJ-1235/ --->  workspace: PROJ-1235
+                  ├─ repos/
+                  │  └─ backend/
+                  ├─ notes/
+                  └─ artifacts/
 
-[Layer 3: Shared State]
-$KRA_HOME/ (default: ~/.kra/)
-├── config.yaml
-└── repo-pool/    (shared repo pool)
+PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
+                  ├─ repos/
+                  │  ├─ api/
+                  │  ├─ web/
+                  │  └─ infra/
+                  ├─ notes/
+                  └─ artifacts/
 ```
+
+`<KRA_ROOT>` stores active/archived task workspaces, while `$KRA_HOME` (default: `~/.kra/`) stores shared state such as config and the repo pool.
 
 - `kra ws create <ID>`: creates `<KRA_ROOT>/workspaces/<ID>/`
 - `kra ws close --id <ID>`: archives to `<KRA_ROOT>/archive/<ID>/`
@@ -82,6 +85,30 @@ Guide: `docs/user/guides/WORKSPACE_LIFECYCLE.md`
 
 ### 2) cmux integration
 When using `cmux`, `kra ws open` creates and opens the corresponding `cmux` workspace if it does not exist, and moves to it if it already exists. `kra ws close` closes mapped `cmux` workspace(s) on a best-effort basis after archive operations.
+
+```text
+Ticket System     Filesystem (KRA_ROOT)       cmux
+---------------   --------------------------   -----------------------
+PROJ-1234  --->   workspaces/PROJ-1234/ --->  workspace: PROJ-1234
+                  ├─ repos/
+                  │  (no repo attached)
+                  ├─ notes/
+                  └─ artifacts/
+
+PROJ-1235  --->   workspaces/PROJ-1235/ --->  workspace: PROJ-1235
+                  ├─ repos/
+                  │  └─ backend/
+                  ├─ notes/
+                  └─ artifacts/
+
+PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
+                  ├─ repos/
+                  │  ├─ api/
+                  │  ├─ web/
+                  │  └─ infra/
+                  ├─ notes/
+                  └─ artifacts/
+```
 
 Example:
 

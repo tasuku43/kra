@@ -17,6 +17,32 @@ This guide explains how `kra` works with `cmux` in task-driven workflows.
 
 This 1:1:1 mapping helps avoid context drift across tools.
 
+### Conceptual mapping (ticket system -> filesystem -> cmux)
+
+```text
+Ticket System     Filesystem (KRA_ROOT)       cmux
+---------------   --------------------------   -----------------------
+PROJ-1234  --->   workspaces/PROJ-1234/ --->  workspace: PROJ-1234
+                  ├─ repos/
+                  │  (no repo attached)
+                  ├─ notes/
+                  └─ artifacts/
+
+PROJ-1235  --->   workspaces/PROJ-1235/ --->  workspace: PROJ-1235
+                  ├─ repos/
+                  │  └─ backend/
+                  ├─ notes/
+                  └─ artifacts/
+
+PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
+                  ├─ repos/
+                  │  ├─ api/
+                  │  ├─ web/
+                  │  └─ infra/
+                  ├─ notes/
+                  └─ artifacts/
+```
+
 ## Open behavior
 
 `kra ws open --id <id>`:
