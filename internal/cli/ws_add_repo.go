@@ -1162,6 +1162,16 @@ func detectDefaultBaseRefFromBare(ctx context.Context, barePath string) (string,
 			}
 		}
 	}
+	if ref, err := gitutil.RunBare(ctx, barePath, "symbolic-ref", "--quiet", "HEAD"); err == nil {
+		ref = strings.TrimSpace(ref)
+		const prefix = "refs/heads/"
+		if strings.HasPrefix(ref, prefix) {
+			branch := strings.TrimSpace(strings.TrimPrefix(ref, prefix))
+			if branch != "" {
+				return "origin/" + branch, nil
+			}
+		}
+	}
 	okMain, err := gitutil.ShowRefExistsBare(ctx, barePath, "refs/remotes/origin/main")
 	if err != nil {
 		return "", err
@@ -1174,6 +1184,20 @@ func detectDefaultBaseRefFromBare(ctx context.Context, barePath string) (string,
 		return "", err
 	}
 	if okMaster {
+		return "origin/master", nil
+	}
+	okLocalMain, err := gitutil.ShowRefExistsBare(ctx, barePath, "refs/heads/main")
+	if err != nil {
+		return "", err
+	}
+	if okLocalMain {
+		return "origin/main", nil
+	}
+	okLocalMaster, err := gitutil.ShowRefExistsBare(ctx, barePath, "refs/heads/master")
+	if err != nil {
+		return "", err
+	}
+	if okLocalMaster {
 		return "origin/master", nil
 	}
 	return "", fmt.Errorf("failed to detect default base_ref in bare repo")

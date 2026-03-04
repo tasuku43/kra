@@ -157,6 +157,27 @@ func TestMissingLocalFileRemotePath(t *testing.T) {
 	}
 }
 
+func TestDetectDefaultBaseRefFromBare_FallsBackToBareHEAD(t *testing.T) {
+	env := testutil.NewEnv(t)
+	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
+		runGit(t, dir, args...)
+	})
+	spec, err := repospec.Normalize(repoSpec)
+	if err != nil {
+		t.Fatalf("Normalize(repoSpec): %v", err)
+	}
+	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
+	runGit(t, "", "clone", "--bare", repoSpec, barePath)
+
+	baseRef, err := detectDefaultBaseRefFromBare(context.Background(), barePath)
+	if err != nil {
+		t.Fatalf("detectDefaultBaseRefFromBare() error: %v", err)
+	}
+	if baseRef != "origin/main" {
+		t.Fatalf("baseRef = %q, want %q", baseRef, "origin/main")
+	}
+}
+
 func TestEvaluateAddRepoFetchDecision_DoesNotRequireWhenOriginBranchMissing(t *testing.T) {
 	env := testutil.NewEnv(t)
 	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
