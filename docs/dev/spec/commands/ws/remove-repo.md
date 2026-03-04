@@ -61,9 +61,11 @@ This command is the operational counterpart of `kra ws add-repo`.
 4. Apply (all-or-nothing)
   - remove workspace repo bindings from state/index
   - delete selected worktree directories under `workspaces/<id>/repos/`
+  - delete corresponding local branches from repo-pool bare repositories (`refs/heads/<branch>`)
+    - if branch deletion cannot be completed (for example, branch already in use elsewhere), continue remove-repo as best-effort
   - if current process cwd is inside target `workspaces/<id>/`, shift cwd to `workspaces/<id>/` before destructive removal
   - when cwd shift happened, emit shell action `cd <workspaces/<id>>` after successful apply
-  - keep repo pool entries and bare repos untouched
+  - keep repo pool entries and bare repository directories untouched
   - on failure, abort with error
 
 5. FS metadata behavior

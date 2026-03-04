@@ -42,6 +42,8 @@ This is a destructive operation. It is separate from `ws close`, which keeps an 
 3) Remove worktrees (if present)
 
 - Remove each worktree under `workspaces/<id>/repos/<alias>`.
+- Delete each corresponding local branch from the repo pool bare repository (`refs/heads/<branch>`).
+  - If branch deletion cannot be completed (for example, branch already in use elsewhere), continue purge as best-effort.
 - Remove `workspaces/<id>/repos/` if it becomes empty.
 
 4) Delete workspace and archive directories (if present)

@@ -3,11 +3,15 @@ package cli
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/tasuku43/kra/internal/core/repospec"
+	"github.com/tasuku43/kra/internal/core/repostore"
 	"github.com/tasuku43/kra/internal/core/workspacerisk"
 	"github.com/tasuku43/kra/internal/testutil"
 )
@@ -87,6 +91,20 @@ func TestCLI_WS_RemoveRepo_JSON_RemovesBindingAndWorktree(t *testing.T) {
 
 	if _, err := os.Stat(worktreePath); !os.IsNotExist(err) {
 		t.Fatalf("worktree should be removed: %v", err)
+	}
+	spec, err := repospec.Normalize(repoSpec)
+	if err != nil {
+		t.Fatalf("Normalize(repoSpec): %v", err)
+	}
+	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
+	cmd := exec.Command("git", "--git-dir", barePath, "show-ref", "--verify", "--quiet", "refs/heads/WS1/test")
+	cmdOut, cmdErr := cmd.CombinedOutput()
+	if cmdErr == nil {
+		t.Fatalf("local branch should be deleted after remove-repo: refs/heads/WS1/test")
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(cmdErr, &exitErr) || exitErr.ExitCode() != 1 {
+		t.Fatalf("git show-ref unexpected error: %v (output=%s)", cmdErr, strings.TrimSpace(string(cmdOut)))
 	}
 	metaBytes, err := os.ReadFile(filepath.Join(env.Root, "workspaces", "WS1", workspaceMetaFilename))
 	if err != nil {

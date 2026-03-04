@@ -43,6 +43,8 @@ This is the primary "task completed" flow in `kra`.
 3) Remove worktrees
 
 - Remove each worktree under `workspaces/<id>/repos/<alias>`.
+- Delete each corresponding local branch from the repo pool bare repository (`refs/heads/<branch>`).
+  - If branch deletion cannot be completed (for example, branch already in use elsewhere), continue close as best-effort.
 - Remove `workspaces/<id>/repos/` if it becomes empty.
 - This step must run after process-cwd shift when current cwd is under target workspace.
 
