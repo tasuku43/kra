@@ -12,6 +12,8 @@ import (
 	"testing"
 
 	"github.com/tasuku43/kra/internal/cmuxmap"
+	"github.com/tasuku43/kra/internal/core/repospec"
+	"github.com/tasuku43/kra/internal/core/repostore"
 	"github.com/tasuku43/kra/internal/core/workspacerisk"
 	"github.com/tasuku43/kra/internal/testutil"
 )
@@ -264,6 +266,20 @@ func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *te
 	}
 	if got := meta.ReposRestore[0]; got.Alias != "r" || got.Branch != "WS1/test" {
 		t.Fatalf("repos_restore[0] = %+v, want alias=%q branch=%q", got, "r", "WS1/test")
+	}
+	spec, err := repospec.Normalize(repoSpec)
+	if err != nil {
+		t.Fatalf("Normalize(repoSpec): %v", err)
+	}
+	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
+	cmd := exec.Command("git", "--git-dir", barePath, "show-ref", "--verify", "--quiet", "refs/heads/WS1/test")
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		t.Fatalf("local branch should be deleted after close: refs/heads/WS1/test")
+	}
+	var exitErr *exec.ExitError
+	if !errors.As(err, &exitErr) || exitErr.ExitCode() != 1 {
+		t.Fatalf("git show-ref unexpected error: %v (output=%s)", err, strings.TrimSpace(string(out)))
 	}
 
 	subj := strings.TrimSpace(mustGitOutput(t, env.Root, "log", "-1", "--pretty=%s"))

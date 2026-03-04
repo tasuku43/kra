@@ -493,7 +493,7 @@ func (c *CLI) closeWorkspace(ctx context.Context, root string, workspaceID strin
 		trace.PreCommitSHA = preSHA
 	}
 
-	if err := removeWorkspaceWorktrees(ctx, root, workspaceID, repos); err != nil {
+	if err := removeWorkspaceWorktrees(ctx, root, workspaceID, repos, c.debugf); err != nil {
 		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
 		return closeCommitTrace{}, fmt.Errorf("remove worktrees: %w", err)
 	}
@@ -976,7 +976,7 @@ func renderRepoRiskState(state workspacerisk.RepoState, useColor bool) string {
 	}
 }
 
-func removeWorkspaceWorktrees(ctx context.Context, root string, workspaceID string, repos []statestore.WorkspaceRepo) error {
+func removeWorkspaceWorktrees(ctx context.Context, root string, workspaceID string, repos []statestore.WorkspaceRepo, debugf func(string, ...any)) error {
 	reposDir := filepath.Join(root, "workspaces", workspaceID, "repos")
 
 	for _, r := range repos {
@@ -987,6 +987,7 @@ func removeWorkspaceWorktrees(ctx context.Context, root string, workspaceID stri
 			}
 			return err
 		}
+		branch := detectBranchForClose(ctx, worktreePath, r.Branch)
 
 		barePath, err := resolveBarePathFromWorktreeGitdir(worktreePath)
 		if err != nil {
@@ -998,6 +999,7 @@ func removeWorkspaceWorktrees(ctx context.Context, root string, workspaceID stri
 			if err != nil {
 				return err
 			}
+			deleteLocalBranchAfterWorktreeRemove(ctx, barePath, branch, debugf)
 		} else if errors.Is(err, os.ErrNotExist) {
 			if err := os.RemoveAll(worktreePath); err != nil {
 				return err
@@ -1018,6 +1020,33 @@ func removeWorkspaceWorktrees(ctx context.Context, root string, workspaceID stri
 		_ = os.Remove(reposDir)
 	}
 	return nil
+}
+
+func deleteLocalBranchAfterWorktreeRemove(ctx context.Context, barePath string, branch string, debugf func(string, ...any)) {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return
+	}
+	ref := "refs/heads/" + branch
+	if err := gitutil.CheckRefFormat(ctx, ref); err != nil {
+		if debugf != nil {
+			debugf("skip branch delete invalid ref bare=%s branch=%s err=%v", barePath, branch, err)
+		}
+		return
+	}
+	exists, err := gitutil.ShowRefExistsBare(ctx, barePath, ref)
+	if err != nil {
+		if debugf != nil {
+			debugf("skip branch delete check failed bare=%s branch=%s err=%v", barePath, branch, err)
+		}
+		return
+	}
+	if !exists {
+		return
+	}
+	if _, err := gitutil.RunBare(ctx, barePath, "branch", "-D", branch); err != nil && debugf != nil {
+		debugf("skip branch delete failed bare=%s branch=%s err=%v", barePath, branch, err)
+	}
 }
 
 func listWorkspaceReposForClose(ctx context.Context, root string, workspaceID string) ([]statestore.WorkspaceRepo, error) {

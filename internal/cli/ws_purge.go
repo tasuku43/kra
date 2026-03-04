@@ -451,7 +451,7 @@ func (c *CLI) purgeWorkspace(ctx context.Context, root string, workspaceID strin
 	if err != nil {
 		return purgeCommitTrace{}, fmt.Errorf("list workspace repos: %w", err)
 	}
-	if err := removeWorkspaceWorktrees(ctx, root, workspaceID, repos); err != nil {
+	if err := removeWorkspaceWorktrees(ctx, root, workspaceID, repos, c.debugf); err != nil {
 		return purgeCommitTrace{}, fmt.Errorf("remove worktrees: %w", err)
 	}
 

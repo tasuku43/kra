@@ -329,6 +329,7 @@ func TestCLI_WS_Reopen_ErrorsWhenBranchCheckedOutElsewhere(t *testing.T) {
 	}
 	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
 	otherWorktree := filepath.Join(t.TempDir(), "other-worktree")
+	runGit("", "--git-dir", barePath, "branch", "-f", "WS1/test", "origin/main")
 	runGit("", "--git-dir", barePath, "worktree", "add", otherWorktree, "WS1/test")
 
 	{

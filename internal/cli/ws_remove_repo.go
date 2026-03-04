@@ -20,6 +20,7 @@ type removeRepoCandidate struct {
 	RepoUID      string
 	RepoKey      string
 	Alias        string
+	Branch       string
 	SelectorID   string
 	WorktreePath string
 }
@@ -269,7 +270,7 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 		return exitError
 	}
 
-	if err := applyRemoveRepoPlan(ctx, root, workspaceID, selected); err != nil {
+	if err := applyRemoveRepoPlan(ctx, root, workspaceID, selected, c.debugf); err != nil {
 		fmt.Fprintf(c.Err, "apply remove-repo: %v\n", err)
 		return exitError
 	}
@@ -350,7 +351,7 @@ func (c *CLI) runWSRemoveRepoJSON(root string, workspaceID string, wd string, ca
 		return exitError
 	}
 
-	if err := applyRemoveRepoPlan(context.Background(), root, workspaceID, selected); err != nil {
+	if err := applyRemoveRepoPlan(context.Background(), root, workspaceID, selected, c.debugf); err != nil {
 		_ = writeCLIJSON(c.Out, cliJSONResponse{
 			OK:          false,
 			Action:      "remove-repo",
@@ -435,10 +436,15 @@ func listRemoveRepoCandidates(ctx context.Context, root string, workspaceID stri
 		if repoUID == "" {
 			repoUID = strings.TrimSpace(restore.RepoUID)
 		}
+		branch := strings.TrimSpace(r.Branch)
+		if branch == "" {
+			branch = strings.TrimSpace(restore.Branch)
+		}
 		out = append(out, removeRepoCandidate{
 			RepoUID:      repoUID,
 			RepoKey:      repoKey,
 			Alias:        alias,
+			Branch:       branch,
 			WorktreePath: filepath.Join(root, "workspaces", workspaceID, "repos", alias),
 		})
 	}
@@ -545,15 +551,17 @@ func selectedAliases(selected []removeRepoCandidate) []string {
 	return aliases
 }
 
-func applyRemoveRepoPlan(ctx context.Context, root string, workspaceID string, selected []removeRepoCandidate) error {
+func applyRemoveRepoPlan(ctx context.Context, root string, workspaceID string, selected []removeRepoCandidate, debugf func(string, ...any)) error {
 	for _, it := range selected {
 		if _, err := os.Stat(it.WorktreePath); err == nil {
+			branch := detectBranchForClose(ctx, it.WorktreePath, it.Branch)
 			barePath, bareErr := resolveBarePathFromWorktreeGitdir(it.WorktreePath)
 			if bareErr == nil {
 				if _, statErr := os.Stat(barePath); statErr == nil {
 					if _, err := gitutil.RunBare(ctx, barePath, "worktree", "remove", "--force", it.WorktreePath); err != nil {
 						return err
 					}
+					deleteLocalBranchAfterWorktreeRemove(ctx, barePath, branch, debugf)
 				}
 			}
 			if err := os.RemoveAll(it.WorktreePath); err != nil {
