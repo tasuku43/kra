@@ -9,7 +9,6 @@ import (
 
 	"github.com/tasuku43/kra/internal/app/repocmd"
 	"github.com/tasuku43/kra/internal/infra/appports"
-	"github.com/tasuku43/kra/internal/infra/gitutil"
 	"github.com/tasuku43/kra/internal/repodiscovery"
 )
 
@@ -110,14 +109,14 @@ func (c *CLI) runRepoDiscover(args []string) int {
 		return exitError
 	}
 
-	existingRepoUIDs, err := listRepoUIDsFromRepoPool(ctx, session.RepoPoolPath)
+	registered, err := loadRootRepoRegistry(session.Root)
 	if err != nil {
-		fmt.Fprintf(c.Err, "list existing repos from pool: %v\n", err)
+		fmt.Fprintf(c.Err, "load root repo registry: %v\n", err)
 		return exitError
 	}
 	existingSet := map[string]bool{}
-	for _, repoUID := range existingRepoUIDs {
-		existingSet[repoUID] = true
+	for _, entry := range registered {
+		existingSet[strings.TrimSpace(entry.RepoUID)] = true
 	}
 
 	candidates := make([]repodiscovery.Repo, 0, len(discovered))
@@ -170,28 +169,13 @@ func (c *CLI) runRepoDiscover(args []string) int {
 	}
 	useColorOut := writerSupportsColor(c.Out)
 	outcomes := applyRepoPoolAddsWithProgress(ctx, session.RepoPoolPath, requests, repoPoolAddDefaultWorkers, c.debugf, c.Out, useColorOut)
+	if err := syncRootRepoRegistryFromPoolAddRequests(session.Root, requests, outcomes); err != nil {
+		fmt.Fprintf(c.Err, "update root repo registry: %v\n", err)
+		return exitError
+	}
 	printRepoPoolAddResult(c.Out, outcomes, useColorOut)
 	if repoPoolAddHadFailure(outcomes) {
 		return exitError
 	}
 	return exitOK
-}
-
-func listRepoUIDsFromRepoPool(ctx context.Context, repoPoolPath string) ([]string, error) {
-	bareRepos, err := listRepoPoolBareRepos(repoPoolPath)
-	if err != nil {
-		return nil, err
-	}
-	seen := make(map[string]bool, len(bareRepos))
-	out := make([]string, 0, len(bareRepos))
-	for _, barePath := range bareRepos {
-		remoteURL, _ := gitutil.RunBare(ctx, barePath, "config", "--get", "remote.origin.url")
-		repoUID, _, ok := resolveRepoIdentityForGC(repoPoolPath, barePath, strings.TrimSpace(remoteURL))
-		if !ok || seen[repoUID] {
-			continue
-		}
-		seen[repoUID] = true
-		out = append(out, repoUID)
-	}
-	return out, nil
 }

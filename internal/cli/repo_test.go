@@ -283,6 +283,91 @@ func TestCLI_RepoDiscover_ExcludesExistingAndAddsSelected(t *testing.T) {
 	if strings.Contains(out.String(), "example-org/existing") {
 		t.Fatalf("stdout should not include existing repo in selected result: %q", out.String())
 	}
+	registered, loadErr := loadRootRepoRegistry(env.Root)
+	if loadErr != nil {
+		t.Fatalf("loadRootRepoRegistry() error: %v", loadErr)
+	}
+	found := false
+	for _, entry := range registered {
+		if entry.RepoKey == "example-org/newone" {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatalf("discovered repo should be registered in root index: %+v", registered)
+	}
+}
+
+func TestCLI_RepoDiscover_DoesNotExcludePoolOnlyRepos(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "pool-only")
+	spec, normErr := repospec.Normalize(repoSpec)
+	if normErr != nil {
+		t.Fatalf("Normalize(repoSpec): %v", normErr)
+	}
+
+	outcomes := applyRepoPoolAdds(context.Background(), env.RepoPoolPath(), []repoPoolAddRequest{{
+		RepoSpecInput: repoSpec,
+	}}, repoPoolAddDefaultWorkers, nil, nil)
+	if len(outcomes) != 1 || !outcomes[0].Success {
+		t.Fatalf("applyRepoPoolAdds() outcomes = %+v", outcomes)
+	}
+
+	provider := &fakeDiscoveryProvider{repos: []repodiscovery.Repo{
+		{
+			RepoUID:   fmt.Sprintf("%s/%s/%s", spec.Host, spec.Owner, spec.Repo),
+			RepoKey:   fmt.Sprintf("%s/%s", spec.Owner, spec.Repo),
+			RemoteURL: repoSpec,
+		},
+	}}
+	origFactory := newRepoDiscoveryProvider
+	newRepoDiscoveryProvider = func(name string) (repodiscovery.Provider, error) {
+		return provider, nil
+	}
+	defer func() {
+		newRepoDiscoveryProvider = origFactory
+	}()
+	origPrompt := promptRepoDiscoverSelection
+	promptRepoDiscoverSelection = func(c *CLI, candidates []workspaceSelectorCandidate) ([]string, error) {
+		return []string{"example-org/pool-only"}, nil
+	}
+	defer func() {
+		promptRepoDiscoverSelection = origPrompt
+	}()
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"repo", "discover", "--org", "example-org"})
+	if code != exitOK {
+		t.Fatalf("repo discover exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	if !strings.Contains(out.String(), "Added 1 / 1") {
+		t.Fatalf("stdout missing summary: %q", out.String())
+	}
+	registered, loadErr := loadRootRepoRegistry(env.Root)
+	if loadErr != nil {
+		t.Fatalf("loadRootRepoRegistry() error: %v", loadErr)
+	}
+	if len(registered) != 1 || registered[0].RepoKey != "example-org/pool-only" {
+		t.Fatalf("registered repos = %+v, want example-org/pool-only only", registered)
+	}
 }
 
 func TestParseRepoDiscoverOptions_DefaultProvider(t *testing.T) {
