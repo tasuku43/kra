@@ -8,6 +8,7 @@ import (
 
 	"github.com/tasuku43/kra/internal/app/repocmd"
 	"github.com/tasuku43/kra/internal/core/repospec"
+	"github.com/tasuku43/kra/internal/core/repostore"
 	"github.com/tasuku43/kra/internal/infra/appports"
 )
 
@@ -94,9 +95,43 @@ func (c *CLI) runRepoAdd(args []string) int {
 	}
 	c.debugf("run repo add count=%d", len(repoSpecs))
 
+	existing, err := loadRootRepoRegistry(session.Root)
+	if err != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.add",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("load root repo registry: %v", err),
+				},
+			})
+			return exitError
+		}
+		fmt.Fprintf(c.Err, "load root repo registry: %v\n", err)
+		return exitError
+	}
+	existingByUID := make(map[string]rootRepoRegistryEntry, len(existing))
+	for _, it := range existing {
+		existingByUID[strings.TrimSpace(it.RepoUID)] = it
+	}
+
 	requests := make([]repoPoolAddRequest, 0, len(repoSpecs))
 	for _, arg := range repoSpecs {
-		requests = append(requests, repoPoolAddRequest{RepoSpecInput: strings.TrimSpace(arg)})
+		specInput := strings.TrimSpace(arg)
+		req := repoPoolAddRequest{RepoSpecInput: specInput}
+		if spec, normErr := repospec.Normalize(specInput); normErr == nil {
+			repoKey := fmt.Sprintf("%s/%s", spec.Owner, spec.Repo)
+			repoUID := fmt.Sprintf("%s/%s", spec.Host, repoKey)
+			if existingEntry, ok := existingByUID[repoUID]; ok && strings.TrimSpace(existingEntry.RemoteURL) == specInput {
+				// Only skip when both root index and bare pool entry already exist.
+				barePath := repostore.StorePath(session.RepoPoolPath, spec)
+				if fi, statErr := os.Stat(barePath); statErr == nil && fi.IsDir() {
+					req.AlreadyInRoot = true
+				}
+			}
+		}
+		requests = append(requests, req)
 	}
 	if outputFormat == "json" {
 		outcomes := applyRepoPoolAdds(ctx, session.RepoPoolPath, requests, repoPoolAddDefaultWorkers, c.debugf, nil)
@@ -112,25 +147,33 @@ func (c *CLI) runRepoAdd(args []string) int {
 			return exitError
 		}
 		items := make([]map[string]any, 0, len(outcomes))
-		success := 0
+		added := 0
+		failed := 0
+		skipped := 0
 		for _, o := range outcomes {
-			if o.Success {
-				success++
+			if !o.Success {
+				failed++
+			} else if o.Skipped {
+				skipped++
+			} else {
+				added++
 			}
 			items = append(items, map[string]any{
 				"repo_key": o.RepoKey,
 				"success":  o.Success,
+				"skipped":  o.Skipped,
 				"reason":   strings.TrimSpace(o.Reason),
 			})
 		}
-		if success == len(outcomes) {
+		if failed == 0 {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
 				OK:     true,
 				Action: "repo.add",
 				Result: map[string]any{
-					"added": success,
-					"total": len(outcomes),
-					"items": items,
+					"added":   added,
+					"skipped": skipped,
+					"total":   len(outcomes),
+					"items":   items,
 				},
 			})
 			return exitOK
@@ -139,13 +182,14 @@ func (c *CLI) runRepoAdd(args []string) int {
 			OK:     false,
 			Action: "repo.add",
 			Result: map[string]any{
-				"added": success,
-				"total": len(outcomes),
-				"items": items,
+				"added":   added,
+				"skipped": skipped,
+				"total":   len(outcomes),
+				"items":   items,
 			},
 			Error: &cliJSONError{
 				Code:    "conflict",
-				Message: fmt.Sprintf("failed to add %d repo(s)", len(outcomes)-success),
+				Message: fmt.Sprintf("failed to add %d repo(s)", failed),
 			},
 		})
 		return exitError
@@ -175,7 +219,7 @@ func syncRootRepoRegistryFromPoolAddRequests(root string, requests []repoPoolAdd
 		limit = len(requests)
 	}
 	for i := 0; i < limit; i++ {
-		if !outcomes[i].Success {
+		if !outcomes[i].Success || outcomes[i].Skipped {
 			continue
 		}
 		spec, err := repospec.Normalize(strings.TrimSpace(requests[i].RepoSpecInput))

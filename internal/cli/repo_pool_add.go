@@ -19,11 +19,13 @@ const repoPoolAddDefaultWorkers = 4
 type repoPoolAddRequest struct {
 	RepoSpecInput string
 	DisplayName   string
+	AlreadyInRoot bool
 }
 
 type repoPoolAddOutcome struct {
 	RepoKey string
 	Success bool
+	Skipped bool
 	Reason  string
 }
 
@@ -118,15 +120,16 @@ func applyOneRepoPoolAdd(ctx context.Context, repoPoolPath string, reqIndex int,
 	repoKey := fmt.Sprintf("%s/%s", spec.Owner, spec.Repo)
 	outcome.RepoKey = repoKey
 
-	defaultBranch, err := gitutil.DefaultBranchFromRemote(ctx, specInput)
-	if err != nil {
-		outcome.Success = false
-		outcome.Reason = err.Error()
-		emitRepoPoolDone(onProgress, reqIndex, outcome)
-		return outcome
-	}
 	barePath := repostore.StorePath(repoPoolPath, spec)
-	if fi, err := os.Stat(barePath); err == nil && fi.IsDir() {
+	existingBare := false
+	if fi, err := os.Stat(barePath); err == nil {
+		if !fi.IsDir() {
+			outcome.Success = false
+			outcome.Reason = fmt.Sprintf("bare path is not a directory: %s", barePath)
+			emitRepoPoolDone(onProgress, reqIndex, outcome)
+			return outcome
+		}
+		existingBare = true
 		existingURL, err := gitutil.RunBare(ctx, barePath, "config", "--get", "remote.origin.url")
 		if err == nil && strings.TrimSpace(existingURL) != "" && strings.TrimSpace(existingURL) != specInput {
 			outcome.Success = false
@@ -135,12 +138,33 @@ func applyOneRepoPoolAdd(ctx context.Context, repoPoolPath string, reqIndex int,
 			return outcome
 		}
 	}
-	if _, err := gitutil.EnsureBareRepoFetched(ctx, specInput, barePath, defaultBranch); err != nil {
+	if existingBare {
+		if req.AlreadyInRoot {
+			if debugf != nil {
+				debugf("repo pool upsert skipped already registered repo_uid=%s bare_path=%s", repoUID, barePath)
+			}
+			outcome.Success = true
+			outcome.Skipped = true
+			outcome.Reason = "already added in current root"
+			emitRepoPoolDone(onProgress, reqIndex, outcome)
+			return outcome
+		}
+		if debugf != nil {
+			debugf("repo pool upsert reused existing bare repo_uid=%s bare_path=%s", repoUID, barePath)
+		}
+		outcome.Success = true
+		emitRepoPoolDone(onProgress, reqIndex, outcome)
+		return outcome
+	}
+
+	if _, err := gitutil.Run(ctx, "", "clone", "--bare", specInput, barePath); err != nil {
 		outcome.Success = false
 		outcome.Reason = err.Error()
 		emitRepoPoolDone(onProgress, reqIndex, outcome)
 		return outcome
 	}
+	// Keep origin tracking refs stable for later ws add-repo fetch/preflight.
+	_, _ = gitutil.RunBare(ctx, barePath, "config", "remote.origin.fetch", "+refs/heads/*:refs/remotes/origin/*")
 
 	if debugf != nil {
 		debugf("repo pool upsert success repo_uid=%s bare_path=%s", repoUID, barePath)
@@ -354,28 +378,57 @@ func printRepoPoolSection(out io.Writer, requests []repoPoolAddRequest, useColor
 
 func printRepoPoolAddResult(out io.Writer, outcomes []repoPoolAddOutcome, useColor bool) {
 	total := len(outcomes)
-	success := 0
+	added := 0
+	skipped := 0
+	failed := 0
 	for _, r := range outcomes {
-		if r.Success {
-			success++
+		if !r.Success {
+			failed++
+			continue
 		}
+		if r.Skipped {
+			skipped++
+			continue
+		}
+		added++
 	}
 
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, renderResultTitle(useColor))
-	summary := fmt.Sprintf("Added %d / %d", success, total)
+	summary := fmt.Sprintf("Added %d / %d", added, total)
 	if useColor {
 		switch {
-		case total > 0 && success == total:
+		case total == 0:
+			summary = styleMuted(summary, useColor)
+		case failed == 0 && added == total:
 			summary = styleSuccess(summary, useColor)
-		case success == 0:
+		case failed == 0 && skipped == total:
+			summary = styleMuted(summary, useColor)
+		case failed == 0:
+			summary = styleInfo(summary, useColor)
+		case added == 0:
 			summary = styleError(summary, useColor)
 		default:
 			summary = styleWarn(summary, useColor)
 		}
 	}
 	fmt.Fprintf(out, "%s%s\n", uiIndent, summary)
+	if skipped > 0 {
+		line := fmt.Sprintf("Skipped %d (already added in current root)", skipped)
+		if useColor {
+			line = styleMuted(line, useColor)
+		}
+		fmt.Fprintf(out, "%s%s\n", uiIndent, line)
+	}
 	for _, r := range outcomes {
+		if r.Success && r.Skipped {
+			prefix := "-"
+			if useColor {
+				prefix = styleMuted(prefix, useColor)
+			}
+			fmt.Fprintf(out, "%s%s %s\n", uiIndent, prefix, r.RepoKey)
+			continue
+		}
 		if !r.Success {
 			prefix := "!"
 			if useColor {

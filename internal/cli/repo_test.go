@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -61,6 +62,46 @@ func TestCLI_RepoAdd_AddsPoolAndRegistersRepo(t *testing.T) {
 	}
 }
 
+func TestCLI_RepoAdd_NewBare_DoesNotFetchImmediately(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "no-fetch-on-add")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"repo", "add", repoSpec})
+	if code != exitOK {
+		t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+
+	spec, normErr := repospec.Normalize(repoSpec)
+	if normErr != nil {
+		t.Fatalf("Normalize(repoSpec): %v", normErr)
+	}
+	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
+	fetchHeadPath := filepath.Join(barePath, "FETCH_HEAD")
+	if _, statErr := os.Stat(fetchHeadPath); statErr == nil {
+		t.Fatalf("FETCH_HEAD should not exist after repo add clone-only path: %s", fetchHeadPath)
+	} else if !os.IsNotExist(statErr) {
+		t.Fatalf("stat FETCH_HEAD: %v", statErr)
+	}
+}
+
 func TestCLI_RepoAdd_JSON_Success(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
@@ -93,6 +134,64 @@ func TestCLI_RepoAdd_JSON_Success(t *testing.T) {
 	}
 	if got := int(resp.Result["added"].(float64)); got != 1 {
 		t.Fatalf("result.added = %d, want 1", got)
+	}
+}
+
+func TestCLI_RepoAdd_JSON_SkipsAlreadyAddedRepo(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "json-skip")
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
+			t.Fatalf("repo add #1 exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"repo", "add", "--format", "json", repoSpec})
+	if code != exitOK {
+		t.Fatalf("repo add --format json (skip) exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "repo.add" {
+		t.Fatalf("unexpected json response: %+v", resp)
+	}
+	if got := int(resp.Result["added"].(float64)); got != 0 {
+		t.Fatalf("result.added = %d, want 0", got)
+	}
+	if got := int(resp.Result["skipped"].(float64)); got != 1 {
+		t.Fatalf("result.skipped = %d, want 1", got)
+	}
+	items, ok := resp.Result["items"].([]any)
+	if !ok || len(items) != 1 {
+		t.Fatalf("result.items unexpected: %#v", resp.Result["items"])
+	}
+	item, ok := items[0].(map[string]any)
+	if !ok {
+		t.Fatalf("result.items[0] unexpected: %#v", items[0])
+	}
+	if skipped, _ := item["skipped"].(bool); !skipped {
+		t.Fatalf("items[0].skipped = %v, want true (item=%#v)", item["skipped"], item)
 	}
 }
 
@@ -189,6 +288,68 @@ func TestCLI_RepoAdd_RemoteMismatchFails(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "Added 0 / 1") {
 		t.Fatalf("stdout missing result summary: %q", out.String())
+	}
+}
+
+func TestCLI_RepoAdd_SkipsWhenAlreadyAddedInCurrentRoot(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	runGit := func(dir string, args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		if dir != "" {
+			cmd.Dir = dir
+		}
+		out, err := cmd.CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
+		}
+	}
+
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "reused")
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
+			t.Fatalf("repo add #1 exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	spec, normErr := repospec.Normalize(repoSpec)
+	if normErr != nil {
+		t.Fatalf("Normalize(repoSpec): %v", normErr)
+	}
+	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
+	if fi, statErr := os.Stat(barePath); statErr != nil || !fi.IsDir() {
+		t.Fatalf("bare repo missing: %s", barePath)
+	}
+
+	remoteURL, parseErr := url.Parse(repoSpec)
+	if parseErr != nil || remoteURL.Scheme != "file" || strings.TrimSpace(remoteURL.Path) == "" {
+		t.Fatalf("unexpected file repo spec: %q (err=%v)", repoSpec, parseErr)
+	}
+	if rmErr := os.RemoveAll(remoteURL.Path); rmErr != nil {
+		t.Fatalf("remove remote bare: %v", rmErr)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
+		t.Fatalf("repo add #2 exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	if !strings.Contains(out.String(), "Added 0 / 1") {
+		t.Fatalf("stdout missing result summary on skip: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "already added in current root") {
+		t.Fatalf("stdout missing skip reason: %q", out.String())
+	}
+	if strings.Contains(out.String(), "(reason: already added in current root)") {
+		t.Fatalf("stdout should not repeat skip reason in per-repo line: %q", out.String())
 	}
 }
 
