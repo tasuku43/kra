@@ -19,6 +19,8 @@ func (c *CLI) runRepo(args []string) int {
 		return c.runRepoAdd(args[1:])
 	case "discover":
 		return c.runRepoDiscover(args[1:])
+	case "preset":
+		return c.runRepoPreset(args[1:])
 	case "remove":
 		return c.runRepoRemove(args[1:])
 	case "gc":

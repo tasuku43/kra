@@ -20,3 +20,11 @@ status: planned
   - Depends: MVP-063
   - Parallel: yes
 
+- [x] UX-REPO-003: Repo preset for `ws add-repo`
+  - What: add root-local repo presets (`kra repo preset ...`) and `kra ws add-repo --preset <name>` to skip repetitive repo selection.
+  - Specs:
+    - `docs/dev/spec/commands/repo/preset.md`
+    - `docs/dev/spec/commands/ws/add-repo.md`
+    - `docs/dev/spec/concepts/config.md`
+  - Depends: UX-WS-018, MVP-030
+  - Parallel: yes

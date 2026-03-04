@@ -58,6 +58,7 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/init.md`: `kra init`
   - `commands/repo/add.md`: `kra repo add`
   - `commands/repo/discover.md`: `kra repo discover`
+  - `commands/repo/preset.md`: `kra repo preset`
   - `commands/repo/remove.md`: `kra repo remove`
   - `commands/repo/gc.md`: `kra repo gc`
   - `commands/template/create.md`: `kra template create`

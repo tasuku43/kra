@@ -145,7 +145,7 @@ func TestCLI_Shell_Completion_Zsh_PrintsCompdef(t *testing.T) {
 	if !strings.Contains(text, `flags=("--id" "--current" "--select" "--multi-select" "--help")`) {
 		t.Fatalf("missing selector-first candidates: %q", text)
 	}
-	if !strings.Contains(text, `flags=("--format" "--repo" "--branch" "--base-ref" "--yes" "--refresh" "--no-fetch" "--help")`) {
+	if !strings.Contains(text, `flags=("--format" "--preset" "--repo" "--branch" "--base-ref" "--yes" "--refresh" "--no-fetch" "--help")`) {
 		t.Fatalf("missing post-selector candidates: %q", text)
 	}
 	if strings.Contains(text, "\"-h\"") {
@@ -186,7 +186,7 @@ func TestCLI_Shell_Completion_Bash_PrintsCompleteHook(t *testing.T) {
 	if !strings.Contains(text, `"--id --current --select --multi-select --help"`) {
 		t.Fatalf("missing selector-first candidates: %q", text)
 	}
-	if !strings.Contains(text, `"--format --repo --branch --base-ref --yes --refresh --no-fetch --help"`) {
+	if !strings.Contains(text, `"--format --preset --repo --branch --base-ref --yes --refresh --no-fetch --help"`) {
 		t.Fatalf("missing post-selector candidates: %q", text)
 	}
 	if strings.Contains(text, " -h") {

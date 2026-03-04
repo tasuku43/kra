@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/mattn/go-isatty"
+	"github.com/tasuku43/kra/internal/config"
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/repostore"
 	"github.com/tasuku43/kra/internal/infra/gitutil"
@@ -112,6 +113,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	refreshFetch := false
 	noFetch := false
 	repoKeysFromFlag := make([]string, 0, 4)
+	presetFromFlag := ""
 	branchFromFlag := ""
 	baseRefFromFlag := ""
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
@@ -134,6 +136,14 @@ func (c *CLI) runWSAddRepo(args []string) int {
 				return exitUsage
 			}
 			repoKeysFromFlag = append(repoKeysFromFlag, strings.TrimSpace(args[1]))
+			args = args[2:]
+		case "--preset":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--preset requires a value")
+				c.printWSAddRepoUsage(c.Err)
+				return exitUsage
+			}
+			presetFromFlag = strings.TrimSpace(args[1])
 			args = args[2:]
 		case "--branch":
 			if len(args) < 2 {
@@ -184,6 +194,11 @@ func (c *CLI) runWSAddRepo(args []string) int {
 				args = args[1:]
 				continue
 			}
+			if strings.HasPrefix(args[0], "--preset=") {
+				presetFromFlag = strings.TrimSpace(strings.TrimPrefix(args[0], "--preset="))
+				args = args[1:]
+				continue
+			}
 			if strings.HasPrefix(args[0], "--branch=") {
 				branchFromFlag = strings.TrimSpace(strings.TrimPrefix(args[0], "--branch="))
 				args = args[1:]
@@ -218,6 +233,11 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	}
 	if refreshFetch && noFetch {
 		fmt.Fprintln(c.Err, "--refresh and --no-fetch cannot be used together")
+		c.printWSAddRepoUsage(c.Err)
+		return exitUsage
+	}
+	if len(repoKeysFromFlag) > 0 && strings.TrimSpace(presetFromFlag) != "" {
+		fmt.Fprintln(c.Err, "--repo and --preset cannot be used together")
 		c.printWSAddRepoUsage(c.Err)
 		return exitUsage
 	}
@@ -267,6 +287,45 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		return exitError
 	}
 	branchTemplate := cfg.Workspace.Branch.Template
+	presetName := strings.TrimSpace(presetFromFlag)
+	presetRepoKeys := []string(nil)
+	if presetName != "" {
+		rootConfigPath := paths.RootConfigPath(root)
+		rootCfg, rootCfgErr := config.LoadFile(rootConfigPath)
+		if rootCfgErr != nil {
+			if outputFormat == "json" {
+				_ = writeCLIJSON(c.Out, cliJSONResponse{
+					OK:     false,
+					Action: "add-repo",
+					Error: &cliJSONError{
+						Code:    "internal_error",
+						Message: fmt.Sprintf("load root config: %v", rootCfgErr),
+					},
+				})
+				return exitError
+			}
+			fmt.Fprintf(c.Err, "load root config: %v\n", rootCfgErr)
+			return exitError
+		}
+		resolvedName, repos, resolvePresetErr := resolveWorkspaceRepoPreset(rootCfg, presetName)
+		if resolvePresetErr != nil {
+			if outputFormat == "json" {
+				_ = writeCLIJSON(c.Out, cliJSONResponse{
+					OK:     false,
+					Action: "add-repo",
+					Error: &cliJSONError{
+						Code:    "invalid_argument",
+						Message: resolvePresetErr.Error(),
+					},
+				})
+				return exitUsage
+			}
+			fmt.Fprintf(c.Err, "%v\n", resolvePresetErr)
+			return exitUsage
+		}
+		presetName = resolvedName
+		presetRepoKeys = repos
+	}
 
 	ctx := context.Background()
 	repoPoolPath, err := paths.DefaultRepoPoolPath()
@@ -299,7 +358,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		return exitUsage
 	}
 	if outputFormat == "json" {
-		return c.runWSAddRepoJSON(workspaceID, root, repoPoolPath, repoKeysFromFlag, baseRefFromFlag, branchFromFlag, branchTemplate, forceApply, addRepoFetchOptions{
+		return c.runWSAddRepoJSON(workspaceID, root, repoPoolPath, repoKeysFromFlag, presetName, presetRepoKeys, baseRefFromFlag, branchFromFlag, branchTemplate, forceApply, addRepoFetchOptions{
 			Refresh: refreshFetch,
 			NoFetch: noFetch,
 		})
@@ -332,27 +391,49 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		fmt.Fprintf(c.Err, "list repo pool candidates: %v\n", err)
 		return exitError
 	}
-	if len(candidates) == 0 {
+	if len(candidates) == 0 && len(presetRepoKeys) == 0 {
 		fmt.Fprintln(c.Err, "no repos available in pool for this workspace")
-		return exitError
-	}
-
-	selected, err := c.promptAddRepoPoolSelection(candidates)
-	if err != nil {
-		if errors.Is(err, errSelectorCanceled) {
-			fmt.Fprintln(c.Err, "aborted")
-			return exitError
-		}
-		fmt.Fprintf(c.Err, "select repos from pool: %v\n", err)
-		return exitError
-	}
-	if len(selected) == 0 {
-		fmt.Fprintln(c.Err, "aborted")
 		return exitError
 	}
 
 	useColorOut := writerSupportsColor(c.Out)
 	useColorErr := writerSupportsColor(c.Err)
+	selected := make([]addRepoPoolCandidate, 0, len(candidates))
+	skippedPresetRepos := make([]string, 0)
+	if len(presetRepoKeys) > 0 {
+		resolved, skipped, missing, presetErr := resolveAddRepoPresetCandidates(ctx, root, workspaceID, candidates, presetRepoKeys)
+		if presetErr != nil {
+			fmt.Fprintf(c.Err, "resolve preset %q: %v\n", presetName, presetErr)
+			return exitError
+		}
+		if len(missing) > 0 {
+			fmt.Fprintf(c.Err, "preset %q has repos not available in current root: %s\n", presetName, strings.Join(missing, ", "))
+			return exitUsage
+		}
+		selected = resolved
+		skippedPresetRepos = skipped
+	} else {
+		var err error
+		selected, err = c.promptAddRepoPoolSelection(candidates)
+		if err != nil {
+			if errors.Is(err, errSelectorCanceled) {
+				fmt.Fprintln(c.Err, "aborted")
+				return exitError
+			}
+			fmt.Fprintf(c.Err, "select repos from pool: %v\n", err)
+			return exitError
+		}
+	}
+	if len(selected) == 0 {
+		if len(skippedPresetRepos) > 0 {
+			printAddRepoResult(c.Out, nil, skippedPresetRepos, useColorOut)
+			c.debugf("ws add-repo completed workspace=%s added=0 skipped=%d (preset)", workspaceID, len(skippedPresetRepos))
+			return exitOK
+		}
+		fmt.Fprintln(c.Err, "aborted")
+		return exitError
+	}
+
 	fetchOpts := addRepoFetchOptions{
 		Refresh: refreshFetch,
 		NoFetch: noFetch,
@@ -530,21 +611,33 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		return exitError
 	}
 
-	printAddRepoResult(c.Out, applied, useColorOut)
-	c.debugf("ws add-repo completed workspace=%s added=%d", workspaceID, len(applied))
+	printAddRepoResult(c.Out, applied, skippedPresetRepos, useColorOut)
+	c.debugf("ws add-repo completed workspace=%s added=%d skipped=%d", workspaceID, len(applied), len(skippedPresetRepos))
 	return exitOK
 }
 
-func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath string, repoKeys []string, baseRefInput string, branchInput string, branchTemplate string, yes bool, fetchOpts addRepoFetchOptions) int {
+func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath string, repoKeys []string, presetName string, presetRepoKeys []string, baseRefInput string, branchInput string, branchTemplate string, yes bool, fetchOpts addRepoFetchOptions) int {
 	ctx := context.Background()
-	if len(repoKeys) == 0 {
+	if len(repoKeys) > 0 && len(presetRepoKeys) > 0 {
 		_ = writeCLIJSON(c.Out, cliJSONResponse{
 			OK:          false,
 			Action:      "add-repo",
 			WorkspaceID: workspaceID,
 			Error: &cliJSONError{
 				Code:    "invalid_argument",
-				Message: "--repo is required in --format json mode",
+				Message: "--repo and --preset cannot be combined",
+			},
+		})
+		return exitUsage
+	}
+	if len(repoKeys) == 0 && len(presetRepoKeys) == 0 {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "invalid_argument",
+				Message: "--repo or --preset is required in --format json mode",
 			},
 		})
 		return exitUsage
@@ -632,9 +725,58 @@ func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath str
 	for _, cand := range candidates {
 		byRepoKey[cand.RepoKey] = cand
 	}
-	plan := make([]addRepoPlanItem, 0, len(repoKeys))
+	targetRepoKeys := append([]string{}, repoKeys...)
+	skippedRepoKeys := make([]string, 0)
+	if len(presetRepoKeys) > 0 {
+		resolvedCandidates, skipped, missing, presetErr := resolveAddRepoPresetCandidates(ctx, root, workspaceID, candidates, presetRepoKeys)
+		if presetErr != nil {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "add-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("resolve preset %q: %v", presetName, presetErr),
+				},
+			})
+			return exitError
+		}
+		if len(missing) > 0 {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "add-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "invalid_argument",
+					Message: fmt.Sprintf("preset %q has repos not available in current root: %s", presetName, strings.Join(missing, ", ")),
+				},
+			})
+			return exitUsage
+		}
+		targetRepoKeys = make([]string, 0, len(resolvedCandidates))
+		for _, cand := range resolvedCandidates {
+			targetRepoKeys = append(targetRepoKeys, cand.RepoKey)
+		}
+		skippedRepoKeys = skipped
+	}
+	if len(targetRepoKeys) == 0 {
+		result := map[string]any{
+			"added":   0,
+			"repos":   []string{},
+			"skipped": skippedRepoKeys,
+		}
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          true,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Result:      result,
+		})
+		return exitOK
+	}
+
+	plan := make([]addRepoPlanItem, 0, len(targetRepoKeys))
 	seen := map[string]bool{}
-	for _, repoKey := range repoKeys {
+	for _, repoKey := range targetRepoKeys {
 		repoKey = strings.TrimSpace(repoKey)
 		if repoKey == "" || seen[repoKey] {
 			continue
@@ -775,8 +917,9 @@ func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath str
 		Action:      "add-repo",
 		WorkspaceID: workspaceID,
 		Result: map[string]any{
-			"added": len(applied),
-			"repos": repos,
+			"added":   len(applied),
+			"repos":   repos,
+			"skipped": skippedRepoKeys,
 		},
 	})
 	return exitOK
@@ -989,6 +1132,83 @@ func listAddRepoPoolCandidates(ctx context.Context, root string, repoPoolPath st
 		return strings.Compare(a.RepoKey, b.RepoKey)
 	})
 	return out, nil
+}
+
+func resolveWorkspaceRepoPreset(cfg config.Config, presetName string) (string, []string, error) {
+	name := strings.TrimSpace(presetName)
+	if name == "" {
+		return "", nil, fmt.Errorf("preset name is required")
+	}
+	preset, ok := cfg.Workspace.RepoPresets[name]
+	if !ok {
+		return "", nil, fmt.Errorf("preset not found: %s", name)
+	}
+	repos := normalizeRepoPresetRepos(preset.Repos)
+	if len(repos) == 0 {
+		return "", nil, fmt.Errorf("preset %q has no repos", name)
+	}
+	return name, repos, nil
+}
+
+func resolveAddRepoPresetCandidates(ctx context.Context, root string, workspaceID string, candidates []addRepoPoolCandidate, presetRepoKeys []string) ([]addRepoPoolCandidate, []string, []string, error) {
+	registered, err := loadRootRepoRegistry(root)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	registeredSet := make(map[string]bool, len(registered))
+	registeredUIDByKey := make(map[string]string, len(registered))
+	for _, entry := range registered {
+		key := strings.TrimSpace(entry.RepoKey)
+		if key == "" {
+			continue
+		}
+		registeredSet[key] = true
+		registeredUIDByKey[key] = strings.TrimSpace(entry.RepoUID)
+	}
+
+	candidateByKey := make(map[string]addRepoPoolCandidate, len(candidates))
+	for _, cand := range candidates {
+		candidateByKey[cand.RepoKey] = cand
+	}
+	boundRepos, err := listWorkspaceReposForClose(ctx, root, workspaceID)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+	boundRepoUIDs := make(map[string]bool, len(boundRepos))
+	for _, repo := range boundRepos {
+		repoUID := strings.TrimSpace(repo.RepoUID)
+		if repoUID == "" {
+			continue
+		}
+		boundRepoUIDs[repoUID] = true
+	}
+
+	selected := make([]addRepoPoolCandidate, 0, len(presetRepoKeys))
+	skipped := make([]string, 0)
+	missing := make([]string, 0)
+	seen := map[string]bool{}
+	for _, rawKey := range presetRepoKeys {
+		repoKey := strings.TrimSpace(rawKey)
+		if repoKey == "" || seen[repoKey] {
+			continue
+		}
+		seen[repoKey] = true
+
+		if !registeredSet[repoKey] {
+			missing = append(missing, repoKey)
+			continue
+		}
+		if cand, ok := candidateByKey[repoKey]; ok {
+			selected = append(selected, cand)
+			continue
+		}
+		if uid := strings.TrimSpace(registeredUIDByKey[repoKey]); uid != "" && boundRepoUIDs[uid] {
+			skipped = append(skipped, repoKey)
+			continue
+		}
+		missing = append(missing, repoKey)
+	}
+	return selected, skipped, missing, nil
 }
 
 func missingLocalFileRemotePath(remote string) (string, bool) {
@@ -1884,10 +2104,14 @@ func rollbackAddRepoApplied(ctx context.Context, applied []addRepoAppliedItem, d
 	}
 }
 
-func printAddRepoResult(out io.Writer, applied []addRepoAppliedItem, useColor bool) {
+func printAddRepoResult(out io.Writer, applied []addRepoAppliedItem, skipped []string, useColor bool) {
 	bullet := styleMuted("•", useColor)
+	total := len(applied) + len(skipped)
 	body := []string{
-		fmt.Sprintf("%s%s Added %d / %d", uiIndent, bullet, len(applied), len(applied)),
+		fmt.Sprintf("%s%s Added %d / %d", uiIndent, bullet, len(applied), total),
+	}
+	if len(skipped) > 0 {
+		body = append(body, fmt.Sprintf("%s%s Skipped %d (already bound)", uiIndent, bullet, len(skipped)))
 	}
 	for _, it := range applied {
 		check := styleSuccess("✔", useColor)
