@@ -47,6 +47,11 @@ workspace:
     template: default
   branch:
     template: "feature/{{workspace_id}}"
+  repo_presets:
+    backend:
+      repos:
+        - org/api
+        - org/web
 
 integration:
   jira:
@@ -58,6 +63,9 @@ integration:
 Notes:
 - `integration.jira.defaults.space` and `integration.jira.defaults.project` are aliases for the same scope concept.
 - Only one of them may be active at a time.
+- `workspace.repo_presets` is a map keyed by preset name.
+- `workspace.repo_presets.<name>.repos[]` stores `repo_key` values in user-selected order.
+- Repo preset persistence is root-local by design (`<KRA_ROOT>/.kra/config.yaml`) to keep team/project intent explicit.
 
 ## Validation rules
 
@@ -65,6 +73,7 @@ Notes:
   - `sprint`
   - `jql`
 - `integration.jira.defaults.space` and `integration.jira.defaults.project` must not be combined.
+- `workspace.repo_presets.<name>.repos[]` must not be empty.
 - Invalid config must fail command execution with a clear path + reason.
 
 ## Error handling

@@ -30,6 +30,7 @@ Notes:
 - `kra context ...` - current/list/create/use/rename/rm context operations.
 - `kra root ...` - conceptual KRA_ROOT helpers (resolve/open).
 - `kra repo ...` - add/discover/remove/gc for repo pool registration.
+- `kra repo preset ...` - manage reusable repo sets for `ws add-repo`.
 - `kra template create` - create a workspace template scaffold.
 - `kra template remove` - remove a workspace template.
 - `kra template validate` - validate workspace templates.
@@ -47,7 +48,7 @@ Notes:
 - `kra ws list --format human|tsv|json`
 - `kra ws dashboard --format human|json`
 - `kra ws open [--id <id> | --current | --select | --multi-select] [--concurrency <n>]`
-- `kra ws add-repo [--id <id> | --current | --select]`
+- `kra ws add-repo [--id <id> | --current | --select] [--preset <name>]`
 - `kra ws remove-repo [--id <id> | --current | --select]`
 - `kra ws close [--id <id> | --current | --select | --multi-select]`
 - `kra ws reopen [--id <id> | --current | --select]`
@@ -108,6 +109,7 @@ Notes:
 
 - Not every workspace command supports all four forms.
 - `ws close` / `ws add-repo` / `ws remove-repo` support `--current` in current implementation.
+- `ws add-repo --preset <name>` skips repo selector and resolves repo set from root config preset.
 - `--multi-select` support is action-dependent; current support includes `open`, `close`, `lock`, `unlock`, `reopen`, `purge`.
 - Positional workspace id arguments are intentionally not supported for these actions.
 - For non-interactive automation, prefer explicit `--id`.

@@ -3,7 +3,7 @@ title: "`kra ws add-repo`"
 status: implemented
 ---
 
-# `kra ws add-repo [--id <workspace-id>] [--current] [--select] [--format human|json] [--refresh] [--no-fetch]`
+# `kra ws add-repo [--id <workspace-id>] [--current] [--select] [--preset <name>] [--format human|json] [--refresh] [--no-fetch]`
 
 ## Purpose
 
@@ -16,8 +16,14 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
   - if omitted, current working directory must be under `KRA_ROOT/workspaces/<id>/`
   - otherwise the command fails fast
 - interactive selection is handled by `kra ws add-repo --select`.
+- preset execution:
+  - `--preset <name>` loads repo keys from `<KRA_ROOT>/.kra/config.yaml` `workspace.repo_presets.<name>.repos[]`
+  - in human mode, `--preset` skips repo selector UI
+  - in JSON mode, `--preset` may be used instead of `--repo`
+  - `--preset` and `--repo` cannot be combined
 - JSON mode (`--format json`) is non-interactive and accepts:
-  - `--repo <repo-key>` (repeatable, required)
+  - `--repo <repo-key>` (repeatable; required when `--preset` omitted)
+  - `--preset <name>` (optional alternative to `--repo`)
   - `--branch <name>` (optional, highest precedence when provided)
   - `--base-ref <origin/branch>` (optional, defaults to detected default branch)
   - `--refresh` (optional; force fetch even when cache is fresh)
@@ -33,6 +39,10 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 - Existing bare repos in shared repo pool that are not registered in current root must not be listed.
 - No direct repo URL input in this command.
 - Repos already bound in the target workspace are excluded from candidates.
+- `--preset` strict behavior:
+  - if any preset repo key is not registered in current root, fail fast
+  - partial apply for missing registration is not allowed
+  - repos already bound in target workspace are treated as `skipped` and do not fail the command
 - Candidate ordering:
   1. 30-day add usage score (`repo_usage_daily` sum, descending)
   2. `repos.updated_at` descending
@@ -46,11 +56,16 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 
 ## Behavior (MVP)
 
-1. Select repos from pool (multi-select)
+1. Resolve target repo set
+  - default mode: select repos from pool (multi-select)
   - section heading: `Repos(pool):`
   - row display: `repo_key` only
   - TTY: use shared inline selector (`space` toggle, `enter` confirm, text filter input)
   - non-TTY: fallback to numbered prompt input (`comma numbers, /filter, empty=cancel`)
+  - preset mode (`--preset`):
+    - skip selector UI
+    - resolve repo list from preset order
+    - skip already-bound repos (`skipped`)
 
 2. Input per-repo branch settings
   - print `Inputs:` section first (`workspace`, `repos`)
@@ -128,6 +143,7 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 8. Result
   - print `Result:`
   - summary: `Added <n> / <m>`
+  - when `--preset` is used and already-bound repos exist, print `Skipped <k> (already bound)`
   - per repo success lines: `✔ <repo-key>`
   - visual emphasis policy:
     - `Added <n> / <m>` stays primary
@@ -148,7 +164,7 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 
 - `--format json` enables machine-readable output.
 - In JSON mode, command must not prompt.
-- Missing required inputs (`--repo`, `--yes`) must fail with `error.code=invalid_argument` and non-zero exit.
+- Missing required inputs (`--repo` or `--preset`, and `--yes`) must fail with `error.code=invalid_argument` and non-zero exit.
 
 ## UI style (TTY)
 

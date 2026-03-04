@@ -21,8 +21,9 @@ type Config struct {
 }
 
 type WorkspaceConfig struct {
-	Defaults WorkspaceDefaults `yaml:"defaults"`
-	Branch   WorkspaceBranch   `yaml:"branch"`
+	Defaults    WorkspaceDefaults              `yaml:"defaults"`
+	Branch      WorkspaceBranch                `yaml:"branch"`
+	RepoPresets map[string]WorkspaceRepoPreset `yaml:"repo_presets"`
 }
 
 type WorkspaceDefaults struct {
@@ -31,6 +32,10 @@ type WorkspaceDefaults struct {
 
 type WorkspaceBranch struct {
 	Template string `yaml:"template"`
+}
+
+type WorkspaceRepoPreset struct {
+	Repos []string `yaml:"repos"`
 }
 
 type IntegrationConfig struct {
@@ -74,6 +79,7 @@ func LoadFile(path string) (Config, error) {
 func (c *Config) Normalize() {
 	c.Workspace.Defaults.Template = strings.TrimSpace(c.Workspace.Defaults.Template)
 	c.Workspace.Branch.Template = strings.TrimSpace(c.Workspace.Branch.Template)
+	c.Workspace.RepoPresets = normalizeWorkspaceRepoPresets(c.Workspace.RepoPresets)
 	c.Integration.Jira.BaseURL = strings.TrimSpace(c.Integration.Jira.BaseURL)
 	c.Integration.Jira.Defaults.Space = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.Defaults.Space))
 	c.Integration.Jira.Defaults.Project = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.Defaults.Project))
@@ -96,6 +102,19 @@ func (c Config) Validate() error {
 	if c.Integration.Jira.Defaults.Space != "" && c.Integration.Jira.Defaults.Project != "" {
 		issues = append(issues, "integration.jira.defaults.space and integration.jira.defaults.project cannot be combined")
 	}
+	for name, preset := range c.Workspace.RepoPresets {
+		trimmedName := strings.TrimSpace(name)
+		if trimmedName == "" {
+			issues = append(issues, "workspace.repo_presets key must not be empty")
+			continue
+		}
+		if strings.ContainsAny(trimmedName, "/\\") {
+			issues = append(issues, fmt.Sprintf("workspace.repo_presets.%s must not contain path separators", trimmedName))
+		}
+		if len(preset.Repos) == 0 {
+			issues = append(issues, fmt.Sprintf("workspace.repo_presets.%s.repos must not be empty", trimmedName))
+		}
+	}
 	if len(issues) == 0 {
 		return nil
 	}
@@ -113,6 +132,14 @@ func Merge(global Config, root Config) Config {
 	if root.Workspace.Branch.Template != "" {
 		out.Workspace.Branch.Template = root.Workspace.Branch.Template
 	}
+	if len(root.Workspace.RepoPresets) > 0 {
+		if out.Workspace.RepoPresets == nil {
+			out.Workspace.RepoPresets = map[string]WorkspaceRepoPreset{}
+		}
+		for name, preset := range root.Workspace.RepoPresets {
+			out.Workspace.RepoPresets[name] = preset
+		}
+	}
 	if root.Integration.Jira.BaseURL != "" {
 		out.Integration.Jira.BaseURL = root.Integration.Jira.BaseURL
 	}
@@ -126,5 +153,38 @@ func Merge(global Config, root Config) Config {
 		out.Integration.Jira.Defaults.Type = root.Integration.Jira.Defaults.Type
 	}
 	out.Normalize()
+	return out
+}
+
+func normalizeWorkspaceRepoPresets(presets map[string]WorkspaceRepoPreset) map[string]WorkspaceRepoPreset {
+	if len(presets) == 0 {
+		return nil
+	}
+	out := make(map[string]WorkspaceRepoPreset, len(presets))
+	for rawName, preset := range presets {
+		name := strings.TrimSpace(rawName)
+		repos := normalizeWorkspaceRepoPresetRepos(preset.Repos)
+		out[name] = WorkspaceRepoPreset{Repos: repos}
+	}
+	return out
+}
+
+func normalizeWorkspaceRepoPresetRepos(repos []string) []string {
+	if len(repos) == 0 {
+		return nil
+	}
+	out := make([]string, 0, len(repos))
+	seen := map[string]bool{}
+	for _, raw := range repos {
+		repoKey := strings.TrimSpace(raw)
+		if repoKey == "" || seen[repoKey] {
+			continue
+		}
+		seen[repoKey] = true
+		out = append(out, repoKey)
+	}
+	if len(out) == 0 {
+		return nil
+	}
 	return out
 }

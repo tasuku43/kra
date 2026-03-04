@@ -85,6 +85,16 @@ func shouldBootstrapGlobalConfig(args []string) bool {
 		switch args[1] {
 		case "add", "discover", "remove", "gc":
 			return true
+		case "preset":
+			if len(args) < 3 {
+				return false
+			}
+			switch strings.TrimSpace(args[2]) {
+			case "add", "rm", "remove":
+				return true
+			default:
+				return false
+			}
 		default:
 			return false
 		}

@@ -35,6 +35,11 @@ workspace:
     template: default
   branch:
     template: "feature/{{workspace_id}}/{{repo_name}}"
+  repo_presets:
+    backend:
+      repos:
+        - org/api
+        - org/web
 
 integration:
   jira:
@@ -53,6 +58,9 @@ Key behavior:
 - `workspace.branch.template`
   - Default branch name template for `kra ws add-repo`.
   - Placeholders: `{{workspace_id}}`, `{{repo_key}}`, `{{repo_name}}`.
+- `workspace.repo_presets.<name>.repos[]`
+  - Root-local reusable repository set for `kra ws add-repo --preset <name>`.
+  - Values are `repo_key` strings in stored order.
 - `integration.jira.base_url`
   - Jira base URL used by `kra ws create --jira` and `kra ws import jira`.
   - Must be an absolute URL.

@@ -73,6 +73,7 @@ func (c *CLI) printRepoUsage(w io.Writer) {
 Subcommands:
   add               Add repositories into shared repo pool
   discover          Discover repositories from provider and add selected
+  preset            Manage reusable repo presets for ws add-repo
   remove            Remove repositories from current root registration
   gc                Garbage-collect removable bare repos from shared pool
   help              Show this help
@@ -343,6 +344,22 @@ Options:
 `)
 }
 
+func (c *CLI) printRepoPresetUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra repo preset add <name> [--yes]
+  kra repo preset rm <name>
+  kra repo preset remove <name>
+  kra repo preset list
+  kra repo preset show <name>
+
+Manage root-local repo presets stored in <KRA_ROOT>/.kra/config.yaml.
+
+Notes:
+  - add uses current-root registered repos as selector candidates.
+  - add with existing name: TTY asks confirmation; non-TTY requires --yes.
+`)
+}
+
 func (c *CLI) printRepoRemoveUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra repo remove [--format human|json] [<repo-key>...]
@@ -397,17 +414,18 @@ Options:
 
 func (c *CLI) printWSAddRepoUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws add-repo [--id <workspace-id> | --current | --select] [--format human|json] [--refresh] [--no-fetch]
-  kra ws add-repo --format json --id <workspace-id> --repo <repo-key> [--repo <repo-key> ...] [--branch <name>] [--base-ref <origin/branch>] [--refresh] [--no-fetch] [--yes]
+  kra ws add-repo [--id <workspace-id> | --current | --select] [--preset <name>] [--format human|json] [--refresh] [--no-fetch]
+  kra ws add-repo --format json --id <workspace-id> [--preset <name> | --repo <repo-key> [--repo <repo-key> ...]] [--branch <name>] [--base-ref <origin/branch>] [--refresh] [--no-fetch] [--yes]
 
 Add repositories from current-root registered repo pool entries to a workspace.
 
 Inputs:
   workspace-id       Existing active workspace ID (optional when running under workspaces/<id>/)
   --id               Explicit workspace ID
+  --preset           Reuse repository set from workspace.repo_presets.<name>
 
 Behavior:
-  - Select one or more repos registered by kra repo add in the current root.
+  - Select one or more repos registered by kra repo add in the current root (or resolve from --preset).
   - For each selected repo, input base_ref and branch.
   - base_ref accepts: origin/<branch>, <branch>, /<branch>.
   - Smart fetch runs for selected repos only (TTL=5m; --refresh forces, --no-fetch skips).
