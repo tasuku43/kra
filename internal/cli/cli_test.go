@@ -430,8 +430,11 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if statErr != nil {
 		t.Fatalf(".gitignore not created: %v", statErr)
 	}
-	if !strings.Contains(string(b), "workspaces/**/repos/**") {
-		t.Fatalf(".gitignore missing pattern: %q", string(b))
+	for _, pattern := range []string{"workspaces/**/repos/**", ".DS_Store", ".kra/logs/"} {
+		if strings.Contains(string(b), pattern) {
+			continue
+		}
+		t.Fatalf(".gitignore missing pattern %q: %q", pattern, string(b))
 	}
 	if _, statErr := os.Stat(filepath.Join(root, ".git")); statErr != nil {
 		t.Fatalf(".git not created: %v", statErr)
@@ -499,6 +502,35 @@ func TestCLI_Init_CreatesMissingKRARootDirectory(t *testing.T) {
 	}
 	if _, statErr := os.Stat(filepath.Join(root, "archive")); statErr != nil {
 		t.Fatalf("archive/ not created: %v", statErr)
+	}
+}
+
+func TestEnsureRootGitignore_AppendsMissingDefaultPatternsOnly(t *testing.T) {
+	root := t.TempDir()
+	path := filepath.Join(root, ".gitignore")
+	initial := "custom.tmp\nworkspaces/**/repos/**\n"
+	if err := os.WriteFile(path, []byte(initial), 0o644); err != nil {
+		t.Fatalf("write initial .gitignore: %v", err)
+	}
+
+	if err := ensureRootGitignore(root); err != nil {
+		t.Fatalf("ensureRootGitignore() error: %v", err)
+	}
+
+	gotBytes, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read .gitignore: %v", err)
+	}
+	got := string(gotBytes)
+
+	if strings.Count(got, "workspaces/**/repos/**") != 1 {
+		t.Fatalf("repos pattern should not be duplicated: %q", got)
+	}
+	for _, pattern := range []string{"custom.tmp", ".DS_Store", ".kra/logs/"} {
+		if strings.Contains(got, pattern) {
+			continue
+		}
+		t.Fatalf(".gitignore missing pattern %q: %q", pattern, got)
 	}
 }
 
