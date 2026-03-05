@@ -89,10 +89,8 @@ List workspaces with status and summary fields, similar in spirit to `gion manif
   - `in-progress` is final for display ordering (skip re-derivation)
   - only `todo` workspaces are eligible for runtime re-derivation
   - preferred baseline source: `.kra.meta.json.baseline`
-  - legacy compatibility: if `.kra.meta.json.baseline` is absent and
-    `.kra/state/workspace-baselines/<id>.json` exists, use the legacy file without auto-migrating it
-    during `ws list`; explicit migration is handled by `doctor --fix`
-  - if no baseline exists in either location, command must create baseline in `.kra.meta.json`
+  - if `.kra.meta.json.baseline` is absent, command must create baseline in `.kra.meta.json`
+  - legacy `.kra/state/workspace-baselines/<id>.json` is ignored by `ws list`; explicit migration is handled by `doctor --fix`
   - repo signals under `repos/**`:
     - `dirty` -> `in-progress`
     - `baseline_head..HEAD` delta -> `in-progress`

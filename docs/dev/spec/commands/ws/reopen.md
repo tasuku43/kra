@@ -63,9 +63,6 @@ For each recorded workspace repo entry:
 - Stage only paths touched by this operation, at minimum:
   - `workspaces/<id>/` (excluding `repos/**`, which is ignored)
   - removal of `archive/<id>/`
-- Legacy compatibility:
-  - if `.kra/state/workspace-baselines/<id>.json` exists from an older workspace format,
-    the commit may include its cleanup only
 
 If post-reopen commit fails, do not auto-rollback filesystem rename; keep reopened state and return error.
 In default commit mode, unrelated changes must not be included in lifecycle commits.

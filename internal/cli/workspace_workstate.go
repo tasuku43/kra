@@ -71,22 +71,15 @@ func loadLegacyWorkspaceBaseline(root string, workspaceID string) (workspaceBase
 
 func loadWorkspaceBaseline(root string, workspaceID string) (workspaceBaseline, error) {
 	wsPath := filepath.Join(root, "workspaces", workspaceID)
-	meta, metaErr := loadWorkspaceMetaFile(wsPath)
-	if metaErr == nil && meta.Baseline != nil {
-		baseline := normalizeWorkspaceBaseline(*meta.Baseline)
-		return baseline, nil
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		return workspaceBaseline{}, err
 	}
-	legacyBaseline, legacyErr := loadLegacyWorkspaceBaseline(root, workspaceID)
-	if legacyErr == nil {
-		return legacyBaseline, nil
-	}
-	if metaErr != nil {
-		return workspaceBaseline{}, metaErr
-	}
-	if os.IsNotExist(legacyErr) {
+	if meta.Baseline == nil {
 		return workspaceBaseline{}, os.ErrNotExist
 	}
-	return workspaceBaseline{}, legacyErr
+	baseline := normalizeWorkspaceBaseline(*meta.Baseline)
+	return baseline, nil
 }
 
 func saveWorkspaceBaseline(root string, workspaceID string, baseline workspaceBaseline) error {
@@ -151,11 +144,6 @@ func ensureWorkspaceBaselineExists(ctx context.Context, root string, workspaceID
 	}
 	if meta.Baseline != nil {
 		return nil
-	}
-	if _, err := os.Stat(workspaceBaselinePath(root, workspaceID)); err == nil {
-		return nil
-	} else if !os.IsNotExist(err) {
-		return err
 	}
 	return createOrRefreshWorkspaceBaseline(ctx, root, workspaceID, now)
 }

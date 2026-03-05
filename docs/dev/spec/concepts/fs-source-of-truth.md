@@ -40,7 +40,7 @@ This spec defines the current canonical model.
 - ranking/usage hints
 - selector acceleration indexes
 - cross-root scan caches
-- legacy compatibility files under `.kra/state/` that can be cleaned up after migration
+- legacy compatibility files under `.kra/state/` that are managed only by `doctor --fix`
 
 If rebuildable data is missing/corrupt, commands should either:
 - rebuild automatically, or

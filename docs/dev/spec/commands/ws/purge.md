@@ -64,9 +64,6 @@ This is a destructive operation. It is separate from `ws close`, which keeps an 
 - Stage only paths touched by this operation, at minimum:
   - removal of `workspaces/<id>/`
   - removal of `archive/<id>/`
-- Legacy compatibility:
-  - purge commit may include removal of `.kra/state/workspace-baselines/<id>.json`
-    when an older workspace format left it behind
 
 In default commit mode, unrelated changes must not be included in lifecycle commits.
 
@@ -85,4 +82,4 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 - `ws close`/`ws reopen` preserve purge guard value.
 - Purge execution is archived-only in current policy.
 - On successful purge, workspace metadata is removed together with the workspace/archive directories.
-- Legacy compatibility: remove `.kra/state/workspace-baselines/<id>.json` if it exists.
+- Legacy baseline cleanup is not part of `ws purge`; use `doctor --fix` for old state files.

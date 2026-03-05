@@ -618,7 +618,7 @@ func TestListRowsFromFilesystem_CreatesBaselineWhenMissing(t *testing.T) {
 	}
 }
 
-func TestListRowsFromFilesystem_UsesLegacyBaselineWhenMetaBaselineMissing(t *testing.T) {
+func TestListRowsFromFilesystem_IgnoresLegacyBaselineWhenMetaBaselineMissing(t *testing.T) {
 	root := t.TempDir()
 	wsPath := filepath.Join(root, "workspaces", "WS1")
 	if err := os.MkdirAll(filepath.Join(wsPath, "repos", "r"), 0o755); err != nil {
@@ -665,8 +665,8 @@ func TestListRowsFromFilesystem_UsesLegacyBaselineWhenMetaBaselineMissing(t *tes
 	if err != nil {
 		t.Fatalf("load meta: %v", err)
 	}
-	if updated.Baseline != nil {
-		t.Fatalf("legacy baseline fallback should not auto-migrate into meta")
+	if updated.Baseline == nil {
+		t.Fatalf("meta baseline should be created even when legacy baseline file exists")
 	}
 }
 

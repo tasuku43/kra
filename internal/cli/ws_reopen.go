@@ -482,12 +482,7 @@ func commitReopenChange(ctx context.Context, root string, workspaceID string) (s
 
 	workspacesArg := filepath.ToSlash(filepath.Join("workspaces", workspaceID))
 	archiveArg := filepath.ToSlash(filepath.Join("archive", workspaceID))
-	baselineArg := filepath.ToSlash(filepath.Join(".kra", "state", workspaceBaselineDirName, workspaceID+".json"))
-	baselinePath, err := toGitTopLevelPath(ctx, root, filepath.Join(".kra", "state", workspaceBaselineDirName, workspaceID+".json"))
-	if err != nil {
-		return "", err
-	}
-	resetArgs := []string{workspacesArg, archiveArg, baselineArg}
+	resetArgs := []string{workspacesArg, archiveArg}
 	resetStaging := func() {
 		cmd := append([]string{"reset", "-q", "--"}, resetArgs...)
 		_, _ = gitutil.Run(ctx, root, cmd...)
@@ -504,31 +499,16 @@ func commitReopenChange(ctx context.Context, root string, workspaceID string) (s
 			return "", err
 		}
 	}
-	for _, arg := range []string{baselineArg} {
-		if _, err := gitutil.Run(ctx, root, "add", "-A", "--", arg); err != nil {
-			if strings.Contains(err.Error(), "did not match any files") || strings.Contains(err.Error(), "did not match any file") {
-				continue
-			}
-			resetStaging()
-			return "", err
-		}
-	}
-
-	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", workspacesArg, archiveArg, baselineArg)
+	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", workspacesArg, archiveArg)
 	if err != nil {
 		resetStaging()
 		return "", err
 	}
 
 	staged := strings.Fields(out)
-	hasBaselineStage := false
 	for _, p := range staged {
 		p = filepath.Clean(filepath.FromSlash(p))
 		if strings.HasPrefix(p, workspacesPrefix) || strings.HasPrefix(p, archivePrefix) {
-			continue
-		}
-		if p == baselinePath {
-			hasBaselineStage = true
 			continue
 		}
 		resetStaging()
@@ -536,9 +516,6 @@ func commitReopenChange(ctx context.Context, root string, workspaceID string) (s
 	}
 
 	commitArgs := []string{"commit", "--only", "-m", fmt.Sprintf("reopen: %s", workspaceID), "--", workspacesArg, archiveArg}
-	if hasBaselineStage {
-		commitArgs = append(commitArgs, baselineArg)
-	}
 	if _, err := gitutil.Run(ctx, root, commitArgs...); err != nil {
 		resetStaging()
 		return "", err
