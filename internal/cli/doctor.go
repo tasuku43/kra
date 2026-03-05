@@ -339,6 +339,28 @@ func runDoctorFix(root string, mode string, report doctorReport) doctorFixResult
 			}
 			result.Actions[i].Status = "applied"
 			result.Summary.Applied++
+		case "migrate_legacy_baseline_file":
+			workspaceID, err := workspaceIDFromLegacyBaselineTarget(root, result.Actions[i].Target)
+			if err != nil {
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			if err := migrateLegacyWorkspaceBaseline(root, workspaceID); err != nil {
+				if os.IsNotExist(err) {
+					result.Actions[i].Status = "skipped"
+					result.Actions[i].Reason = "already_missing"
+					result.Summary.Skipped++
+					continue
+				}
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			result.Actions[i].Status = "applied"
+			result.Summary.Applied++
 		case "register_root":
 			if err := touchRootRegistry(root); err != nil {
 				result.Actions[i].Status = "failed"
@@ -372,6 +394,8 @@ func planDoctorFixActions(report doctorReport) []doctorFixAction {
 			kind = "remove_legacy_workstate_file"
 		case "legacy_baseline_file", "legacy_baseline_orphan":
 			kind = "remove_legacy_baseline_file"
+		case "legacy_baseline_in_use":
+			kind = "migrate_legacy_baseline_file"
 		default:
 			continue
 		}
@@ -389,6 +413,22 @@ func planDoctorFixActions(report doctorReport) []doctorFixAction {
 		nextID++
 	}
 	return actions
+}
+
+func workspaceIDFromLegacyBaselineTarget(root string, target string) (string, error) {
+	expectedDir := filepath.Clean(filepath.Join(root, ".kra", "state", workspaceBaselineDirName))
+	if filepath.Clean(filepath.Dir(target)) != expectedDir {
+		return "", fmt.Errorf("legacy baseline target is outside expected directory: %s", target)
+	}
+	base := strings.TrimSpace(filepath.Base(target))
+	if !strings.HasSuffix(base, ".json") {
+		return "", fmt.Errorf("legacy baseline target must be a json file: %s", target)
+	}
+	workspaceID := strings.TrimSuffix(base, ".json")
+	if err := validateWorkspaceID(workspaceID); err != nil {
+		return "", fmt.Errorf("invalid workspace id from legacy baseline target: %w", err)
+	}
+	return workspaceID, nil
 }
 
 func touchRootRegistry(root string) error {
@@ -708,11 +748,11 @@ func scanDoctorLegacyState(
 		case err == nil && meta.Baseline != nil:
 			addWarn("legacy_baseline_file", target, "baseline already exists in .kra.meta.json; legacy file can be removed")
 		case err == nil:
-			addWarn("legacy_baseline_in_use", target, "workspace still relies on legacy baseline file")
+			addWarn("legacy_baseline_in_use", target, "workspace still relies on legacy baseline file; doctor --fix can migrate it into .kra.meta.json")
 		case os.IsNotExist(err):
 			addWarn("legacy_baseline_orphan", target, "workspace is missing; legacy baseline file can be removed")
 		default:
-			addWarn("legacy_baseline_in_use", target, "unable to confirm safe cleanup automatically")
+			addWarn("legacy_baseline_check_failed", target, "unable to confirm safe cleanup automatically")
 		}
 	}
 }

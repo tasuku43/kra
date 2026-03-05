@@ -167,6 +167,20 @@ func removeWorkspaceBaseline(root string, workspaceID string) error {
 	return nil
 }
 
+func migrateLegacyWorkspaceBaseline(root string, workspaceID string) error {
+	baseline, err := loadLegacyWorkspaceBaseline(root, workspaceID)
+	if err != nil {
+		return err
+	}
+	if err := saveWorkspaceBaseline(root, workspaceID, baseline); err != nil {
+		return err
+	}
+	if err := removeWorkspaceBaseline(root, workspaceID); err != nil {
+		return err
+	}
+	return nil
+}
+
 func resolveWorkspaceWorkState(
 	ctx context.Context,
 	root string,

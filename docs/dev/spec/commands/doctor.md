@@ -26,6 +26,7 @@ Provide a non-destructive health report for current `KRA_ROOT` to detect operati
     - removable when active workspace already has `.kra.meta.json.baseline`
     - removable when the workspace is missing (orphan legacy file)
     - `legacy_baseline_in_use` when active workspace still relies on the legacy file
+      (`doctor --fix` may migrate it into `.kra.meta.json.baseline`)
 
 ## Output
 

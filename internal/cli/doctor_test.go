@@ -201,6 +201,41 @@ func TestCLI_Doctor_DetectsLegacyBaselineInUse(t *testing.T) {
 	}
 }
 
+func TestCLI_Doctor_DetectsLegacyBaselineCheckFailed(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	wsPath := filepath.Join(env.Root, "workspaces", "WS-1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(wsPath, workspaceMetaFilename), []byte("{broken-json"), 0o644); err != nil {
+		t.Fatalf("write broken meta: %v", err)
+	}
+	legacyBaselinePath := writeLegacyBaselineFile(t, env.Root, "WS-1")
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	if err := c.touchStateRegistry(env.Root); err != nil {
+		t.Fatalf("touchStateRegistry: %v", err)
+	}
+
+	code := c.Run([]string{"doctor", "--format", "json"})
+	if code != exitError {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitError, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "legacy_baseline_check_failed", legacyBaselinePath) {
+		t.Fatalf("legacy baseline check failed finding missing: %+v", resp.Result.Findings)
+	}
+}
+
 func TestCLI_Doctor_JSONAndFixValidation(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
@@ -271,7 +306,7 @@ func TestCLI_Doctor_FixPlan_JSON(t *testing.T) {
 	}
 }
 
-func TestCLI_Doctor_FixPlan_JSON_IncludesLegacyCleanupOnlyWhenSafe(t *testing.T) {
+func TestCLI_Doctor_FixPlan_JSON_SeparatesMigrationFromCleanup(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
 
@@ -331,8 +366,8 @@ func TestCLI_Doctor_FixPlan_JSON_IncludesLegacyCleanupOnlyWhenSafe(t *testing.T)
 	if !hasDoctorAction(resp.Result.Actions, "remove_legacy_baseline_file", dropBaselinePath) {
 		t.Fatalf("safe legacy baseline cleanup action missing: %+v", resp.Result.Actions)
 	}
-	if hasDoctorAction(resp.Result.Actions, "remove_legacy_baseline_file", keepBaselinePath) {
-		t.Fatalf("legacy baseline in use must not be auto-fixable: %+v", resp.Result.Actions)
+	if !hasDoctorAction(resp.Result.Actions, "migrate_legacy_baseline_file", keepBaselinePath) {
+		t.Fatalf("legacy baseline in use should be migrated explicitly: %+v", resp.Result.Actions)
 	}
 }
 
@@ -402,6 +437,46 @@ func TestCLI_Doctor_FixApply_RemovesLegacyStateFiles(t *testing.T) {
 	}
 	if _, err := os.Stat(legacyBaselinePath); !os.IsNotExist(err) {
 		t.Fatalf("legacy baseline file should be removed, stat err=%v", err)
+	}
+}
+
+func TestCLI_Doctor_FixApply_MigratesLegacyBaselineIntoMeta(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	wsPath := filepath.Join(env.Root, "workspaces", "WS-1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	if err := writeWorkspaceMetaFile(wsPath, newWorkspaceMetaFileForCreate("WS-1", "title", "", 100)); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+	legacyBaselinePath := writeLegacyBaselineFile(t, env.Root, "WS-1")
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	if err := c.touchStateRegistry(env.Root); err != nil {
+		t.Fatalf("touchStateRegistry: %v", err)
+	}
+
+	code := c.Run([]string{"doctor", "--fix", "--apply", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load workspace meta: %v", err)
+	}
+	if meta.Baseline == nil {
+		t.Fatalf("baseline should be migrated into workspace meta")
+	}
+	if meta.Baseline.Version != 1 || meta.Baseline.CreatedAt != 100 {
+		t.Fatalf("unexpected migrated baseline: %+v", *meta.Baseline)
+	}
+	if _, err := os.Stat(legacyBaselinePath); !os.IsNotExist(err) {
+		t.Fatalf("legacy baseline file should be removed after migration, stat err=%v", err)
 	}
 }
 

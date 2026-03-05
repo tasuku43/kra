@@ -91,6 +91,7 @@ List workspaces with status and summary fields, similar in spirit to `gion manif
   - preferred baseline source: `.kra.meta.json.baseline`
   - legacy compatibility: if `.kra.meta.json.baseline` is absent and
     `.kra/state/workspace-baselines/<id>.json` exists, use the legacy file without auto-migrating it
+    during `ws list`; explicit migration is handled by `doctor --fix`
   - if no baseline exists in either location, command must create baseline in `.kra.meta.json`
   - repo signals under `repos/**`:
     - `dirty` -> `in-progress`

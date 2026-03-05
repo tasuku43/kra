@@ -21,6 +21,8 @@ This keeps recovery explicit and auditable while reducing operational MTTR.
 - legacy state cleanup under `KRA_ROOT/.kra/state/`:
   - remove `workspace-workstate.json`
   - remove `workspace-baselines/<id>.json` only when cleanup is provably safe
+  - migrate active-workspace `workspace-baselines/<id>.json` into `workspaces/<id>/.kra.meta.json.baseline`
+    when the workspace still relies on the legacy file
 
 ## Inputs
 
@@ -53,7 +55,9 @@ This keeps recovery explicit and auditable while reducing operational MTTR.
   - the workspace is archived
   - the workspace is missing (orphan legacy file)
   - the active workspace already has `.kra.meta.json.baseline`
-- Active workspaces that still rely on legacy baseline files are reported, but not auto-fixed.
+- Active workspaces that still rely on legacy baseline files are migrated by copying the baseline into
+  `.kra.meta.json` first, then removing the legacy file.
+- The migration must not recompute baseline content; it preserves the legacy snapshot as-is.
 
 ## JSON contract
 

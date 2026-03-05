@@ -77,6 +77,7 @@ This file is canonical and stored in:
   - `repos.<alias>.baseline_head`
   - `fs.<path> = sha256:<digest>`
   - baseline is canonical workspace metadata, not a root-level cache
+  - legacy `.kra/state/workspace-baselines/<id>.json` may be migrated into this field by `doctor --fix`
 - `protection.purge_guard.enabled` controls whether purge is blocked.
 - Runtime-only `risk` is not stored.
 
