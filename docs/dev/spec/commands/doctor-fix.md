@@ -18,6 +18,9 @@ This keeps recovery explicit and auditable while reducing operational MTTR.
 
 - stale lock cleanup under `KRA_ROOT/.kra/locks/`
 - root registry touch/repair when current root is missing from registry
+- legacy state cleanup under `KRA_ROOT/.kra/state/`:
+  - remove `workspace-workstate.json`
+  - remove `workspace-baselines/<id>.json` only when cleanup is provably safe
 
 ## Inputs
 
@@ -46,6 +49,11 @@ This keeps recovery explicit and auditable while reducing operational MTTR.
 - No remote Git operations.
 - No workspace destructive operations (`close/reopen/purge`) are performed.
 - Unsupported/ambiguous fix types are reported as `skipped` with reason `manual_required`.
+- Legacy baseline files are auto-removed only when one of the following is true:
+  - the workspace is archived
+  - the workspace is missing (orphan legacy file)
+  - the active workspace already has `.kra.meta.json.baseline`
+- Active workspaces that still rely on legacy baseline files are reported, but not auto-fixed.
 
 ## JSON contract
 

@@ -324,6 +324,21 @@ func runDoctorFix(root string, mode string, report doctorReport) doctorFixResult
 			}
 			result.Actions[i].Status = "applied"
 			result.Summary.Applied++
+		case "remove_legacy_workstate_file", "remove_legacy_baseline_file":
+			if err := os.Remove(result.Actions[i].Target); err != nil {
+				if os.IsNotExist(err) {
+					result.Actions[i].Status = "skipped"
+					result.Actions[i].Reason = "already_missing"
+					result.Summary.Skipped++
+					continue
+				}
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			result.Actions[i].Status = "applied"
+			result.Summary.Applied++
 		case "register_root":
 			if err := touchRootRegistry(root); err != nil {
 				result.Actions[i].Status = "failed"
@@ -353,6 +368,10 @@ func planDoctorFixActions(report doctorReport) []doctorFixAction {
 			kind = "remove_stale_lock"
 		case "root_not_registered":
 			kind = "register_root"
+		case "legacy_workstate_file":
+			kind = "remove_legacy_workstate_file"
+		case "legacy_baseline_file", "legacy_baseline_orphan":
+			kind = "remove_legacy_baseline_file"
 		default:
 			continue
 		}
@@ -427,6 +446,7 @@ func runDoctorChecks(root string) doctorReport {
 	scanDoctorWorkspaceScope(root, "archive", "archived", false, addOK, addWarn, addError)
 	scanDoctorLocks(root, addOK, addWarn)
 	scanDoctorRegistry(root, addOK, addWarn)
+	scanDoctorLegacyState(root, addOK, addWarn)
 
 	slices.SortFunc(report.Findings, func(a, b doctorFinding) int {
 		if a.Severity != b.Severity {
@@ -626,4 +646,73 @@ func scanDoctorRegistry(
 		return
 	}
 	addOK()
+}
+
+func scanDoctorLegacyState(
+	root string,
+	addOK func(),
+	addWarn func(code string, target string, message string),
+) {
+	stateDir := filepath.Join(root, ".kra", "state")
+	if fi, err := os.Stat(stateDir); err != nil {
+		if os.IsNotExist(err) {
+			addOK()
+			return
+		}
+		addWarn("state_dir_stat_failed", stateDir, err.Error())
+		return
+	} else if !fi.IsDir() {
+		addWarn("state_dir_not_directory", stateDir, "state path is not a directory")
+		return
+	}
+	addOK()
+
+	workstatePath := filepath.Join(stateDir, "workspace-workstate.json")
+	if fi, err := os.Stat(workstatePath); err != nil {
+		if os.IsNotExist(err) {
+			addOK()
+		} else {
+			addWarn("legacy_workstate_stat_failed", workstatePath, err.Error())
+		}
+	} else if fi.IsDir() {
+		addWarn("legacy_workstate_path_invalid", workstatePath, "legacy work-state path should be a file")
+	} else {
+		addWarn("legacy_workstate_file", workstatePath, "legacy workspace work-state file is unused and can be removed")
+	}
+
+	baselineDir := filepath.Join(stateDir, workspaceBaselineDirName)
+	entries, err := os.ReadDir(baselineDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			addOK()
+			return
+		}
+		addWarn("legacy_baseline_dir_read_failed", baselineDir, err.Error())
+		return
+	}
+	addOK()
+
+	for _, ent := range entries {
+		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".json") {
+			continue
+		}
+		target := filepath.Join(baselineDir, ent.Name())
+		workspaceID := strings.TrimSuffix(ent.Name(), ".json")
+		if _, err := os.Stat(filepath.Join(root, "archive", workspaceID)); err == nil {
+			addWarn("legacy_baseline_file", target, "archived workspace no longer needs legacy baseline file")
+			continue
+		}
+		wsPath := filepath.Join(root, "workspaces", workspaceID)
+		meta, err := loadWorkspaceMetaFile(wsPath)
+		switch {
+		case err == nil && meta.Baseline != nil:
+			addWarn("legacy_baseline_file", target, "baseline already exists in .kra.meta.json; legacy file can be removed")
+		case err == nil:
+			addWarn("legacy_baseline_in_use", target, "workspace still relies on legacy baseline file")
+		case os.IsNotExist(err):
+			addWarn("legacy_baseline_orphan", target, "workspace is missing; legacy baseline file can be removed")
+		default:
+			addWarn("legacy_baseline_in_use", target, "unable to confirm safe cleanup automatically")
+		}
+	}
 }

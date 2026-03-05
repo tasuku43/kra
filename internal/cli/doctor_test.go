@@ -127,6 +127,80 @@ func TestCLI_Doctor_DetectsBindingMissingWorktree(t *testing.T) {
 	}
 }
 
+func TestCLI_Doctor_DetectsLegacyWorkstateFile(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	workstatePath := filepath.Join(env.Root, ".kra", "state", "workspace-workstate.json")
+	if err := os.MkdirAll(filepath.Dir(workstatePath), 0o755); err != nil {
+		t.Fatalf("mkdir state dir: %v", err)
+	}
+	if err := os.WriteFile(workstatePath, []byte("{\"WS-1\":\"todo\"}\n"), 0o644); err != nil {
+		t.Fatalf("write legacy workstate file: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	if err := c.touchStateRegistry(env.Root); err != nil {
+		t.Fatalf("touchStateRegistry: %v", err)
+	}
+
+	code := c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		OK     bool         `json:"ok"`
+		Action string       `json:"action"`
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !resp.OK || resp.Action != "doctor" {
+		t.Fatalf("unexpected response head: %+v", resp)
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "legacy_workstate_file", workstatePath) {
+		t.Fatalf("legacy workstate finding missing: %+v", resp.Result.Findings)
+	}
+}
+
+func TestCLI_Doctor_DetectsLegacyBaselineInUse(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	wsPath := filepath.Join(env.Root, "workspaces", "WS-1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	if err := writeWorkspaceMetaFile(wsPath, newWorkspaceMetaFileForCreate("WS-1", "title", "", 100)); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+	legacyBaselinePath := writeLegacyBaselineFile(t, env.Root, "WS-1")
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	if err := c.touchStateRegistry(env.Root); err != nil {
+		t.Fatalf("touchStateRegistry: %v", err)
+	}
+
+	code := c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "legacy_baseline_in_use", legacyBaselinePath) {
+		t.Fatalf("legacy baseline in use finding missing: %+v", resp.Result.Findings)
+	}
+}
+
 func TestCLI_Doctor_JSONAndFixValidation(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
@@ -197,6 +271,71 @@ func TestCLI_Doctor_FixPlan_JSON(t *testing.T) {
 	}
 }
 
+func TestCLI_Doctor_FixPlan_JSON_IncludesLegacyCleanupOnlyWhenSafe(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	wsKeepPath := filepath.Join(env.Root, "workspaces", "WS-KEEP")
+	if err := os.MkdirAll(wsKeepPath, 0o755); err != nil {
+		t.Fatalf("mkdir keep workspace: %v", err)
+	}
+	if err := writeWorkspaceMetaFile(wsKeepPath, newWorkspaceMetaFileForCreate("WS-KEEP", "keep", "", 100)); err != nil {
+		t.Fatalf("write keep workspace meta: %v", err)
+	}
+	keepBaselinePath := writeLegacyBaselineFile(t, env.Root, "WS-KEEP")
+
+	wsDropPath := filepath.Join(env.Root, "workspaces", "WS-DROP")
+	if err := os.MkdirAll(wsDropPath, 0o755); err != nil {
+		t.Fatalf("mkdir drop workspace: %v", err)
+	}
+	metaDrop := newWorkspaceMetaFileForCreate("WS-DROP", "drop", "", 100)
+	metaDrop.Baseline = &workspaceBaseline{Version: 1, CreatedAt: 100}
+	if err := writeWorkspaceMetaFile(wsDropPath, metaDrop); err != nil {
+		t.Fatalf("write drop workspace meta: %v", err)
+	}
+	dropBaselinePath := writeLegacyBaselineFile(t, env.Root, "WS-DROP")
+
+	workstatePath := filepath.Join(env.Root, ".kra", "state", "workspace-workstate.json")
+	if err := os.MkdirAll(filepath.Dir(workstatePath), 0o755); err != nil {
+		t.Fatalf("mkdir state dir: %v", err)
+	}
+	if err := os.WriteFile(workstatePath, []byte("{\"WS-DROP\":\"in-progress\"}\n"), 0o644); err != nil {
+		t.Fatalf("write legacy workstate file: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	if err := c.touchStateRegistry(env.Root); err != nil {
+		t.Fatalf("touchStateRegistry: %v", err)
+	}
+
+	code := c.Run([]string{"doctor", "--fix", "--plan", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		OK     bool            `json:"ok"`
+		Action string          `json:"action"`
+		Result doctorFixResult `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !resp.OK || resp.Action != "doctor.fix" {
+		t.Fatalf("unexpected response head: %+v", resp)
+	}
+	if !hasDoctorAction(resp.Result.Actions, "remove_legacy_workstate_file", workstatePath) {
+		t.Fatalf("legacy workstate cleanup action missing: %+v", resp.Result.Actions)
+	}
+	if !hasDoctorAction(resp.Result.Actions, "remove_legacy_baseline_file", dropBaselinePath) {
+		t.Fatalf("safe legacy baseline cleanup action missing: %+v", resp.Result.Actions)
+	}
+	if hasDoctorAction(resp.Result.Actions, "remove_legacy_baseline_file", keepBaselinePath) {
+		t.Fatalf("legacy baseline in use must not be auto-fixable: %+v", resp.Result.Actions)
+	}
+}
+
 func TestCLI_Doctor_FixApply_RemovesStaleLock(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
@@ -220,6 +359,49 @@ func TestCLI_Doctor_FixApply_RemovesStaleLock(t *testing.T) {
 	}
 	if _, err := os.Stat(lockPath); !os.IsNotExist(err) {
 		t.Fatalf("lock file should be removed, stat err=%v", err)
+	}
+}
+
+func TestCLI_Doctor_FixApply_RemovesLegacyStateFiles(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	wsPath := filepath.Join(env.Root, "workspaces", "WS-1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	meta := newWorkspaceMetaFileForCreate("WS-1", "title", "", 100)
+	meta.Baseline = &workspaceBaseline{Version: 1, CreatedAt: 100}
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+	legacyBaselinePath := writeLegacyBaselineFile(t, env.Root, "WS-1")
+
+	workstatePath := filepath.Join(env.Root, ".kra", "state", "workspace-workstate.json")
+	if err := os.MkdirAll(filepath.Dir(workstatePath), 0o755); err != nil {
+		t.Fatalf("mkdir state dir: %v", err)
+	}
+	if err := os.WriteFile(workstatePath, []byte("{\"WS-1\":\"todo\"}\n"), 0o644); err != nil {
+		t.Fatalf("write legacy workstate file: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	if err := c.touchStateRegistry(env.Root); err != nil {
+		t.Fatalf("touchStateRegistry: %v", err)
+	}
+
+	code := c.Run([]string{"doctor", "--fix", "--apply", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+
+	if _, err := os.Stat(workstatePath); !os.IsNotExist(err) {
+		t.Fatalf("legacy workstate file should be removed, stat err=%v", err)
+	}
+	if _, err := os.Stat(legacyBaselinePath); !os.IsNotExist(err) {
+		t.Fatalf("legacy baseline file should be removed, stat err=%v", err)
 	}
 }
 
@@ -272,4 +454,45 @@ func TestCLI_Doctor_FixFlagValidation(t *testing.T) {
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d", code, exitUsage)
 	}
+}
+
+func writeLegacyBaselineFile(t *testing.T, root string, workspaceID string) string {
+	t.Helper()
+
+	path := workspaceBaselinePath(root, workspaceID)
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatalf("mkdir baseline dir: %v", err)
+	}
+	baseline := workspaceBaseline{
+		Version:   1,
+		CreatedAt: 100,
+		Repos:     map[string]workspaceBaselineRepo{},
+		FS:        map[string]string{},
+	}
+	raw, err := json.Marshal(baseline)
+	if err != nil {
+		t.Fatalf("marshal legacy baseline: %v", err)
+	}
+	if err := os.WriteFile(path, append(raw, '\n'), 0o644); err != nil {
+		t.Fatalf("write legacy baseline: %v", err)
+	}
+	return path
+}
+
+func hasDoctorFinding(findings []doctorFinding, code string, target string) bool {
+	for _, f := range findings {
+		if f.Code == code && f.Target == target {
+			return true
+		}
+	}
+	return false
+}
+
+func hasDoctorAction(actions []doctorFixAction, kind string, target string) bool {
+	for _, a := range actions {
+		if a.Kind == kind && a.Target == target {
+			return true
+		}
+	}
+	return false
 }

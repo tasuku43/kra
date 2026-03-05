@@ -19,6 +19,13 @@ Provide a non-destructive health report for current `KRA_ROOT` to detect operati
   - worktree exists but binding/metadata missing
 - Detect stale workspace action lock files under `.kra/locks/` when owner PID is not alive.
 - Detect obvious registry drift where current root is missing from `~/.kra/state/root-registry.json`.
+- Detect legacy workspace-local state files under `KRA_ROOT/.kra/state/`:
+  - `workspace-workstate.json` is always reported as legacy/unused.
+  - `workspace-baselines/<id>.json` is reported as:
+    - removable when the workspace is archived
+    - removable when active workspace already has `.kra.meta.json.baseline`
+    - removable when the workspace is missing (orphan legacy file)
+    - `legacy_baseline_in_use` when active workspace still relies on the legacy file
 
 ## Output
 
