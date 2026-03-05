@@ -227,6 +227,26 @@ func TestClientSetStatus_BuildsCommandArgs(t *testing.T) {
 	}
 }
 
+func TestClientLog_RequiresMessage(t *testing.T) {
+	c := &Client{}
+	if err := c.Log(context.Background(), "", "", "", ""); err == nil {
+		t.Fatalf("Log() with empty message should fail")
+	}
+}
+
+func TestClientLog_BuildsCommandArgs(t *testing.T) {
+	f := &fakeRunner{stdout: []byte("OK\n")}
+	c := &Client{Runner: f}
+
+	if err := c.Log(context.Background(), "build started", "info", "kra", "ws-1"); err != nil {
+		t.Fatalf("Log() error: %v", err)
+	}
+	wantArgs := []string{"log", "--level", "info", "--source", "kra", "--workspace", "ws-1", "build started"}
+	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
+		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
+	}
+}
+
 func TestClientCloseWorkspace_BuildsCommandArgs(t *testing.T) {
 	f := &fakeRunner{stdout: []byte("OK\n")}
 	c := &Client{Runner: f}

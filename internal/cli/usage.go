@@ -204,6 +204,7 @@ func (c *CLI) printWSUsage(w io.Writer) {
   kra ws close [--id <id> | --current | --select | --multi-select] [action-args...]
   kra ws reopen [--id <id> | --current | --select] [action-args...]
   kra ws purge [--id <id> | --current | --select] [action-args...]
+  kra ws log [--id <id> | --current] [--] <message>
   kra ws list|ls [--archived] [--tree] [--format human|tsv|json]
   kra ws dashboard [--archived] [--workspace <id>] [--format human|json]
   kra ws lock [--id <id> | --current | --select | --multi-select] [--format human|json]
@@ -228,6 +229,15 @@ func (c *CLI) printWSOpenUsage(w io.Writer) {
   kra ws open [--id <id> | --current | --select | --multi-select] [--concurrency <n>] [--format human|json]
 
 Open workspace runtime flow.
+`)
+}
+
+func (c *CLI) printWSLogUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws log [--id <id> | --current] [--] <message>
+
+Append <message> to workspace log.txt.
+If CMUX_WORKSPACE_ID is set, also mirror to cmux sidebar log.
 `)
 }
 

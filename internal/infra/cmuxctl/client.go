@@ -271,6 +271,32 @@ func (c *Client) SetStatus(ctx context.Context, workspace string, label string, 
 	return nil
 }
 
+func (c *Client) Log(ctx context.Context, message string, level string, source string, workspace string) error {
+	message = strings.TrimSpace(message)
+	level = strings.TrimSpace(level)
+	source = strings.TrimSpace(source)
+	workspace = strings.TrimSpace(workspace)
+	if message == "" {
+		return fmt.Errorf("message is required")
+	}
+	args := []string{"log"}
+	if level != "" {
+		args = append(args, "--level", level)
+	}
+	if source != "" {
+		args = append(args, "--source", source)
+	}
+	if workspace != "" {
+		args = append(args, "--workspace", workspace)
+	}
+	args = append(args, message)
+	_, stderr, err := c.run(ctx, false, false, args...)
+	if err != nil {
+		return commandError("log", stderr, err)
+	}
+	return nil
+}
+
 func (c *Client) SendText(ctx context.Context, workspace string, surface string, text string) error {
 	workspace = strings.TrimSpace(workspace)
 	surface = strings.TrimSpace(surface)

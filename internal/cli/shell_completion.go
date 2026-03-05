@@ -54,6 +54,7 @@ var kraCompletionSubcommands = map[string][]string{
 		"close",
 		"reopen",
 		"purge",
+		"log",
 		"help",
 	},
 }
@@ -119,6 +120,7 @@ var kraCompletionPathFlagOrder = []string{
 	"ws close",
 	"ws reopen",
 	"ws purge",
+	"ws log",
 	"ws lock",
 	"ws unlock",
 }
@@ -160,6 +162,7 @@ var kraCompletionPathFlags = map[string][]string{
 	"ws close":           {"--id", "--current", "--select", "--multi-select", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
 	"ws reopen":          {"--id", "--current", "--select", "--format", "--no-commit", "--dry-run", "--help", "-h"},
 	"ws purge":           {"--id", "--current", "--select", "--no-prompt", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
+	"ws log":             {"--id", "--current", "--help", "-h"},
 	"ws lock":            {"--id", "--current", "--select", "--multi-select", "--format", "--help", "-h"},
 	"ws unlock":          {"--id", "--current", "--select", "--multi-select", "--format", "--help", "-h"},
 }
