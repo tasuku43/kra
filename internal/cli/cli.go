@@ -130,6 +130,8 @@ func (c *CLI) runWS(args []string) int {
 		return c.runWSList(args[1:])
 	case "dashboard":
 		return c.runWSDashboard(args[1:])
+	case "log":
+		return c.runWSLog(args[1:])
 	case "insight":
 		if !c.isExperimentEnabled(experimentInsightCapture) {
 			fmt.Fprintf(c.Err, "ws insight is experimental (set %s=%s)\n", experimentsEnvKey, experimentInsightCapture)
