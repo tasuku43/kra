@@ -33,14 +33,14 @@ This spec defines the current canonical model.
 - workspace metadata and repo restore metadata:
   - `.kra.meta.json` stored inside workspace/archive directories
   - includes `workspace.work_state` (`todo` / `in-progress`)
+  - includes workspace-local baseline snapshot used for logical work-state derivation
 
 ### Rebuildable (can be recreated)
 
 - ranking/usage hints
 - selector acceleration indexes
 - cross-root scan caches
-- workspace logical-state baseline/cache:
-  - `.kra/state/workspace-baselines/<id>.json`
+- legacy compatibility files under `.kra/state/` that can be cleaned up after migration
 
 If rebuildable data is missing/corrupt, commands should either:
 - rebuild automatically, or

@@ -15,6 +15,7 @@ type workspaceMetaFile struct {
 	SchemaVersion int                        `json:"schema_version"`
 	Workspace     workspaceMetaWorkspace     `json:"workspace"`
 	ReposRestore  []workspaceMetaRepoRestore `json:"repos_restore"`
+	Baseline      *workspaceBaseline         `json:"baseline,omitempty"`
 	Protection    workspaceMetaProtection    `json:"protection,omitempty"`
 }
 
@@ -130,6 +131,10 @@ func loadWorkspaceMetaFile(wsPath string) (workspaceMetaFile, error) {
 	}
 	if meta.ReposRestore == nil {
 		meta.ReposRestore = make([]workspaceMetaRepoRestore, 0)
+	}
+	if meta.Baseline != nil {
+		baseline := normalizeWorkspaceBaseline(*meta.Baseline)
+		meta.Baseline = &baseline
 	}
 	return meta, nil
 }

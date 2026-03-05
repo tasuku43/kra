@@ -10,6 +10,7 @@ status: implemented
 Define a single-file metadata format per workspace/archive that supports:
 - workspace descriptive metadata
 - repo restore metadata required by `ws reopen`
+- workspace-local baseline metadata required by logical work-state derivation
 
 This file is canonical and stored in:
 - `KRA_ROOT/workspaces/<id>/.kra.meta.json` (active)
@@ -39,6 +40,18 @@ This file is canonical and stored in:
       "base_ref": "origin/main"
     }
   ],
+  "baseline": {
+    "version": 1,
+    "created_at": 1730000000,
+    "repos": {
+      "repo": {
+        "baseline_head": "0123456789abcdef"
+      }
+    },
+    "fs": {
+      "notes/README.md": "sha256:..."
+    }
+  },
   "protection": {
     "purge_guard": {
       "enabled": true,
@@ -59,6 +72,11 @@ This file is canonical and stored in:
   - monotonic transition only (`todo -> in-progress`)
   - `in-progress` is treated as stable (no downgrade during `ws list`/selector rendering)
 - `repos_restore` is the authoritative input for worktree reconstruction on `ws reopen`.
+- `baseline` stores workspace-local snapshot data used to derive `workspace.work_state` for
+  `todo` workspaces.
+  - `repos.<alias>.baseline_head`
+  - `fs.<path> = sha256:<digest>`
+  - baseline is canonical workspace metadata, not a root-level cache
 - `protection.purge_guard.enabled` controls whether purge is blocked.
 - Runtime-only `risk` is not stored.
 
@@ -75,6 +93,7 @@ This file is canonical and stored in:
 - `ws create`:
   - create `.kra.meta.json` with empty `repos_restore`.
   - initialize `workspace.work_state=todo`.
+  - initialize `baseline` from created workspace contents.
 - `ws add-repo`:
   - update `repos_restore` entries for added/bound repos.
 - `ws close`:
@@ -84,6 +103,7 @@ This file is canonical and stored in:
   - recreate worktrees from `repos_restore`.
   - set `workspace.status=active`.
   - reset `workspace.work_state=todo`.
+  - refresh `baseline` from reopened workspace contents.
 - `ws purge`:
   - remove workspace/archive directories (metadata removed with them).
 

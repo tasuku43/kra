@@ -32,6 +32,11 @@ Metadata schema (v1):
   - `alias`
   - `branch`
   - `base_ref`
+- `baseline`
+  - `version`
+  - `created_at`
+  - `repos.<alias>.baseline_head`
+  - `fs.<path>`
 
 ## Derived/logical model
 

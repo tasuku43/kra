@@ -327,18 +327,13 @@ func commitCreateWorkspace(ctx context.Context, root string, workspaceID string)
 		return "", err
 	}
 	workspaceArg := filepath.ToSlash(filepath.Join("workspaces", workspaceID))
-	baselineArg := filepath.ToSlash(filepath.Join(".kra", "state", workspaceBaselineDirName, workspaceID+".json"))
-	args := []string{workspaceArg, baselineArg}
+	args := []string{workspaceArg}
 
 	workspacePrefix, err := toGitTopLevelPath(ctx, root, filepath.Join("workspaces", workspaceID))
 	if err != nil {
 		return "", err
 	}
 	workspacePrefix += string(filepath.Separator)
-	baselinePath, err := toGitTopLevelPath(ctx, root, filepath.Join(".kra", "state", workspaceBaselineDirName, workspaceID+".json"))
-	if err != nil {
-		return "", err
-	}
 	for _, arg := range args {
 		if _, err := gitutil.Run(ctx, root, "add", "-A", "--", arg); err != nil {
 			if strings.Contains(err.Error(), "did not match any files") || strings.Contains(err.Error(), "did not match any file") {
@@ -348,28 +343,20 @@ func commitCreateWorkspace(ctx context.Context, root string, workspaceID string)
 			return "", err
 		}
 	}
-	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", workspaceArg, baselineArg)
+	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", workspaceArg)
 	if err != nil {
 		resetCreateStaging(ctx, root, args)
 		return "", err
 	}
-	hasBaselineStage := false
 	for _, p := range strings.Fields(out) {
 		p = filepath.Clean(filepath.FromSlash(p))
 		if strings.HasPrefix(p, workspacePrefix) {
-			continue
-		}
-		if p == baselinePath {
-			hasBaselineStage = true
 			continue
 		}
 		resetCreateStaging(ctx, root, args)
 		return "", fmt.Errorf("unexpected staged path outside allowlist: %s", p)
 	}
 	commitArgs := []string{"commit", "--only", "-m", fmt.Sprintf("create: %s", workspaceID), "--", workspaceArg}
-	if hasBaselineStage {
-		commitArgs = append(commitArgs, baselineArg)
-	}
 	if _, err := gitutil.Run(ctx, root, commitArgs...); err != nil {
 		resetCreateStaging(ctx, root, args)
 		return "", err

@@ -33,18 +33,30 @@ type workspaceBaselineRepo struct {
 }
 
 type workspaceBaseline struct {
-	Version     int                              `json:"version"`
-	WorkspaceID string                           `json:"workspace_id"`
-	CreatedAt   int64                            `json:"created_at"`
-	Repos       map[string]workspaceBaselineRepo `json:"repos,omitempty"`
-	FS          map[string]string                `json:"fs,omitempty"`
+	Version   int                              `json:"version"`
+	CreatedAt int64                            `json:"created_at"`
+	Repos     map[string]workspaceBaselineRepo `json:"repos,omitempty"`
+	FS        map[string]string                `json:"fs,omitempty"`
 }
 
 func workspaceBaselinePath(root string, workspaceID string) string {
 	return filepath.Join(root, ".kra", "state", workspaceBaselineDirName, workspaceID+".json")
 }
 
-func loadWorkspaceBaseline(root string, workspaceID string) (workspaceBaseline, error) {
+func normalizeWorkspaceBaseline(baseline workspaceBaseline) workspaceBaseline {
+	if baseline.Version <= 0 {
+		baseline.Version = 1
+	}
+	if baseline.Repos == nil {
+		baseline.Repos = map[string]workspaceBaselineRepo{}
+	}
+	if baseline.FS == nil {
+		baseline.FS = map[string]string{}
+	}
+	return baseline
+}
+
+func loadLegacyWorkspaceBaseline(root string, workspaceID string) (workspaceBaseline, error) {
 	path := workspaceBaselinePath(root, workspaceID)
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -54,63 +66,38 @@ func loadWorkspaceBaseline(root string, workspaceID string) (workspaceBaseline, 
 	if err := json.Unmarshal(b, &baseline); err != nil {
 		return workspaceBaseline{}, err
 	}
-	if baseline.Version <= 0 {
-		baseline.Version = 1
+	return normalizeWorkspaceBaseline(baseline), nil
+}
+
+func loadWorkspaceBaseline(root string, workspaceID string) (workspaceBaseline, error) {
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	meta, metaErr := loadWorkspaceMetaFile(wsPath)
+	if metaErr == nil && meta.Baseline != nil {
+		baseline := normalizeWorkspaceBaseline(*meta.Baseline)
+		return baseline, nil
 	}
-	if baseline.WorkspaceID == "" {
-		baseline.WorkspaceID = workspaceID
+	legacyBaseline, legacyErr := loadLegacyWorkspaceBaseline(root, workspaceID)
+	if legacyErr == nil {
+		return legacyBaseline, nil
 	}
-	if baseline.Repos == nil {
-		baseline.Repos = map[string]workspaceBaselineRepo{}
+	if metaErr != nil {
+		return workspaceBaseline{}, metaErr
 	}
-	if baseline.FS == nil {
-		baseline.FS = map[string]string{}
+	if os.IsNotExist(legacyErr) {
+		return workspaceBaseline{}, os.ErrNotExist
 	}
-	return baseline, nil
+	return workspaceBaseline{}, legacyErr
 }
 
 func saveWorkspaceBaseline(root string, workspaceID string, baseline workspaceBaseline) error {
-	stateDir := filepath.Join(root, ".kra", "state", workspaceBaselineDirName)
-	if err := os.MkdirAll(stateDir, 0o755); err != nil {
-		return err
-	}
-	path := workspaceBaselinePath(root, workspaceID)
-	if baseline.Version <= 0 {
-		baseline.Version = 1
-	}
-	baseline.WorkspaceID = workspaceID
-	if baseline.Repos == nil {
-		baseline.Repos = map[string]workspaceBaselineRepo{}
-	}
-	if baseline.FS == nil {
-		baseline.FS = map[string]string{}
-	}
-	b, err := json.MarshalIndent(baseline, "", "  ")
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	meta, err := loadWorkspaceMetaFile(wsPath)
 	if err != nil {
 		return err
 	}
-	tmp, err := os.CreateTemp(stateDir, ".workspace-baseline-*.tmp")
-	if err != nil {
-		return err
-	}
-	tmpPath := tmp.Name()
-	cleanup := func() {
-		_ = os.Remove(tmpPath)
-	}
-	if _, err := tmp.Write(append(b, '\n')); err != nil {
-		_ = tmp.Close()
-		cleanup()
-		return err
-	}
-	if err := tmp.Close(); err != nil {
-		cleanup()
-		return err
-	}
-	if err := os.Rename(tmpPath, path); err != nil {
-		cleanup()
-		return err
-	}
-	return nil
+	normalized := normalizeWorkspaceBaseline(baseline)
+	meta.Baseline = &normalized
+	return writeWorkspaceMetaFile(wsPath, meta)
 }
 
 func createOrRefreshWorkspaceBaseline(ctx context.Context, root string, workspaceID string, now int64) error {
@@ -142,11 +129,10 @@ func createOrRefreshWorkspaceBaseline(ctx context.Context, root string, workspac
 		repoBaseline[alias] = workspaceBaselineRepo{BaselineHead: trimmedHead}
 	}
 	baseline := workspaceBaseline{
-		Version:     1,
-		WorkspaceID: workspaceID,
-		CreatedAt:   now,
-		Repos:       repoBaseline,
-		FS:          fsHashes,
+		Version:   1,
+		CreatedAt: now,
+		Repos:     repoBaseline,
+		FS:        fsHashes,
 	}
 	if err := saveWorkspaceBaseline(root, workspaceID, baseline); err != nil {
 		return err
@@ -155,6 +141,17 @@ func createOrRefreshWorkspaceBaseline(ctx context.Context, root string, workspac
 }
 
 func ensureWorkspaceBaselineExists(ctx context.Context, root string, workspaceID string, now int64) error {
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		if os.IsNotExist(err) || strings.Contains(err.Error(), workspaceMetaFilename) {
+			return nil
+		}
+		return err
+	}
+	if meta.Baseline != nil {
+		return nil
+	}
 	if _, err := os.Stat(workspaceBaselinePath(root, workspaceID)); err == nil {
 		return nil
 	} else if !os.IsNotExist(err) {

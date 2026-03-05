@@ -137,7 +137,9 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 - Policy: non-`repos/` contents must be captured in the archive commit.
 - Stage by allowlist only:
   - pre-close snapshot commit: `workspaces/<id>/`
-  - archive commit: `workspaces/<id>/`, `archive/<id>/`, `.kra/state/workspace-baselines/<id>.json`
+  - archive commit: `workspaces/<id>/`, `archive/<id>/`
+  - legacy compatibility: archive commit may include removal of
+    `.kra/state/workspace-baselines/<id>.json` when an older workspace format left it behind
 - Each lifecycle commit must be scoped by allowlist pathspec only so pre-existing staged changes outside the
   allowlist are preserved and must not be included.
 - If `gitignore` causes any non-`repos/` files under selected workspace to be unstageable, abort.
@@ -148,5 +150,5 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 - `repos_restore` becomes the canonical reopen input after close.
 - `workspace.status` in `.kra.meta.json` must be updated to `archived` before moving to `archive/<id>/`.
 - Metadata updates must use atomic replace.
-- On successful close, remove runtime baseline/cache entries for `<id>`:
-  - `.kra/state/workspace-baselines/<id>.json`
+- On successful close, archived `.kra.meta.json` keeps the workspace baseline.
+- Legacy compatibility: remove `.kra/state/workspace-baselines/<id>.json` if it exists.

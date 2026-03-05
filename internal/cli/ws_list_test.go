@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -551,9 +552,8 @@ func TestListRowsFromFilesystem_BackfillsMissingMetaWorkStateAsInProgress(t *tes
 		t.Fatalf("write raw meta: %v", err)
 	}
 	baseline := workspaceBaseline{
-		Version:     1,
-		WorkspaceID: "WS1",
-		CreatedAt:   100,
+		Version:   1,
+		CreatedAt: 100,
 		Repos: map[string]workspaceBaselineRepo{
 			"r": {BaselineHead: "deadbeef"},
 		},
@@ -577,6 +577,9 @@ func TestListRowsFromFilesystem_BackfillsMissingMetaWorkStateAsInProgress(t *tes
 	if err != nil {
 		t.Fatalf("load meta: %v", err)
 	}
+	if updated.Baseline == nil {
+		t.Fatalf("meta baseline should be stored in .kra.meta.json")
+	}
 	if updated.Workspace.WorkState != string(workspaceWorkStateInProgress) {
 		t.Fatalf("meta work_state = %q, want %q", updated.Workspace.WorkState, workspaceWorkStateInProgress)
 	}
@@ -595,15 +598,75 @@ func TestListRowsFromFilesystem_CreatesBaselineWhenMissing(t *testing.T) {
 	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
 		t.Fatalf("write meta: %v", err)
 	}
-	if _, err := os.Stat(workspaceBaselinePath(root, "WS1")); !os.IsNotExist(err) {
-		t.Fatalf("baseline should not exist before list, err=%v", err)
+	loaded, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load meta before list: %v", err)
+	}
+	if loaded.Baseline != nil {
+		t.Fatalf("baseline should not exist in meta before list")
 	}
 
 	if _, err := listRowsFromFilesystem(context.Background(), root, "active", false); err != nil {
 		t.Fatalf("listRowsFromFilesystem() error: %v", err)
 	}
-	if _, err := os.Stat(workspaceBaselinePath(root, "WS1")); err != nil {
-		t.Fatalf("baseline should be created, err=%v", err)
+	updated, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load meta after list: %v", err)
+	}
+	if updated.Baseline == nil {
+		t.Fatalf("baseline should be created in .kra.meta.json")
+	}
+}
+
+func TestListRowsFromFilesystem_UsesLegacyBaselineWhenMetaBaselineMissing(t *testing.T) {
+	root := t.TempDir()
+	wsPath := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(filepath.Join(wsPath, "repos", "r"), 0o755); err != nil {
+		t.Fatalf("mkdir repos: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
+		t.Fatalf("mkdir archive: %v", err)
+	}
+	meta := newWorkspaceMetaFileForCreate("WS1", "title", "", 100)
+	meta.Baseline = nil
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write meta: %v", err)
+	}
+	legacy := workspaceBaseline{
+		Version:   1,
+		CreatedAt: 100,
+		Repos: map[string]workspaceBaselineRepo{
+			"r": {BaselineHead: "deadbeef"},
+		},
+		FS: map[string]string{},
+	}
+	if err := os.MkdirAll(filepath.Dir(workspaceBaselinePath(root, "WS1")), 0o755); err != nil {
+		t.Fatalf("mkdir legacy baseline dir: %v", err)
+	}
+	b, err := json.MarshalIndent(legacy, "", "  ")
+	if err != nil {
+		t.Fatalf("marshal legacy baseline: %v", err)
+	}
+	if err := os.WriteFile(workspaceBaselinePath(root, "WS1"), append(b, '\n'), 0o644); err != nil {
+		t.Fatalf("write legacy baseline: %v", err)
+	}
+
+	rows, err := listRowsFromFilesystem(context.Background(), root, "active", false)
+	if err != nil {
+		t.Fatalf("listRowsFromFilesystem() error: %v", err)
+	}
+	if len(rows) != 1 {
+		t.Fatalf("row count = %d, want 1", len(rows))
+	}
+	if rows[0].WorkState != workspaceWorkStateInProgress {
+		t.Fatalf("work_state = %s, want in-progress", rows[0].WorkState)
+	}
+	updated, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load meta: %v", err)
+	}
+	if updated.Baseline != nil {
+		t.Fatalf("legacy baseline fallback should not auto-migrate into meta")
 	}
 }
 

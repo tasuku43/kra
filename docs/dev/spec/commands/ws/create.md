@@ -72,13 +72,12 @@ Create a workspace from a root-local template.
   - commit message: `create: <workspace-id>`
   - staging allowlist:
     - `workspaces/<id>/`
-    - `.kra/state/workspace-baselines/<id>.json`
   - if staged paths contain entries outside the allowlist, abort.
-- `ws create` must initialize workspace baseline state at:
-  - `.kra/state/workspace-baselines/<id>.json`
-  - baseline captures:
-    - repo baselines: `repos/<alias>` `baseline_head`
-    - non-repo FS baselines: `path -> sha256` map (exclude `repos/**` and `.kra.meta.json`)
+- `ws create` must initialize workspace baseline state inside
+  `workspaces/<id>/.kra.meta.json`:
+  - `baseline.repos.<alias>.baseline_head`
+  - `baseline.fs.<path> = sha256:<digest>`
+  - exclude `repos/**` and `.kra.meta.json` itself from `baseline.fs`
 
 ## Output
 
@@ -106,6 +105,7 @@ Create a workspace from a root-local template.
   - `workspace` object (`id`, `title`(stored as `title` for compatibility), `source_url`, `status=active`, timestamps)
     - include `work_state=todo`
   - `repos_restore` as an empty array
+  - `baseline` object initialized from created workspace contents
   - `protection.purge_guard.enabled=true`
 - File write must be atomic (`temp + rename`).
 
