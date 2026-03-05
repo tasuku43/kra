@@ -320,26 +320,40 @@ func ensureRootAgents(root string) error {
 
 func ensureRootGitignore(root string) error {
 	path := filepath.Join(root, gitignoreFilename)
-	const pattern = "workspaces/**/repos/**"
+	requiredPatterns := []string{
+		"workspaces/**/repos/**",
+		".DS_Store",
+		".kra/logs/",
+	}
 
 	b, err := os.ReadFile(path)
 	if err != nil && !os.IsNotExist(err) {
 		return fmt.Errorf("read %s: %w", gitignoreFilename, err)
 	}
 
-	if hasGitignoreLine(string(b), pattern) {
+	contents := string(b)
+	missing := make([]string, 0, len(requiredPatterns))
+	for _, pattern := range requiredPatterns {
+		if hasGitignoreLine(contents, pattern) {
+			continue
+		}
+		missing = append(missing, pattern)
+	}
+	if len(missing) == 0 {
 		return nil
 	}
 
 	var out string
 	if len(b) == 0 {
-		out = "# kra\n" + pattern + "\n"
+		out = "# kra\n" + strings.Join(requiredPatterns, "\n") + "\n"
 	} else {
-		out = string(b)
+		out = contents
 		if !strings.HasSuffix(out, "\n") {
 			out += "\n"
 		}
-		out += pattern + "\n"
+		for _, pattern := range missing {
+			out += pattern + "\n"
+		}
 	}
 
 	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {

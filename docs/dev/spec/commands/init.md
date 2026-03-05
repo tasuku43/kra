@@ -62,6 +62,9 @@ Initialize a kra root and filesystem-first runtime metadata.
   - `<root>/AGENTS.md`
   - `<root>/templates/default/AGENTS.md` (if created)
 - Write `.gitignore` such that `workspaces/**/repos/**` is ignored
+- Default `.gitignore` entries added by `kra init` should also include:
+  - `.DS_Store`
+  - `.kra/logs/`
 - Touch root registry metadata for this root.
 - Register/refresh context binding (`name -> root`) in root registry.
 - Update global current context (`~/.kra/state/current-context`) to this root on success.
