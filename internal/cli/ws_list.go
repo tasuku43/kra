@@ -33,6 +33,8 @@ type wsListRow struct {
 	Repos     []statestore.WorkspaceRepo
 }
 
+type wsListPhaseObserver func(phase string, scope string, workspaceID string, elapsed time.Duration)
+
 func (c *CLI) runWSList(args []string) int {
 	requestedJSON := false
 	for i := 0; i < len(args); i++ {
@@ -109,6 +111,7 @@ func (c *CLI) runWSList(args []string) int {
 	c.debugf("run ws list tree=%t format=%s scope=%s", opts.tree, opts.format, opts.scope)
 
 	ctx := context.Background()
+	registryStart := time.Now()
 	if err := c.touchStateRegistry(root); err != nil {
 		if opts.format == "json" {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
@@ -124,9 +127,18 @@ func (c *CLI) runWSList(args []string) int {
 		fmt.Fprintf(c.Err, "update root registry: %v\n", err)
 		return exitError
 	}
+	debugPhasef(c.debugf, "ws-list", "registry_touch", registryStart, "scope=%s", opts.scope)
 
 	now := time.Now().Unix()
-	rows, usedFSFallback, err := buildWSListRows(ctx, root, opts.scope, now, opts.tree)
+	rowsStart := time.Now()
+	observer := func(phase string, scope string, workspaceID string, elapsed time.Duration) {
+		if strings.TrimSpace(workspaceID) == "" {
+			c.debugf("ws-list phase=%s scope=%s elapsed_ms=%d", phase, scope, elapsed.Milliseconds())
+			return
+		}
+		c.debugf("ws-list phase=%s scope=%s workspace=%s elapsed_ms=%d", phase, scope, workspaceID, elapsed.Milliseconds())
+	}
+	rows, usedFSFallback, err := buildWSListRowsObserved(ctx, root, opts.scope, now, opts.tree, observer)
 	if err != nil {
 		if opts.format == "json" {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
@@ -142,10 +154,12 @@ func (c *CLI) runWSList(args []string) int {
 		fmt.Fprintf(c.Err, "list workspaces: %v\n", err)
 		return exitError
 	}
+	debugPhasef(c.debugf, "ws-list", "build_rows", rowsStart, "scope=%s count=%d", opts.scope, len(rows))
 	if usedFSFallback {
 		c.debugf("ws list fallback to filesystem-only rows (state db unavailable)")
 	}
 
+	renderStart := time.Now()
 	switch opts.format {
 	case "tsv":
 		printWSListTSV(c.Out, rows)
@@ -155,13 +169,18 @@ func (c *CLI) runWSList(args []string) int {
 		useColorOut := writerSupportsColor(c.Out)
 		printWSListHuman(c.Out, rows, opts.scope, opts.tree, useColorOut)
 	}
+	debugPhasef(c.debugf, "ws-list", "render", renderStart, "scope=%s format=%s count=%d", opts.scope, opts.format, len(rows))
 	c.debugf("ws list completed count=%d", len(rows))
 	return exitOK
 }
 
 func buildWSListRows(ctx context.Context, root string, scope string, now int64, includeRepos bool) ([]wsListRow, bool, error) {
+	return buildWSListRowsObserved(ctx, root, scope, now, includeRepos, nil)
+}
+
+func buildWSListRowsObserved(ctx context.Context, root string, scope string, now int64, includeRepos bool, observer wsListPhaseObserver) ([]wsListRow, bool, error) {
 	_ = now
-	rows, err := listRowsFromFilesystem(ctx, root, scope, includeRepos)
+	rows, err := listRowsFromFilesystemObserved(ctx, root, scope, includeRepos, observer)
 	if err != nil {
 		return nil, false, err
 	}
@@ -169,13 +188,21 @@ func buildWSListRows(ctx context.Context, root string, scope string, now int64, 
 }
 
 func listRowsFromFilesystem(ctx context.Context, root string, scope string, includeRepos bool) ([]wsListRow, error) {
+	return listRowsFromFilesystemObserved(ctx, root, scope, includeRepos, nil)
+}
+
+func listRowsFromFilesystemObserved(ctx context.Context, root string, scope string, includeRepos bool, observer wsListPhaseObserver) ([]wsListRow, error) {
 	baseDir := filepath.Join(root, "workspaces")
 	if scope == "archived" {
 		baseDir = filepath.Join(root, "archive")
 	}
+	readDirStart := time.Now()
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
 		return nil, err
+	}
+	if observer != nil {
+		observer("scan_dir", scope, "", time.Since(readDirStart))
 	}
 
 	rows := make([]wsListRow, 0, len(entries))
@@ -204,22 +231,31 @@ func listRowsFromFilesystem(ctx context.Context, root string, scope string, incl
 		repoCount := 0
 		var repos []statestore.WorkspaceRepo
 		if includeRepos {
+			repoPhaseStart := time.Now()
 			var listErr error
 			repos, listErr = listWorkspaceReposFromFilesystem(ctx, root, scope, id, meta)
 			if listErr != nil {
 				return nil, listErr
 			}
 			repoCount = len(repos)
+			if observer != nil {
+				observer("repos", scope, id, time.Since(repoPhaseStart))
+			}
 		} else {
+			repoPhaseStart := time.Now()
 			var countErr error
 			repoCount, countErr = countWorkspaceReposFromFilesystem(root, scope, id, meta)
 			if countErr != nil {
 				return nil, countErr
 			}
+			if observer != nil {
+				observer("repo_count", scope, id, time.Since(repoPhaseStart))
+			}
 		}
 
 		workState := workspaceWorkStateTodo
 		if scope == "active" {
+			workStateStart := time.Now()
 			workStateRaw := strings.TrimSpace(meta.Workspace.WorkState)
 			workState = normalizeWorkspaceWorkState(workspaceWorkState(workStateRaw))
 			if workState == workspaceWorkStateInProgress {
@@ -245,6 +281,9 @@ func listRowsFromFilesystem(ctx context.Context, root string, scope string, incl
 						return nil, err
 					}
 				}
+			}
+			if observer != nil {
+				observer("work_state", scope, id, time.Since(workStateStart))
 			}
 		}
 

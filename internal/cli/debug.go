@@ -89,6 +89,22 @@ func (c *CLI) writeDebugLocked(format string, args ...any) {
 	_, _ = fmt.Fprintf(c.debugSession.file, "%s %s\n", ts, msg)
 }
 
+func debugPhasef(debugf func(string, ...any), scope string, phase string, start time.Time, format string, args ...any) {
+	if debugf == nil {
+		return
+	}
+	elapsedMs := time.Since(start).Milliseconds()
+	msg := ""
+	if strings.TrimSpace(format) != "" {
+		msg = strings.TrimSpace(fmt.Sprintf(format, args...))
+	}
+	if msg == "" {
+		debugf("%s phase=%s elapsed_ms=%d", scope, phase, elapsedMs)
+		return
+	}
+	debugf("%s phase=%s elapsed_ms=%d %s", scope, phase, elapsedMs, msg)
+}
+
 func sanitizeDebugScope(scope string) string {
 	if strings.TrimSpace(scope) == "" {
 		return "command"

@@ -84,6 +84,8 @@ List workspaces with status and summary fields, similar in spirit to `gion manif
 
 - Filesystem metadata (`.kra.meta.json`) is the primary source of desired/current state.
 - Directory existence under `KRA_ROOT/workspaces/` and `KRA_ROOT/archive/` is treated as physical truth.
+- with `--debug`, emit phase timing entries to debug log for registry touch, row scan/build, per-workspace
+  repo/work-state derivation, and render steps
 - Logical work-state derivation (`active` scope):
   - source of truth: `.kra.meta.json.workspace.work_state`
   - `in-progress` is final for display ordering (skip re-derivation)

@@ -52,6 +52,7 @@ Default scope is active workspaces.
 - read-only command (no mutation)
 - should degrade gracefully when optional sources are missing
 - in degraded mode, return `ok=true` with warning details in `result.warnings[]` where possible
+- with `--debug`, emit phase timing entries to debug log for list/risk/context/summary/render steps
 
 ## Non-goals (phase 1)
 

@@ -26,6 +26,10 @@ Typical events:
 - command start/end
 - per-command scope marker
 - internal execution traces for diagnostics
+- timing-capable commands may emit phase timing lines:
+  - `phase=<name>`
+  - `elapsed_ms=<duration>`
+  - optional command-specific fields such as `scope`, `workspace`, `count`, `format`
 
 ## Operator notes
 

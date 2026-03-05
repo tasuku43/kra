@@ -80,8 +80,10 @@ func (c *CLI) runWSDashboard(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-dashboard"); err != nil {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
+	c.debugf("run ws dashboard scope=%s format=%s workspace=%s", opts.scope, opts.format, opts.workspace)
 
-	result, err := buildWSDashboardResult(root, opts)
+	buildStart := time.Now()
+	result, err := buildWSDashboardResult(root, opts, c.debugf)
 	if err != nil {
 		code := "internal_error"
 		if strings.Contains(err.Error(), "workspace not found") {
@@ -89,11 +91,15 @@ func (c *CLI) runWSDashboard(args []string) int {
 		}
 		return c.writeDashboardError(opts.format, code, err.Error())
 	}
+	debugPhasef(c.debugf, "ws-dashboard", "build_result", buildStart, "scope=%s count=%d", opts.scope, len(result.Workspaces))
 
+	renderStart := time.Now()
 	if opts.format == "json" {
+		debugPhasef(c.debugf, "ws-dashboard", "render", renderStart, "format=json count=%d", len(result.Workspaces))
 		return writeWSDashboardJSON(c.Out, result)
 	}
 	printWSDashboardHuman(c.Out, result, writerSupportsColor(c.Out))
+	debugPhasef(c.debugf, "ws-dashboard", "render", renderStart, "format=human count=%d", len(result.Workspaces))
 	return exitOK
 }
 
@@ -166,14 +172,27 @@ func parseWSDashboardOptions(args []string) (wsDashboardOptions, error) {
 	return opts, nil
 }
 
-func buildWSDashboardResult(root string, opts wsDashboardOptions) (wsDashboardResult, error) {
+func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(string, ...any)) (wsDashboardResult, error) {
 	ctx := context.Background()
 	now := time.Now().Unix()
-	rows, err := listRowsFromFilesystem(ctx, root, opts.scope, true)
+	rowsStart := time.Now()
+	observer := func(phase string, scope string, workspaceID string, elapsed time.Duration) {
+		if debugf == nil {
+			return
+		}
+		if strings.TrimSpace(workspaceID) == "" {
+			debugf("ws-dashboard phase=%s scope=%s elapsed_ms=%d", phase, scope, elapsed.Milliseconds())
+			return
+		}
+		debugf("ws-dashboard phase=%s scope=%s workspace=%s elapsed_ms=%d", phase, scope, workspaceID, elapsed.Milliseconds())
+	}
+	rows, err := listRowsFromFilesystemObserved(ctx, root, opts.scope, true, observer)
 	if err != nil {
 		return wsDashboardResult{}, fmt.Errorf("list workspaces: %w", err)
 	}
+	debugPhasef(debugf, "ws-dashboard", "list_scope", rowsStart, "scope=%s count=%d", opts.scope, len(rows))
 	if opts.workspace != "" {
+		filterStart := time.Now()
 		filtered := make([]wsListRow, 0, 1)
 		for _, row := range rows {
 			if row.ID == opts.workspace {
@@ -185,17 +204,21 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions) (wsDashboardRe
 			return wsDashboardResult{}, fmt.Errorf("workspace not found in %s scope: %s", opts.scope, opts.workspace)
 		}
 		rows = filtered
+		debugPhasef(debugf, "ws-dashboard", "filter_workspace", filterStart, "workspace=%s", opts.workspace)
 	}
 
 	warnings := make([]string, 0, 2)
+	contextStart := time.Now()
 	contextName, contextErr := resolveDashboardContextName(root)
 	if contextErr != nil {
 		contextName = root
 		warnings = append(warnings, fmt.Sprintf("resolve context: %v", contextErr))
 	}
+	debugPhasef(debugf, "ws-dashboard", "resolve_context", contextStart, "scope=%s", opts.scope)
 
 	riskByWorkspace := map[string]workspaceRiskDetail{}
 	if opts.scope == "active" {
+		riskStart := time.Now()
 		ids := make([]string, 0, len(rows))
 		for _, row := range rows {
 			ids = append(ids, row.ID)
@@ -208,6 +231,7 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions) (wsDashboardRe
 				riskByWorkspace[item.id] = item
 			}
 		}
+		debugPhasef(debugf, "ws-dashboard", "collect_risk", riskStart, "scope=%s count=%d", opts.scope, len(ids))
 	}
 
 	items := make([]wsDashboardRow, 0, len(rows))
@@ -233,8 +257,10 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions) (wsDashboardRe
 		})
 	}
 
-	activeRows, _ := listRowsFromFilesystem(ctx, root, "active", false)
-	archivedRows, _ := listRowsFromFilesystem(ctx, root, "archived", false)
+	summaryStart := time.Now()
+	activeRows, _ := listRowsFromFilesystemObserved(ctx, root, "active", false, observer)
+	archivedRows, _ := listRowsFromFilesystemObserved(ctx, root, "archived", false, observer)
+	debugPhasef(debugf, "ws-dashboard", "summary_counts", summaryStart, "active=%d archived=%d", len(activeRows), len(archivedRows))
 
 	var detail *workspaceRiskDetail
 	if opts.showDetail {
