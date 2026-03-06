@@ -102,16 +102,7 @@ func TestCLI_WS_Close_WithStagedChanges_CommitsOnlyWorkspaceScope(t *testing.T) 
 
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	p := filepath.Join(env.Root, "README.tmp")
 	if err := os.WriteFile(p, []byte("staged\n"), 0o644); err != nil {
@@ -151,25 +142,7 @@ func TestCLI_WS_Reopen_WithStagedChanges_PreservesUnrelatedIndexAndReopens(t *te
 
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "archived", "WS1")
 
 	p := filepath.Join(env.Root, "README.tmp")
 	if err := os.WriteFile(p, []byte("staged\n"), 0o644); err != nil {
@@ -208,16 +181,7 @@ func TestCLI_WS_Purge_WithStagedChanges_PreservesUnrelatedIndexAndPurges(t *test
 
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "archived", "WS1")
 
 	p := filepath.Join(env.Root, "README.tmp")
 	if err := os.WriteFile(p, []byte("staged\n"), 0o644); err != nil {
@@ -233,9 +197,6 @@ func TestCLI_WS_Purge_WithStagedChanges_PreservesUnrelatedIndexAndPurges(t *test
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "close", "--id", "WS1"}); code != exitOK {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
 		if code := c.Run([]string{"ws", "unlock", "--id", "WS1"}); code != exitOK {
 			t.Fatalf("ws unlock exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
