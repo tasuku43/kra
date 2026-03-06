@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -191,6 +192,7 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 		return wsDashboardResult{}, fmt.Errorf("list workspaces: %w", err)
 	}
 	debugPhasef(debugf, "ws-dashboard", "list_scope", rowsStart, "scope=%s count=%d", opts.scope, len(rows))
+	scopeCount := len(rows)
 	if opts.workspace != "" {
 		filterStart := time.Now()
 		filtered := make([]wsListRow, 0, 1)
@@ -258,9 +260,17 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 	}
 
 	summaryStart := time.Now()
-	activeRows, _ := listRowsFromFilesystemObserved(ctx, root, "active", false, observer)
-	archivedRows, _ := listRowsFromFilesystemObserved(ctx, root, "archived", false, observer)
-	debugPhasef(debugf, "ws-dashboard", "summary_counts", summaryStart, "active=%d archived=%d", len(activeRows), len(archivedRows))
+	activeCount := 0
+	archivedCount := 0
+	switch opts.scope {
+	case "active":
+		activeCount = scopeCount
+		archivedCount, _ = countWorkspaceDirectories(root, "archived")
+	default:
+		archivedCount = scopeCount
+		activeCount, _ = countWorkspaceDirectories(root, "active")
+	}
+	debugPhasef(debugf, "ws-dashboard", "summary_counts", summaryStart, "active=%d archived=%d", activeCount, archivedCount)
 
 	var detail *workspaceRiskDetail
 	if opts.showDetail {
@@ -275,14 +285,36 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 		Scope:       opts.scope,
 		GeneratedAt: now,
 		Summary: wsDashboardSummary{
-			Active:     len(activeRows),
-			Archived:   len(archivedRows),
+			Active:     activeCount,
+			Archived:   archivedCount,
 			RiskTotals: riskTotals,
 		},
 		Workspaces: items,
 		Warnings:   warnings,
 		Detail:     detail,
 	}, nil
+}
+
+func countWorkspaceDirectories(root string, scope string) (int, error) {
+	baseDir := filepath.Join(root, "workspaces")
+	if scope == "archived" {
+		baseDir = filepath.Join(root, "archive")
+	}
+	entries, err := os.ReadDir(baseDir)
+	if err != nil {
+		return 0, err
+	}
+	count := 0
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		if err := validateWorkspaceID(strings.TrimSpace(entry.Name())); err != nil {
+			continue
+		}
+		count++
+	}
+	return count, nil
 }
 
 func resolveDashboardContextName(root string) (string, error) {

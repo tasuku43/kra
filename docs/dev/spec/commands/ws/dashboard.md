@@ -34,6 +34,7 @@ Default scope is active workspaces.
 - with `--workspace <id>`, show one detailed panel:
   - repo-level risk tree
   - workspace-level aggregated risk
+  - summary cards still reflect global active/archived counts for the root, not the filtered subset
 
 ## JSON envelope
 
@@ -53,6 +54,7 @@ Default scope is active workspaces.
 - should degrade gracefully when optional sources are missing
 - in degraded mode, return `ok=true` with warning details in `result.warnings[]` where possible
 - with `--debug`, emit phase timing entries to debug log for list/risk/context/summary/render steps
+- summary counts should use lightweight scope counting and must not rebuild workspace rows only for card totals
 
 ## Non-goals (phase 1)
 
