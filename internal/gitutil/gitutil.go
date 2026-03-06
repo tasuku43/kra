@@ -7,10 +7,14 @@ import (
 	"os"
 	"os/exec"
 	"strings"
+	"time"
 
 	"github.com/tasuku43/kra/internal/core/gitparse"
 	"github.com/tasuku43/kra/internal/core/gitref"
+	"github.com/tasuku43/kra/internal/procexec"
 )
+
+const gitCommandTimeout = 2 * time.Minute
 
 func EnsureGitInPath() error {
 	if _, err := exec.LookPath("git"); err != nil {
@@ -27,11 +31,7 @@ func Run(ctx context.Context, dir string, args ...string) (string, error) {
 		return "", err
 	}
 
-	cmd := exec.CommandContext(ctx, "git", args...)
-	if dir != "" {
-		cmd.Dir = dir
-	}
-	out, err := cmd.CombinedOutput()
+	out, err := procexec.RunCombined(ctx, dir, "git", gitCommandTimeout, args...)
 	s := strings.TrimSpace(string(out))
 	if err != nil {
 		return s, fmt.Errorf("git %s failed: %w (output=%s)", strings.Join(args, " "), err, s)
@@ -65,8 +65,7 @@ func ShowRefExistsBare(ctx context.Context, gitDir string, ref string) (bool, er
 		return false, err
 	}
 
-	cmd := exec.CommandContext(ctx, "git", "--git-dir", gitDir, "show-ref", "--verify", "--quiet", ref)
-	out, err := cmd.CombinedOutput()
+	out, _, err := procexec.RunOutput(ctx, "", "git", gitCommandTimeout, "--git-dir", gitDir, "show-ref", "--verify", "--quiet", ref)
 	if err == nil {
 		return true, nil
 	}
@@ -91,11 +90,7 @@ func IsIgnored(ctx context.Context, dir string, path string) (bool, error) {
 		return false, err
 	}
 
-	cmd := exec.CommandContext(ctx, "git", "check-ignore", "--quiet", "--", path)
-	if dir != "" {
-		cmd.Dir = dir
-	}
-	out, err := cmd.CombinedOutput()
+	out, _, err := procexec.RunOutput(ctx, dir, "git", gitCommandTimeout, "check-ignore", "--quiet", "--", path)
 	if err == nil {
 		return true, nil
 	}

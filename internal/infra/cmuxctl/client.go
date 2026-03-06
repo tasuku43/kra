@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"os/exec"
 	"strconv"
 	"strings"
+	"time"
+
+	"github.com/tasuku43/kra/internal/procexec"
 )
 
 type Runner interface {
@@ -16,16 +18,10 @@ type Runner interface {
 type execRunner struct{}
 
 func (execRunner) Run(ctx context.Context, name string, args ...string) ([]byte, []byte, error) {
-	cmd := exec.CommandContext(ctx, name, args...)
-	stdout, err := cmd.Output()
-	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
-			return stdout, ee.Stderr, err
-		}
-		return stdout, nil, err
-	}
-	return stdout, nil, nil
+	return procexec.RunOutput(ctx, "", name, cmuxCommandTimeout, args...)
 }
+
+const cmuxCommandTimeout = 15 * time.Second
 
 type Client struct {
 	Runner     Runner

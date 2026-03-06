@@ -6,8 +6,10 @@ import (
 	"os/exec"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/tasuku43/kra/internal/core/repospec"
+	"github.com/tasuku43/kra/internal/procexec"
 )
 
 type ghRunner func(ctx context.Context, args ...string) (string, error)
@@ -15,6 +17,8 @@ type ghRunner func(ctx context.Context, args ...string) (string, error)
 type GitHubGHProvider struct {
 	run ghRunner
 }
+
+const ghCommandTimeout = 2 * time.Minute
 
 func NewGitHubGHProvider(run ghRunner) *GitHubGHProvider {
 	if run == nil {
@@ -117,8 +121,7 @@ func runGHCommand(ctx context.Context, args ...string) (string, error) {
 	if _, err := exec.LookPath("gh"); err != nil {
 		return "", fmt.Errorf("gh not found in PATH: %w", err)
 	}
-	cmd := exec.CommandContext(ctx, "gh", args...)
-	out, err := cmd.CombinedOutput()
+	out, err := procexec.RunCombined(ctx, "", "gh", ghCommandTimeout, args...)
 	s := strings.TrimSpace(string(out))
 	if err != nil {
 		return s, fmt.Errorf("gh %s failed: %w (output=%s)", strings.Join(args, " "), err, s)
