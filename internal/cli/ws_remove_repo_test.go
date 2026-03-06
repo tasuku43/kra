@@ -310,24 +310,7 @@ func TestPrintRemoveRepoPlan_ShowsFilesSectionForDirtyRepo(t *testing.T) {
 
 func createTestRemoteRepoSpec(t *testing.T) string {
 	t.Helper()
-
-	src := filepath.Join(t.TempDir(), "src")
-	if err := os.MkdirAll(src, 0o755); err != nil {
-		t.Fatalf("mkdir src: %v", err)
-	}
-	runGit(t, src, "init", "-b", "main")
-	runGit(t, src, "config", "user.email", "test@example.com")
-	runGit(t, src, "config", "user.name", "test")
-	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	runGit(t, src, "add", ".")
-	runGit(t, src, "commit", "-m", "init")
-
-	remoteBare := filepath.Join(t.TempDir(), "github.com", "tasuku43", "sample.git")
-	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
-		t.Fatalf("mkdir remote bare dir: %v", err)
-	}
-	runGit(t, "", "clone", "--bare", src, remoteBare)
-	return "file://" + remoteBare
+	return prepareRemoteRepoSpecWithName(t, func(dir string, args ...string) {
+		runGit(t, dir, args...)
+	}, "github.com", "tasuku43", "sample")
 }

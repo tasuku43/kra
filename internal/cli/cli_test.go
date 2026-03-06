@@ -816,26 +816,7 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 		}
 	}
 
-	// Prepare a local "remote" bare repo addressable via a file:// spec that ends with <host>/<owner>/<repo>.
-	src := filepath.Join(t.TempDir(), "src")
-	if err := os.MkdirAll(src, 0o755); err != nil {
-		t.Fatalf("mkdir src: %v", err)
-	}
-	runGit(src, "init", "-b", "main")
-	runGit(src, "config", "user.email", "test@example.com")
-	runGit(src, "config", "user.name", "test")
-	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	runGit(src, "add", ".")
-	runGit(src, "commit", "-m", "init")
-
-	remoteBare := filepath.Join(t.TempDir(), "github.com", "tasuku43", "sample.git")
-	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
-		t.Fatalf("mkdir remoteBare dir: %v", err)
-	}
-	runGit("", "clone", "--bare", src, remoteBare)
-	repoSpec := "file://" + remoteBare
+	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "tasuku43", "sample")
 
 	root := t.TempDir()
 	kraHome := setKraHomeForTest(t)
@@ -930,26 +911,7 @@ func TestCLI_WS_AddRepo_DBUnavailable_FallsBackToFilesystem(t *testing.T) {
 		}
 	}
 
-	// Prepare a local remote bare repo.
-	src := filepath.Join(t.TempDir(), "src")
-	if err := os.MkdirAll(src, 0o755); err != nil {
-		t.Fatalf("mkdir src: %v", err)
-	}
-	runGit(src, "init", "-b", "main")
-	runGit(src, "config", "user.email", "test@example.com")
-	runGit(src, "config", "user.name", "test")
-	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	runGit(src, "add", ".")
-	runGit(src, "commit", "-m", "init")
-
-	remoteBare := filepath.Join(t.TempDir(), "github.com", "tasuku43", "sample.git")
-	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
-		t.Fatalf("mkdir remoteBare dir: %v", err)
-	}
-	runGit("", "clone", "--bare", src, remoteBare)
-	repoSpec := "file://" + remoteBare
+	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "tasuku43", "sample")
 
 	root := t.TempDir()
 	kraHome := setKraHomeForTest(t)
