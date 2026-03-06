@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -34,31 +33,8 @@ func TestCLI_WS_Reopen_Help_ShowsUsage(t *testing.T) {
 func TestCLI_WS_Reopen_RestoresWorkspaceRecreatesWorktreesAndCanCommitAndUpdatesDB(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
-	runGit := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		if dir != "" {
-			cmd.Dir = dir
-		}
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
-		}
-	}
-
 	env := testutil.NewEnv(t)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"init", "--root", env.Root, "--context", "ws-reopen"})
-		if code != exitOK {
-			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	runGit(env.Root, "config", "user.email", "test@example.com")
-	runGit(env.Root, "config", "user.name", "test")
+	initAndConfigureRootRepo(t, env.Root)
 
 	{
 		var out bytes.Buffer
@@ -70,25 +46,9 @@ func TestCLI_WS_Reopen_RestoresWorkspaceRecreatesWorktreesAndCanCommitAndUpdates
 		}
 	}
 
-	src := filepath.Join(t.TempDir(), "src")
-	if err := os.MkdirAll(src, 0o755); err != nil {
-		t.Fatalf("mkdir src: %v", err)
-	}
-	runGit(src, "init", "-b", "main")
-	runGit(src, "config", "user.email", "test@example.com")
-	runGit(src, "config", "user.name", "test")
-	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	runGit(src, "add", ".")
-	runGit(src, "commit", "-m", "init")
-
-	remoteBare := filepath.Join(t.TempDir(), "github.com", "o", "r.git")
-	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
-		t.Fatalf("mkdir remoteBare dir: %v", err)
-	}
-	runGit("", "clone", "--bare", src, remoteBare)
-	repoSpec := "file://" + remoteBare
+	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
+		runGit(t, dir, args...)
+	})
 	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 
 	{
@@ -148,31 +108,8 @@ func TestCLI_WS_Reopen_RestoresWorkspaceRecreatesWorktreesAndCanCommitAndUpdates
 func TestCLI_WS_Reopen_RecreatesWorktreesWithoutWorkspaceRepoBindings(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
-	runGit := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		if dir != "" {
-			cmd.Dir = dir
-		}
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
-		}
-	}
-
 	env := testutil.NewEnv(t)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"init", "--root", env.Root, "--context", "ws-reopen"})
-		if code != exitOK {
-			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	runGit(env.Root, "config", "user.email", "test@example.com")
-	runGit(env.Root, "config", "user.name", "test")
+	initAndConfigureRootRepo(t, env.Root)
 
 	{
 		var out bytes.Buffer
@@ -184,25 +121,9 @@ func TestCLI_WS_Reopen_RecreatesWorktreesWithoutWorkspaceRepoBindings(t *testing
 		}
 	}
 
-	src := filepath.Join(t.TempDir(), "src")
-	if err := os.MkdirAll(src, 0o755); err != nil {
-		t.Fatalf("mkdir src: %v", err)
-	}
-	runGit(src, "init", "-b", "main")
-	runGit(src, "config", "user.email", "test@example.com")
-	runGit(src, "config", "user.name", "test")
-	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	runGit(src, "add", ".")
-	runGit(src, "commit", "-m", "init")
-
-	remoteBare := filepath.Join(t.TempDir(), "github.com", "o", "r.git")
-	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
-		t.Fatalf("mkdir remoteBare dir: %v", err)
-	}
-	runGit("", "clone", "--bare", src, remoteBare)
-	repoSpec := "file://" + remoteBare
+	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
+		runGit(t, dir, args...)
+	})
 	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 
 	{
@@ -245,31 +166,8 @@ func TestCLI_WS_Reopen_RecreatesWorktreesWithoutWorkspaceRepoBindings(t *testing
 func TestCLI_WS_Reopen_ErrorsWhenBranchCheckedOutElsewhere(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
-	runGit := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		if dir != "" {
-			cmd.Dir = dir
-		}
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
-		}
-	}
-
 	env := testutil.NewEnv(t)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"init", "--root", env.Root, "--context", "ws-reopen"})
-		if code != exitOK {
-			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	runGit(env.Root, "config", "user.email", "test@example.com")
-	runGit(env.Root, "config", "user.name", "test")
+	initAndConfigureRootRepo(t, env.Root)
 
 	{
 		var out bytes.Buffer
@@ -281,25 +179,9 @@ func TestCLI_WS_Reopen_ErrorsWhenBranchCheckedOutElsewhere(t *testing.T) {
 		}
 	}
 
-	src := filepath.Join(t.TempDir(), "src")
-	if err := os.MkdirAll(src, 0o755); err != nil {
-		t.Fatalf("mkdir src: %v", err)
-	}
-	runGit(src, "init", "-b", "main")
-	runGit(src, "config", "user.email", "test@example.com")
-	runGit(src, "config", "user.name", "test")
-	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	runGit(src, "add", ".")
-	runGit(src, "commit", "-m", "init")
-
-	remoteBare := filepath.Join(t.TempDir(), "github.com", "o", "r.git")
-	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
-		t.Fatalf("mkdir remoteBare dir: %v", err)
-	}
-	runGit("", "clone", "--bare", src, remoteBare)
-	repoSpec := "file://" + remoteBare
+	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
+		runGit(t, dir, args...)
+	})
 	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 
 	{
@@ -329,8 +211,8 @@ func TestCLI_WS_Reopen_ErrorsWhenBranchCheckedOutElsewhere(t *testing.T) {
 	}
 	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
 	otherWorktree := filepath.Join(t.TempDir(), "other-worktree")
-	runGit("", "--git-dir", barePath, "branch", "-f", "WS1/test", "origin/main")
-	runGit("", "--git-dir", barePath, "worktree", "add", otherWorktree, "WS1/test")
+	runGit(t, "", "--git-dir", barePath, "branch", "-f", "WS1/test", "origin/main")
+	runGit(t, "", "--git-dir", barePath, "worktree", "add", otherWorktree, "WS1/test")
 
 	{
 		var out bytes.Buffer

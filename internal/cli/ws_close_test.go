@@ -158,31 +158,8 @@ func TestCLI_WS_Close_CMUXCloseFailure_DoesNotFailWorkspaceClose(t *testing.T) {
 func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
-	runGit := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		if dir != "" {
-			cmd.Dir = dir
-		}
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
-		}
-	}
-
 	env := testutil.NewEnv(t)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"init", "--root", env.Root, "--context", "ws-close"})
-		if code != exitOK {
-			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	runGit(env.Root, "config", "user.email", "test@example.com")
-	runGit(env.Root, "config", "user.name", "test")
+	initAndConfigureRootRepo(t, env.Root)
 
 	{
 		var out bytes.Buffer
@@ -194,26 +171,9 @@ func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *te
 		}
 	}
 
-	// Prepare a local "remote" bare repo addressable via a file:// spec that ends with <host>/<owner>/<repo>.
-	src := filepath.Join(t.TempDir(), "src")
-	if err := os.MkdirAll(src, 0o755); err != nil {
-		t.Fatalf("mkdir src: %v", err)
-	}
-	runGit(src, "init", "-b", "main")
-	runGit(src, "config", "user.email", "test@example.com")
-	runGit(src, "config", "user.name", "test")
-	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	runGit(src, "add", ".")
-	runGit(src, "commit", "-m", "init")
-
-	remoteBare := filepath.Join(t.TempDir(), "github.com", "o", "r.git")
-	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
-		t.Fatalf("mkdir remoteBare dir: %v", err)
-	}
-	runGit("", "clone", "--bare", src, remoteBare)
-	repoSpec := "file://" + remoteBare
+	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
+		runGit(t, dir, args...)
+	})
 	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 
 	{
@@ -296,29 +256,8 @@ func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *te
 func TestCLI_WS_Close_DirtyRepo_PromptsAndCanAbort(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
-	runGit := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		if dir != "" {
-			cmd.Dir = dir
-		}
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
-		}
-	}
-
 	env := testutil.NewEnv(t)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"init", "--root", env.Root, "--context", "ws-close"})
-		if code != exitOK {
-			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	initAndConfigureRootRepo(t, env.Root)
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
@@ -328,28 +267,9 @@ func TestCLI_WS_Close_DirtyRepo_PromptsAndCanAbort(t *testing.T) {
 			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
-	runGit(env.Root, "config", "user.email", "test@example.com")
-	runGit(env.Root, "config", "user.name", "test")
-
-	src := filepath.Join(t.TempDir(), "src")
-	if err := os.MkdirAll(src, 0o755); err != nil {
-		t.Fatalf("mkdir src: %v", err)
-	}
-	runGit(src, "init", "-b", "main")
-	runGit(src, "config", "user.email", "test@example.com")
-	runGit(src, "config", "user.name", "test")
-	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	runGit(src, "add", ".")
-	runGit(src, "commit", "-m", "init")
-
-	remoteBare := filepath.Join(t.TempDir(), "github.com", "o", "r.git")
-	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
-		t.Fatalf("mkdir remoteBare dir: %v", err)
-	}
-	runGit("", "clone", "--bare", src, remoteBare)
-	repoSpec := "file://" + remoteBare
+	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
+		runGit(t, dir, args...)
+	})
 	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
 
 	{
@@ -396,16 +316,7 @@ func TestCLI_WS_Close_SelectorModeWithoutTTY_Errors(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
 	env := testutil.NewEnv(t)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"init", "--root", env.Root, "--context", "ws-close"})
-		if code != exitOK {
-			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	initAndConfigureRootRepo(t, env.Root)
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
@@ -440,15 +351,7 @@ func TestCLI_WS_Close_ShiftsProcessCWDWhenInsideTargetWorkspace(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
 	env := testutil.NewEnv(t)
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"init", "--root", env.Root, "--context", "ws-close"})
-		if code != exitOK {
-			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	initAndConfigureRootRepo(t, env.Root)
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
@@ -497,15 +400,7 @@ func TestCLI_WS_Close_AllowsUnrelatedPreStagedChangesOutsideWorkspaceAllowlist(t
 	testutil.RequireCommand(t, "git")
 
 	env := testutil.NewEnv(t)
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"init", "--root", env.Root, "--context", "ws-close"})
-		if code != exitOK {
-			t.Fatalf("init exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	initAndConfigureRootRepo(t, env.Root)
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
@@ -515,9 +410,6 @@ func TestCLI_WS_Close_AllowsUnrelatedPreStagedChangesOutsideWorkspaceAllowlist(t
 			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 	}
-
-	runGit(t, env.Root, "config", "user.email", "test@example.com")
-	runGit(t, env.Root, "config", "user.name", "test")
 	unrelated := filepath.Join(env.Root, "UNRELATED.md")
 	if err := os.WriteFile(unrelated, []byte("keep staged\n"), 0o644); err != nil {
 		t.Fatalf("write unrelated file: %v", err)

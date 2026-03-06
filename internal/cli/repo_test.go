@@ -1084,23 +1084,13 @@ func TestCLI_RepoGC_BlockedByArchiveMetadataReference(t *testing.T) {
 func prepareRemoteRepoSpecWithName(t *testing.T, runGit func(dir string, args ...string), host string, owner string, repo string) string {
 	t.Helper()
 
-	src := filepath.Join(t.TempDir(), "src")
-	if err := os.MkdirAll(src, 0o755); err != nil {
-		t.Fatalf("mkdir src: %v", err)
-	}
-	runGit(src, "init", "-b", "main")
-	runGit(src, "config", "user.email", "test@example.com")
-	runGit(src, "config", "user.name", "test")
-	if err := os.WriteFile(filepath.Join(src, "README.md"), []byte("hello\n"), 0o644); err != nil {
-		t.Fatalf("write README: %v", err)
-	}
-	runGit(src, "add", ".")
-	runGit(src, "commit", "-m", "init")
-
+	templateBare := prepareRemoteRepoTemplate(t, runGit)
 	remoteBare := filepath.Join(t.TempDir(), host, owner, repo+".git")
 	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
 		t.Fatalf("mkdir remoteBare dir: %v", err)
 	}
-	runGit("", "clone", "--bare", src, remoteBare)
+	if err := copyDir(templateBare, remoteBare); err != nil {
+		t.Fatalf("copy bare repo fixture: %v", err)
+	}
 	return "file://" + remoteBare
 }
