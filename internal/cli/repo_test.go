@@ -10,6 +10,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/repostore"
@@ -678,32 +679,8 @@ func TestCLI_RepoRemove_FailsWhenRepoBoundToWorkspace(t *testing.T) {
 	env.EnsureRootLayout(t)
 	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "bound-repo")
 
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
-			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "TEST-200"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "TEST-200"))
-		if code := c.Run([]string{"ws", "add-repo", "--id", "TEST-200"}); code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
+	seedWorkspaceRepoBindingMeta(t, env.Root, "active", "TEST-200", repoSpec)
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -736,31 +713,8 @@ func TestCLI_RepoRemove_JSON_BlockedWhenRepoBound(t *testing.T) {
 	env.EnsureRootLayout(t)
 	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "bound-json")
 
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
-			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "TEST-201"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "TEST-201"))
-		if code := c.Run([]string{"ws", "add-repo", "--id", "TEST-201"}); code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
+	seedWorkspaceRepoBindingMeta(t, env.Root, "active", "TEST-201", repoSpec)
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -916,32 +870,8 @@ func TestCLI_RepoGC_FailsWhenNoEligibleCandidates(t *testing.T) {
 	initAndConfigureRootRepo(t, env.Root)
 	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "gc-blocked")
 
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
-			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS-GC"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS-GC"))
-		if code := c.Run([]string{"ws", "add-repo", "--id", "WS-GC"}); code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
+	seedWorkspaceRepoBindingMeta(t, env.Root, "active", "WS-GC", repoSpec)
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -975,31 +905,8 @@ func TestCLI_RepoGC_JSON_BlockedWhenNotEligible(t *testing.T) {
 	initAndConfigureRootRepo(t, env.Root)
 	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "gc-json-blocked")
 
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
-			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS-GC-JSON"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS-GC-JSON"))
-		if code := c.Run([]string{"ws", "add-repo", "--id", "WS-GC-JSON"}); code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
+	seedWorkspaceRepoBindingMeta(t, env.Root, "active", "WS-GC-JSON", repoSpec)
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -1033,39 +940,8 @@ func TestCLI_RepoGC_BlockedByArchiveMetadataReference(t *testing.T) {
 	initAndConfigureRootRepo(t, env.Root)
 
 	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "gc-archive-ref")
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"repo", "add", repoSpec}); code != exitOK {
-			t.Fatalf("repo add exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-		if code := c.Run([]string{"ws", "add-repo", "--id", "WS1"}); code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "close", "--id", "WS1"}); code != exitOK {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
+	seedWorkspaceRepoBindingMeta(t, env.Root, "archived", "WS1", repoSpec)
 
 	{
 		var out bytes.Buffer
@@ -1093,4 +969,35 @@ func prepareRemoteRepoSpecWithName(t *testing.T, runGit func(dir string, args ..
 		t.Fatalf("copy bare repo fixture: %v", err)
 	}
 	return "file://" + remoteBare
+}
+
+func seedWorkspaceRepoBindingMeta(t *testing.T, root string, scope string, workspaceID string, repoSpecInput string) {
+	t.Helper()
+
+	spec := mustNormalizeRepoSpec(t, repoSpecInput)
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	if scope == "archived" {
+		wsPath = filepath.Join(root, "archive", workspaceID)
+	}
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace path: %v", err)
+	}
+
+	now := time.Now().Unix()
+	meta := newWorkspaceMetaFileForCreate(workspaceID, workspaceID, "", now)
+	meta.Workspace.UpdatedAt = now
+	if scope == "archived" {
+		meta.Workspace.Status = "archived"
+	}
+	meta.ReposRestore = []workspaceMetaRepoRestore{{
+		RepoUID:   fmt.Sprintf("%s/%s/%s", spec.Host, spec.Owner, spec.Repo),
+		RepoKey:   fmt.Sprintf("%s/%s", spec.Owner, spec.Repo),
+		RemoteURL: repoSpecInput,
+		Alias:     spec.Repo,
+		Branch:    workspaceID + "/test",
+		BaseRef:   "origin/main",
+	}}
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
 }
