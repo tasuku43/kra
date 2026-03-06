@@ -55,15 +55,7 @@ func initAndConfigureRootRepo(t *testing.T, root string) {
 func prepareRemoteRepoSpec(t *testing.T, runGit func(dir string, args ...string)) string {
 	t.Helper()
 
-	templateBare := prepareRemoteRepoTemplate(t, runGit)
-	remoteBare := filepath.Join(t.TempDir(), "github.com", "o", "r.git")
-	if err := os.MkdirAll(filepath.Dir(remoteBare), 0o755); err != nil {
-		t.Fatalf("mkdir remoteBare dir: %v", err)
-	}
-	if err := copyDir(templateBare, remoteBare); err != nil {
-		t.Fatalf("copy bare repo fixture: %v", err)
-	}
-	return "file://" + remoteBare
+	return "file://" + prepareRemoteRepoTemplate(t, runGit)
 }
 
 func prepareRemoteRepoTemplate(t *testing.T, runGit func(dir string, args ...string)) string {
