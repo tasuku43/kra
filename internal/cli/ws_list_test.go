@@ -151,34 +151,8 @@ func TestCLI_WS_List_FallbackToFilesystem_WhenStateDBCorrupted(t *testing.T) {
 func TestCLI_WS_List_DefaultScopeShowsActiveOnlyAndNoSelectionMarker(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS_ACTIVE"})
-		if code != exitOK {
-			t.Fatalf("ws create WS_ACTIVE exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS_ARCHIVED"})
-		if code != exitOK {
-			t.Fatalf("ws create WS_ARCHIVED exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "--id", "WS_ARCHIVED"})
-		if code != exitOK {
-			t.Fatalf("ws close WS_ARCHIVED exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS_ACTIVE")
+	seedWorkspaceMeta(t, env.Root, "archived", "WS_ARCHIVED")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -208,34 +182,8 @@ func TestCLI_WS_List_DefaultScopeShowsActiveOnlyAndNoSelectionMarker(t *testing.
 func TestCLI_WS_List_ArchivedScopeShowsArchivedOnly(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS_ACTIVE"})
-		if code != exitOK {
-			t.Fatalf("ws create WS_ACTIVE exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS_ARCHIVED"})
-		if code != exitOK {
-			t.Fatalf("ws create WS_ARCHIVED exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "--id", "WS_ARCHIVED"})
-		if code != exitOK {
-			t.Fatalf("ws close WS_ARCHIVED exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS_ACTIVE")
+	seedWorkspaceMeta(t, env.Root, "archived", "WS_ARCHIVED")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -259,16 +207,7 @@ func TestCLI_WS_List_ArchivedScopeShowsArchivedOnly(t *testing.T) {
 func TestCLI_WS_List_SummaryDoesNotShowTextualRiskTags(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create WS1 exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
