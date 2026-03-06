@@ -35,6 +35,7 @@ the same application use cases.
 - `cli` must not import `statestore`, `paths`, or `gitutil` directly after migration.
 - `cli` calls `app` use cases through explicit request/response structs.
 - `app` depends on interfaces only; concrete adapters live in `infra` and `ui`.
+- workspace metadata file I/O is centralized in `internal/app/workspacemeta`; CLI keeps only thin adapters.
 - Launcher (`kra ws`) and direct operations (`ws close`, `ws add-repo`, ...) must execute through
   the same `app` use case path to avoid behavior drift.
 - During migration, direct `internal/infra/*` imports under `internal/cli` are controlled by architecture allowlist tests in

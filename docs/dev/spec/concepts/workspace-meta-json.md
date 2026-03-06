@@ -85,6 +85,7 @@ This file is canonical and stored in:
 
 - Any update must use atomic replace (`temp file -> fsync optional -> rename`).
 - Command-level writes should validate full JSON before replacing.
+- Metadata read/write helpers are centralized in `internal/app/workspacemeta`.
 - On parse failure:
   - fail fast with path + recovery hint.
   - no silent fallback to partial/default values.

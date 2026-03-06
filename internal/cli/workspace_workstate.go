@@ -13,6 +13,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/tasuku43/kra/internal/app/workspacemeta"
 	"github.com/tasuku43/kra/internal/infra/gitutil"
 	"github.com/tasuku43/kra/internal/infra/statestore"
 )
@@ -28,32 +29,12 @@ const (
 	workspaceBaselineDirName = "workspace-baselines"
 )
 
-type workspaceBaselineRepo struct {
-	BaselineHead string `json:"baseline_head,omitempty"`
-}
-
-type workspaceBaseline struct {
-	Version   int                              `json:"version"`
-	CreatedAt int64                            `json:"created_at"`
-	Repos     map[string]workspaceBaselineRepo `json:"repos,omitempty"`
-	FS        map[string]string                `json:"fs,omitempty"`
-}
-
 func workspaceBaselinePath(root string, workspaceID string) string {
 	return filepath.Join(root, ".kra", "state", workspaceBaselineDirName, workspaceID+".json")
 }
 
 func normalizeWorkspaceBaseline(baseline workspaceBaseline) workspaceBaseline {
-	if baseline.Version <= 0 {
-		baseline.Version = 1
-	}
-	if baseline.Repos == nil {
-		baseline.Repos = map[string]workspaceBaselineRepo{}
-	}
-	if baseline.FS == nil {
-		baseline.FS = map[string]string{}
-	}
-	return baseline
+	return workspacemeta.NormalizeBaseline(baseline)
 }
 
 func loadLegacyWorkspaceBaseline(root string, workspaceID string) (workspaceBaseline, error) {
