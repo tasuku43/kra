@@ -291,7 +291,7 @@ func TestCLI_WS_Close_ShiftsProcessCWDWhenInsideTargetWorkspace(t *testing.T) {
 	var out bytes.Buffer
 	var errBuf bytes.Buffer
 	c := New(&out, &errBuf)
-	code := c.Run([]string{"ws", "close", "--id", "WS1"})
+	code := c.Run([]string{"ws", "close", "--no-commit", "--id", "WS1"})
 	if code != exitOK {
 		t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, errBuf.String())
 	}

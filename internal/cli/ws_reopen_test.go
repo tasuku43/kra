@@ -79,7 +79,7 @@ func TestCLI_WS_Reopen_RecreatesWorktreesWithoutWorkspaceRepoBindings(t *testing
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "reopen", "--id", "WS1"})
+		code := c.Run([]string{"ws", "reopen", "--no-commit", "--id", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws reopen exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}

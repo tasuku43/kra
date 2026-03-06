@@ -40,7 +40,7 @@ func TestCLI_WS_Purge_ArchivedWorkspace_DeletesPathsAndCanCommitAndUpdatesDB(t *
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "--id", "WS1"})
+		code := c.Run([]string{"ws", "close", "--no-commit", "--id", "WS1"})
 		if code != exitOK {
 			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
