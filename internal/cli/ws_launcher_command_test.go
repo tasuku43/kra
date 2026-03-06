@@ -29,16 +29,7 @@ func TestCLI_WS_Launcher_RequiresIDOrWorkspaceContext(t *testing.T) {
 func TestCLI_WS_Launcher_WithIDAndFixedAction(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -55,23 +46,7 @@ func TestCLI_WS_Launcher_WithIDAndFixedAction(t *testing.T) {
 func TestCLI_WS_Launcher_ReopenAcceptsIDWithNoCommitFlag(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "close", "--id", "WS1", "--no-commit", "--force"}); code != exitOK {
-			t.Fatalf("ws close --id --no-commit exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "archived", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -91,23 +66,7 @@ func TestCLI_WS_Launcher_ReopenAcceptsIDWithNoCommitFlag(t *testing.T) {
 func TestCLI_WS_Launcher_PurgeAcceptsIDWithNoPromptForce(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "close", "--id", "WS1", "--no-commit", "--force"}); code != exitOK {
-			t.Fatalf("ws close --id --no-commit exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "archived", "WS1")
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
@@ -135,15 +94,7 @@ func TestCLI_WS_Launcher_PurgeAcceptsIDWithNoPromptForce(t *testing.T) {
 func TestCLI_WS_Launcher_UnlockActionAcceptsIDWithFormatJSON(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer

@@ -99,15 +99,7 @@ func TestCLI_WS_Create_JSON_MissingID_ReturnsInvalidArgument(t *testing.T) {
 func TestCLI_WS_ActClose_JSON_Success(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -128,15 +120,7 @@ func TestCLI_WS_ActClose_JSON_Success(t *testing.T) {
 func TestCLI_WS_ActClose_DryRun_JSON_Success(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -157,18 +141,7 @@ func TestCLI_WS_ActClose_DryRun_JSON_Success(t *testing.T) {
 func TestCLI_WS_ActReopen_DryRun_JSON_Success(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-		if code := c.Run([]string{"ws", "close", "--format", "json", "--id", "WS1"}); code != exitOK {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "archived", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -186,15 +159,7 @@ func TestCLI_WS_ActReopen_DryRun_JSON_Success(t *testing.T) {
 func TestCLI_WS_ActPurge_DryRun_JSON_ArchivedOnly(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -215,15 +180,7 @@ func TestCLI_WS_ActPurge_DryRun_JSON_ArchivedOnly(t *testing.T) {
 func TestCLI_WS_ActAddRepo_JSON_RequiresRepo(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -241,15 +198,7 @@ func TestCLI_WS_ActAddRepo_JSON_RequiresRepo(t *testing.T) {
 func TestCLI_WS_ActRemoveRepo_JSON_RequiresRepo(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
