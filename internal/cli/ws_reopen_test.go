@@ -2,13 +2,16 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/repostore"
+	"github.com/tasuku43/kra/internal/gitutil"
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
@@ -33,45 +36,7 @@ func TestCLI_WS_Reopen_Help_ShowsUsage(t *testing.T) {
 func TestCLI_WS_Reopen_RestoresWorkspaceRecreatesWorktreesAndCanCommitAndUpdatesDB(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
-	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
-		runGit(t, dir, args...)
-	})
-	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-
-		code := c.Run([]string{"ws", "add-repo", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	env, _ := prepareArchivedWorkspaceForReopenTest(t)
 
 	{
 		var out bytes.Buffer
@@ -108,44 +73,7 @@ func TestCLI_WS_Reopen_RestoresWorkspaceRecreatesWorktreesAndCanCommitAndUpdates
 func TestCLI_WS_Reopen_RecreatesWorktreesWithoutWorkspaceRepoBindings(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
-	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
-		runGit(t, dir, args...)
-	})
-	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-
-		code := c.Run([]string{"ws", "add-repo", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	env, _ := prepareArchivedWorkspaceForReopenTest(t)
 
 	{
 		var out bytes.Buffer
@@ -166,44 +94,7 @@ func TestCLI_WS_Reopen_RecreatesWorktreesWithoutWorkspaceRepoBindings(t *testing
 func TestCLI_WS_Reopen_ErrorsWhenBranchCheckedOutElsewhere(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
-	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
-		runGit(t, dir, args...)
-	})
-	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-
-		code := c.Run([]string{"ws", "add-repo", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	env, repoSpec := prepareArchivedWorkspaceForReopenTest(t)
 
 	spec, err := repospec.Normalize(repoSpec)
 	if err != nil {
@@ -232,27 +123,7 @@ func TestCLI_WS_Reopen_ErrorsWhenBranchCheckedOutElsewhere(t *testing.T) {
 func TestCLI_WS_Reopen_SelectorModeWithoutTTY_Errors(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	_, _ = prepareArchivedWorkspaceForReopenTest(t)
 
 	{
 		var out bytes.Buffer
@@ -268,4 +139,44 @@ func TestCLI_WS_Reopen_SelectorModeWithoutTTY_Errors(t *testing.T) {
 			t.Fatalf("stderr missing id requirement: %q", err.String())
 		}
 	}
+}
+
+func prepareArchivedWorkspaceForReopenTest(t *testing.T) (testutil.Env, string) {
+	t.Helper()
+
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
+		runGit(t, dir, args...)
+	})
+	spec, err := repospec.Normalize(repoSpec)
+	if err != nil {
+		t.Fatalf("Normalize(repoSpec): %v", err)
+	}
+	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
+	if _, err := gitutil.EnsureBareRepoFetched(context.Background(), repoSpec, barePath, "main"); err != nil {
+		t.Fatalf("EnsureBareRepoFetched() error: %v", err)
+	}
+
+	wsPath := filepath.Join(env.Root, "archive", "WS1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir archive workspace: %v", err)
+	}
+	now := time.Now().Unix()
+	meta := newWorkspaceMetaFileForCreate("WS1", "WS1", "", now)
+	meta.Workspace.Status = "archived"
+	meta.Workspace.UpdatedAt = now
+	meta.ReposRestore = []workspaceMetaRepoRestore{{
+		RepoUID:   spec.Host + "/" + spec.Owner + "/" + spec.Repo,
+		RepoKey:   spec.Owner + "/" + spec.Repo,
+		RemoteURL: repoSpec,
+		Alias:     spec.Repo,
+		Branch:    "WS1/test",
+		BaseRef:   "origin/main",
+	}}
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+	return env, repoSpec
 }
