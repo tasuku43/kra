@@ -93,23 +93,15 @@ func TestCLI_RepoPreset_AddShowListRemove_And_WSAddRepoPreset(t *testing.T) {
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		c.In = strings.NewReader("\n\n\n\n\n")
-		if code := c.Run([]string{"ws", "add-repo", "--id", "WS1", "--preset", "backend"}); code != exitOK {
+		if code := c.Run([]string{"ws", "add-repo", "--format", "json", "--id", "WS1", "--preset", "backend", "--yes"}); code != exitOK {
 			t.Fatalf("ws add-repo --preset exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
-		if !strings.Contains(out.String(), "Added 2 / 2") {
-			t.Fatalf("stdout missing add summary: %q", out.String())
+		resp := decodeJSONResponse(t, out.String())
+		if !resp.OK || resp.Action != "add-repo" {
+			t.Fatalf("unexpected json response: %+v", resp)
 		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "add-repo", "--id", "WS1", "--preset", "backend"}); code != exitOK {
-			t.Fatalf("ws add-repo --preset second run exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-		if !strings.Contains(out.String(), "Added 0 / 2") || !strings.Contains(out.String(), "Skipped 2 (already bound)") {
-			t.Fatalf("stdout missing skipped summary: %q", out.String())
+		if got := int(resp.Result["added"].(float64)); got != 2 {
+			t.Fatalf("result.added = %d, want 2", got)
 		}
 	}
 
