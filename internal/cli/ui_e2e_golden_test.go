@@ -67,8 +67,6 @@ func TestGolden_UIE2E_ArchivePurgeFlow(t *testing.T) {
 
 	steps := []uiE2EStep{
 		{Args: []string{"init", "--root", env.Root, "--context", "ui-e2e"}},
-		{Args: []string{"ws", "create", "--no-prompt", "UI-200"}},
-		{Args: []string{"ws", "close", "--id", "UI-200"}},
 		{Args: []string{"ws", "reopen", "--id", "UI-200"}},
 		{Args: []string{"ws", "close", "--id", "UI-200"}},
 		{Args: []string{"ws", "unlock", "--id", "UI-200"}},
@@ -82,6 +80,7 @@ func TestGolden_UIE2E_ArchivePurgeFlow(t *testing.T) {
 		stdout, stderr, code := runUIE2EStep(t, step)
 		if i == 0 {
 			configureRootGitUserForUIE2E(t, env.Root)
+			seedWorkspaceMeta(t, env.Root, "archived", "UI-200")
 		}
 
 		transcript.WriteString(fmt.Sprintf("$ kra %s\n", strings.Join(step.Args, " ")))
