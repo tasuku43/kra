@@ -5,69 +5,110 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
-func TestWorkspaceBaselineLifecycle_CreateCloseReopenPurge(t *testing.T) {
+func TestWorkspaceBaselineLifecycle_CreateWritesBaselineToMeta(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 
-	run := func(args ...string) {
-		t.Helper()
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run(args)
-		if code != exitOK {
-			t.Fatalf("%v exit code=%d want=%d stderr=%q", args, code, exitOK, err.String())
-		}
-	}
+	runWorkspaceLifecycleCommand(t, "ws", "create", "--no-prompt", "WS1")
 
-	legacyBaselinePath := filepath.Join(env.Root, ".kra", "state", workspaceBaselineDirName, "WS1.json")
-	loadMeta := func(path string) workspaceMetaFile {
-		t.Helper()
-		meta, err := loadWorkspaceMetaFile(path)
-		if err != nil {
-			t.Fatalf("load workspace meta: %v", err)
-		}
-		return meta
-	}
-
-	run("ws", "create", "--no-prompt", "WS1")
-	createdMeta := loadMeta(filepath.Join(env.Root, "workspaces", "WS1"))
-	if createdMeta.Baseline == nil {
+	meta := loadWorkspaceMetaForLifecycleTest(t, filepath.Join(env.Root, "workspaces", "WS1"))
+	if meta.Baseline == nil {
 		t.Fatalf("baseline should exist in .kra.meta.json after create")
 	}
-	if _, err := os.Stat(legacyBaselinePath); !os.IsNotExist(err) {
-		t.Fatalf("legacy baseline file should not exist after create: %v", err)
-	}
+	assertNoLegacyWorkspaceBaseline(t, env.Root, "WS1")
+}
 
-	run("ws", "close", "--id", "WS1")
-	archivedMeta := loadMeta(filepath.Join(env.Root, "archive", "WS1"))
-	if archivedMeta.Baseline == nil {
+func TestWorkspaceBaselineLifecycle_ClosePreservesBaselineInArchive(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	seedWorkspaceWithBaseline(t, env.Root, "active", "WS1")
+
+	runWorkspaceLifecycleCommand(t, "ws", "close", "--no-commit", "--id", "WS1")
+
+	meta := loadWorkspaceMetaForLifecycleTest(t, filepath.Join(env.Root, "archive", "WS1"))
+	if meta.Baseline == nil {
 		t.Fatalf("baseline should remain in archived .kra.meta.json after close")
 	}
-	if _, err := os.Stat(legacyBaselinePath); !os.IsNotExist(err) {
-		t.Fatalf("legacy baseline file should be removed after close: %v", err)
-	}
+	assertNoLegacyWorkspaceBaseline(t, env.Root, "WS1")
+}
 
-	run("ws", "reopen", "--id", "WS1")
-	reopenedMeta := loadMeta(filepath.Join(env.Root, "workspaces", "WS1"))
-	if reopenedMeta.Baseline == nil {
+func TestWorkspaceBaselineLifecycle_ReopenRefreshesBaselineInWorkspaceMeta(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	seedWorkspaceWithBaseline(t, env.Root, "archived", "WS1")
+
+	runWorkspaceLifecycleCommand(t, "ws", "reopen", "--no-commit", "--id", "WS1")
+
+	meta := loadWorkspaceMetaForLifecycleTest(t, filepath.Join(env.Root, "workspaces", "WS1"))
+	if meta.Baseline == nil {
 		t.Fatalf("baseline should exist in .kra.meta.json after reopen")
 	}
-	if _, err := os.Stat(legacyBaselinePath); !os.IsNotExist(err) {
-		t.Fatalf("legacy baseline file should not exist after reopen: %v", err)
-	}
+	assertNoLegacyWorkspaceBaseline(t, env.Root, "WS1")
+}
 
-	run("ws", "close", "--id", "WS1")
-	run("ws", "unlock", "--id", "WS1")
-	run("ws", "purge", "--no-prompt", "--force", "--id", "WS1")
-	if _, err := os.Stat(legacyBaselinePath); !os.IsNotExist(err) {
-		t.Fatalf("legacy baseline file should be removed after purge: %v", err)
-	}
+func TestWorkspaceBaselineLifecycle_PurgeRemovesWorkspaceMetaAndLegacyBaseline(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	seedWorkspaceWithBaseline(t, env.Root, "archived", "WS1")
+
+	runWorkspaceLifecycleCommand(t, "ws", "unlock", "--id", "WS1")
+	runWorkspaceLifecycleCommand(t, "ws", "purge", "--no-prompt", "--force", "--no-commit", "--id", "WS1")
+
+	assertNoLegacyWorkspaceBaseline(t, env.Root, "WS1")
 	if _, err := os.Stat(filepath.Join(env.Root, "archive", "WS1", workspaceMetaFilename)); !os.IsNotExist(err) {
 		t.Fatalf("workspace meta should be removed after purge: %v", err)
 	}
+}
+
+func runWorkspaceLifecycleCommand(t *testing.T, args ...string) {
+	t.Helper()
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run(args)
+	if code != exitOK {
+		t.Fatalf("%v exit code=%d want=%d stderr=%q", args, code, exitOK, err.String())
+	}
+}
+
+func loadWorkspaceMetaForLifecycleTest(t *testing.T, path string) workspaceMetaFile {
+	t.Helper()
+	meta, err := loadWorkspaceMetaFile(path)
+	if err != nil {
+		t.Fatalf("load workspace meta: %v", err)
+	}
+	return meta
+}
+
+func assertNoLegacyWorkspaceBaseline(t *testing.T, root string, workspaceID string) {
+	t.Helper()
+	legacyBaselinePath := filepath.Join(root, ".kra", "state", workspaceBaselineDirName, workspaceID+".json")
+	if _, err := os.Stat(legacyBaselinePath); !os.IsNotExist(err) {
+		t.Fatalf("legacy baseline file should not exist: %v", err)
+	}
+}
+
+func seedWorkspaceWithBaseline(t *testing.T, root string, scope string, workspaceID string) string {
+	t.Helper()
+
+	wsPath := seedWorkspaceMeta(t, root, scope, workspaceID)
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load workspace meta: %v", err)
+	}
+	meta.Baseline = &workspaceBaseline{
+		Version:   1,
+		CreatedAt: time.Now().Unix(),
+		Repos:     map[string]workspaceBaselineRepo{},
+		FS:        map[string]string{},
+	}
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+	return wsPath
 }
