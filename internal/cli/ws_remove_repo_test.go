@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -13,6 +14,7 @@ import (
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/repostore"
 	"github.com/tasuku43/kra/internal/core/workspacerisk"
+	"github.com/tasuku43/kra/internal/gitutil"
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
@@ -37,21 +39,7 @@ func TestCLI_WS_RemoveRepo_Help(t *testing.T) {
 }
 
 func TestCLI_WS_RemoveRepo_JSON_RemovesBindingAndWorktree(t *testing.T) {
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-
-	repoSpec := createTestRemoteRepoSpec(t)
-	_, repoKey, alias := seedRepoPoolAndState(t, env, repoSpec)
-	seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-		if code := c.Run([]string{"ws", "add-repo", "--id", "WS1"}); code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	env, repoSpec, repoKey, alias := prepareActiveWorkspaceForRemoveRepoTest(t)
 
 	worktreePath := filepath.Join(env.Root, "workspaces", "WS1", "repos", alias)
 	if _, err := os.Stat(filepath.Join(worktreePath, ".git")); err != nil {
@@ -112,21 +100,7 @@ func TestCLI_WS_RemoveRepo_JSON_RemovesBindingAndWorktree(t *testing.T) {
 }
 
 func TestCLI_WS_RemoveRepo_JSON_RiskyRequiresForce(t *testing.T) {
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-
-	repoSpec := createTestRemoteRepoSpec(t)
-	_, repoKey, alias := seedRepoPoolAndState(t, env, repoSpec)
-	seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-		if code := c.Run([]string{"ws", "add-repo", "--id", "WS1"}); code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	env, _, repoKey, alias := prepareActiveWorkspaceForRemoveRepoTest(t)
 
 	worktreePath := filepath.Join(env.Root, "workspaces", "WS1", "repos", alias)
 	dirtyFile := filepath.Join(worktreePath, "DIRTY.txt")
@@ -157,21 +131,7 @@ func TestCLI_WS_RemoveRepo_JSON_RiskyRequiresForce(t *testing.T) {
 }
 
 func TestCLI_WS_RemoveRepo_JSON_ShiftsCWDWhenInsideTargetWorkspace(t *testing.T) {
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-
-	repoSpec := createTestRemoteRepoSpec(t)
-	_, repoKey, alias := seedRepoPoolAndState(t, env, repoSpec)
-	seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-		if code := c.Run([]string{"ws", "add-repo", "--id", "WS1"}); code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	env, _, repoKey, alias := prepareActiveWorkspaceForRemoveRepoTest(t)
 
 	origWD, err := os.Getwd()
 	if err != nil {
@@ -289,4 +249,50 @@ func createTestRemoteRepoSpec(t *testing.T) string {
 	return prepareRemoteRepoSpecWithName(t, func(dir string, args ...string) {
 		runGit(t, dir, args...)
 	}, "github.com", "tasuku43", "sample")
+}
+
+func prepareActiveWorkspaceForRemoveRepoTest(t *testing.T) (testutil.Env, string, string, string) {
+	t.Helper()
+
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	repoSpec := createTestRemoteRepoSpec(t)
+	spec := mustNormalizeRepoSpec(t, repoSpec)
+	repoUID := spec.Host + "/" + spec.Owner + "/" + spec.Repo
+	repoKey := spec.Owner + "/" + spec.Repo
+	alias := spec.Repo
+
+	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
+	if _, err := gitutil.EnsureBareRepoFetched(context.Background(), repoSpec, barePath, "main"); err != nil {
+		t.Fatalf("EnsureBareRepoFetched() error: %v", err)
+	}
+	if err := upsertRootRepoRegistryEntries(env.Root, []rootRepoRegistryEntry{{
+		RepoUID:   repoUID,
+		RepoKey:   repoKey,
+		RemoteURL: repoSpec,
+	}}); err != nil {
+		t.Fatalf("upsertRootRepoRegistryEntries() error: %v", err)
+	}
+
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load workspace meta: %v", err)
+	}
+	meta.ReposRestore = []workspaceMetaRepoRestore{{
+		RepoUID:   repoUID,
+		RepoKey:   repoKey,
+		RemoteURL: repoSpec,
+		Alias:     alias,
+		Branch:    "WS1/test",
+		BaseRef:   "origin/main",
+	}}
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+
+	runGit(t, "", "--git-dir", barePath, "branch", "WS1/test", "origin/main")
+	runGit(t, "", "--git-dir", barePath, "worktree", "add", filepath.Join(wsPath, "repos", alias), "WS1/test")
+	return env, repoSpec, repoKey, alias
 }
