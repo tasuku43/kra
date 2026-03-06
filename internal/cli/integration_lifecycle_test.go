@@ -67,44 +67,7 @@ func TestCLI_WS_AddRepo_CorruptedRepoPool_FailsWithoutStateMutation(t *testing.T
 
 func TestCLI_WS_Close_RepoMetadataDrift_FailsWithoutArchiving(t *testing.T) {
 	testutil.RequireCommand(t, "git")
-
-	runGit := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		if dir != "" {
-			cmd.Dir = dir
-		}
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
-		}
-	}
-
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
-	repoSpec := prepareRemoteRepoSpec(t, runGit)
-	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-		code := c.Run([]string{"ws", "add-repo", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
 
 	{
 		var out bytes.Buffer
