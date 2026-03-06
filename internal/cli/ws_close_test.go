@@ -10,11 +10,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tasuku43/kra/internal/cmuxmap"
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/repostore"
 	"github.com/tasuku43/kra/internal/core/workspacerisk"
+	"github.com/tasuku43/kra/internal/gitutil"
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
@@ -158,35 +160,7 @@ func TestCLI_WS_Close_CMUXCloseFailure_DoesNotFailWorkspaceClose(t *testing.T) {
 func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
-	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
-		runGit(t, dir, args...)
-	})
-	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-
-		code := c.Run([]string{"ws", "add-repo", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	env, repoSpec := prepareActiveWorkspaceForCloseTest(t)
 
 	{
 		var out bytes.Buffer
@@ -256,33 +230,7 @@ func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *te
 func TestCLI_WS_Close_DirtyRepo_PromptsAndCanAbort(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
-		runGit(t, dir, args...)
-	})
-	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-
-		code := c.Run([]string{"ws", "add-repo", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
 
 	worktreePath := filepath.Join(env.Root, "workspaces", "WS1", "repos", "r")
 	if err := os.WriteFile(filepath.Join(worktreePath, "DIRTY.txt"), []byte("x\n"), 0o644); err != nil {
@@ -595,4 +543,46 @@ func mustGitOutput(t *testing.T, dir string, args ...string) string {
 		t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
 	}
 	return string(out)
+}
+
+func prepareActiveWorkspaceForCloseTest(t *testing.T) (testutil.Env, string) {
+	t.Helper()
+
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	repoSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
+		runGit(t, dir, args...)
+	})
+	spec, err := repospec.Normalize(repoSpec)
+	if err != nil {
+		t.Fatalf("Normalize(repoSpec): %v", err)
+	}
+	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
+	if _, err := gitutil.EnsureBareRepoFetched(context.Background(), repoSpec, barePath, "main"); err != nil {
+		t.Fatalf("EnsureBareRepoFetched() error: %v", err)
+	}
+
+	wsPath := filepath.Join(env.Root, "workspaces", "WS1")
+	if err := os.MkdirAll(filepath.Join(wsPath, "repos"), 0o755); err != nil {
+		t.Fatalf("mkdir workspace repos: %v", err)
+	}
+	now := time.Now().Unix()
+	meta := newWorkspaceMetaFileForCreate("WS1", "WS1", "", now)
+	meta.ReposRestore = []workspaceMetaRepoRestore{{
+		RepoUID:   spec.Host + "/" + spec.Owner + "/" + spec.Repo,
+		RepoKey:   spec.Owner + "/" + spec.Repo,
+		RemoteURL: repoSpec,
+		Alias:     spec.Repo,
+		Branch:    "WS1/test",
+		BaseRef:   "origin/main",
+	}}
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+
+	runGit(t, "", "--git-dir", barePath, "branch", "WS1/test", "origin/main")
+	runGit(t, "", "--git-dir", barePath, "worktree", "add", filepath.Join(wsPath, "repos", spec.Repo), "WS1/test")
+
+	return env, repoSpec
 }
