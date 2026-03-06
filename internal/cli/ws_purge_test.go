@@ -35,16 +35,7 @@ func TestCLI_WS_Purge_ArchivedWorkspace_DeletesPathsAndCanCommitAndUpdatesDB(t *
 
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
@@ -99,16 +90,7 @@ func TestCLI_WS_Purge_ArchivedWorkspace_DeletesPathsAndCanCommitAndUpdatesDB(t *
 func TestCLI_WS_Purge_NoPromptWithoutForce_Refuses(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -139,16 +121,7 @@ func TestCLI_WS_Purge_ActiveWorkspace_RefusesUntilArchived(t *testing.T) {
 
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	repoSpec := prepareRemoteRepoSpec(t, runGit)
 	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
@@ -229,25 +202,7 @@ func TestCLI_WS_Purge_NoPromptForce_ActiveWorkspace_Refuses(t *testing.T) {
 func TestCLI_WS_Purge_SelectorModeWithoutTTY_Errors(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "archived", "WS1")
 
 	{
 		var out bytes.Buffer

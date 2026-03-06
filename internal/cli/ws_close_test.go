@@ -54,15 +54,7 @@ func TestCLI_WS_Close_Help_ShowsUsage(t *testing.T) {
 func TestCLI_WS_Close_ClosesMappedCMUXWorkspaceAndPrunesMapping(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 	store := cmuxmap.NewStore(env.Root)
 	if err := store.Save(cmuxmap.File{
 		Version: cmuxmap.CurrentVersion,
@@ -105,15 +97,7 @@ func TestCLI_WS_Close_ClosesMappedCMUXWorkspaceAndPrunesMapping(t *testing.T) {
 func TestCLI_WS_Close_CMUXCloseFailure_DoesNotFailWorkspaceClose(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 	store := cmuxmap.NewStore(env.Root)
 	if err := store.Save(cmuxmap.File{
 		Version: cmuxmap.CurrentVersion,
@@ -265,15 +249,7 @@ func TestCLI_WS_Close_SelectorModeWithoutTTY_Errors(t *testing.T) {
 
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	{
 		var out bytes.Buffer
@@ -300,15 +276,7 @@ func TestCLI_WS_Close_ShiftsProcessCWDWhenInsideTargetWorkspace(t *testing.T) {
 
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	origWD, err := os.Getwd()
 	if err != nil {
@@ -349,15 +317,7 @@ func TestCLI_WS_Close_AllowsUnrelatedPreStagedChangesOutsideWorkspaceAllowlist(t
 
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 	unrelated := filepath.Join(env.Root, "UNRELATED.md")
 	if err := os.WriteFile(unrelated, []byte("keep staged\n"), 0o644); err != nil {
 		t.Fatalf("write unrelated file: %v", err)

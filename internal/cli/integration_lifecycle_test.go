@@ -30,16 +30,7 @@ func TestCLI_WS_AddRepo_CorruptedRepoPool_FailsWithoutStateMutation(t *testing.T
 
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	repoSpec := prepareRemoteRepoSpec(t, runGit)
 	spec, err := repospec.Normalize(repoSpec)

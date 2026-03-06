@@ -14,15 +14,7 @@ import (
 func TestCLI_WS_Unlock_JSON_Success(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -43,18 +35,7 @@ func TestCLI_WS_Unlock_JSON_Success(t *testing.T) {
 func TestCLI_WS_Purge_BlockedByDefaultGuard(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-		if code := c.Run([]string{"ws", "close", "--id", "WS1"}); code != exitOK {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "archived", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
