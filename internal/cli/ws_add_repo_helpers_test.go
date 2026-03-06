@@ -13,6 +13,8 @@ import (
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
+const fixtureRemoteDefaultBranch = "main"
+
 func seedRepoPoolAndState(t *testing.T, env testutil.Env, repoSpecInput string) (repoUID string, repoKey string, alias string) {
 	t.Helper()
 	ctx := context.Background()
@@ -25,12 +27,10 @@ func seedRepoPoolAndState(t *testing.T, env testutil.Env, repoSpecInput string) 
 	repoUID = fmt.Sprintf("%s/%s", spec.Host, repoKey)
 	alias = spec.Repo
 
-	defaultBranch, err := gitutil.DefaultBranchFromRemote(ctx, repoSpecInput)
-	if err != nil {
-		t.Fatalf("DefaultBranchFromRemote() error: %v", err)
-	}
 	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
-	if _, err := gitutil.EnsureBareRepoFetched(ctx, repoSpecInput, barePath, defaultBranch); err != nil {
+	// All fixture remotes are created from prepareRemoteRepoTemplate(), which always
+	// initializes the default branch as "main". Skip an extra remote probe here.
+	if _, err := gitutil.EnsureBareRepoFetched(ctx, repoSpecInput, barePath, fixtureRemoteDefaultBranch); err != nil {
 		t.Fatalf("EnsureBareRepoFetched() error: %v", err)
 	}
 	if err := upsertRootRepoRegistryEntries(env.Root, []rootRepoRegistryEntry{{

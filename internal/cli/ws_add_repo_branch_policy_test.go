@@ -18,15 +18,7 @@ func TestCLI_WS_AddRepo_JSON_DefaultBranchUsesWorkspaceBranchTemplate(t *testing
 	_, repoKey, _ := seedRepoPoolAndState(t, env, repoSpec)
 
 	writeRootConfigYAML(t, env.Root, "workspace:\n  branch:\n    template: \"feature/{{workspace_id}}/{{repo_name}}\"\n")
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	{
 		var out bytes.Buffer
@@ -62,15 +54,7 @@ func TestCLI_WS_AddRepo_JSON_BranchFlagOverridesWorkspaceBranchTemplate(t *testi
 	_, repoKey, _ := seedRepoPoolAndState(t, env, repoSpec)
 
 	writeRootConfigYAML(t, env.Root, "workspace:\n  branch:\n    template: \"feature/{{workspace_id}}/{{repo_name}}\"\n")
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	{
 		var out bytes.Buffer

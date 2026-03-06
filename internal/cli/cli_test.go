@@ -806,35 +806,10 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 		t.Skip("git not found in PATH")
 	}
 
-	runGit := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
-		}
-	}
-
-	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "tasuku43", "sample")
-
-	root := t.TempDir()
-	kraHome := setKraHomeForTest(t)
-
-	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
-		t.Fatalf("create workspaces/: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
-		t.Fatalf("create archive/: %v", err)
-	}
-	seedDefaultTemplate(t, root)
-	initGitRootForWSCreateTest(t, root)
-
-	if err := paths.WriteCurrentContext(root); err != nil {
-		t.Fatalf("WriteCurrentContext() error: %v", err)
-	}
-	env := testutil.Env{Root: root, KraHome: kraHome}
-	seedWorkspaceMeta(t, root, "active", "MVP-020")
+	repoSpec := createTestRemoteRepoSpec(t)
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	seedWorkspaceMeta(t, env.Root, "active", "MVP-020")
 
 	{
 		var out bytes.Buffer
@@ -848,13 +823,13 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 
-		worktreePath := filepath.Join(root, "workspaces", "MVP-020", "repos", "sample")
+		worktreePath := filepath.Join(env.Root, "workspaces", "MVP-020", "repos", "sample")
 		if _, statErr := os.Stat(filepath.Join(worktreePath, ".git")); statErr != nil {
 			t.Fatalf("worktree .git missing: %v", statErr)
 		}
 	}
 
-	metaBytes, readErr := os.ReadFile(filepath.Join(root, "workspaces", "MVP-020", workspaceMetaFilename))
+	metaBytes, readErr := os.ReadFile(filepath.Join(env.Root, "workspaces", "MVP-020", workspaceMetaFilename))
 	if readErr != nil {
 		t.Fatalf("read %s: %v", workspaceMetaFilename, readErr)
 	}
@@ -891,49 +866,15 @@ func TestCLI_WS_AddRepo_DBUnavailable_FallsBackToFilesystem(t *testing.T) {
 		t.Skip("git not found in PATH")
 	}
 
-	runGit := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		cmd.Dir = dir
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
-		}
-	}
-
-	repoSpec := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "tasuku43", "sample")
-
-	root := t.TempDir()
-	kraHome := setKraHomeForTest(t)
-
-	if err := os.MkdirAll(filepath.Join(root, "workspaces"), 0o755); err != nil {
-		t.Fatalf("create workspaces/: %v", err)
-	}
-	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
-		t.Fatalf("create archive/: %v", err)
-	}
-	seedDefaultTemplate(t, root)
-	initGitRootForWSCreateTest(t, root)
-
-	if err := paths.WriteCurrentContext(root); err != nil {
-		t.Fatalf("WriteCurrentContext() error: %v", err)
-	}
-	env := testutil.Env{Root: root, KraHome: kraHome}
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "MVP-021"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	repoSpec := createTestRemoteRepoSpec(t)
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	seedWorkspaceMeta(t, env.Root, "active", "MVP-021")
 
 	// Seed repo-pool, then break SQLite schema to force DB fallback path.
 	{
 		_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
-		if err := os.MkdirAll(filepath.Join(root, "workspaces", "MVP-021", "repos"), 0o755); err != nil {
+		if err := os.MkdirAll(filepath.Join(env.Root, "workspaces", "MVP-021", "repos"), 0o755); err != nil {
 			t.Fatalf("prepare workspace dir: %v", err)
 		}
 	}
@@ -949,13 +890,13 @@ func TestCLI_WS_AddRepo_DBUnavailable_FallsBackToFilesystem(t *testing.T) {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 
-		worktreePath := filepath.Join(root, "workspaces", "MVP-021", "repos", "sample")
+		worktreePath := filepath.Join(env.Root, "workspaces", "MVP-021", "repos", "sample")
 		if _, statErr := os.Stat(filepath.Join(worktreePath, ".git")); statErr != nil {
 			t.Fatalf("worktree .git missing: %v", statErr)
 		}
 	}
 
-	metaBytes, readErr := os.ReadFile(filepath.Join(root, "workspaces", "MVP-021", workspaceMetaFilename))
+	metaBytes, readErr := os.ReadFile(filepath.Join(env.Root, "workspaces", "MVP-021", workspaceMetaFilename))
 	if readErr != nil {
 		t.Fatalf("read %s: %v", workspaceMetaFilename, readErr)
 	}

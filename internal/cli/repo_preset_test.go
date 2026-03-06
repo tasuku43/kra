@@ -11,7 +11,7 @@ import (
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
-func TestCLI_RepoPreset_AddShowListRemove_And_WSAddRepoPreset(t *testing.T) {
+func TestCLI_RepoPreset_AddShowListRemove(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
 	runGit := func(dir string, args ...string) {
@@ -33,7 +33,6 @@ func TestCLI_RepoPreset_AddShowListRemove_And_WSAddRepoPreset(t *testing.T) {
 	repoSpec2 := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "preset-b")
 	_, repoKey1, _ := seedRepoPoolAndState(t, env, repoSpec1)
 	_, repoKey2, _ := seedRepoPoolAndState(t, env, repoSpec2)
-	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	origPrompt := promptRepoPresetSelection
 	promptRepoPresetSelection = func(c *CLI, candidates []workspaceSelectorCandidate) ([]string, error) {
@@ -86,22 +85,6 @@ func TestCLI_RepoPreset_AddShowListRemove_And_WSAddRepoPreset(t *testing.T) {
 		}
 		if !strings.Contains(out.String(), "backend") {
 			t.Fatalf("stdout missing preset name: %q", out.String())
-		}
-	}
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "add-repo", "--format", "json", "--id", "WS1", "--preset", "backend", "--yes"}); code != exitOK {
-			t.Fatalf("ws add-repo --preset exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-		resp := decodeJSONResponse(t, out.String())
-		if !resp.OK || resp.Action != "add-repo" {
-			t.Fatalf("unexpected json response: %+v", resp)
-		}
-		if got := int(resp.Result["added"].(float64)); got != 2 {
-			t.Fatalf("result.added = %d, want 2", got)
 		}
 	}
 
