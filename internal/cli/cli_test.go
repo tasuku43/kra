@@ -834,17 +834,7 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 		t.Fatalf("WriteCurrentContext() error: %v", err)
 	}
 	env := testutil.Env{Root: root, KraHome: kraHome}
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-
-		code := c.Run([]string{"ws", "create", "--no-prompt", "MVP-020"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, root, "active", "MVP-020")
 
 	{
 		var out bytes.Buffer

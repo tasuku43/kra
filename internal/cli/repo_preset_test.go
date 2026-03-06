@@ -33,6 +33,7 @@ func TestCLI_RepoPreset_AddShowListRemove_And_WSAddRepoPreset(t *testing.T) {
 	repoSpec2 := prepareRemoteRepoSpecWithName(t, runGit, "github.com", "example-org", "preset-b")
 	_, repoKey1, _ := seedRepoPoolAndState(t, env, repoSpec1)
 	_, repoKey2, _ := seedRepoPoolAndState(t, env, repoSpec2)
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	origPrompt := promptRepoPresetSelection
 	promptRepoPresetSelection = func(c *CLI, candidates []workspaceSelectorCandidate) ([]string, error) {
@@ -88,14 +89,6 @@ func TestCLI_RepoPreset_AddShowListRemove_And_WSAddRepoPreset(t *testing.T) {
 		}
 	}
 
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer

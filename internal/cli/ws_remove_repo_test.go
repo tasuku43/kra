@@ -42,15 +42,7 @@ func TestCLI_WS_RemoveRepo_JSON_RemovesBindingAndWorktree(t *testing.T) {
 
 	repoSpec := createTestRemoteRepoSpec(t)
 	_, repoKey, alias := seedRepoPoolAndState(t, env, repoSpec)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
@@ -125,15 +117,7 @@ func TestCLI_WS_RemoveRepo_JSON_RiskyRequiresForce(t *testing.T) {
 
 	repoSpec := createTestRemoteRepoSpec(t)
 	_, repoKey, alias := seedRepoPoolAndState(t, env, repoSpec)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
@@ -178,15 +162,7 @@ func TestCLI_WS_RemoveRepo_JSON_ShiftsCWDWhenInsideTargetWorkspace(t *testing.T)
 
 	repoSpec := createTestRemoteRepoSpec(t)
 	_, repoKey, alias := seedRepoPoolAndState(t, env, repoSpec)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer

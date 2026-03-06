@@ -16,15 +16,7 @@ func TestCLI_WS_AddRepo_JSON_Preset_AddAndSkip(t *testing.T) {
 	repoSpec := createTestRemoteRepoSpec(t)
 	_, repoKey, _ := seedRepoPoolAndState(t, env, repoSpec)
 	writeRootConfigYAML(t, env.Root, fmt.Sprintf("workspace:\n  repo_presets:\n    backend:\n      repos:\n        - %s\n", repoKey))
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	{
 		var out bytes.Buffer
@@ -85,15 +77,7 @@ func TestCLI_WS_AddRepo_JSON_Preset_StrictMissing(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	writeRootConfigYAML(t, env.Root, "workspace:\n  repo_presets:\n    backend:\n      repos:\n        - org/missing\n")
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer

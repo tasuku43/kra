@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/tasuku43/kra/internal/infra/appports"
 	"github.com/tasuku43/kra/internal/infra/paths"
@@ -133,4 +134,27 @@ func copyDir(src string, dst string) error {
 		}
 		return out.Close()
 	})
+}
+
+func seedWorkspaceMeta(t *testing.T, root string, scope string, workspaceID string) string {
+	t.Helper()
+
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	if scope == "archived" {
+		wsPath = filepath.Join(root, "archive", workspaceID)
+	}
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace path: %v", err)
+	}
+
+	now := time.Now().Unix()
+	meta := newWorkspaceMetaFileForCreate(workspaceID, workspaceID, "", now)
+	meta.Workspace.UpdatedAt = now
+	if scope == "archived" {
+		meta.Workspace.Status = "archived"
+	}
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+	return wsPath
 }
