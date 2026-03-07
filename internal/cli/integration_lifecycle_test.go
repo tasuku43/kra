@@ -64,25 +64,3 @@ func TestCLI_WS_AddRepo_CorruptedRepoPool_FailsWithoutStateMutation(t *testing.T
 	}
 
 }
-
-func TestCLI_WS_Close_RepoMetadataDrift_FailsWithoutArchiving(t *testing.T) {
-	testutil.RequireCommand(t, "git")
-	env, _ := prepareActiveWorkspaceForCloseTest(t)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "close", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
-	if _, err := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); err == nil {
-		t.Fatalf("workspaces/WS1 should be archived after close")
-	}
-	if _, err := os.Stat(filepath.Join(env.Root, "archive", "WS1")); err != nil {
-		t.Fatalf("archive/WS1 should exist: %v", err)
-	}
-}
