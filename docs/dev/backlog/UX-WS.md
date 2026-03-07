@@ -322,4 +322,15 @@ status: planned
   - Depends: UX-WS-028, WS-STATE-001
   - Parallel: yes
 
+- [ ] UX-WS-032: Output coverage signals and empty-record close gate
+  - What: add workspace output coverage (`empty` / `notes-only` / `artifacts-only` / `documented`) to
+    `ws dashboard`, and add an empty-record warning/confirmation gate to `ws close` with root-config policy.
+  - Specs:
+    - `docs/dev/spec/commands/ws/dashboard.md`
+    - `docs/dev/spec/commands/ws/close.md`
+    - `docs/dev/spec/concepts/config.md`
+    - `docs/dev/spec/core/DATA_MODEL.md`
+  - Depends: OPS-016, OPS-017
+  - Serial: yes
+
 ## Architecture Refactor (full layering migration)

@@ -19,6 +19,7 @@ Implementation should reference these specs. When behavior changes, update the s
 ### `status` values
 
 - `planned`: spec-first discussion; not implemented yet.
+- `proposed`: target behavior selected for upcoming implementation; current implementation may differ.
 - `implemented`: implemented and considered current.
 
 ## Global CLI behavior
@@ -32,7 +33,7 @@ Implementation should reference these specs. When behavior changes, update the s
 
 - Core
   - `../backlog/README.md`: Implementation backlog index (dependencies, parallelism, spec mapping)
-  - `core/DATA_MODEL.md`: State store data model (tables, keys, constraints)
+  - `core/DATA_MODEL.md`: Filesystem-first data model and derived/runtime state
   - `core/AGENTS.md`: AGENTS.md generation and conventions
   - `core/CLI_GLOBALS.md`: root/global flag behavior (`--debug`, `--version`, help)
   - `core/COMPATIBILITY.md`: versioning and supported distribution/install policy
@@ -40,9 +41,10 @@ Implementation should reference these specs. When behavior changes, update the s
   - `concepts/layout.md`: KRA_ROOT layout and Git tracking policy
   - `concepts/state-store.md`: Optional/rebuildable root index and registry
   - `concepts/config.md`: Global/root user config model and precedence
+  - `concepts/lifecycle-journal.md`: Interrupted lifecycle recovery journal for workspace operations
   - `concepts/branch-naming-policy.md`: Branch naming template policy for workspace repo operations
   - `concepts/fs-source-of-truth.md`: FS=SoT and index-store downgrade policy (planned)
-  - `concepts/workspace-meta-json.md`: `.kra.meta.json` schema and atomic update rules (planned)
+  - `concepts/workspace-meta-json.md`: `.kra.meta.json` schema and atomic update rules
   - `concepts/workspace-template.md`: root-local workspace template model and validation
   - `concepts/ui-color.md`: CLI/TUI semantic color token policy
   - `concepts/architecture.md`: Layered architecture (`cli/app/domain/infra/ui`) and migration rules

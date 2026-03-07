@@ -1,6 +1,6 @@
 ---
 title: "`kra init`"
-status: implemented
+status: proposed
 ---
 
 # `kra init [--root <path>] [--context <name>] [--format human|json]`
@@ -62,9 +62,15 @@ Initialize a kra root and filesystem-first runtime metadata.
   - `<root>/AGENTS.md`
   - `<root>/templates/default/AGENTS.md` (if created)
 - Write `.gitignore` such that `workspaces/**/repos/**` is ignored
-- Default `.gitignore` entries added by `kra init` should also include:
+- Default `.gitignore` entries managed by `kra init` should also include:
   - `.DS_Store`
   - `.kra/logs/`
+  - `.kra/state/cmux-sessions.json`
+  - `.kra/state/cmux-workspaces.json`
+  - `.kra/state/root-repos.json`
+  - `.kra/state/operations/`
+- Re-running `kra init` on an existing root must reconcile any missing default ignore entries without
+  removing unrelated user-authored `.gitignore` content.
 - Touch root registry metadata for this root.
 - Register/refresh context binding (`name -> root`) in root registry.
 - Update global current context (`~/.kra/state/current-context`) to this root on success.

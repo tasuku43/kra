@@ -1,6 +1,6 @@
 ---
 title: "`kra ws close`"
-status: implemented
+status: proposed
 ---
 
 # `kra ws close [--id <id>] [--current] [--select] [--force] [--format human|json] [--no-commit] [--commit]`
@@ -13,6 +13,7 @@ Close a workspace:
 - remove Git worktrees to keep the working area clean
 
 This is the primary "task completed" flow in `kra`.
+This flow must be recoverable when interrupted after irreversible filesystem phases.
 
 ## Behavior (MVP)
 
@@ -22,6 +23,8 @@ This is the primary "task completed" flow in `kra`.
 - Workspace `<id>` must exist as workspace metadata and be active.
 - If current process cwd is inside the target workspace path (`workspaces/<id>/...`), the command must
   shift process cwd to `KRA_ROOT` before worktree removal starts.
+- If `KRA_ROOT/.kra/state/operations/ws-close/<id>.json` already exists and is unfinished, `ws close` must fail
+  with recovery guidance instead of starting a second close flow.
 
 ### Steps
 
@@ -31,7 +34,31 @@ This is the primary "task completed" flow in `kra`.
   - compute risk similar to `gion` (dirty / unpushed / diverged / unknown / clean)
 - If any repo is not clean, prompt for confirmation before continuing.
 
-2) Commit pre-close snapshot (default; skipped by `--no-commit`)
+2) Inspect output coverage
+
+- Derive output coverage from non-scaffolding files under `notes/` and `artifacts/`.
+- Coverage states are:
+  - `empty`
+  - `notes-only`
+  - `artifacts-only`
+  - `documented`
+- Scaffolding-only files do not count toward coverage:
+  - `AGENTS.md`
+  - `CLAUDE.md`
+  - `.kra.meta.json`
+  - `.claude/settings.local.json`
+- `README.md` may be shown as a summary artifact but does not by itself satisfy `documented`.
+- Root config key `workspace.close.empty_record_policy` controls handling when coverage is `empty`:
+  - `warn`
+  - `require-confirmation`
+
+3) Initialize lifecycle journal
+
+- Create/update `KRA_ROOT/.kra/state/operations/ws-close/<id>.json`.
+- Journal schema is defined in `docs/dev/spec/concepts/lifecycle-journal.md`.
+- Persist phase `risk_checked` after safety evaluation and before irreversible work begins.
+
+4) Commit pre-close snapshot (default; skipped by `--no-commit`)
 
 - Commit message is fixed: `close-pre: <id>`
 - Commit on the current branch.
@@ -40,7 +67,7 @@ This is the primary "task completed" flow in `kra`.
 - Preserve unrelated staged changes outside allowlist.
 - `--commit` is accepted for backward compatibility and keeps default behavior.
 
-3) Remove worktrees
+5) Remove worktrees
 
 - Remove each worktree under `workspaces/<id>/repos/<alias>`.
 - Delete each corresponding local branch from the repo pool bare repository (`refs/heads/<branch>`).
@@ -48,17 +75,17 @@ This is the primary "task completed" flow in `kra`.
 - Remove `workspaces/<id>/repos/` if it becomes empty.
 - This step must run after process-cwd shift when current cwd is under target workspace.
 
-4) Update workspace metadata/index
+6) Update workspace metadata/index
 
 - Mark the workspace as `archived`.
 - Update `updated_at`.
 
-5) Archive the workspace contents
+7) Archive the workspace contents
 
 - Move `KRA_ROOT/workspaces/<id>/` to `KRA_ROOT/archive/<id>/` using an atomic rename.
 - After this step, `KRA_ROOT/workspaces/<id>/` should not exist.
 
-6) Commit the archive change (default; skipped by `--no-commit`)
+8) Commit the archive change (default; skipped by `--no-commit`)
 
 - Commit message is fixed: `archive: <id>`
 - Commit on the current branch.
@@ -66,14 +93,15 @@ This is the primary "task completed" flow in `kra`.
   - `archive/<id>/`
   - removal of `workspaces/<id>/` (and any emptied parent folders as needed)
 - After committing, store the commit SHA in metadata/index as `archived_commit_sha`.
-- If post-archive commit fails, do not auto-rollback filesystem rename; keep archived state and return error.
+- If post-archive commit fails, do not auto-rollback filesystem rename; keep archived state, preserve the
+  lifecycle journal, and return error.
 
-7) Append an event
+9) Append an event
 
 - Append `workspace_events(event_type='archived', workspace_id='<id>', at=...)` (this is the source of truth
   for the archive timestamp).
 
-8) Close mapped cmux workspace(s) (best-effort)
+10) Close mapped cmux workspace(s) (best-effort)
 
 - If `.kra/state/cmux-workspaces.json` has mapping entries for `<id>`, call `cmux close-workspace --workspace <cmux-id>`
   for each mapped entry.
@@ -81,6 +109,11 @@ This is the primary "task completed" flow in `kra`.
 - When all mapped entries are closed (or already absent), remove the workspace mapping entry from
   `.kra/state/cmux-workspaces.json`.
 - cmux close failures must not rollback archive results.
+
+11) Finalize lifecycle journal
+
+- Mark the operation `completed`.
+- Remove the journal file after successful completion.
 
 In default commit mode, unrelated changes must not be included in lifecycle commits.
 
@@ -119,9 +152,11 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 
 - After selector confirmation, evaluate risk for all selected workspaces.
 - `risky` is defined as `dirty` / `unpushed` / `diverged` (plus `unknown` as non-safe).
+- `empty` output coverage is also a confirmation trigger when `workspace.close.empty_record_policy=require-confirmation`.
 - If selected set is clean-only, proceed directly to close and print `Result:`.
 - If any selected workspace is non-clean (`risky` or `unknown`), print `Plan:` section with risk details and
   require explicit `yes` confirmation before execution.
+- If output coverage requires confirmation, include that reason in the same `Plan:` section.
 - If risk confirmation is declined/canceled, abort without side effects.
 - Risk label semantics and severity follow `commands/ws/selector.md`.
 
@@ -129,7 +164,8 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 
 - `--format json` enables non-interactive execution contract.
 - In JSON mode, cwd fallback is not allowed; target must be explicit (`--id`).
-- If non-clean risk exists, execution requires `--force`; otherwise command returns non-zero with JSON error.
+- If non-clean risk exists, or empty coverage requires confirmation, execution requires `--force`;
+  otherwise command returns non-zero with JSON error.
 - `--dry-run --format json` must not mutate filesystem/git/state and should return executable/risk/planned-effects envelope.
 
 ### Commit strictness (non-repo files)
@@ -150,3 +186,5 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 - Metadata updates must use atomic replace.
 - On successful close, archived `.kra.meta.json` keeps the workspace baseline.
 - Legacy baseline cleanup is not part of `ws close`; use `doctor --fix` for old state files.
+- Read-only commands must not be relied on to finish or repair interrupted close state; recovery belongs to
+  lifecycle journal handling and `doctor --fix`.

@@ -1,6 +1,6 @@
 ---
 title: "Data Model"
-status: implemented
+status: proposed
 ---
 
 # Data Model
@@ -44,6 +44,17 @@ The following should be computed at read time, not persisted as canonical state:
 
 - live risk (`clean` / `dirty` / `unpushed` / `diverged` / `unknown`)
 - current worktree existence and drift state
+- output coverage (`empty` / `notes-only` / `artifacts-only` / `documented`)
+- lifecycle recovery state (`none` / `resume_ready` / `manual_required`)
+
+`output coverage` excludes scaffolding-only files such as:
+
+- `AGENTS.md`
+- `CLAUDE.md`
+- `.kra.meta.json`
+- `.claude/settings.local.json`
+
+`README.md` is a summary artifact but does not by itself satisfy `documented`.
 
 ## Optional index model
 
@@ -52,6 +63,19 @@ Optional index/cache layers are allowed for UX/performance, with these constrain
 - rebuildable from canonical filesystem metadata
 - safe to delete without data loss
 - commands must fail closed or rebuild when index is stale/corrupt
+
+## Runtime operational model
+
+Runtime operational state may exist under `KRA_ROOT/.kra/state/`.
+
+Examples:
+
+- cmux mapping/session stores
+- root repo registry
+- lifecycle journals under `operations/ws-close/<id>.json`
+
+These files are not canonical workspace data. They support recovery and UX, but must not silently replace
+workspace metadata as the source of truth.
 
 ## Lifecycle semantics
 

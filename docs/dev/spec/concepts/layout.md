@@ -1,6 +1,6 @@
 ---
 title: "Layout"
-status: implemented
+status: proposed
 ---
 
 # Layout
@@ -32,6 +32,16 @@ At the workspace level, we separate "text-first" logs from "file-first" artifact
 ```
 KRA_ROOT/
   AGENTS.md
+  .kra/
+    config.yaml
+    logs/
+    state/
+      cmux-sessions.json
+      cmux-workspaces.json
+      root-repos.json
+      operations/
+        ws-close/
+          <id>.json
   templates/
     <name>/        # workspace template root copied by ws create
   workspaces/
@@ -56,7 +66,20 @@ Notes:
 `kra` treats `KRA_ROOT` as a Git working tree.
 
 - Track:
+  - `.kra/config.yaml`
   - `workspaces/<id>/` except `repos/` (notes, artifacts, AGENTS.md, and any additional files)
   - everything under `archive/<id>/`
 - Ignore:
   - `workspaces/<id>/repos/**` (git worktrees)
+  - `.kra/logs/**`
+  - `.kra/state/cmux-sessions.json`
+  - `.kra/state/cmux-workspaces.json`
+  - `.kra/state/root-repos.json`
+  - `.kra/state/operations/**`
+  - `.DS_Store`
+
+Notes:
+
+- Runtime operational files under `.kra/state/` are ignored by default unless a future spec explicitly promotes
+  them to canonical tracked state.
+- `.kra.meta.json` remains canonical workspace state and is tracked as part of each workspace/archive directory.

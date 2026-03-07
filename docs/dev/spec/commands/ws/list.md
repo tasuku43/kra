@@ -1,6 +1,6 @@
 ---
 title: "`kra ws list`"
-status: implemented
+status: proposed
 ---
 
 # `kra ws list [--archived] [--tree] [--format human|tsv|json]`
@@ -12,8 +12,8 @@ Alias:
 
 List workspaces with status and summary fields, similar in spirit to `gion manifest ls`.
 
-`ws list` is a read-only listing command.
-`ws list` is read-only. Interactive selection is provided by each workspace action command with `--select`.
+`ws list` is a read-only listing command. Interactive selection is provided by each workspace action command
+with `--select`.
 
 ## Role boundary
 
@@ -80,31 +80,31 @@ List workspaces with status and summary fields, similar in spirit to `gion manif
 - `repo_count`
 - `title` (stored as `title` for compatibility)
 
-## Behavior (MVP)
+## Behavior
 
 - Filesystem metadata (`.kra.meta.json`) is the primary source of desired/current state.
 - Directory existence under `KRA_ROOT/workspaces/` and `KRA_ROOT/archive/` is treated as physical truth.
 - with `--debug`, emit phase timing entries to debug log for registry touch, row scan/build, per-workspace
   repo/work-state derivation, and render steps
-- Logical work-state derivation (`active` scope):
-  - source of truth: `.kra.meta.json.workspace.work_state`
-  - `in-progress` is final for display ordering (skip re-derivation)
-  - only `todo` workspaces are eligible for runtime re-derivation
-  - preferred baseline source: `.kra.meta.json.baseline`
-  - if `.kra.meta.json.baseline` is absent, command must create baseline in `.kra.meta.json`
-  - legacy `.kra/state/workspace-baselines/<id>.json` is ignored by `ws list`; explicit migration is handled by `doctor --fix`
-  - repo signals under `repos/**`:
-    - `dirty` -> `in-progress`
-    - `baseline_head..HEAD` delta -> `in-progress`
-  - non-repo FS signals:
-    - compare current file hash map with baseline `fs` map (exclude `repos/**`, `.kra.meta.json`)
-  - if any signal differs, classify as `in-progress`; otherwise `todo`
-  - when derived as `in-progress`, persist to `.kra.meta.json.workspace.work_state`
-    with monotonic `todo -> in-progress` semantics.
+- `ws list` is strictly read-only:
+  - must not create or refresh `.kra.meta.json.baseline`
+  - must not rewrite `.kra.meta.json.workspace.work_state`
+  - must not migrate legacy files
+- Logical work-state handling (`active` scope):
+  - preferred source is `.kra.meta.json.workspace.work_state`
+  - if stored state is missing/blank, command may derive a transient display value from existing
+    `.kra.meta.json.baseline`
+  - legacy `.kra/state/workspace-baselines/<id>.json` is not read by `ws list`
+  - if safe derivation is not possible, use the closest non-mutating fallback for ordering and report degraded state
+    in warnings
+- Drift or metadata normalization is reported, not repaired:
+  - broken repo links
+  - missing baseline
+  - missing work-state
+  - legacy state files
+  are `doctor` responsibilities
 
-### Drift repair (MVP)
+## JSON contract additions
 
-- If a repo appears in metadata but its worktree is missing on disk:
-  - mark/reconcile drift in index data without mutating canonical metadata unexpectedly
-- If a workspace directory exists on disk but index/cached record is missing:
-  - import it using directory and metadata signals.
+- `result.warnings[]` may be returned when row data is degraded but listing can still succeed
+- warnings must be stable, user-actionable strings rather than raw stack messages

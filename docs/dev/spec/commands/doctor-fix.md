@@ -1,6 +1,6 @@
 ---
 title: "`kra doctor --fix` staged remediation"
-status: implemented
+status: proposed
 ---
 
 # `kra doctor --fix --plan|--apply [--format human|json]`
@@ -14,7 +14,7 @@ Extend `kra doctor` from detection-only to staged remediation:
 
 This keeps recovery explicit and auditable while reducing operational MTTR.
 
-## Scope (implemented phase)
+## Scope
 
 - stale lock cleanup under `KRA_ROOT/.kra/locks/`
 - root registry touch/repair when current root is missing from registry
@@ -23,6 +23,10 @@ This keeps recovery explicit and auditable while reducing operational MTTR.
   - remove `workspace-baselines/<id>.json` only when cleanup is provably safe
   - migrate active-workspace `workspace-baselines/<id>.json` into `workspaces/<id>/.kra.meta.json.baseline`
     when the workspace still relies on the legacy file
+- create missing `.kra.meta.json.baseline` for active workspaces when deterministic from current filesystem state
+- normalize missing `workspace.work_state` when canonical metadata can be updated without ambiguity
+- append missing default `.gitignore` patterns for KRA-managed runtime noise
+- resume safe post-rename `ws close` operations from lifecycle journals
 
 ## Inputs
 
@@ -51,6 +55,7 @@ This keeps recovery explicit and auditable while reducing operational MTTR.
 - No remote Git operations.
 - No workspace destructive operations (`close/reopen/purge`) are performed.
 - Unsupported/ambiguous fix types are reported as `skipped` with reason `manual_required`.
+- Tracked local-noise files are never auto-untracked or auto-deleted.
 - Legacy baseline files are auto-removed only when one of the following is true:
   - the workspace is archived
   - the workspace is missing (orphan legacy file)
@@ -58,6 +63,9 @@ This keeps recovery explicit and auditable while reducing operational MTTR.
 - Active workspaces that still rely on legacy baseline files are migrated by copying the baseline into
   `.kra.meta.json` first, then removing the legacy file.
 - The migration must not recompute baseline content; it preserves the legacy snapshot as-is.
+- Baseline creation for missing canonical data must use current local filesystem/worktree state only.
+- Close recovery is allowed only when lifecycle journal state and filesystem state agree on a deterministic
+  archive-finalization path.
 
 ## JSON contract
 

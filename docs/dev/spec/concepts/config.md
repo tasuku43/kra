@@ -1,6 +1,6 @@
 ---
 title: "User Config"
-status: implemented
+status: proposed
 ---
 
 # User Config
@@ -45,6 +45,8 @@ For string values, empty/whitespace-only values are treated as "unset".
 workspace:
   defaults:
     template: default
+  close:
+    empty_record_policy: require-confirmation # warn | require-confirmation
   branch:
     template: "feature/{{workspace_id}}"
   repo_presets:
@@ -63,6 +65,8 @@ integration:
 Notes:
 - `integration.jira.defaults.space` and `integration.jira.defaults.project` are aliases for the same scope concept.
 - Only one of them may be active at a time.
+- `workspace.close.empty_record_policy` controls how `ws close` reacts when a workspace has no substantive
+  `notes/` or `artifacts/` record.
 - `workspace.repo_presets` is a map keyed by preset name.
 - `workspace.repo_presets.<name>.repos[]` stores `repo_key` values in user-selected order.
 - Repo preset persistence is root-local by design (`<KRA_ROOT>/.kra/config.yaml`) to keep team/project intent explicit.
@@ -73,6 +77,9 @@ Notes:
   - `sprint`
   - `jql`
 - `integration.jira.defaults.space` and `integration.jira.defaults.project` must not be combined.
+- `workspace.close.empty_record_policy` must be one of:
+  - `warn`
+  - `require-confirmation`
 - `workspace.repo_presets.<name>.repos[]` must not be empty.
 - Invalid config must fail command execution with a clear path + reason.
 

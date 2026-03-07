@@ -1,6 +1,6 @@
 ---
 title: "Workspace Meta JSON"
-status: implemented
+status: proposed
 ---
 
 # Workspace Meta JSON (`.kra.meta.json`)
@@ -70,10 +70,11 @@ This file is canonical and stored in:
 - `workspace.work_state`:
   - `todo` or `in-progress`
   - monotonic transition only (`todo -> in-progress`)
-  - `in-progress` is treated as stable (no downgrade during `ws list`/selector rendering)
+  - `in-progress` is treated as stable for canonical state
+  - read-only commands must not rewrite this field during inspection
 - `repos_restore` is the authoritative input for worktree reconstruction on `ws reopen`.
 - `baseline` stores workspace-local snapshot data used to derive `workspace.work_state` for
-  `todo` workspaces.
+  `todo` workspaces and repair missing canonical state.
   - `repos.<alias>.baseline_head`
   - `fs.<path> = sha256:<digest>`
   - baseline is canonical workspace metadata, not a root-level cache
@@ -98,6 +99,10 @@ This file is canonical and stored in:
   - initialize `baseline` from created workspace contents.
 - `ws add-repo`:
   - update `repos_restore` entries for added/bound repos.
+- `ws list` / `ws dashboard`:
+  - may derive transient state in memory
+  - must not create missing baseline data
+  - must not normalize `workspace.work_state` by writing metadata
 - `ws close`:
   - refresh `repos_restore` from live worktrees before worktree removal.
   - set `workspace.status=archived`.
@@ -106,6 +111,9 @@ This file is canonical and stored in:
   - set `workspace.status=active`.
   - reset `workspace.work_state=todo`.
   - refresh `baseline` from reopened workspace contents.
+- `doctor --fix`:
+  - may create a missing baseline for an active workspace
+  - may normalize missing `workspace.work_state` when deterministic
 - `ws purge`:
   - remove workspace/archive directories (metadata removed with them).
 

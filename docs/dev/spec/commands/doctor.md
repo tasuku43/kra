@@ -1,6 +1,6 @@
 ---
 title: "`kra doctor`"
-status: implemented
+status: proposed
 ---
 
 # `kra doctor [--format human|json]`
@@ -10,7 +10,7 @@ status: implemented
 
 Provide a non-destructive health report for current `KRA_ROOT` to detect operational drifts early.
 
-## Scope (MVP)
+## Scope
 
 - Validate root layout essentials (`workspaces/`, `archive/`).
 - Validate workspace metadata readability (`.kra.meta.json` parse/required fields).
@@ -19,6 +19,9 @@ Provide a non-destructive health report for current `KRA_ROOT` to detect operati
   - worktree exists but binding/metadata missing
 - Detect stale workspace action lock files under `.kra/locks/` when owner PID is not alive.
 - Detect obvious registry drift where current root is missing from `~/.kra/state/root-registry.json`.
+- Detect active workspaces missing canonical metadata support:
+  - missing `.kra.meta.json.baseline`
+  - missing/blank `.kra.meta.json.workspace.work_state`
 - Detect legacy workspace-local state files under `KRA_ROOT/.kra/state/`:
   - `workspace-workstate.json` is always reported as legacy/unused.
   - `workspace-baselines/<id>.json` is reported as:
@@ -27,6 +30,16 @@ Provide a non-destructive health report for current `KRA_ROOT` to detect operati
     - removable when the workspace is missing (orphan legacy file)
     - `legacy_baseline_in_use` when active workspace still relies on the legacy file
       (`doctor --fix` may migrate it into `.kra.meta.json.baseline`)
+- Detect unfinished lifecycle journals under `KRA_ROOT/.kra/state/operations/ws-close/`
+  and classify them as:
+  - `ws_close_resume_ready`
+  - `ws_close_manual_required`
+- Detect older half-closed states without journals when filesystem/Git state strongly suggests
+  `close-pre` completed but archive finalization did not.
+- Detect root hygiene drift:
+  - missing default `.gitignore` patterns
+  - runtime-only `.kra` state that is not ignored
+  - tracked local noise files such as `.DS_Store` or editor-local workspace files
 
 ## Output
 
@@ -41,7 +54,7 @@ Provide a non-destructive health report for current `KRA_ROOT` to detect operati
 
 - `0` when no `error` findings (warnings allowed).
 - `3` when at least one `error` finding exists, or command runtime fails.
-- `2` for usage errors (including unsupported `--fix` in MVP).
+- `2` for usage errors (including invalid `--fix` flag combinations).
 
 ## `--fix` policy
 
@@ -50,7 +63,7 @@ Provide a non-destructive health report for current `KRA_ROOT` to detect operati
 - This command keeps detection/reporting behavior as default.
 - Remediation is opt-in and explicit via `--fix --plan|--apply`.
 
-## Non-goals (MVP)
+## Non-goals (current phase)
 
 - No automatic mutation of filesystem or state store.
 - No remote Git operations (`fetch`, network checks).

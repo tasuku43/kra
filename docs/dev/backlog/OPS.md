@@ -125,3 +125,41 @@ status: planned
     - `docs/dev/spec/commands/ws/select-multi.md`
   - Depends: OPS-012
   - Serial: yes
+
+- [ ] OPS-015: Read-path purity for workspace inspection commands
+  - What: make `ws list` / `ws dashboard` strictly read-only, remove write-through baseline/work-state repair
+    from inspection paths, and move canonical metadata repair into `doctor --fix`.
+  - Specs:
+    - `docs/dev/spec/commands/ws/list.md`
+    - `docs/dev/spec/commands/ws/dashboard.md`
+    - `docs/dev/spec/commands/doctor.md`
+    - `docs/dev/spec/commands/doctor-fix.md`
+    - `docs/dev/spec/concepts/workspace-meta-json.md`
+    - `docs/dev/spec/concepts/state-store.md`
+  - Depends: OPS-008, WS-STATE-001
+  - Serial: yes
+
+- [ ] OPS-016: Recoverable `ws close` lifecycle journal + doctor-assisted resume
+  - What: add a root-local `ws close` lifecycle journal and let `doctor --fix` resume safe post-rename
+    close flows instead of leaving half-closed roots in manual-repair state.
+  - Specs:
+    - `docs/dev/spec/commands/ws/close.md`
+    - `docs/dev/spec/commands/doctor.md`
+    - `docs/dev/spec/commands/doctor-fix.md`
+    - `docs/dev/spec/concepts/lifecycle-journal.md`
+    - `docs/dev/spec/concepts/layout.md`
+    - `docs/dev/spec/concepts/state-store.md`
+  - Depends: OPS-012, OPS-015
+  - Serial: yes
+
+- [ ] OPS-017: Root runtime-state ignore reconciliation and hygiene drift
+  - What: classify root-local runtime `.kra` state vs tracked config, teach `kra init` to reconcile missing
+    ignore defaults on re-run, and surface root hygiene drift via `doctor`.
+  - Specs:
+    - `docs/dev/spec/commands/init.md`
+    - `docs/dev/spec/commands/doctor.md`
+    - `docs/dev/spec/commands/doctor-fix.md`
+    - `docs/dev/spec/concepts/layout.md`
+    - `docs/dev/spec/concepts/state-store.md`
+  - Depends: CONFIG-006, OPS-016
+  - Serial: yes
