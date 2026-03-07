@@ -302,4 +302,24 @@ status: planned
   - Depends: UX-WS-028
   - Serial: yes
 
+- [ ] UX-WS-031: Workspace-local structured task management
+  - What: add AI-editable workspace-local task management based on optional `tasks.md`, with strict
+    `kra ws task` operations (`list/add/start/block/done`) and supplemental task summaries in
+    overview surfaces (`ws list`, `ws dashboard`) without replacing the existing activity-oriented
+    workspace progress model.
+  - Specs:
+    - `docs/dev/spec/concepts/workspace-tasks.md`
+    - `docs/dev/spec/concepts/workspace-task-examples.md`
+    - `docs/dev/spec/concepts/workspace-task-overview.md`
+    - `docs/dev/spec/commands/ws/task.md`
+    - `docs/dev/spec/commands/ws/task/list.md`
+    - `docs/dev/spec/commands/ws/task/add.md`
+    - `docs/dev/spec/commands/ws/task/start.md`
+    - `docs/dev/spec/commands/ws/task/block.md`
+    - `docs/dev/spec/commands/ws/task/done.md`
+    - `docs/dev/spec/commands/ws/list-task-summary.md`
+    - `docs/dev/spec/commands/ws/dashboard-task-summary.md`
+  - Depends: UX-WS-028, WS-STATE-001
+  - Parallel: yes
+
 ## Architecture Refactor (full layering migration)
