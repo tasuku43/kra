@@ -2,7 +2,6 @@ package cli
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"errors"
 	"os"
@@ -14,7 +13,6 @@ import (
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/repostore"
 	"github.com/tasuku43/kra/internal/core/workspacerisk"
-	"github.com/tasuku43/kra/internal/gitutil"
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
@@ -246,9 +244,9 @@ func TestPrintRemoveRepoPlan_ShowsFilesSectionForDirtyRepo(t *testing.T) {
 
 func createTestRemoteRepoSpec(t *testing.T) string {
 	t.Helper()
-	return prepareRemoteRepoSpecWithName(t, func(dir string, args ...string) {
+	return prepareRemoteRepoSpec(t, func(dir string, args ...string) {
 		runGit(t, dir, args...)
-	}, "github.com", "tasuku43", "sample")
+	})
 }
 
 func prepareActiveWorkspaceForRemoveRepoTest(t *testing.T) (testutil.Env, string, string, string) {
@@ -264,9 +262,7 @@ func prepareActiveWorkspaceForRemoveRepoTest(t *testing.T) (testutil.Env, string
 	alias := spec.Repo
 
 	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
-	if _, err := gitutil.EnsureBareRepoFetched(context.Background(), repoSpec, barePath, "main"); err != nil {
-		t.Fatalf("EnsureBareRepoFetched() error: %v", err)
-	}
+	seedRepoPoolBareFixtureOrFetch(t, repoSpec, barePath, fixtureRemoteDefaultBranch)
 	if err := upsertRootRepoRegistryEntries(env.Root, []rootRepoRegistryEntry{{
 		RepoUID:   repoUID,
 		RepoKey:   repoKey,

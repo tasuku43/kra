@@ -810,6 +810,9 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	seedWorkspaceMeta(t, env.Root, "active", "MVP-020")
+	spec := mustNormalizeRepoSpec(t, repoSpec)
+	repoUID := spec.Host + "/" + spec.Owner + "/" + spec.Repo
+	repoKey := spec.Owner + "/" + spec.Repo
 
 	{
 		var out bytes.Buffer
@@ -823,7 +826,7 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 		}
 
-		worktreePath := filepath.Join(env.Root, "workspaces", "MVP-020", "repos", "sample")
+		worktreePath := filepath.Join(env.Root, "workspaces", "MVP-020", "repos", spec.Repo)
 		if _, statErr := os.Stat(filepath.Join(worktreePath, ".git")); statErr != nil {
 			t.Fatalf("worktree .git missing: %v", statErr)
 		}
@@ -841,17 +844,17 @@ func TestCLI_WS_AddRepo_CreatesWorktreeAndRecordsState(t *testing.T) {
 		t.Fatalf("repos_restore length = %d, want %d", len(meta.ReposRestore), 1)
 	}
 	got := meta.ReposRestore[0]
-	if got.RepoUID != "github.com/tasuku43/sample" {
-		t.Fatalf("repos_restore.repo_uid = %q, want %q", got.RepoUID, "github.com/tasuku43/sample")
+	if got.RepoUID != repoUID {
+		t.Fatalf("repos_restore.repo_uid = %q, want %q", got.RepoUID, repoUID)
 	}
-	if got.RepoKey != "tasuku43/sample" {
-		t.Fatalf("repos_restore.repo_key = %q, want %q", got.RepoKey, "tasuku43/sample")
+	if got.RepoKey != repoKey {
+		t.Fatalf("repos_restore.repo_key = %q, want %q", got.RepoKey, repoKey)
 	}
 	if got.RemoteURL != repoSpec {
 		t.Fatalf("repos_restore.remote_url = %q, want %q", got.RemoteURL, repoSpec)
 	}
-	if got.Alias != "sample" {
-		t.Fatalf("repos_restore.alias = %q, want %q", got.Alias, "sample")
+	if got.Alias != spec.Repo {
+		t.Fatalf("repos_restore.alias = %q, want %q", got.Alias, spec.Repo)
 	}
 	if got.Branch != "MVP-020/test" {
 		t.Fatalf("repos_restore.branch = %q, want %q", got.Branch, "MVP-020/test")
@@ -870,6 +873,9 @@ func TestCLI_WS_AddRepo_DBUnavailable_FallsBackToFilesystem(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	seedWorkspaceMeta(t, env.Root, "active", "MVP-021")
+	spec := mustNormalizeRepoSpec(t, repoSpec)
+	repoUID := spec.Host + "/" + spec.Owner + "/" + spec.Repo
+	repoKeyWant := spec.Owner + "/" + spec.Repo
 
 	// Seed repo-pool, then break SQLite schema to force DB fallback path.
 	{
@@ -897,7 +903,7 @@ func TestCLI_WS_AddRepo_DBUnavailable_FallsBackToFilesystem(t *testing.T) {
 			t.Fatalf("unexpected json response: %+v", resp)
 		}
 
-		worktreePath := filepath.Join(env.Root, "workspaces", "MVP-021", "repos", "sample")
+		worktreePath := filepath.Join(env.Root, "workspaces", "MVP-021", "repos", spec.Repo)
 		if _, statErr := os.Stat(filepath.Join(worktreePath, ".git")); statErr != nil {
 			t.Fatalf("worktree .git missing: %v", statErr)
 		}
@@ -915,17 +921,17 @@ func TestCLI_WS_AddRepo_DBUnavailable_FallsBackToFilesystem(t *testing.T) {
 		t.Fatalf("repos_restore length = %d, want %d", len(meta.ReposRestore), 1)
 	}
 	got := meta.ReposRestore[0]
-	if got.RepoUID != "github.com/tasuku43/sample" {
-		t.Fatalf("repos_restore.repo_uid = %q, want %q", got.RepoUID, "github.com/tasuku43/sample")
+	if got.RepoUID != repoUID {
+		t.Fatalf("repos_restore.repo_uid = %q, want %q", got.RepoUID, repoUID)
 	}
-	if got.RepoKey != "tasuku43/sample" {
-		t.Fatalf("repos_restore.repo_key = %q, want %q", got.RepoKey, "tasuku43/sample")
+	if got.RepoKey != repoKeyWant {
+		t.Fatalf("repos_restore.repo_key = %q, want %q", got.RepoKey, repoKeyWant)
 	}
 	if got.RemoteURL != repoSpec {
 		t.Fatalf("repos_restore.remote_url = %q, want %q", got.RemoteURL, repoSpec)
 	}
-	if got.Alias != "sample" {
-		t.Fatalf("repos_restore.alias = %q, want %q", got.Alias, "sample")
+	if got.Alias != spec.Repo {
+		t.Fatalf("repos_restore.alias = %q, want %q", got.Alias, spec.Repo)
 	}
 	if got.Branch != "MVP-021/test" {
 		t.Fatalf("repos_restore.branch = %q, want %q", got.Branch, "MVP-021/test")
