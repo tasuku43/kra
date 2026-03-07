@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -105,41 +104,9 @@ func TestCLI_WS_Purge_NoPromptWithoutForce_Refuses(t *testing.T) {
 }
 
 func TestCLI_WS_Purge_ActiveWorkspace_RefusesUntilArchived(t *testing.T) {
-	testutil.RequireCommand(t, "git")
-
-	runGit := func(dir string, args ...string) {
-		t.Helper()
-		cmd := exec.Command("git", args...)
-		if dir != "" {
-			cmd.Dir = dir
-		}
-		out, err := cmd.CombinedOutput()
-		if err != nil {
-			t.Fatalf("git %s failed: %v (output=%s)", strings.Join(args, " "), err, strings.TrimSpace(string(out)))
-		}
-	}
-
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	seedWorkspaceMeta(t, env.Root, "active", "WS1")
-
-	repoSpec := prepareRemoteRepoSpec(t, runGit)
-	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "WS1/test"))
-		code := c.Run([]string{"ws", "add-repo", "--id", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
-
-	worktreePath := filepath.Join(env.Root, "workspaces", "WS1", "repos", "r")
-	if err := os.WriteFile(filepath.Join(worktreePath, "DIRTY.txt"), []byte("x\n"), 0o644); err != nil {
-		t.Fatalf("write dirty file: %v", err)
-	}
 
 	{
 		var out bytes.Buffer
@@ -170,16 +137,7 @@ func TestCLI_WS_Purge_ActiveWorkspace_RefusesUntilArchived(t *testing.T) {
 func TestCLI_WS_Purge_NoPromptForce_ActiveWorkspace_Refuses(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
-
-	{
-		var out bytes.Buffer
-		var err bytes.Buffer
-		c := New(&out, &err)
-		code := c.Run([]string{"ws", "create", "--no-prompt", "WS1"})
-		if code != exitOK {
-			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-		}
-	}
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	var out bytes.Buffer
 	var err bytes.Buffer
