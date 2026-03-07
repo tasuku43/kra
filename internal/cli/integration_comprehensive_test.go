@@ -31,18 +31,29 @@ func TestCLI_WS_AddRepo_BaseRefNotFound_FailsWithoutMutatingState(t *testing.T) 
 	seedWorkspaceMeta(t, env.Root, "active", "WS1")
 
 	repoSpec := prepareRemoteRepoSpec(t, runGit)
-	_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
+	_, repoKey, _ := seedRepoPoolAndState(t, env, repoSpec)
 	{
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("origin/does-not-exist", "WS1/test"))
-		code := c.Run([]string{"ws", "add-repo", "--id", "WS1"})
+		code := c.Run([]string{
+			"ws", "add-repo",
+			"--format", "json",
+			"--id", "WS1",
+			"--repo", repoKey,
+			"--branch", "WS1/test",
+			"--base-ref", "origin/does-not-exist",
+			"--yes",
+		})
 		if code != exitError {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
 		}
-		if !strings.Contains(err.String(), "base_ref not found") {
-			t.Fatalf("stderr missing base_ref not found: %q", err.String())
+		resp := decodeJSONResponse(t, out.String())
+		if resp.OK || resp.Action != "add-repo" {
+			t.Fatalf("unexpected json response: %+v", resp)
+		}
+		if !strings.Contains(resp.Error.Message, "base_ref not found") {
+			t.Fatalf("error missing base_ref not found: %+v", resp.Error)
 		}
 	}
 

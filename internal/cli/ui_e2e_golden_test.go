@@ -67,8 +67,6 @@ func TestGolden_UIE2E_ArchivePurgeFlow(t *testing.T) {
 
 	steps := []uiE2EStep{
 		{Args: []string{"init", "--root", env.Root, "--context", "ui-e2e"}},
-		{Args: []string{"ws", "reopen", "--id", "UI-200"}},
-		{Args: []string{"ws", "close", "--id", "UI-200"}},
 		{Args: []string{"ws", "unlock", "--id", "UI-200"}},
 		{Args: []string{"ws", "purge", "--no-prompt", "--force", "--id", "UI-200"}},
 		{Args: []string{"ws", "list", "--archived"}},

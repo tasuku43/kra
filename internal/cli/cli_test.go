@@ -873,21 +873,28 @@ func TestCLI_WS_AddRepo_DBUnavailable_FallsBackToFilesystem(t *testing.T) {
 
 	// Seed repo-pool, then break SQLite schema to force DB fallback path.
 	{
-		_, _, _ = seedRepoPoolAndState(t, env, repoSpec)
+		_, repoKey, _ := seedRepoPoolAndState(t, env, repoSpec)
 		if err := os.MkdirAll(filepath.Join(env.Root, "workspaces", "MVP-021", "repos"), 0o755); err != nil {
 			t.Fatalf("prepare workspace dir: %v", err)
 		}
-	}
-
-	{
 		var out bytes.Buffer
 		var err bytes.Buffer
 		c := New(&out, &err)
-		c.In = strings.NewReader(addRepoSelectionInput("", "MVP-021/test"))
-
-		code := c.Run([]string{"ws", "add-repo", "--id", "MVP-021"})
+		code := c.Run([]string{
+			"ws", "add-repo",
+			"--format", "json",
+			"--id", "MVP-021",
+			"--repo", repoKey,
+			"--branch", "MVP-021/test",
+			"--base-ref", "origin/main",
+			"--yes",
+		})
 		if code != exitOK {
 			t.Fatalf("ws add-repo exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+		resp := decodeJSONResponse(t, out.String())
+		if !resp.OK || resp.Action != "add-repo" {
+			t.Fatalf("unexpected json response: %+v", resp)
 		}
 
 		worktreePath := filepath.Join(env.Root, "workspaces", "MVP-021", "repos", "sample")
