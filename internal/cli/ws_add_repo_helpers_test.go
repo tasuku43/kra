@@ -9,7 +9,6 @@ import (
 
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/repostore"
-	"github.com/tasuku43/kra/internal/gitutil"
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
@@ -17,7 +16,6 @@ const fixtureRemoteDefaultBranch = "main"
 
 func seedRepoPoolAndState(t *testing.T, env testutil.Env, repoSpecInput string) (repoUID string, repoKey string, alias string) {
 	t.Helper()
-	ctx := context.Background()
 
 	spec, err := repospec.Normalize(repoSpecInput)
 	if err != nil {
@@ -29,10 +27,8 @@ func seedRepoPoolAndState(t *testing.T, env testutil.Env, repoSpecInput string) 
 
 	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
 	// All fixture remotes are created from prepareRemoteRepoTemplate(), which always
-	// initializes the default branch as "main". Skip an extra remote probe here.
-	if _, err := gitutil.EnsureBareRepoFetched(ctx, repoSpecInput, barePath, fixtureRemoteDefaultBranch); err != nil {
-		t.Fatalf("EnsureBareRepoFetched() error: %v", err)
-	}
+	// initializes the default branch as "main". Reuse a fetched bare fixture when possible.
+	seedRepoPoolBareFixtureOrFetch(t, repoSpecInput, barePath, fixtureRemoteDefaultBranch)
 	if err := upsertRootRepoRegistryEntries(env.Root, []rootRepoRegistryEntry{{
 		RepoUID:   repoUID,
 		RepoKey:   repoKey,
@@ -57,9 +53,7 @@ func TestListAddRepoPoolCandidates_UsesCurrentRootRegistryOnly(t *testing.T) {
 	unregisteredSpec := prepareRemoteRepoSpec(t, func(dir string, args ...string) {
 		runGit(t, dir, args...)
 	})
-	if _, err := gitutil.EnsureBareRepoFetched(context.Background(), unregisteredSpec, repostore.StorePath(env.RepoPoolPath(), mustNormalizeRepoSpec(t, unregisteredSpec)), "main"); err != nil {
-		t.Fatalf("EnsureBareRepoFetched(unregistered) error: %v", err)
-	}
+	seedRepoPoolBareFixtureOrFetch(t, unregisteredSpec, repostore.StorePath(env.RepoPoolPath(), mustNormalizeRepoSpec(t, unregisteredSpec)), fixtureRemoteDefaultBranch)
 
 	rows, err := listAddRepoPoolCandidates(context.Background(), env.Root, env.RepoPoolPath(), "WS-NOT-EXIST", time.Now(), nil)
 	if err != nil {

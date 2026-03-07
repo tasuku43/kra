@@ -16,7 +16,6 @@ import (
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/repostore"
 	"github.com/tasuku43/kra/internal/core/workspacerisk"
-	"github.com/tasuku43/kra/internal/gitutil"
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
@@ -519,9 +518,7 @@ func prepareActiveWorkspaceForCloseTest(t *testing.T) (testutil.Env, string) {
 		t.Fatalf("Normalize(repoSpec): %v", err)
 	}
 	barePath := repostore.StorePath(env.RepoPoolPath(), spec)
-	if _, err := gitutil.EnsureBareRepoFetched(context.Background(), repoSpec, barePath, "main"); err != nil {
-		t.Fatalf("EnsureBareRepoFetched() error: %v", err)
-	}
+	seedRepoPoolBareFixtureOrFetch(t, repoSpec, barePath, fixtureRemoteDefaultBranch)
 
 	wsPath := filepath.Join(env.Root, "workspaces", "WS1")
 	if err := os.MkdirAll(filepath.Join(wsPath, "repos"), 0o755); err != nil {

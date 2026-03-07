@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"io"
 	"os"
 	"os/exec"
@@ -10,12 +11,19 @@ import (
 	"testing"
 	"time"
 
+	"github.com/tasuku43/kra/internal/gitutil"
 	"github.com/tasuku43/kra/internal/infra/appports"
 	"github.com/tasuku43/kra/internal/infra/paths"
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
 var remoteRepoFixture struct {
+	once sync.Once
+	path string
+	err  error
+}
+
+var repoPoolBareFixture struct {
 	once sync.Once
 	path string
 	err  error
@@ -96,6 +104,53 @@ func prepareRemoteRepoTemplate(t *testing.T, runGit func(dir string, args ...str
 	return remoteRepoFixture.path
 }
 
+func prepareRepoPoolBareFixture(t *testing.T) string {
+	t.Helper()
+
+	repoPoolBareFixture.once.Do(func() {
+		if strings.TrimSpace(remoteRepoFixture.path) == "" {
+			repoPoolBareFixture.err = os.ErrNotExist
+			return
+		}
+		base, err := os.MkdirTemp("", "kra-repo-pool-fixture-*")
+		if err != nil {
+			repoPoolBareFixture.err = err
+			return
+		}
+		barePath := filepath.Join(base, "pool.git")
+		if _, err := gitutil.EnsureBareRepoFetched(context.Background(), "file://"+remoteRepoFixture.path, barePath, fixtureRemoteDefaultBranch); err != nil {
+			repoPoolBareFixture.err = err
+			return
+		}
+		repoPoolBareFixture.path = barePath
+	})
+	if repoPoolBareFixture.err != nil {
+		t.Fatalf("prepare repo-pool bare fixture: %v", repoPoolBareFixture.err)
+	}
+	return repoPoolBareFixture.path
+}
+
+func seedRepoPoolBareFixtureOrFetch(t *testing.T, repoSpecInput string, barePath string, fallbackDefaultBranch string) {
+	t.Helper()
+
+	if _, err := os.Stat(barePath); err == nil {
+		return
+	} else if !os.IsNotExist(err) {
+		t.Fatalf("stat bare repo path: %v", err)
+	}
+
+	if remoteRepoFixture.path != "" && repoSpecInput == "file://"+remoteRepoFixture.path {
+		if err := copyDir(prepareRepoPoolBareFixture(t), barePath); err != nil {
+			t.Fatalf("copy repo-pool bare fixture: %v", err)
+		}
+		return
+	}
+
+	if _, err := gitutil.EnsureBareRepoFetched(context.Background(), repoSpecInput, barePath, fallbackDefaultBranch); err != nil {
+		t.Fatalf("EnsureBareRepoFetched() error: %v", err)
+	}
+}
+
 func copyDir(src string, dst string) error {
 	return filepath.Walk(src, func(path string, info os.FileInfo, err error) error {
 		if err != nil {
@@ -107,7 +162,7 @@ func copyDir(src string, dst string) error {
 		}
 		target := filepath.Join(dst, rel)
 		if info.IsDir() {
-			return os.MkdirAll(target, info.Mode())
+			return os.MkdirAll(target, info.Mode()|0o700)
 		}
 		in, err := os.Open(path)
 		if err != nil {
