@@ -2,7 +2,9 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -30,13 +32,20 @@ func TestCLI_Doctor_Help(t *testing.T) {
 
 func TestCLI_Doctor_HealthyRoot(t *testing.T) {
 	env := testutil.NewEnv(t)
-	env.EnsureRootLayout(t)
+	initAndConfigureRootRepo(t, env.Root)
 
 	wsPath := filepath.Join(env.Root, "workspaces", "WS-1")
 	if err := os.MkdirAll(wsPath, 0o755); err != nil {
 		t.Fatalf("mkdir workspace: %v", err)
 	}
-	if err := writeWorkspaceMetaFile(wsPath, newWorkspaceMetaFileForCreate("WS-1", "title", "", 100)); err != nil {
+	meta := newWorkspaceMetaFileForCreate("WS-1", "title", "", 100)
+	meta.Baseline = &workspaceBaseline{
+		Version:   1,
+		CreatedAt: 100,
+		Repos:     map[string]workspaceBaselineRepo{},
+		FS:        map[string]string{},
+	}
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
 		t.Fatalf("write workspace meta: %v", err)
 	}
 
@@ -57,6 +66,88 @@ func TestCLI_Doctor_HealthyRoot(t *testing.T) {
 	}
 	if errBuf.Len() != 0 {
 		t.Fatalf("stderr not empty: %q", errBuf.String())
+	}
+}
+
+func TestCLI_Doctor_DetectsRootGitignoreDriftAndUnignoredRuntimeState(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	gitignorePath := rootGitignorePath(env.Root)
+	if err := os.WriteFile(gitignorePath, []byte("# kra\nworkspaces/**/repos/**\n.DS_Store\n.kra/logs/\n"), 0o644); err != nil {
+		t.Fatalf("write partial .gitignore: %v", err)
+	}
+	runtimeStatePath := filepath.Join(env.Root, ".kra", "state", "root-repos.json")
+	if err := os.MkdirAll(filepath.Dir(runtimeStatePath), 0o755); err != nil {
+		t.Fatalf("mkdir runtime state dir: %v", err)
+	}
+	if err := os.WriteFile(runtimeStatePath, []byte("{\"repos\":[]}\n"), 0o644); err != nil {
+		t.Fatalf("write runtime state file: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "root_gitignore_missing_defaults", gitignorePath) {
+		t.Fatalf("root gitignore drift finding missing: %+v", resp.Result.Findings)
+	}
+	finding, ok := findDoctorFinding(resp.Result.Findings, "root_gitignore_missing_defaults", gitignorePath)
+	if !ok || !strings.Contains(finding.Message, ".kra/state/root-repos.json") {
+		t.Fatalf("root gitignore drift message should list missing runtime patterns: %+v", finding)
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "runtime_state_not_ignored", runtimeStatePath) {
+		t.Fatalf("runtime state ignore finding missing: %+v", resp.Result.Findings)
+	}
+}
+
+func TestCLI_Doctor_DetectsTrackedLocalNoiseFiles(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	dsStorePath := filepath.Join(env.Root, ".DS_Store")
+	if err := os.WriteFile(dsStorePath, []byte("noise\n"), 0o644); err != nil {
+		t.Fatalf("write .DS_Store: %v", err)
+	}
+	ideaPath := filepath.Join(env.Root, ".idea", "workspace.xml")
+	if err := os.MkdirAll(filepath.Dir(ideaPath), 0o755); err != nil {
+		t.Fatalf("mkdir .idea dir: %v", err)
+	}
+	if err := os.WriteFile(ideaPath, []byte("<workspace/>\n"), 0o644); err != nil {
+		t.Fatalf("write workspace.xml: %v", err)
+	}
+	runGit(t, env.Root, "add", "-f", ".DS_Store")
+	runGit(t, env.Root, "add", ".idea/workspace.xml")
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "tracked_local_noise_file", dsStorePath) {
+		t.Fatalf(".DS_Store tracked-noise finding missing: %+v", resp.Result.Findings)
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "tracked_local_noise_file", ideaPath) {
+		t.Fatalf(".idea/workspace.xml tracked-noise finding missing: %+v", resp.Result.Findings)
 	}
 }
 
@@ -92,13 +183,19 @@ func TestCLI_Doctor_DetectsInvalidWorkspaceMeta(t *testing.T) {
 
 func TestCLI_Doctor_DetectsBindingMissingWorktree(t *testing.T) {
 	env := testutil.NewEnv(t)
-	env.EnsureRootLayout(t)
+	initAndConfigureRootRepo(t, env.Root)
 
 	wsPath := filepath.Join(env.Root, "workspaces", "WS-1")
 	if err := os.MkdirAll(wsPath, 0o755); err != nil {
 		t.Fatalf("mkdir workspace: %v", err)
 	}
 	meta := newWorkspaceMetaFileForCreate("WS-1", "title", "", 100)
+	meta.Baseline = &workspaceBaseline{
+		Version:   1,
+		CreatedAt: 100,
+		Repos:     map[string]workspaceBaselineRepo{},
+		FS:        map[string]string{},
+	}
 	meta.ReposRestore = []workspaceMetaRepoRestore{{
 		RepoUID: "github.com/example/repo",
 		RepoKey: "example/repo",
@@ -198,6 +295,47 @@ func TestCLI_Doctor_DetectsLegacyBaselineInUse(t *testing.T) {
 	}
 	if !hasDoctorFinding(resp.Result.Findings, "legacy_baseline_in_use", legacyBaselinePath) {
 		t.Fatalf("legacy baseline in use finding missing: %+v", resp.Result.Findings)
+	}
+}
+
+func TestCLI_Doctor_DetectsMissingCanonicalWorkspaceMetadata(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	wsPath := filepath.Join(env.Root, "workspaces", "WS-1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	meta := newWorkspaceMetaFileForCreate("WS-1", "title", "", 100)
+	meta.Workspace.WorkState = ""
+	meta.Baseline = nil
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	if err := c.touchStateRegistry(env.Root); err != nil {
+		t.Fatalf("touchStateRegistry: %v", err)
+	}
+
+	code := c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	metaPath := filepath.Join(wsPath, workspaceMetaFilename)
+	if !hasDoctorFinding(resp.Result.Findings, "workspace_baseline_missing", metaPath) {
+		t.Fatalf("missing baseline finding missing: %+v", resp.Result.Findings)
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "workspace_work_state_missing", metaPath) {
+		t.Fatalf("missing work_state finding missing: %+v", resp.Result.Findings)
 	}
 }
 
@@ -371,6 +509,82 @@ func TestCLI_Doctor_FixPlan_JSON_SeparatesMigrationFromCleanup(t *testing.T) {
 	}
 }
 
+func TestCLI_Doctor_FixPlan_JSON_IncludesBaselineCreationWithoutAmbiguousWorkStateNormalization(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	wsPath := filepath.Join(env.Root, "workspaces", "WS-1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	meta := newWorkspaceMetaFileForCreate("WS-1", "title", "", 100)
+	meta.Baseline = nil
+	meta.Workspace.WorkState = ""
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	if err := c.touchStateRegistry(env.Root); err != nil {
+		t.Fatalf("touchStateRegistry: %v", err)
+	}
+
+	code := c.Run([]string{"doctor", "--fix", "--plan", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorFixResult `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	metaPath := filepath.Join(wsPath, workspaceMetaFilename)
+	if !hasDoctorAction(resp.Result.Actions, "create_workspace_baseline", metaPath) {
+		t.Fatalf("baseline creation action missing: %+v", resp.Result.Actions)
+	}
+	if hasDoctorAction(resp.Result.Actions, "normalize_workspace_work_state", metaPath) {
+		t.Fatalf("work_state normalization should not be planned without canonical baseline: %+v", resp.Result.Actions)
+	}
+}
+
+func TestCLI_Doctor_FixPlan_JSON_IncludesRootGitignoreReconcile(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	gitignorePath := rootGitignorePath(env.Root)
+	if err := os.WriteFile(gitignorePath, []byte("# kra\nworkspaces/**/repos/**\n.DS_Store\n.kra/logs/\n"), 0o644); err != nil {
+		t.Fatalf("write partial .gitignore: %v", err)
+	}
+	runtimeStatePath := filepath.Join(env.Root, ".kra", "state", "root-repos.json")
+	if err := os.MkdirAll(filepath.Dir(runtimeStatePath), 0o755); err != nil {
+		t.Fatalf("mkdir runtime state dir: %v", err)
+	}
+	if err := os.WriteFile(runtimeStatePath, []byte("{\"repos\":[]}\n"), 0o644); err != nil {
+		t.Fatalf("write runtime state file: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"doctor", "--fix", "--plan", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorFixResult `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !hasDoctorAction(resp.Result.Actions, "reconcile_root_gitignore", gitignorePath) {
+		t.Fatalf("root gitignore reconcile action missing: %+v", resp.Result.Actions)
+	}
+}
+
 func TestCLI_Doctor_FixApply_RemovesStaleLock(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
@@ -480,6 +694,294 @@ func TestCLI_Doctor_FixApply_MigratesLegacyBaselineIntoMeta(t *testing.T) {
 	}
 }
 
+func TestCLI_Doctor_FixApply_CreatesMissingCanonicalBaseline(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	wsPath := filepath.Join(env.Root, "workspaces", "WS-1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	meta := newWorkspaceMetaFileForCreate("WS-1", "title", "", 100)
+	meta.Baseline = nil
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	if err := c.touchStateRegistry(env.Root); err != nil {
+		t.Fatalf("touchStateRegistry: %v", err)
+	}
+
+	code := c.Run([]string{"doctor", "--fix", "--apply", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+
+	updated, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load workspace meta: %v", err)
+	}
+	if updated.Baseline == nil {
+		t.Fatalf("baseline should be created in workspace meta")
+	}
+}
+
+func TestCLI_Doctor_FixApply_NormalizesMissingWorkStateFromCanonicalBaseline(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	wsPath := filepath.Join(env.Root, "workspaces", "WS-1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	meta := newWorkspaceMetaFileForCreate("WS-1", "title", "", 100)
+	meta.Workspace.WorkState = ""
+	meta.Baseline = &workspaceBaseline{
+		Version:   1,
+		CreatedAt: 100,
+		Repos:     map[string]workspaceBaselineRepo{},
+		FS:        map[string]string{},
+	}
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	if err := c.touchStateRegistry(env.Root); err != nil {
+		t.Fatalf("touchStateRegistry: %v", err)
+	}
+
+	code := c.Run([]string{"doctor", "--fix", "--apply", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+
+	updated, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load workspace meta: %v", err)
+	}
+	if updated.Workspace.WorkState != string(workspaceWorkStateTodo) {
+		t.Fatalf("work_state = %q, want %q", updated.Workspace.WorkState, workspaceWorkStateTodo)
+	}
+}
+
+func TestCLI_Doctor_FixApply_ReconcilesRootGitignore(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	gitignorePath := rootGitignorePath(env.Root)
+	if err := os.WriteFile(gitignorePath, []byte("# kra\nworkspaces/**/repos/**\n.DS_Store\n.kra/logs/\n"), 0o644); err != nil {
+		t.Fatalf("write partial .gitignore: %v", err)
+	}
+	runtimeStatePath := filepath.Join(env.Root, ".kra", "state", "root-repos.json")
+	if err := os.MkdirAll(filepath.Dir(runtimeStatePath), 0o755); err != nil {
+		t.Fatalf("mkdir runtime state dir: %v", err)
+	}
+	if err := os.WriteFile(runtimeStatePath, []byte("{\"repos\":[]}\n"), 0o644); err != nil {
+		t.Fatalf("write runtime state file: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"doctor", "--fix", "--apply", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+
+	raw, err := os.ReadFile(gitignorePath)
+	if err != nil {
+		t.Fatalf("read reconciled .gitignore: %v", err)
+	}
+	for _, pattern := range managedRootGitignorePatterns() {
+		if !strings.Contains(string(raw), pattern) {
+			t.Fatalf("reconciled .gitignore missing pattern %q: %q", pattern, string(raw))
+		}
+	}
+
+	out.Reset()
+	errBuf.Reset()
+	code = c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("doctor after fix exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	for _, finding := range resp.Result.Findings {
+		if finding.Code == "root_gitignore_missing_defaults" || finding.Code == "runtime_state_not_ignored" {
+			t.Fatalf("root hygiene drift should be repaired: %+v", resp.Result.Findings)
+		}
+	}
+}
+
+func TestCLI_Doctor_DetectsWSCloseResumeReady(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
+
+	prev := commitArchiveChangeFn
+	commitArchiveChangeFn = func(ctx context.Context, root string, workspaceID string, expectedArchiveFiles []string) (string, error) {
+		return "", errors.New("boom archive commit")
+	}
+	defer func() { commitArchiveChangeFn = prev }()
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	code := c.Run([]string{"ws", "close", "--commit", "--id", "WS1"})
+	if code != exitError {
+		t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitError, errBuf.String())
+	}
+
+	out.Reset()
+	errBuf.Reset()
+	code = c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("doctor exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "ws_close_resume_ready", wsCloseJournalPath(env.Root, "WS1")) {
+		t.Fatalf("resume-ready finding missing: %+v", resp.Result.Findings)
+	}
+}
+
+func TestCLI_Doctor_DetectsWSCloseManualRequired(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	journal := newWSCloseLifecycleJournal("WS-1", true, 100)
+	if err := journal.advance(wsClosePhaseClosePreCommitted, 101); err != nil {
+		t.Fatalf("advance journal: %v", err)
+	}
+	if err := saveWSCloseLifecycleJournal(env.Root, journal); err != nil {
+		t.Fatalf("save ws close journal: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	code := c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("doctor exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "ws_close_manual_required", wsCloseJournalPath(env.Root, "WS-1")) {
+		t.Fatalf("manual-required finding missing: %+v", resp.Result.Findings)
+	}
+}
+
+func TestCLI_Doctor_DetectsLegacyHalfClosedWSCloseWithoutJournal(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	runGit(t, env.Root, "add", filepath.ToSlash(filepath.Join("workspaces", "WS1")))
+	runGit(t, env.Root, "commit", "-m", "close-pre: WS1")
+
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load workspace meta: %v", err)
+	}
+	meta.Workspace.Status = "archived"
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+	if err := os.Rename(wsPath, filepath.Join(env.Root, "archive", "WS1")); err != nil {
+		t.Fatalf("rename workspace to archive: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	code := c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("doctor exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "ws_close_manual_required", filepath.Join(env.Root, "archive", "WS1")) {
+		t.Fatalf("legacy half-closed finding missing: %+v", resp.Result.Findings)
+	}
+}
+
+func TestCLI_Doctor_FixApply_ResumesWSCloseFromJournal(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
+
+	prev := commitArchiveChangeFn
+	commitArchiveChangeFn = func(ctx context.Context, root string, workspaceID string, expectedArchiveFiles []string) (string, error) {
+		return "", errors.New("boom archive commit")
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	code := c.Run([]string{"ws", "close", "--commit", "--id", "WS1"})
+	if code != exitError {
+		t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitError, errBuf.String())
+	}
+
+	commitArchiveChangeFn = prev
+	out.Reset()
+	errBuf.Reset()
+	code = c.Run([]string{"doctor", "--fix", "--apply", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("doctor fix exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+
+	if _, statErr := os.Stat(wsCloseJournalPath(env.Root, "WS1")); !os.IsNotExist(statErr) {
+		t.Fatalf("ws close journal should be removed after resume, stat err=%v", statErr)
+	}
+	subj := strings.TrimSpace(mustGitOutput(t, env.Root, "log", "-1", "--pretty=%s"))
+	if subj != "archive: WS1" {
+		t.Fatalf("commit subject = %q, want %q", subj, "archive: WS1")
+	}
+
+	out.Reset()
+	errBuf.Reset()
+	code = c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("doctor after resume exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	for _, finding := range resp.Result.Findings {
+		if finding.Code == "ws_close_resume_ready" || finding.Code == "ws_close_manual_required" {
+			t.Fatalf("ws close recovery finding should be cleared after resume: %+v", resp.Result.Findings)
+		}
+	}
+}
+
 func TestCLI_Doctor_FixApply_RegistersCurrentRoot(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
@@ -561,6 +1063,15 @@ func hasDoctorFinding(findings []doctorFinding, code string, target string) bool
 		}
 	}
 	return false
+}
+
+func findDoctorFinding(findings []doctorFinding, code string, target string) (doctorFinding, bool) {
+	for _, f := range findings {
+		if f.Code == code && f.Target == target {
+			return f, true
+		}
+	}
+	return doctorFinding{}, false
 }
 
 func hasDoctorAction(actions []doctorFixAction, kind string, target string) bool {

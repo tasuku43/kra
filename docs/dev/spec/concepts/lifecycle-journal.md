@@ -1,6 +1,6 @@
 ---
 title: "Lifecycle Journal"
-status: proposed
+status: implemented
 ---
 
 # Lifecycle Journal
@@ -34,6 +34,7 @@ One file exists per in-flight close operation.
   "started_at": 1772800000,
   "updated_at": 1772800042,
   "phase": "workspace_renamed",
+  "commit_enabled": true,
   "close_pre_commit_sha": "abc123",
   "archive_commit_sha": "",
   "workspace_path_present": false,
@@ -70,6 +71,7 @@ The journal file is removed after successful completion.
 - Writes must use temp-file + rename replacement semantics.
 - Phase updates must be monotonic.
 - Journal content should be sufficient for deterministic post-rename recovery without recomputing prior phases.
+- `commit_enabled` records whether post-rename archive commit should be resumed or skipped.
 
 ## Recovery contract
 
@@ -79,6 +81,11 @@ The journal file is removed after successful completion.
 - `ws_close_manual_required`
 
 `doctor --fix` may resume only when the journal and filesystem state agree on a safe post-rename recovery path.
+- phase `workspace_renamed`:
+  - resume archive commit when `commit_enabled=true`
+  - skip directly to finalization when `commit_enabled=false`
+- phase `archive_committed`:
+  - resume finalization only
 
 ## Non-goals
 

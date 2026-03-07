@@ -413,7 +413,7 @@ func (c *CLI) printWSListUsage(w io.Writer) {
   kra ws list [--archived] [--tree] [--format human|tsv|json]
   kra ws ls [--archived] [--tree] [--format human|tsv|json]
 
-List workspaces from filesystem metadata and repair basic drift.
+List workspaces from filesystem metadata without mutating canonical state.
 
 Options:
   --archived        Show archived workspaces (default: active only)

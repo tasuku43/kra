@@ -28,12 +28,14 @@ type wsDashboardRow struct {
 	Status    string
 	RepoCount int
 	Risk      workspacerisk.WorkspaceRisk
+	Coverage  workspaceOutputCoverage
 }
 
 type wsDashboardSummary struct {
-	Active     int
-	Archived   int
-	RiskTotals map[string]int
+	Active         int
+	Archived       int
+	RiskTotals     map[string]int
+	CoverageTotals map[string]int
 }
 
 type wsDashboardResult struct {
@@ -45,6 +47,7 @@ type wsDashboardResult struct {
 	Workspaces  []wsDashboardRow
 	Warnings    []string
 	Detail      *workspaceRiskDetail
+	DetailCover *workspaceOutputCoverageSummary
 }
 
 func (c *CLI) runWSDashboard(args []string) int {
@@ -187,10 +190,11 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 		}
 		debugf("ws-dashboard phase=%s scope=%s workspace=%s elapsed_ms=%d", phase, scope, workspaceID, elapsed.Milliseconds())
 	}
-	rows, err := listRowsFromFilesystemObserved(ctx, root, opts.scope, true, observer)
+	rowResult, err := listRowsFromFilesystemObservedResult(ctx, root, opts.scope, true, observer)
 	if err != nil {
 		return wsDashboardResult{}, fmt.Errorf("list workspaces: %w", err)
 	}
+	rows := rowResult.Rows
 	debugPhasef(debugf, "ws-dashboard", "list_scope", rowsStart, "scope=%s count=%d", opts.scope, len(rows))
 	scopeCount := len(rows)
 	if opts.workspace != "" {
@@ -209,12 +213,12 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 		debugPhasef(debugf, "ws-dashboard", "filter_workspace", filterStart, "workspace=%s", opts.workspace)
 	}
 
-	warnings := make([]string, 0, 2)
+	warnings := append([]string{}, rowResult.Warnings...)
 	contextStart := time.Now()
 	contextName, contextErr := resolveDashboardContextName(root)
 	if contextErr != nil {
 		contextName = root
-		warnings = append(warnings, fmt.Sprintf("resolve context: %v", contextErr))
+		warnings = append(warnings, "context resolution is degraded; using root path as fallback context")
 	}
 	debugPhasef(debugf, "ws-dashboard", "resolve_context", contextStart, "scope=%s", opts.scope)
 
@@ -227,7 +231,7 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 		}
 		riskDetails, riskErr := collectWorkspaceRiskDetails(ctx, root, ids)
 		if riskErr != nil {
-			warnings = append(warnings, fmt.Sprintf("inspect workspace risk: %v", riskErr))
+			warnings = append(warnings, "workspace risk inspection is degraded; rows may show unknown risk")
 		} else {
 			for _, item := range riskDetails {
 				riskByWorkspace[item.id] = item
@@ -237,6 +241,7 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 	}
 
 	items := make([]wsDashboardRow, 0, len(rows))
+	coverageByWorkspace := make(map[string]workspaceOutputCoverageSummary, len(rows))
 	riskTotals := map[string]int{
 		string(workspacerisk.WorkspaceRiskClean):    0,
 		string(workspacerisk.WorkspaceRiskUnpushed): 0,
@@ -244,18 +249,32 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 		string(workspacerisk.WorkspaceRiskDirty):    0,
 		string(workspacerisk.WorkspaceRiskUnknown):  0,
 	}
+	coverageTotals := map[string]int{
+		string(workspaceOutputCoverageEmpty):         0,
+		string(workspaceOutputCoverageNotesOnly):     0,
+		string(workspaceOutputCoverageArtifactsOnly): 0,
+		string(workspaceOutputCoverageDocumented):    0,
+	}
 	for _, row := range rows {
 		risk := workspacerisk.WorkspaceRiskUnknown
 		if detail, ok := riskByWorkspace[row.ID]; ok {
 			risk = detail.risk
 		}
+		coverage, coverageErr := deriveWorkspaceOutputCoverage(root, opts.scope, row.ID)
+		if coverageErr != nil {
+			warnings = append(warnings, fmt.Sprintf("output coverage scan is degraded for %s: %v", row.ID, coverageErr))
+			coverage = workspaceOutputCoverageSummary{Coverage: workspaceOutputCoverageEmpty}
+		}
 		riskTotals[string(risk)]++
+		coverageTotals[string(coverage.Coverage)]++
+		coverageByWorkspace[row.ID] = coverage
 		items = append(items, wsDashboardRow{
 			ID:        row.ID,
 			Title:     row.Title,
 			Status:    row.Status,
 			RepoCount: row.RepoCount,
 			Risk:      risk,
+			Coverage:  coverage.Coverage,
 		})
 	}
 
@@ -273,9 +292,14 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 	debugPhasef(debugf, "ws-dashboard", "summary_counts", summaryStart, "active=%d archived=%d", activeCount, archivedCount)
 
 	var detail *workspaceRiskDetail
+	var detailCoverage *workspaceOutputCoverageSummary
 	if opts.showDetail {
 		if d, ok := riskByWorkspace[opts.workspace]; ok {
 			detail = &d
+		}
+		if coverage, ok := coverageByWorkspace[opts.workspace]; ok {
+			coverageCopy := coverage
+			detailCoverage = &coverageCopy
 		}
 	}
 
@@ -285,13 +309,15 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 		Scope:       opts.scope,
 		GeneratedAt: now,
 		Summary: wsDashboardSummary{
-			Active:     activeCount,
-			Archived:   archivedCount,
-			RiskTotals: riskTotals,
+			Active:         activeCount,
+			Archived:       archivedCount,
+			RiskTotals:     riskTotals,
+			CoverageTotals: coverageTotals,
 		},
-		Workspaces: items,
-		Warnings:   warnings,
-		Detail:     detail,
+		Workspaces:  items,
+		Warnings:    warnings,
+		Detail:      detail,
+		DetailCover: detailCoverage,
 	}, nil
 }
 
@@ -334,6 +360,7 @@ func writeWSDashboardJSON(out io.Writer, result wsDashboardResult) int {
 			"title":      row.Title,
 			"status":     row.Status,
 			"risk":       string(row.Risk),
+			"coverage":   string(row.Coverage),
 			"repo_count": row.RepoCount,
 		})
 	}
@@ -344,9 +371,10 @@ func writeWSDashboardJSON(out io.Writer, result wsDashboardResult) int {
 		"scope":        result.Scope,
 		"generated_at": result.GeneratedAt,
 		"summary": map[string]any{
-			"active":      result.Summary.Active,
-			"archived":    result.Summary.Archived,
-			"risk_totals": result.Summary.RiskTotals,
+			"active":          result.Summary.Active,
+			"archived":        result.Summary.Archived,
+			"risk_totals":     result.Summary.RiskTotals,
+			"coverage_totals": result.Summary.CoverageTotals,
 		},
 		"workspaces": items,
 		"warnings":   result.Warnings,
@@ -363,6 +391,13 @@ func writeWSDashboardJSON(out io.Writer, result wsDashboardResult) int {
 			"workspace_id": result.Detail.id,
 			"risk":         string(result.Detail.risk),
 			"repos":        repos,
+		}
+		if result.DetailCover != nil {
+			payload["detail"].(map[string]any)["coverage"] = map[string]any{
+				"state":           string(result.DetailCover.Coverage),
+				"notes_count":     result.DetailCover.NotesCount,
+				"artifacts_count": result.DetailCover.ArtifactsCount,
+			}
 		}
 	}
 	_ = writeCLIJSON(out, cliJSONResponse{
@@ -395,6 +430,14 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 			result.Summary.RiskTotals[string(workspacerisk.WorkspaceRiskDirty)],
 			result.Summary.RiskTotals[string(workspacerisk.WorkspaceRiskUnknown)],
 		),
+		fmt.Sprintf("%s%s coverage: empty=%d notes-only=%d artifacts-only=%d documented=%d",
+			uiIndent,
+			styleMuted("•", useColor),
+			result.Summary.CoverageTotals[string(workspaceOutputCoverageEmpty)],
+			result.Summary.CoverageTotals[string(workspaceOutputCoverageNotesOnly)],
+			result.Summary.CoverageTotals[string(workspaceOutputCoverageArtifactsOnly)],
+			result.Summary.CoverageTotals[string(workspaceOutputCoverageDocumented)],
+		),
 	}
 	printSection(out, styleBold("Summary:", useColor), summary, sectionRenderOptions{
 		blankAfterHeading: true,
@@ -417,6 +460,7 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 				styleMuted("repos", useColor),
 				row.RepoCount,
 			)
+			line += fmt.Sprintf("  %s:%s", styleMuted("coverage", useColor), renderDashboardCoverage(row.Coverage, useColor))
 			rows = append(rows, line)
 		}
 	}
@@ -426,9 +470,13 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 	})
 
 	if result.Detail != nil {
-		lines := make([]string, 0, len(result.Detail.perRepo)+2)
+		lines := make([]string, 0, len(result.Detail.perRepo)+4)
 		lines = append(lines, fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleAccent("workspace", useColor), result.Detail.id))
 		lines = append(lines, fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("risk", useColor), renderDashboardWorkspaceRisk(result.Detail.risk, useColor)))
+		if result.DetailCover != nil {
+			lines = append(lines, fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("coverage", useColor), renderDashboardCoverage(result.DetailCover.Coverage, useColor)))
+			lines = append(lines, fmt.Sprintf("%s%s %s: notes=%d artifacts=%d", uiIndent, styleMuted("•", useColor), styleMuted("coverage_counts", useColor), result.DetailCover.NotesCount, result.DetailCover.ArtifactsCount))
+		}
 		for _, repo := range result.Detail.perRepo {
 			lines = append(lines, fmt.Sprintf("%s%s %s (%s)", uiIndent+uiIndent, styleMuted("-", useColor), repo.alias, renderRepoRiskState(repo.state, useColor)))
 		}
@@ -458,5 +506,16 @@ func renderDashboardWorkspaceRisk(risk workspacerisk.WorkspaceRisk, useColor boo
 		return styleWarn(string(risk), useColor)
 	default:
 		return styleMuted(string(risk), useColor)
+	}
+}
+
+func renderDashboardCoverage(coverage workspaceOutputCoverage, useColor bool) string {
+	switch coverage {
+	case workspaceOutputCoverageDocumented:
+		return styleSuccess(string(coverage), useColor)
+	case workspaceOutputCoverageNotesOnly, workspaceOutputCoverageArtifactsOnly:
+		return styleWarn(string(coverage), useColor)
+	default:
+		return styleError(string(coverage), useColor)
 	}
 }

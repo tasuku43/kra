@@ -1,13 +1,16 @@
 package cli
 
 import (
+	"context"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
+	"github.com/tasuku43/kra/internal/infra/gitutil"
 	"github.com/tasuku43/kra/internal/infra/paths"
 	"github.com/tasuku43/kra/internal/infra/stateregistry"
 )
@@ -370,6 +373,116 @@ func runDoctorFix(root string, mode string, report doctorReport) doctorFixResult
 			}
 			result.Actions[i].Status = "applied"
 			result.Summary.Applied++
+		case "create_workspace_baseline":
+			workspaceID, err := workspaceIDFromWorkspaceMetaTarget(root, result.Actions[i].Target)
+			if err != nil {
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			if err := createOrRefreshWorkspaceBaseline(context.Background(), root, workspaceID, time.Now().Unix()); err != nil {
+				if os.IsNotExist(err) {
+					result.Actions[i].Status = "skipped"
+					result.Actions[i].Reason = "already_missing"
+					result.Summary.Skipped++
+					continue
+				}
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			result.Actions[i].Status = "applied"
+			result.Summary.Applied++
+		case "normalize_workspace_work_state":
+			workspaceID, err := workspaceIDFromWorkspaceMetaTarget(root, result.Actions[i].Target)
+			if err != nil {
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			state, ok, err := resolveDoctorWorkspaceWorkState(context.Background(), root, workspaceID)
+			if err != nil {
+				if os.IsNotExist(err) {
+					result.Actions[i].Status = "skipped"
+					result.Actions[i].Reason = "already_missing"
+					result.Summary.Skipped++
+					continue
+				}
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			if !ok {
+				result.Actions[i].Status = "skipped"
+				result.Actions[i].Reason = "manual_required"
+				result.Summary.Skipped++
+				continue
+			}
+			metaPath := filepath.Dir(result.Actions[i].Target)
+			changed, err := setWorkspaceMetaWorkState(metaPath, state, time.Now().Unix())
+			if err != nil {
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			if !changed {
+				result.Actions[i].Status = "skipped"
+				result.Actions[i].Reason = "already_normalized"
+				result.Summary.Skipped++
+				continue
+			}
+			result.Actions[i].Status = "applied"
+			result.Summary.Applied++
+		case "resume_ws_close":
+			workspaceID, err := workspaceIDFromWSCloseJournalTarget(root, result.Actions[i].Target)
+			if err != nil {
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			journal, err := loadWSCloseLifecycleJournal(root, workspaceID)
+			if err != nil {
+				if os.IsNotExist(err) {
+					result.Actions[i].Status = "skipped"
+					result.Actions[i].Reason = "already_missing"
+					result.Summary.Skipped++
+					continue
+				}
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			if err := resumeWSCloseLifecycleJournal(context.Background(), root, journal, nil); err != nil {
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			result.Actions[i].Status = "applied"
+			result.Summary.Applied++
+		case "reconcile_root_gitignore":
+			changed, err := reconcileRootGitignore(root)
+			if err != nil {
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			if !changed {
+				result.Actions[i].Status = "skipped"
+				result.Actions[i].Reason = "already_reconciled"
+				result.Summary.Skipped++
+				continue
+			}
+			result.Actions[i].Status = "applied"
+			result.Summary.Applied++
 		default:
 			result.Actions[i].Status = "skipped"
 			result.Actions[i].Reason = "manual_required"
@@ -383,23 +496,51 @@ func planDoctorFixActions(report doctorReport) []doctorFixAction {
 	actions := make([]doctorFixAction, 0, len(report.Findings))
 	seen := map[string]bool{}
 	nextID := 1
+	migrateWorkspaceBaseline := map[string]bool{}
+	for _, f := range report.Findings {
+		if f.Code != "legacy_baseline_in_use" {
+			continue
+		}
+		workspaceID, err := workspaceIDFromLegacyBaselineTarget(report.Root, f.Target)
+		if err != nil {
+			continue
+		}
+		migrateWorkspaceBaseline[workspaceID] = true
+	}
 	for _, f := range report.Findings {
 		kind := ""
+		target := f.Target
 		switch f.Code {
 		case "stale_lock":
 			kind = "remove_stale_lock"
 		case "root_not_registered":
 			kind = "register_root"
+		case "root_gitignore_missing_defaults", "runtime_state_not_ignored":
+			kind = "reconcile_root_gitignore"
+			target = rootGitignorePath(report.Root)
 		case "legacy_workstate_file":
 			kind = "remove_legacy_workstate_file"
 		case "legacy_baseline_file", "legacy_baseline_orphan":
 			kind = "remove_legacy_baseline_file"
 		case "legacy_baseline_in_use":
 			kind = "migrate_legacy_baseline_file"
+		case "workspace_baseline_missing":
+			workspaceID, err := workspaceIDFromWorkspaceMetaTarget(report.Root, f.Target)
+			if err != nil || migrateWorkspaceBaseline[workspaceID] {
+				continue
+			}
+			kind = "create_workspace_baseline"
+		case "workspace_work_state_missing":
+			if !canDoctorNormalizeWorkspaceWorkState(report.Root, f.Target, migrateWorkspaceBaseline) {
+				continue
+			}
+			kind = "normalize_workspace_work_state"
+		case "ws_close_resume_ready":
+			kind = "resume_ws_close"
 		default:
 			continue
 		}
-		key := kind + "|" + f.Target
+		key := kind + "|" + target
 		if seen[key] {
 			continue
 		}
@@ -407,7 +548,7 @@ func planDoctorFixActions(report doctorReport) []doctorFixAction {
 		actions = append(actions, doctorFixAction{
 			ID:     fmt.Sprintf("fx-%03d", nextID),
 			Kind:   kind,
-			Target: f.Target,
+			Target: target,
 			Status: "planned",
 		})
 		nextID++
@@ -429,6 +570,64 @@ func workspaceIDFromLegacyBaselineTarget(root string, target string) (string, er
 		return "", fmt.Errorf("invalid workspace id from legacy baseline target: %w", err)
 	}
 	return workspaceID, nil
+}
+
+func workspaceIDFromWorkspaceMetaTarget(root string, target string) (string, error) {
+	if strings.TrimSpace(filepath.Base(target)) != workspaceMetaFilename {
+		return "", fmt.Errorf("workspace meta target must be %s: %s", workspaceMetaFilename, target)
+	}
+	workspaceDir := filepath.Dir(target)
+	expectedBase := filepath.Clean(filepath.Join(root, "workspaces"))
+	if filepath.Clean(filepath.Dir(workspaceDir)) != expectedBase {
+		return "", fmt.Errorf("workspace meta target is outside expected active workspace directory: %s", target)
+	}
+	workspaceID := strings.TrimSpace(filepath.Base(workspaceDir))
+	if err := validateWorkspaceID(workspaceID); err != nil {
+		return "", fmt.Errorf("invalid workspace id from workspace meta target: %w", err)
+	}
+	return workspaceID, nil
+}
+
+func canDoctorNormalizeWorkspaceWorkState(root string, target string, migrateWorkspaceBaseline map[string]bool) bool {
+	workspaceID, err := workspaceIDFromWorkspaceMetaTarget(root, target)
+	if err != nil {
+		return false
+	}
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		return false
+	}
+	if strings.TrimSpace(meta.Workspace.WorkState) != "" {
+		return false
+	}
+	if meta.Baseline != nil {
+		return true
+	}
+	return migrateWorkspaceBaseline[workspaceID]
+}
+
+func resolveDoctorWorkspaceWorkState(ctx context.Context, root string, workspaceID string) (workspaceWorkState, bool, error) {
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		return workspaceWorkStateTodo, false, err
+	}
+	if strings.TrimSpace(meta.Workspace.WorkState) != "" {
+		return normalizeWorkspaceWorkState(workspaceWorkState(meta.Workspace.WorkState)), false, nil
+	}
+	if meta.Baseline == nil {
+		return workspaceWorkStateTodo, false, nil
+	}
+	repos, err := listWorkspaceReposFromFilesystem(ctx, root, "active", workspaceID, meta)
+	if err != nil {
+		return workspaceWorkStateTodo, false, err
+	}
+	state, err := deriveWorkspaceWorkStateFromBaseline(ctx, root, workspaceID, repos)
+	if err != nil {
+		return workspaceWorkStateTodo, false, err
+	}
+	return state, true, nil
 }
 
 func touchRootRegistry(root string) error {
@@ -487,6 +686,8 @@ func runDoctorChecks(root string) doctorReport {
 	scanDoctorLocks(root, addOK, addWarn)
 	scanDoctorRegistry(root, addOK, addWarn)
 	scanDoctorLegacyState(root, addOK, addWarn)
+	scanDoctorRootHygiene(root, addOK, addWarn)
+	scanDoctorWSCloseRecovery(root, addOK, addWarn)
 
 	slices.SortFunc(report.Findings, func(a, b doctorFinding) int {
 		if a.Severity != b.Severity {
@@ -544,6 +745,19 @@ func scanDoctorWorkspaceScope(
 		}
 		if strings.TrimSpace(meta.Workspace.Status) != expectStatus {
 			addWarn("workspace_status_mismatch", filepath.Join(wsPath, workspaceMetaFilename), fmt.Sprintf("status=%q expected=%q", strings.TrimSpace(meta.Workspace.Status), expectStatus))
+		}
+		if expectStatus == "active" {
+			metaPath := filepath.Join(wsPath, workspaceMetaFilename)
+			if meta.Baseline == nil {
+				addWarn("workspace_baseline_missing", metaPath, "active workspace is missing .kra.meta.json.baseline; doctor --fix can create it from current filesystem state")
+			} else {
+				addOK()
+			}
+			if strings.TrimSpace(meta.Workspace.WorkState) == "" {
+				addWarn("workspace_work_state_missing", metaPath, "active workspace is missing .kra.meta.json.workspace.work_state; doctor --fix can normalize it when deterministic")
+			} else {
+				addOK()
+			}
 		}
 
 		aliasSeen := make(map[string]bool, len(meta.ReposRestore))
@@ -754,5 +968,221 @@ func scanDoctorLegacyState(
 		default:
 			addWarn("legacy_baseline_check_failed", target, "unable to confirm safe cleanup automatically")
 		}
+	}
+}
+
+func scanDoctorRootHygiene(
+	root string,
+	addOK func(),
+	addWarn func(code string, target string, message string),
+) {
+	gitignorePath := rootGitignorePath(root)
+	contents := ""
+	if b, err := os.ReadFile(gitignorePath); err == nil {
+		contents = string(b)
+		addOK()
+	} else if !os.IsNotExist(err) {
+		addWarn("root_gitignore_read_failed", gitignorePath, err.Error())
+		return
+	}
+
+	missing := missingManagedRootGitignorePatterns(contents)
+	if len(missing) > 0 {
+		addWarn("root_gitignore_missing_defaults", gitignorePath, fmt.Sprintf("missing default ignore patterns: %s", strings.Join(missing, ", ")))
+	} else {
+		addOK()
+	}
+
+	runtimeTargets, err := collectDoctorRuntimeStateTargets(root)
+	if err != nil {
+		addWarn("runtime_state_scan_failed", filepath.Join(root, ".kra", "state"), err.Error())
+	} else if len(runtimeTargets) == 0 {
+		addOK()
+	} else {
+		for _, target := range runtimeTargets {
+			rel, relErr := filepath.Rel(root, target)
+			if relErr != nil {
+				addWarn("runtime_state_ignore_check_failed", target, relErr.Error())
+				continue
+			}
+			ignored, ignoreErr := gitutil.IsIgnored(context.Background(), root, filepath.ToSlash(rel))
+			if ignoreErr != nil {
+				addWarn("runtime_state_ignore_check_failed", target, ignoreErr.Error())
+				continue
+			}
+			if !ignored {
+				addWarn("runtime_state_not_ignored", target, "runtime state file is not ignored; reconcile root .gitignore")
+				continue
+			}
+			addOK()
+		}
+	}
+
+	trackedNoise, err := listDoctorTrackedLocalNoiseFiles(root)
+	if err != nil {
+		addWarn("tracked_local_noise_scan_failed", root, err.Error())
+		return
+	}
+	if len(trackedNoise) == 0 {
+		addOK()
+		return
+	}
+	for _, rel := range trackedNoise {
+		addWarn("tracked_local_noise_file", filepath.Join(root, filepath.FromSlash(rel)), "tracked local-noise file should be untracked or ignored manually; doctor --fix will not modify tracked files")
+	}
+}
+
+func collectDoctorRuntimeStateTargets(root string) ([]string, error) {
+	targets := make([]string, 0, 4)
+	for _, rel := range []string{
+		filepath.Join(".kra", "state", "cmux-sessions.json"),
+		filepath.Join(".kra", "state", "cmux-workspaces.json"),
+		filepath.Join(".kra", "state", "root-repos.json"),
+	} {
+		target := filepath.Join(root, rel)
+		fi, err := os.Stat(target)
+		if err != nil {
+			if os.IsNotExist(err) {
+				continue
+			}
+			return nil, err
+		}
+		if fi.IsDir() {
+			continue
+		}
+		targets = append(targets, target)
+	}
+
+	opsDir := filepath.Join(root, ".kra", "state", "operations")
+	if _, err := os.Stat(opsDir); err != nil {
+		if os.IsNotExist(err) {
+			slices.Sort(targets)
+			return targets, nil
+		}
+		return nil, err
+	}
+	if err := filepath.WalkDir(opsDir, func(path string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			return nil
+		}
+		targets = append(targets, path)
+		return nil
+	}); err != nil {
+		return nil, err
+	}
+	slices.Sort(targets)
+	return targets, nil
+}
+
+func listDoctorTrackedLocalNoiseFiles(root string) ([]string, error) {
+	out, err := gitutil.Run(context.Background(), root, "ls-files", "-z", "--full-name")
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return nil, nil
+	}
+	seen := map[string]bool{}
+	files := make([]string, 0)
+	for _, entry := range strings.Split(out, "\x00") {
+		rel := filepath.ToSlash(strings.TrimSpace(strings.Trim(entry, "\x00")))
+		if rel == "" || !isDoctorTrackedLocalNoisePath(rel) || seen[rel] {
+			continue
+		}
+		seen[rel] = true
+		files = append(files, rel)
+	}
+	slices.Sort(files)
+	return files, nil
+}
+
+func isDoctorTrackedLocalNoisePath(rel string) bool {
+	rel = filepath.ToSlash(strings.TrimSpace(rel))
+	switch {
+	case rel == "":
+		return false
+	case rel == ".DS_Store" || strings.HasSuffix(rel, "/.DS_Store"):
+		return true
+	case strings.HasSuffix(rel, ".code-workspace"):
+		return true
+	case rel == ".idea/workspace.xml" || strings.HasSuffix(rel, "/.idea/workspace.xml"):
+		return true
+	case rel == ".idea/tasks.xml" || strings.HasSuffix(rel, "/.idea/tasks.xml"):
+		return true
+	default:
+		return false
+	}
+}
+
+func scanDoctorWSCloseRecovery(
+	root string,
+	addOK func(),
+	addWarn func(code string, target string, message string),
+) {
+	journalDir := wsCloseJournalDir(root)
+	entries, err := os.ReadDir(journalDir)
+	if err != nil {
+		if os.IsNotExist(err) {
+			addOK()
+			scanDoctorLegacyHalfClosedWSClose(root, map[string]bool{}, addWarn)
+			return
+		}
+		addWarn("ws_close_journal_dir_read_failed", journalDir, err.Error())
+		return
+	}
+	addOK()
+
+	journalIDs := make(map[string]bool, len(entries))
+	for _, ent := range entries {
+		if ent.IsDir() || !strings.HasSuffix(ent.Name(), ".json") {
+			continue
+		}
+		target := filepath.Join(journalDir, ent.Name())
+		journal, err := loadWSCloseLifecycleJournalFile(target)
+		if err != nil {
+			addWarn("ws_close_journal_invalid", target, err.Error())
+			continue
+		}
+		journalIDs[journal.WorkspaceID] = true
+		if journal.Phase == wsClosePhaseCompleted {
+			addWarn("ws_close_journal_stale", target, "completed ws close journal should be removed")
+			continue
+		}
+		if ok, reason := canResumeWSCloseLifecycleJournal(root, journal); ok {
+			addWarn("ws_close_resume_ready", target, fmt.Sprintf("workspace %s close can be resumed with doctor --fix --apply", journal.WorkspaceID))
+		} else {
+			addWarn("ws_close_manual_required", target, fmt.Sprintf("workspace %s close requires manual recovery: %s", journal.WorkspaceID, reason))
+		}
+	}
+
+	scanDoctorLegacyHalfClosedWSClose(root, journalIDs, addWarn)
+}
+
+func scanDoctorLegacyHalfClosedWSClose(
+	root string,
+	journalIDs map[string]bool,
+	addWarn func(code string, target string, message string),
+) {
+	archiveDir := filepath.Join(root, "archive")
+	entries, err := os.ReadDir(archiveDir)
+	if err != nil {
+		return
+	}
+	for _, ent := range entries {
+		if !ent.IsDir() {
+			continue
+		}
+		workspaceID := strings.TrimSpace(ent.Name())
+		if journalIDs[workspaceID] {
+			continue
+		}
+		ok, reason := detectLegacyHalfClosedWSClose(root, workspaceID)
+		if !ok {
+			continue
+		}
+		addWarn("ws_close_manual_required", filepath.Join(archiveDir, workspaceID), fmt.Sprintf("workspace %s close requires manual recovery: %s", workspaceID, reason))
 	}
 }

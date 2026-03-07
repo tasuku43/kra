@@ -1,6 +1,6 @@
 ---
 title: "Workspace Meta JSON"
-status: proposed
+status: implemented
 ---
 
 # Workspace Meta JSON (`.kra.meta.json`)

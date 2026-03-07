@@ -430,7 +430,7 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if statErr != nil {
 		t.Fatalf(".gitignore not created: %v", statErr)
 	}
-	for _, pattern := range []string{"workspaces/**/repos/**", ".DS_Store", ".kra/logs/"} {
+	for _, pattern := range managedRootGitignorePatterns() {
 		if strings.Contains(string(b), pattern) {
 			continue
 		}
@@ -526,7 +526,7 @@ func TestEnsureRootGitignore_AppendsMissingDefaultPatternsOnly(t *testing.T) {
 	if strings.Count(got, "workspaces/**/repos/**") != 1 {
 		t.Fatalf("repos pattern should not be duplicated: %q", got)
 	}
-	for _, pattern := range []string{"custom.tmp", ".DS_Store", ".kra/logs/"} {
+	for _, pattern := range append([]string{"custom.tmp"}, managedRootGitignorePatterns()[1:]...) {
 		if strings.Contains(got, pattern) {
 			continue
 		}

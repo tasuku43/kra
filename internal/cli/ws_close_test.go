@@ -243,6 +243,145 @@ func TestCLI_WS_Close_DirtyRepo_PromptsAndCanAbort(t *testing.T) {
 	}
 }
 
+func TestCLI_WS_Close_EmptyRecordWarnPolicy_ContinuesAndWarns(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
+	writeWSCloseEmptyRecordPolicy(t, env.Root, "warn")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "close", "--no-commit", "--id", "WS1"})
+	if code != exitOK {
+		t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	if !strings.Contains(out.String(), "Warnings:") || !strings.Contains(out.String(), "coverage: empty") {
+		t.Fatalf("stdout should include empty-record warning: %q", out.String())
+	}
+	if strings.Contains(err.String(), "type yes to apply close on non-clean workspaces:") {
+		t.Fatalf("warn policy should not require confirmation: %q", err.String())
+	}
+	if _, statErr := os.Stat(filepath.Join(env.Root, "archive", "WS1")); statErr != nil {
+		t.Fatalf("archive/WS1 should exist after close: %v", statErr)
+	}
+}
+
+func TestCLI_WS_Close_EmptyRecordRequireConfirmation_PromptsAndCanAbort(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
+	writeWSCloseEmptyRecordPolicy(t, env.Root, "require-confirmation")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	c.In = strings.NewReader("n\n")
+
+	code := c.Run([]string{"ws", "close", "--no-commit", "--id", "WS1"})
+	if code != exitError {
+		t.Fatalf("ws close exit code = %d, want %d (stderr=%q stdout=%q)", code, exitError, err.String(), out.String())
+	}
+	if !strings.Contains(out.String(), "Plan:") || !strings.Contains(out.String(), "coverage: empty") {
+		t.Fatalf("stdout should include empty-record plan reason: %q", out.String())
+	}
+	if !strings.Contains(err.String(), "type yes to apply close on non-clean workspaces:") {
+		t.Fatalf("stderr should include confirmation prompt: %q", err.String())
+	}
+	if _, statErr := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); statErr != nil {
+		t.Fatalf("workspace should remain after declined confirmation: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(env.Root, "archive", "WS1")); !os.IsNotExist(statErr) {
+		t.Fatalf("archive should not exist after declined confirmation, stat err=%v", statErr)
+	}
+}
+
+func TestCLI_WS_Close_JSON_DryRun_EmptyRecordRequireConfirmationRequiresForce(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
+	writeWSCloseEmptyRecordPolicy(t, env.Root, "require-confirmation")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "close", "--dry-run", "--format", "json", "--id", "WS1"})
+	if code != exitError {
+		t.Fatalf("ws close dry-run exit code = %d, want %d (stderr=%q stdout=%q)", code, exitError, err.String(), out.String())
+	}
+
+	var resp struct {
+		OK     bool   `json:"ok"`
+		Action string `json:"action"`
+		Result struct {
+			Executable           bool              `json:"executable"`
+			RequiresConfirmation bool              `json:"requires_confirmation"`
+			RequiresForce        bool              `json:"requires_force"`
+			Checks               []jsonDryRunCheck `json:"checks"`
+			Coverage             map[string]any    `json:"coverage"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if resp.OK {
+		t.Fatalf("dry-run response should not be ok when force is required: %+v", resp)
+	}
+	if resp.Action != "ws.close.dry-run" {
+		t.Fatalf("action = %q, want %q", resp.Action, "ws.close.dry-run")
+	}
+	if resp.Result.Executable {
+		t.Fatalf("dry-run should not be executable without force: %+v", resp.Result)
+	}
+	if !resp.Result.RequiresConfirmation || !resp.Result.RequiresForce {
+		t.Fatalf("dry-run should require confirmation/force: %+v", resp.Result)
+	}
+	if got := resp.Result.Coverage["state"]; got != string(workspaceOutputCoverageEmpty) {
+		t.Fatalf("coverage.state = %v, want %q", got, workspaceOutputCoverageEmpty)
+	}
+	if !jsonChecksContainMessage(resp.Result.Checks, "output_coverage_gate", "requires --force") {
+		t.Fatalf("checks should mention output coverage force gate: %+v", resp.Result.Checks)
+	}
+}
+
+func TestCLI_WS_Close_JSON_DryRun_Force_AllowsEmptyRecordRequireConfirmation(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
+	writeWSCloseEmptyRecordPolicy(t, env.Root, "require-confirmation")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "close", "--dry-run", "--format", "json", "--force", "--id", "WS1"})
+	if code != exitOK {
+		t.Fatalf("ws close dry-run --force exit code = %d, want %d (stderr=%q stdout=%q)", code, exitOK, err.String(), out.String())
+	}
+
+	var resp struct {
+		OK     bool   `json:"ok"`
+		Action string `json:"action"`
+		Result struct {
+			Executable           bool              `json:"executable"`
+			RequiresConfirmation bool              `json:"requires_confirmation"`
+			RequiresForce        bool              `json:"requires_force"`
+			Checks               []jsonDryRunCheck `json:"checks"`
+		} `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !resp.OK || resp.Action != "ws.close.dry-run" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if !resp.Result.Executable {
+		t.Fatalf("dry-run should be executable with force: %+v", resp.Result)
+	}
+	if !jsonChecksContainMessage(resp.Result.Checks, "output_coverage_gate", "accepted") {
+		t.Fatalf("checks should mention accepted empty coverage: %+v", resp.Result.Checks)
+	}
+}
+
 func TestCLI_WS_Close_SelectorModeWithoutTTY_Errors(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
@@ -345,6 +484,81 @@ func TestCLI_WS_Close_AllowsUnrelatedPreStagedChangesOutsideWorkspaceAllowlist(t
 	subj := strings.TrimSpace(mustGitOutput(t, env.Root, "log", "-1", "--pretty=%s"))
 	if subj != "archive: WS1" {
 		t.Fatalf("commit subject = %q, want %q", subj, "archive: WS1")
+	}
+}
+
+func TestCLI_WS_Close_RemovesLifecycleJournalOnSuccess(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "close", "--commit", "--id", "WS1"})
+	if code != exitOK {
+		t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	if _, statErr := os.Stat(wsCloseJournalPath(env.Root, "WS1")); !os.IsNotExist(statErr) {
+		t.Fatalf("ws close journal should be removed on success, stat err=%v", statErr)
+	}
+}
+
+func TestCLI_WS_Close_PostRenameFailure_PreservesLifecycleJournal(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
+
+	prev := commitArchiveChangeFn
+	commitArchiveChangeFn = func(ctx context.Context, root string, workspaceID string, expectedArchiveFiles []string) (string, error) {
+		return "", errors.New("boom archive commit")
+	}
+	t.Cleanup(func() { commitArchiveChangeFn = prev })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "close", "--commit", "--id", "WS1"})
+	if code != exitError {
+		t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+	}
+	if _, statErr := os.Stat(filepath.Join(env.Root, "archive", "WS1")); statErr != nil {
+		t.Fatalf("archive/WS1 should remain after post-rename failure: %v", statErr)
+	}
+	journal, loadErr := loadWSCloseLifecycleJournal(env.Root, "WS1")
+	if loadErr != nil {
+		t.Fatalf("load ws close journal: %v", loadErr)
+	}
+	if journal.Phase != wsClosePhaseWorkspaceRenamed {
+		t.Fatalf("journal phase = %q, want %q", journal.Phase, wsClosePhaseWorkspaceRenamed)
+	}
+	if journal.ClosePreCommitSHA == "" {
+		t.Fatalf("close_pre_commit_sha should be recorded")
+	}
+	if journal.ArchiveCommitSHA != "" {
+		t.Fatalf("archive_commit_sha should be empty before resume, got %q", journal.ArchiveCommitSHA)
+	}
+}
+
+func TestCLI_WS_Close_RefusesWhenUnfinishedLifecycleJournalExists(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
+
+	journal := newWSCloseLifecycleJournal("WS1", true, time.Now().Unix())
+	if err := saveWSCloseLifecycleJournal(env.Root, journal); err != nil {
+		t.Fatalf("save ws close journal: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "close", "--no-commit", "--id", "WS1"})
+	if code != exitError {
+		t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+	}
+	if !strings.Contains(err.String(), "unfinished ws close recovery exists") {
+		t.Fatalf("stderr should mention unfinished journal: %q", err.String())
 	}
 }
 
@@ -542,4 +756,32 @@ func prepareActiveWorkspaceForCloseTest(t *testing.T) (testutil.Env, string) {
 	runGit(t, "", "--git-dir", barePath, "worktree", "add", filepath.Join(wsPath, "repos", spec.Repo), "WS1/test")
 
 	return env, repoSpec
+}
+
+func writeWSCloseEmptyRecordPolicy(t *testing.T, root string, policy string) {
+	t.Helper()
+
+	rootConfigPath := filepath.Join(root, ".kra", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
+		t.Fatalf("mkdir root config dir: %v", err)
+	}
+	content := "workspace:\n  defaults:\n    template: default\n  close:\n    empty_record_policy: " + policy + "\n"
+	if err := os.WriteFile(rootConfigPath, []byte(content), 0o644); err != nil {
+		t.Fatalf("write root config: %v", err)
+	}
+}
+
+type jsonDryRunCheck struct {
+	Name    string `json:"name"`
+	Status  string `json:"status"`
+	Message string `json:"message"`
+}
+
+func jsonChecksContainMessage(checks []jsonDryRunCheck, name string, wantSubstring string) bool {
+	for _, check := range checks {
+		if check.Name == name && strings.Contains(check.Message, wantSubstring) {
+			return true
+		}
+	}
+	return false
 }

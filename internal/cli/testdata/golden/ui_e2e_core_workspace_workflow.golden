@@ -36,6 +36,10 @@ Workspaces(active):
 $ kra ws close --id UI-100
 exit: 0
 stdout:
+Warnings:
+
+  • workspace UI-100 coverage: empty (no substantive notes/ or artifacts/ files)
+
 Result:
   Closed 1 / 1
   ✔ UI-100

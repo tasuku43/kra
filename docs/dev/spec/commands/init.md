@@ -1,6 +1,6 @@
 ---
 title: "`kra init`"
-status: proposed
+status: implemented
 ---
 
 # `kra init [--root <path>] [--context <name>] [--format human|json]`

@@ -1,6 +1,6 @@
 ---
 title: "`kra ws list`"
-status: proposed
+status: implemented
 ---
 
 # `kra ws list [--archived] [--tree] [--format human|tsv|json]`

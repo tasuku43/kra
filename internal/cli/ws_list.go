@@ -33,6 +33,11 @@ type wsListRow struct {
 	Repos     []statestore.WorkspaceRepo
 }
 
+type wsListRowsResult struct {
+	Rows     []wsListRow
+	Warnings []string
+}
+
 type wsListPhaseObserver func(phase string, scope string, workspaceID string, elapsed time.Duration)
 
 func (c *CLI) runWSList(args []string) int {
@@ -138,7 +143,7 @@ func (c *CLI) runWSList(args []string) int {
 		}
 		c.debugf("ws-list phase=%s scope=%s workspace=%s elapsed_ms=%d", phase, scope, workspaceID, elapsed.Milliseconds())
 	}
-	rows, usedFSFallback, err := buildWSListRowsObserved(ctx, root, opts.scope, now, opts.tree, observer)
+	listResult, usedFSFallback, err := buildWSListRowsResultObserved(ctx, root, opts.scope, now, opts.tree, observer)
 	if err != nil {
 		if opts.format == "json" {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
@@ -154,7 +159,7 @@ func (c *CLI) runWSList(args []string) int {
 		fmt.Fprintf(c.Err, "list workspaces: %v\n", err)
 		return exitError
 	}
-	debugPhasef(c.debugf, "ws-list", "build_rows", rowsStart, "scope=%s count=%d", opts.scope, len(rows))
+	debugPhasef(c.debugf, "ws-list", "build_rows", rowsStart, "scope=%s count=%d", opts.scope, len(listResult.Rows))
 	if usedFSFallback {
 		c.debugf("ws list fallback to filesystem-only rows (state db unavailable)")
 	}
@@ -162,36 +167,51 @@ func (c *CLI) runWSList(args []string) int {
 	renderStart := time.Now()
 	switch opts.format {
 	case "tsv":
-		printWSListTSV(c.Out, rows)
+		printWSListTSV(c.Out, listResult.Rows)
 	case "json":
-		printWSListJSON(c.Out, rows, opts.scope, opts.tree)
+		printWSListJSON(c.Out, listResult.Rows, listResult.Warnings, opts.scope, opts.tree)
 	default:
 		useColorOut := writerSupportsColor(c.Out)
-		printWSListHuman(c.Out, rows, opts.scope, opts.tree, useColorOut)
+		printWSListHuman(c.Out, listResult.Rows, listResult.Warnings, opts.scope, opts.tree, useColorOut)
 	}
-	debugPhasef(c.debugf, "ws-list", "render", renderStart, "scope=%s format=%s count=%d", opts.scope, opts.format, len(rows))
-	c.debugf("ws list completed count=%d", len(rows))
+	debugPhasef(c.debugf, "ws-list", "render", renderStart, "scope=%s format=%s count=%d", opts.scope, opts.format, len(listResult.Rows))
+	c.debugf("ws list completed count=%d", len(listResult.Rows))
 	return exitOK
 }
 
 func buildWSListRows(ctx context.Context, root string, scope string, now int64, includeRepos bool) ([]wsListRow, bool, error) {
-	return buildWSListRowsObserved(ctx, root, scope, now, includeRepos, nil)
+	result, usedFSFallback, err := buildWSListRowsResult(ctx, root, scope, now, includeRepos)
+	return result.Rows, usedFSFallback, err
 }
 
-func buildWSListRowsObserved(ctx context.Context, root string, scope string, now int64, includeRepos bool, observer wsListPhaseObserver) ([]wsListRow, bool, error) {
+func buildWSListRowsResult(ctx context.Context, root string, scope string, now int64, includeRepos bool) (wsListRowsResult, bool, error) {
+	return buildWSListRowsResultObserved(ctx, root, scope, now, includeRepos, nil)
+}
+
+func buildWSListRowsResultObserved(ctx context.Context, root string, scope string, now int64, includeRepos bool, observer wsListPhaseObserver) (wsListRowsResult, bool, error) {
 	_ = now
-	rows, err := listRowsFromFilesystemObserved(ctx, root, scope, includeRepos, observer)
+	result, err := listRowsFromFilesystemObservedResult(ctx, root, scope, includeRepos, observer)
 	if err != nil {
-		return nil, false, err
+		return wsListRowsResult{}, false, err
 	}
-	return rows, false, nil
+	return result, false, nil
 }
 
 func listRowsFromFilesystem(ctx context.Context, root string, scope string, includeRepos bool) ([]wsListRow, error) {
-	return listRowsFromFilesystemObserved(ctx, root, scope, includeRepos, nil)
+	result, err := listRowsFromFilesystemResult(ctx, root, scope, includeRepos)
+	return result.Rows, err
+}
+
+func listRowsFromFilesystemResult(ctx context.Context, root string, scope string, includeRepos bool) (wsListRowsResult, error) {
+	return listRowsFromFilesystemObservedResult(ctx, root, scope, includeRepos, nil)
 }
 
 func listRowsFromFilesystemObserved(ctx context.Context, root string, scope string, includeRepos bool, observer wsListPhaseObserver) ([]wsListRow, error) {
+	result, err := listRowsFromFilesystemObservedResult(ctx, root, scope, includeRepos, observer)
+	return result.Rows, err
+}
+
+func listRowsFromFilesystemObservedResult(ctx context.Context, root string, scope string, includeRepos bool, observer wsListPhaseObserver) (wsListRowsResult, error) {
 	baseDir := filepath.Join(root, "workspaces")
 	if scope == "archived" {
 		baseDir = filepath.Join(root, "archive")
@@ -199,13 +219,23 @@ func listRowsFromFilesystemObserved(ctx context.Context, root string, scope stri
 	readDirStart := time.Now()
 	entries, err := os.ReadDir(baseDir)
 	if err != nil {
-		return nil, err
+		return wsListRowsResult{}, err
 	}
 	if observer != nil {
 		observer("scan_dir", scope, "", time.Since(readDirStart))
 	}
 
 	rows := make([]wsListRow, 0, len(entries))
+	warnings := make([]string, 0)
+	warningSeen := map[string]bool{}
+	appendWarning := func(warning string) {
+		trimmed := strings.TrimSpace(warning)
+		if trimmed == "" || warningSeen[trimmed] {
+			return
+		}
+		warningSeen[trimmed] = true
+		warnings = append(warnings, trimmed)
+	}
 	for _, e := range entries {
 		if !e.IsDir() {
 			continue
@@ -235,7 +265,7 @@ func listRowsFromFilesystemObserved(ctx context.Context, root string, scope stri
 			var listErr error
 			repos, listErr = listWorkspaceReposFromFilesystem(ctx, root, scope, id, meta)
 			if listErr != nil {
-				return nil, listErr
+				return wsListRowsResult{}, listErr
 			}
 			repoCount = len(repos)
 			if observer != nil {
@@ -246,7 +276,7 @@ func listRowsFromFilesystemObserved(ctx context.Context, root string, scope stri
 			var countErr error
 			repoCount, countErr = countWorkspaceReposFromFilesystem(root, scope, id, meta)
 			if countErr != nil {
-				return nil, countErr
+				return wsListRowsResult{}, countErr
 			}
 			if observer != nil {
 				observer("repo_count", scope, id, time.Since(repoPhaseStart))
@@ -256,37 +286,22 @@ func listRowsFromFilesystemObserved(ctx context.Context, root string, scope stri
 		workState := workspaceWorkStateTodo
 		if scope == "active" {
 			workStateStart := time.Now()
-			workStateRaw := strings.TrimSpace(meta.Workspace.WorkState)
-			workState = normalizeWorkspaceWorkState(workspaceWorkState(workStateRaw))
-			if workState == workspaceWorkStateInProgress {
-				// Monotonic state: once in-progress, skip re-derivation.
-			} else {
-				if err := ensureWorkspaceBaselineExists(ctx, root, id, time.Now().Unix()); err != nil {
-					return nil, err
+			reposForState := repos
+			if reposForState == nil {
+				reposForState, err = listWorkspaceReposFromFilesystem(ctx, root, scope, id, meta)
+				if err != nil {
+					return wsListRowsResult{}, err
 				}
-				reposForState := repos
-				if reposForState == nil {
-					reposForState, err = listWorkspaceReposFromFilesystem(ctx, root, scope, id, meta)
-					if err != nil {
-						return nil, err
-					}
-				}
-				workState = resolveWorkspaceWorkState(ctx, root, scope, id, reposForState)
-				if metaErr == nil && workState == workspaceWorkStateInProgress {
-					if _, err := setWorkspaceMetaWorkState(wsPath, workspaceWorkStateInProgress, time.Now().Unix()); err != nil {
-						return nil, err
-					}
-				} else if metaErr == nil && workStateRaw == "" {
-					if _, err := setWorkspaceMetaWorkState(wsPath, workspaceWorkStateTodo, time.Now().Unix()); err != nil {
-						return nil, err
-					}
-				}
+			}
+			var workStateWarnings []string
+			workState, workStateWarnings = resolveWorkspaceListWorkState(ctx, root, id, reposForState, meta, metaErr)
+			for _, warning := range workStateWarnings {
+				appendWarning(warning)
 			}
 			if observer != nil {
 				observer("work_state", scope, id, time.Since(workStateStart))
 			}
 		}
-
 		rows = append(rows, wsListRow{
 			ID:        id,
 			Status:    scope,
@@ -317,7 +332,10 @@ func listRowsFromFilesystemObserved(ctx context.Context, root string, scope stri
 		}
 		return strings.Compare(a.ID, b.ID)
 	})
-	return rows, nil
+	return wsListRowsResult{
+		Rows:     rows,
+		Warnings: warnings,
+	}, nil
 }
 
 func countWorkspaceReposFromFilesystem(root string, scope string, workspaceID string, meta workspaceMetaFile) (int, error) {
@@ -479,7 +497,7 @@ func printWSListTSV(out io.Writer, rows []wsListRow) {
 	}
 }
 
-func printWSListJSON(out io.Writer, rows []wsListRow, scope string, tree bool) {
+func printWSListJSON(out io.Writer, rows []wsListRow, warnings []string, scope string, tree bool) {
 	items := make([]map[string]any, 0, len(rows))
 	for _, row := range rows {
 		item := map[string]any{
@@ -508,14 +526,15 @@ func printWSListJSON(out io.Writer, rows []wsListRow, scope string, tree bool) {
 		OK:     true,
 		Action: "ws.list",
 		Result: map[string]any{
-			"scope": scope,
-			"tree":  tree,
-			"items": items,
+			"scope":    scope,
+			"tree":     tree,
+			"items":    items,
+			"warnings": warnings,
 		},
 	})
 }
 
-func printWSListHuman(out io.Writer, rows []wsListRow, scope string, tree bool, useColor bool) {
+func printWSListHuman(out io.Writer, rows []wsListRow, warnings []string, scope string, tree bool, useColor bool) {
 	body := make([]string, 0, len(rows)*2+1)
 	if len(rows) == 0 {
 		body = append(body, fmt.Sprintf("%s(none)", uiIndent))
@@ -523,22 +542,74 @@ func printWSListHuman(out io.Writer, rows []wsListRow, scope string, tree bool, 
 			blankAfterHeading: true,
 			trailingBlank:     true,
 		})
+	} else {
+		maxCols := listTerminalWidth()
+		for _, row := range rows {
+			body = append(body, renderWSListSummaryRow(row, maxCols, useColor))
+
+			if !tree {
+				continue
+			}
+			body = append(body, renderWSListTreeLines(row.Repos, maxCols, useColor)...)
+		}
+		printSection(out, renderWorkspacesTitle(scope, useColor), body, sectionRenderOptions{
+			blankAfterHeading: true,
+			trailingBlank:     true,
+		})
+	}
+	if len(warnings) == 0 {
 		return
 	}
-
-	maxCols := listTerminalWidth()
-	for _, row := range rows {
-		body = append(body, renderWSListSummaryRow(row, maxCols, useColor))
-
-		if !tree {
-			continue
-		}
-		body = append(body, renderWSListTreeLines(row.Repos, maxCols, useColor)...)
+	lines := make([]string, 0, len(warnings))
+	for _, warning := range warnings {
+		lines = append(lines, fmt.Sprintf("%s%s %s", uiIndent, styleWarn("•", useColor), warning))
 	}
-	printSection(out, renderWorkspacesTitle(scope, useColor), body, sectionRenderOptions{
+	printSection(out, styleBold(styleWarn("Warnings:", useColor), useColor), lines, sectionRenderOptions{
 		blankAfterHeading: true,
 		trailingBlank:     true,
 	})
+}
+
+func resolveWorkspaceListWorkState(
+	ctx context.Context,
+	root string,
+	workspaceID string,
+	repos []statestore.WorkspaceRepo,
+	meta workspaceMetaFile,
+	metaErr error,
+) (workspaceWorkState, []string) {
+	if metaErr != nil {
+		return workspaceWorkStateTodo, nil
+	}
+	storedRaw := strings.TrimSpace(meta.Workspace.WorkState)
+	if storedRaw != "" {
+		return normalizeWorkspaceWorkState(workspaceWorkState(storedRaw)), nil
+	}
+
+	warnings := []string{formatWorkspaceListMissingWorkStateWarning(workspaceID)}
+	if meta.Baseline == nil {
+		warnings = append(warnings, formatWorkspaceListMissingBaselineWarning(workspaceID))
+		return deriveWorkspaceWorkStateFromRepoRisk(ctx, root, workspaceID, repos), warnings
+	}
+
+	state, err := deriveWorkspaceWorkStateFromBaseline(ctx, root, workspaceID, repos)
+	if err != nil {
+		warnings = append(warnings, formatWorkspaceListDegradedBaselineWarning(workspaceID))
+		return deriveWorkspaceWorkStateFromRepoRisk(ctx, root, workspaceID, repos), warnings
+	}
+	return state, warnings
+}
+
+func formatWorkspaceListMissingWorkStateWarning(workspaceID string) string {
+	return fmt.Sprintf("workspace %s is missing .kra.meta.json.workspace.work_state; run kra doctor --fix --plan", workspaceID)
+}
+
+func formatWorkspaceListMissingBaselineWarning(workspaceID string) string {
+	return fmt.Sprintf("workspace %s is missing .kra.meta.json.baseline; run kra doctor --fix --plan", workspaceID)
+}
+
+func formatWorkspaceListDegradedBaselineWarning(workspaceID string) string {
+	return fmt.Sprintf("workspace %s uses fallback work-state ordering because baseline inspection is degraded; run kra doctor", workspaceID)
 }
 
 func renderWSListSummaryRow(row wsListRow, maxCols int, useColor bool) string {

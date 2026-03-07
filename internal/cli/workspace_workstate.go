@@ -173,7 +173,7 @@ func deriveWorkspaceWorkStateFromBaseline(ctx context.Context, root string, work
 	baseline, err := loadWorkspaceBaseline(root, workspaceID)
 	if err != nil {
 		if os.IsNotExist(err) {
-			return deriveWorkspaceWorkStateFromLegacyRisk(ctx, root, workspaceID, repos), nil
+			return deriveWorkspaceWorkStateFromRepoRisk(ctx, root, workspaceID, repos), nil
 		}
 		return workspaceWorkStateInProgress, err
 	}
@@ -194,7 +194,7 @@ func deriveWorkspaceWorkStateFromBaseline(ctx context.Context, root string, work
 	return workspaceWorkStateTodo, nil
 }
 
-func deriveWorkspaceWorkStateFromLegacyRisk(ctx context.Context, root string, workspaceID string, repos []statestore.WorkspaceRepo) workspaceWorkState {
+func deriveWorkspaceWorkStateFromRepoRisk(ctx context.Context, root string, workspaceID string, repos []statestore.WorkspaceRepo) workspaceWorkState {
 	risk, _ := inspectWorkspaceRepoRisk(ctx, root, workspaceID, repos)
 	switch risk {
 	case "clean":

@@ -1,6 +1,6 @@
 ---
 title: "`kra ws close`"
-status: proposed
+status: implemented
 ---
 
 # `kra ws close [--id <id>] [--current] [--select] [--force] [--format human|json] [--no-commit] [--commit]`

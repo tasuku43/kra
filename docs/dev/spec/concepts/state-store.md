@@ -1,6 +1,6 @@
 ---
 title: "State Store"
-status: proposed
+status: implemented
 ---
 
 # State Store

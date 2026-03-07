@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/tasuku43/kra/internal/cmuxmap"
+	"github.com/tasuku43/kra/internal/config"
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/workspacerisk"
 	"github.com/tasuku43/kra/internal/infra/cmuxctl"
@@ -135,6 +135,23 @@ func (c *CLI) runWSClose(args []string) int {
 		fmt.Fprintf(c.Err, "enable debug logging: %v\n", err)
 	}
 	c.debugf("run ws close args=%q", args)
+	cfg, err := c.loadMergedConfig(root)
+	if err != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "close",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("load config: %v", err),
+				},
+			})
+			return exitError
+		}
+		fmt.Fprintf(c.Err, "load config: %v\n", err)
+		return exitError
+	}
+	emptyRecordPolicy := workspaceCloseEmptyRecordPolicy(cfg)
 
 	ctx := context.Background()
 
@@ -177,7 +194,11 @@ func (c *CLI) runWSClose(args []string) int {
 		directWorkspaceID = fromCWD.ID
 	}
 	if outputFormat == "json" {
-		return c.runWSCloseJSON(directWorkspaceID, force, wd, root, doCommit, dryRun)
+		return c.runWSCloseJSON(directWorkspaceID, force, wd, root, doCommit, dryRun, emptyRecordPolicy)
+	}
+	if err := ensureNoUnfinishedWSCloseJournal(root, directWorkspaceID); err != nil {
+		fmt.Fprintf(c.Err, "%v\n", err)
+		return exitError
 	}
 	shouldShiftCWD := isPathInside(filepath.Join(root, "workspaces", directWorkspaceID), wd)
 	if shouldShiftCWD {
@@ -199,16 +220,15 @@ func (c *CLI) runWSClose(args []string) int {
 			return selected, nil
 		},
 		CollectRiskStage: func(items []workspaceFlowSelection) (workspaceFlowRiskStage, error) {
-			riskItems, err := collectWorkspaceRiskDetails(ctx, root, workspaceFlowSelectionIDs(items))
+			riskItems, requiresConfirmation, warningItems, err := inspectWorkspaceCloseDetails(ctx, root, workspaceFlowSelectionIDs(items), emptyRecordPolicy)
 			if err != nil {
-				return workspaceFlowRiskStage{}, fmt.Errorf("inspect workspace risk: %w", err)
+				return workspaceFlowRiskStage{}, fmt.Errorf("inspect workspace close preconditions: %w", err)
 			}
-			hasRisk := hasNonCleanRisk(riskItems)
-			if hasRisk {
-				c.debugf("ws close risk detected count=%d", len(riskItems))
+			if len(warningItems) > 0 {
+				printCloseCoverageWarnings(c.Out, warningItems, useColorOut)
 			}
 			return workspaceFlowRiskStage{
-				HasRisk: hasRisk,
+				HasRisk: requiresConfirmation,
 				Print: func(useColor bool) {
 					printRiskSection(c.Out, riskItems, useColor)
 				},
@@ -258,8 +278,49 @@ func (c *CLI) runWSClose(args []string) int {
 	return exitOK
 }
 
-func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root string, doCommit bool, dryRun bool) int {
+func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root string, doCommit bool, dryRun bool, emptyRecordPolicy string) int {
 	ctx := context.Background()
+	if journal, exists, err := findUnfinishedWSCloseJournal(root, workspaceID); err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "close",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("inspect ws close journal: %v", err),
+			},
+		})
+		return exitError
+	} else if exists {
+		message := fmt.Sprintf("unfinished ws close recovery exists for %s (phase=%s); run kra doctor --fix --plan", workspaceID, journal.Phase)
+		if dryRun {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "ws.close.dry-run",
+				WorkspaceID: workspaceID,
+				Result: map[string]any{
+					"executable": false,
+					"checks": []map[string]any{
+						{"name": "lifecycle_recovery_gate", "status": "fail", "message": message},
+					},
+					"requires_confirmation": false,
+					"requires_force":        false,
+					"commit_enabled":        doCommit,
+				},
+			})
+			return exitError
+		}
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "close",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "conflict",
+				Message: message,
+			},
+		})
+		return exitError
+	}
 	shouldShiftCWD := isPathInside(filepath.Join(root, "workspaces", workspaceID), wd)
 	if shouldShiftCWD {
 		if err := os.Chdir(root); err != nil {
@@ -276,7 +337,7 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 		}
 	}
 
-	riskItems, err := collectWorkspaceRiskDetails(ctx, root, []string{workspaceID})
+	riskItems, requiresConfirmation, _, err := inspectWorkspaceCloseDetails(ctx, root, []string{workspaceID}, emptyRecordPolicy)
 	if err != nil {
 		_ = writeCLIJSON(c.Out, cliJSONResponse{
 			OK:          false,
@@ -284,12 +345,12 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 			WorkspaceID: workspaceID,
 			Error: &cliJSONError{
 				Code:    "internal_error",
-				Message: fmt.Sprintf("inspect workspace risk: %v", err),
+				Message: fmt.Sprintf("inspect workspace close preconditions: %v", err),
 			},
 		})
 		return exitError
 	}
-	if hasNonCleanRisk(riskItems) && !force {
+	if requiresConfirmation && !force {
 		if dryRun {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{
 				OK:          false,
@@ -297,14 +358,12 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 				WorkspaceID: workspaceID,
 				Result: map[string]any{
 					"executable": false,
-					"checks": []map[string]any{
-						{"name": "workspace_exists_active", "status": "pass", "message": "workspace exists and is active"},
-						{"name": "risk_gate", "status": "fail", "message": "non-clean risk requires --force"},
-					},
+					"checks":     buildWSCloseJSONChecks(riskItems, emptyRecordPolicy, false),
 					"risk": map[string]any{
 						"workspace": string(workspaceRiskFromDetails(riskItems)),
 						"repos":     renderRiskDetailItemsJSON(riskItems),
 					},
+					"coverage": renderWSCloseCoverageJSON(riskItems),
 					"planned_effects": []map[string]any{
 						{"path": filepath.Join(root, "workspaces", workspaceID), "effect": "move_to_archive"},
 						{"path": filepath.Join(root, "archive", workspaceID), "effect": "create"},
@@ -322,7 +381,7 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 			WorkspaceID: workspaceID,
 			Error: &cliJSONError{
 				Code:    "conflict",
-				Message: "risk confirmation required (pass --force to proceed in --format json mode)",
+				Message: "close confirmation required (pass --force to proceed in --format json mode)",
 			},
 		})
 		return exitError
@@ -334,20 +393,18 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 			WorkspaceID: workspaceID,
 			Result: map[string]any{
 				"executable": true,
-				"checks": []map[string]any{
-					{"name": "workspace_exists_active", "status": "pass", "message": "workspace exists and is active"},
-					{"name": "risk_gate", "status": "pass", "message": "close can proceed"},
-				},
+				"checks":     buildWSCloseJSONChecks(riskItems, emptyRecordPolicy, true),
 				"risk": map[string]any{
 					"workspace": string(workspaceRiskFromDetails(riskItems)),
 					"repos":     renderRiskDetailItemsJSON(riskItems),
 				},
+				"coverage": renderWSCloseCoverageJSON(riskItems),
 				"planned_effects": []map[string]any{
 					{"path": filepath.Join(root, "workspaces", workspaceID), "effect": "move_to_archive"},
 					{"path": filepath.Join(root, "archive", workspaceID), "effect": "create"},
 				},
-				"requires_confirmation": hasNonCleanRisk(riskItems),
-				"requires_force":        false,
+				"requires_confirmation": requiresConfirmation,
+				"requires_force":        requiresConfirmation,
 				"commit_enabled":        doCommit,
 			},
 		})
@@ -394,6 +451,7 @@ func (c *CLI) runWSCloseJSON(workspaceID string, force bool, wd string, root str
 		WorkspaceID: workspaceID,
 		Result: map[string]any{
 			"archived_path": filepath.Join(root, "archive", workspaceID),
+			"coverage":      renderWSCloseCoverageJSON(riskItems),
 		},
 	})
 	return exitOK
@@ -451,6 +509,9 @@ func isPathInside(base string, target string) bool {
 }
 
 func (c *CLI) closeWorkspace(ctx context.Context, root string, workspaceID string, doCommit bool) (closeCommitTrace, error) {
+	if err := ensureNoUnfinishedWSCloseJournal(root, workspaceID); err != nil {
+		return closeCommitTrace{}, err
+	}
 	wsPath := filepath.Join(root, "workspaces", workspaceID)
 	if fi, err := os.Stat(wsPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -484,6 +545,11 @@ func (c *CLI) closeWorkspace(ctx context.Context, root string, workspaceID strin
 	if err != nil {
 		return closeCommitTrace{}, fmt.Errorf("list workspace files for archive commit: %w", err)
 	}
+	now := time.Now().Unix()
+	journal := newWSCloseLifecycleJournal(workspaceID, doCommit, now)
+	if err := saveWSCloseLifecycleJournal(root, journal); err != nil {
+		return closeCommitTrace{}, err
+	}
 	trace := closeCommitTrace{CommitEnabled: doCommit}
 	if doCommit {
 		preSHA, err := commitClosePreSnapshot(ctx, root, workspaceID)
@@ -491,16 +557,35 @@ func (c *CLI) closeWorkspace(ctx context.Context, root string, workspaceID strin
 			return closeCommitTrace{}, fmt.Errorf("commit close pre-snapshot: %w", err)
 		}
 		trace.PreCommitSHA = preSHA
+		journal.ClosePreCommitSHA = preSHA
+	}
+	if err := journal.advance(wsClosePhaseClosePreCommitted, time.Now().Unix()); err != nil {
+		return closeCommitTrace{}, err
+	}
+	if err := saveWSCloseLifecycleJournal(root, journal); err != nil {
+		return closeCommitTrace{}, err
 	}
 
 	if err := removeWorkspaceWorktrees(ctx, root, workspaceID, repos, c.debugf); err != nil {
 		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
 		return closeCommitTrace{}, fmt.Errorf("remove worktrees: %w", err)
 	}
+	if err := journal.advance(wsClosePhaseWorktreesRemoved, time.Now().Unix()); err != nil {
+		return closeCommitTrace{}, err
+	}
+	if err := saveWSCloseLifecycleJournal(root, journal); err != nil {
+		return closeCommitTrace{}, err
+	}
 
 	if err := writeWorkspaceMetaFile(wsPath, updatedMeta); err != nil {
 		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
 		return closeCommitTrace{}, fmt.Errorf("write %s: %w", workspaceMetaFilename, err)
+	}
+	if err := journal.advance(wsClosePhaseMetadataArchived, time.Now().Unix()); err != nil {
+		return closeCommitTrace{}, err
+	}
+	if err := saveWSCloseLifecycleJournal(root, journal); err != nil {
+		return closeCommitTrace{}, err
 	}
 
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
@@ -511,62 +596,41 @@ func (c *CLI) closeWorkspace(ctx context.Context, root string, workspaceID strin
 		_ = writeWorkspaceMetaFile(wsPath, originalMeta)
 		return closeCommitTrace{}, fmt.Errorf("archive (rename): %w", err)
 	}
+	journal.WorkspacePathPresent = false
+	journal.ArchivePathPresent = true
+	if err := journal.advance(wsClosePhaseWorkspaceRenamed, time.Now().Unix()); err != nil {
+		return closeCommitTrace{}, err
+	}
+	if err := saveWSCloseLifecycleJournal(root, journal); err != nil {
+		return closeCommitTrace{}, err
+	}
 
 	if doCommit {
-		postSHA, err := commitArchiveChange(ctx, root, workspaceID, expectedFiles)
+		postSHA, err := commitArchiveChangeFn(ctx, root, workspaceID, expectedFiles)
 		if err != nil {
 			return closeCommitTrace{}, fmt.Errorf("commit archive change: %w", err)
 		}
 		trace.PostCommitSHA = postSHA
+		journal.ArchiveCommitSHA = postSHA
 	}
-	c.closeMappedCMUXWorkspacesBestEffort(ctx, root, workspaceID)
+	if err := journal.advance(wsClosePhaseArchiveCommitted, time.Now().Unix()); err != nil {
+		return closeCommitTrace{}, err
+	}
+	if err := saveWSCloseLifecycleJournal(root, journal); err != nil {
+		return closeCommitTrace{}, err
+	}
+	closeMappedCMUXWorkspacesBestEffort(ctx, root, workspaceID, c.debugf)
+	if err := journal.advance(wsClosePhaseCompleted, time.Now().Unix()); err != nil {
+		return closeCommitTrace{}, err
+	}
+	if err := saveWSCloseLifecycleJournal(root, journal); err != nil {
+		return closeCommitTrace{}, err
+	}
+	if err := removeWSCloseLifecycleJournal(root, workspaceID); err != nil {
+		return closeCommitTrace{}, err
+	}
 
 	return trace, nil
-}
-
-func (c *CLI) closeMappedCMUXWorkspacesBestEffort(ctx context.Context, root string, workspaceID string) {
-	store := cmuxmap.NewStore(root)
-	mapping, err := store.Load()
-	if err != nil {
-		c.debugf("ws close cmux mapping load skipped workspace=%s err=%v", workspaceID, err)
-		return
-	}
-	ws, ok := mapping.Workspaces[workspaceID]
-	if !ok || len(ws.Entries) == 0 {
-		return
-	}
-	client := newCMUXCloseClient()
-	if client == nil {
-		c.debugf("ws close cmux close skipped workspace=%s err=nil client", workspaceID)
-		return
-	}
-
-	nonRecoverableErr := false
-	for _, entry := range ws.Entries {
-		cmuxWorkspaceID := strings.TrimSpace(entry.CMUXWorkspaceID)
-		if cmuxWorkspaceID == "" {
-			continue
-		}
-		if err := client.CloseWorkspace(ctx, cmuxWorkspaceID); err != nil {
-			if isCMUXWorkspaceNotFoundError(err) {
-				c.debugf("ws close cmux workspace already absent workspace=%s cmux=%s", workspaceID, cmuxWorkspaceID)
-				continue
-			}
-			nonRecoverableErr = true
-			c.debugf("ws close cmux workspace close failed workspace=%s cmux=%s err=%v", workspaceID, cmuxWorkspaceID, err)
-			continue
-		}
-		c.debugf("ws close cmux workspace closed workspace=%s cmux=%s", workspaceID, cmuxWorkspaceID)
-	}
-	if nonRecoverableErr {
-		c.debugf("ws close cmux mapping kept due close errors workspace=%s", workspaceID)
-		return
-	}
-
-	delete(mapping.Workspaces, workspaceID)
-	if err := store.Save(mapping); err != nil {
-		c.debugf("ws close cmux mapping save skipped workspace=%s err=%v", workspaceID, err)
-	}
 }
 
 func isCMUXWorkspaceNotFoundError(err error) bool {
@@ -683,6 +747,8 @@ type workspaceRiskDetail struct {
 	risk      workspacerisk.WorkspaceRisk
 	perRepo   []repoRiskItem
 	repoPlans []closeRepoPlanDetail
+	coverage  workspaceOutputCoverageSummary
+	emptyGate string
 }
 
 type closeCommitTrace struct {
@@ -705,6 +771,102 @@ type closeRepoPlanDetail struct {
 	files      []string
 	filesANSI  []string
 	worktreeOK bool
+}
+
+func workspaceCloseEmptyRecordPolicy(cfg config.Config) string {
+	policy := strings.TrimSpace(cfg.Workspace.Close.EmptyRecordPolicy)
+	if policy == "" {
+		return config.WorkspaceCloseEmptyRecordPolicyWarn
+	}
+	return policy
+}
+
+func inspectWorkspaceCloseDetails(ctx context.Context, root string, workspaceIDs []string, emptyRecordPolicy string) ([]workspaceRiskDetail, bool, []workspaceRiskDetail, error) {
+	items, err := collectWorkspaceRiskDetails(ctx, root, workspaceIDs)
+	if err != nil {
+		return nil, false, nil, err
+	}
+	requiresConfirmation := hasNonCleanRisk(items)
+	warnings := make([]workspaceRiskDetail, 0, len(items))
+	for i := range items {
+		coverage, err := deriveWorkspaceOutputCoverage(root, "active", items[i].id)
+		if err != nil {
+			return nil, false, nil, fmt.Errorf("inspect output coverage for %s: %w", items[i].id, err)
+		}
+		items[i].coverage = coverage
+		if coverage.Coverage != workspaceOutputCoverageEmpty {
+			continue
+		}
+		if emptyRecordPolicy == config.WorkspaceCloseEmptyRecordPolicyRequireConfirmation {
+			items[i].emptyGate = config.WorkspaceCloseEmptyRecordPolicyRequireConfirmation
+			requiresConfirmation = true
+			continue
+		}
+		items[i].emptyGate = config.WorkspaceCloseEmptyRecordPolicyWarn
+		warnings = append(warnings, items[i])
+	}
+	return items, requiresConfirmation, warnings, nil
+}
+
+func buildWSCloseJSONChecks(items []workspaceRiskDetail, emptyRecordPolicy string, allowForceSatisfied bool) []map[string]any {
+	checks := []map[string]any{
+		{"name": "workspace_exists_active", "status": "pass", "message": "workspace exists and is active"},
+	}
+	riskMessage := "close can proceed"
+	riskStatus := "pass"
+	if hasNonCleanRisk(items) {
+		if allowForceSatisfied {
+			riskMessage = "non-clean risk accepted"
+		} else {
+			riskMessage = "non-clean risk requires --force"
+			riskStatus = "fail"
+		}
+	}
+	checks = append(checks, map[string]any{
+		"name":    "risk_gate",
+		"status":  riskStatus,
+		"message": riskMessage,
+	})
+
+	coverageStatus := "pass"
+	coverageMessage := "output coverage is non-empty"
+	if len(items) > 0 && items[0].coverage.Coverage == workspaceOutputCoverageEmpty {
+		switch emptyRecordPolicy {
+		case config.WorkspaceCloseEmptyRecordPolicyRequireConfirmation:
+			if allowForceSatisfied {
+				coverageMessage = "empty output record accepted"
+			} else {
+				coverageStatus = "fail"
+				coverageMessage = "empty output record requires --force"
+			}
+		default:
+			coverageStatus = "warn"
+			coverageMessage = "workspace has no substantive notes/ or artifacts/ record"
+		}
+	} else if len(items) > 0 {
+		coverageMessage = fmt.Sprintf("output coverage=%s", items[0].coverage.Coverage)
+	}
+	checks = append(checks, map[string]any{
+		"name":    "output_coverage_gate",
+		"status":  coverageStatus,
+		"message": coverageMessage,
+	})
+	return checks
+}
+
+func renderWSCloseCoverageJSON(items []workspaceRiskDetail) map[string]any {
+	if len(items) == 0 {
+		return map[string]any{
+			"state":           string(workspaceOutputCoverageEmpty),
+			"notes_count":     0,
+			"artifacts_count": 0,
+		}
+	}
+	return map[string]any{
+		"state":           string(items[0].coverage.Coverage),
+		"notes_count":     items[0].coverage.NotesCount,
+		"artifacts_count": items[0].coverage.ArtifactsCount,
+	}
 }
 
 func collectWorkspaceRiskDetails(ctx context.Context, root string, workspaceIDs []string) ([]workspaceRiskDetail, error) {
@@ -749,15 +911,17 @@ func hasNonCleanRisk(items []workspaceRiskDetail) bool {
 }
 
 func printRiskSection(w io.Writer, items []workspaceRiskDetail, useColor bool) {
-	body := make([]string, 0, len(items)*8+4)
+	body := make([]string, 0, len(items)*10+4)
 	if len(items) == 1 {
 		body = append(body, fmt.Sprintf("%s%s close workspace %s", uiIndent, styleMuted("•", useColor), items[0].id))
+		appendCloseCoveragePlanBody(&body, items[0], useColor)
 		body = append(body, fmt.Sprintf("%s%s %s:", uiIndent, styleMuted("•", useColor), styleAccent("repos", useColor)))
 		appendCloseRepoPlanBody(&body, items[0], useColor)
 	} else {
 		body = append(body, fmt.Sprintf("%s%s close %d workspaces", uiIndent, styleMuted("•", useColor), len(items)))
 		for _, it := range items {
 			body = append(body, fmt.Sprintf("%s%s workspace %s", uiIndent, styleMuted("•", useColor), it.id))
+			appendCloseCoveragePlanBody(&body, it, useColor)
 			body = append(body, fmt.Sprintf("%s%s %s:", uiIndent, styleMuted("•", useColor), styleAccent("repos", useColor)))
 			appendCloseRepoPlanBody(&body, it, useColor)
 		}
@@ -767,6 +931,19 @@ func printRiskSection(w io.Writer, items []workspaceRiskDetail, useColor bool) {
 		blankAfterHeading: false,
 		trailingBlank:     true,
 	})
+}
+
+func appendCloseCoveragePlanBody(body *[]string, item workspaceRiskDetail, useColor bool) {
+	if item.coverage.Coverage != workspaceOutputCoverageEmpty {
+		return
+	}
+	label := styleWarn(string(item.coverage.Coverage), useColor)
+	message := "no substantive notes/ or artifacts/ files"
+	if item.emptyGate == config.WorkspaceCloseEmptyRecordPolicyRequireConfirmation {
+		message += " (confirmation required)"
+	}
+	*body = append(*body, fmt.Sprintf("%s%s %s: %s", uiIndent+uiIndent, styleMuted("-", useColor), styleMuted("coverage", useColor), label))
+	*body = append(*body, fmt.Sprintf("%s%s %s", uiIndent+uiIndent, styleMuted("  ", useColor), styleWarn(message, useColor)))
 }
 
 func appendCloseRepoPlanBody(body *[]string, item workspaceRiskDetail, useColor bool) {
@@ -843,6 +1020,20 @@ func renderClosePlanRiskLabel(detail closeRepoPlanDetail, useColor bool) string 
 func renderCloseRiskApplyPrompt(useColor bool) string {
 	bullet := styleMuted("•", useColor)
 	return fmt.Sprintf("%s%s type %s to apply close on non-clean workspaces: ", uiIndent, bullet, styleAccent("yes", useColor))
+}
+
+func printCloseCoverageWarnings(w io.Writer, items []workspaceRiskDetail, useColor bool) {
+	if len(items) == 0 {
+		return
+	}
+	body := make([]string, 0, len(items))
+	for _, item := range items {
+		body = append(body, fmt.Sprintf("%s%s workspace %s coverage: empty (no substantive notes/ or artifacts/ files)", uiIndent, styleWarn("•", useColor), item.id))
+	}
+	printSection(w, styleBold(styleWarn("Warnings:", useColor), useColor), body, sectionRenderOptions{
+		blankAfterHeading: true,
+		trailingBlank:     true,
+	})
 }
 
 func shortCommitSHA(sha string) string {
@@ -1310,4 +1501,22 @@ func isGitIgnoredRelativeToRoot(root string, relPath string) (bool, error) {
 		return false, err
 	}
 	return ignored, nil
+}
+
+func latestGitSubject(ctx context.Context, root string) (string, error) {
+	out, err := gitutil.Run(ctx, root, "log", "-1", "--pretty=%s")
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
+}
+
+func gitStatusShortPaths(ctx context.Context, root string, pathspecs ...string) (string, error) {
+	args := []string{"status", "--short", "--"}
+	args = append(args, pathspecs...)
+	out, err := gitutil.Run(ctx, root, args...)
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(out), nil
 }
