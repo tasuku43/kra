@@ -318,34 +318,51 @@ func ensureRootAgents(root string) error {
 	return nil
 }
 
-func ensureRootGitignore(root string) error {
-	path := filepath.Join(root, gitignoreFilename)
-	requiredPatterns := []string{
+func rootGitignorePath(root string) string {
+	return filepath.Join(root, gitignoreFilename)
+}
+
+func managedRootGitignorePatterns() []string {
+	return []string{
 		"workspaces/**/repos/**",
 		".DS_Store",
 		".kra/logs/",
+		".kra/state/cmux-sessions.json",
+		".kra/state/cmux-workspaces.json",
+		".kra/state/root-repos.json",
+		".kra/state/operations/",
 	}
+}
 
-	b, err := os.ReadFile(path)
-	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("read %s: %w", gitignoreFilename, err)
-	}
-
-	contents := string(b)
-	missing := make([]string, 0, len(requiredPatterns))
-	for _, pattern := range requiredPatterns {
+func missingManagedRootGitignorePatterns(contents string) []string {
+	missing := make([]string, 0, len(managedRootGitignorePatterns()))
+	for _, pattern := range managedRootGitignorePatterns() {
 		if hasGitignoreLine(contents, pattern) {
 			continue
 		}
 		missing = append(missing, pattern)
 	}
+	return missing
+}
+
+func reconcileRootGitignore(root string) (bool, error) {
+	path := rootGitignorePath(root)
+	patterns := managedRootGitignorePatterns()
+
+	b, err := os.ReadFile(path)
+	if err != nil && !os.IsNotExist(err) {
+		return false, fmt.Errorf("read %s: %w", gitignoreFilename, err)
+	}
+
+	contents := string(b)
+	missing := missingManagedRootGitignorePatterns(contents)
 	if len(missing) == 0 {
-		return nil
+		return false, nil
 	}
 
 	var out string
 	if len(b) == 0 {
-		out = "# kra\n" + strings.Join(requiredPatterns, "\n") + "\n"
+		out = "# kra\n" + strings.Join(patterns, "\n") + "\n"
 	} else {
 		out = contents
 		if !strings.HasSuffix(out, "\n") {
@@ -357,9 +374,14 @@ func ensureRootGitignore(root string) error {
 	}
 
 	if err := os.WriteFile(path, []byte(out), 0o644); err != nil {
-		return fmt.Errorf("write %s: %w", gitignoreFilename, err)
+		return false, fmt.Errorf("write %s: %w", gitignoreFilename, err)
 	}
-	return nil
+	return true, nil
+}
+
+func ensureRootGitignore(root string) error {
+	_, err := reconcileRootGitignore(root)
+	return err
 }
 
 func hasGitignoreLine(contents string, want string) bool {
@@ -538,6 +560,8 @@ func defaultRootConfigContent() string {
 workspace:
   defaults:
     template: default
+  # close:
+  #   empty_record_policy: require-confirmation # warn | require-confirmation
 
 integration:
   jira:

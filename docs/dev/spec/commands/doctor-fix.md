@@ -1,6 +1,6 @@
 ---
 title: "`kra doctor --fix` staged remediation"
-status: proposed
+status: implemented
 ---
 
 # `kra doctor --fix --plan|--apply [--format human|json]`

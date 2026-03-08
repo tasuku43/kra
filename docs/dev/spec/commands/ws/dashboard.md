@@ -1,6 +1,6 @@
 ---
 title: "`kra ws dashboard`"
-status: proposed
+status: implemented
 ---
 
 # `kra ws dashboard [--archived] [--workspace <id>] [--format human|json]`

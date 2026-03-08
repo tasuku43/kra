@@ -1,6 +1,6 @@
 ---
 title: "Data Model"
-status: proposed
+status: implemented
 ---
 
 # Data Model

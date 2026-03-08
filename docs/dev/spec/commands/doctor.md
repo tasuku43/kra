@@ -1,6 +1,6 @@
 ---
 title: "`kra doctor`"
-status: proposed
+status: implemented
 ---
 
 # `kra doctor [--format human|json]`

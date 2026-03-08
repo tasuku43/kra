@@ -133,7 +133,7 @@ func TestGolden_WSImportJiraResult(t *testing.T) {
 
 func TestGolden_WSListHuman_Empty(t *testing.T) {
 	var out bytes.Buffer
-	printWSListHuman(&out, nil, "active", false, false)
+	printWSListHuman(&out, nil, nil, "active", false, false)
 	assertGolden(t, "ws_list_human_empty.golden", out.String())
 }
 
@@ -167,7 +167,7 @@ func TestGolden_WSListHuman_Tree(t *testing.T) {
 			Repos: nil,
 		},
 	}
-	printWSListHuman(&out, rows, "active", true, false)
+	printWSListHuman(&out, rows, nil, "active", true, false)
 	assertGolden(t, "ws_list_human_tree.golden", out.String())
 }
 

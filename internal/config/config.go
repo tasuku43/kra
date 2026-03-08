@@ -13,6 +13,9 @@ import (
 const (
 	JiraTypeSprint = "sprint"
 	JiraTypeJQL    = "jql"
+
+	WorkspaceCloseEmptyRecordPolicyWarn                = "warn"
+	WorkspaceCloseEmptyRecordPolicyRequireConfirmation = "require-confirmation"
 )
 
 type Config struct {
@@ -22,12 +25,17 @@ type Config struct {
 
 type WorkspaceConfig struct {
 	Defaults    WorkspaceDefaults              `yaml:"defaults"`
+	Close       WorkspaceClose                 `yaml:"close"`
 	Branch      WorkspaceBranch                `yaml:"branch"`
 	RepoPresets map[string]WorkspaceRepoPreset `yaml:"repo_presets"`
 }
 
 type WorkspaceDefaults struct {
 	Template string `yaml:"template"`
+}
+
+type WorkspaceClose struct {
+	EmptyRecordPolicy string `yaml:"empty_record_policy"`
 }
 
 type WorkspaceBranch struct {
@@ -78,6 +86,7 @@ func LoadFile(path string) (Config, error) {
 
 func (c *Config) Normalize() {
 	c.Workspace.Defaults.Template = strings.TrimSpace(c.Workspace.Defaults.Template)
+	c.Workspace.Close.EmptyRecordPolicy = strings.ToLower(strings.TrimSpace(c.Workspace.Close.EmptyRecordPolicy))
 	c.Workspace.Branch.Template = strings.TrimSpace(c.Workspace.Branch.Template)
 	c.Workspace.RepoPresets = normalizeWorkspaceRepoPresets(c.Workspace.RepoPresets)
 	c.Integration.Jira.BaseURL = strings.TrimSpace(c.Integration.Jira.BaseURL)
@@ -101,6 +110,11 @@ func (c Config) Validate() error {
 	}
 	if c.Integration.Jira.Defaults.Space != "" && c.Integration.Jira.Defaults.Project != "" {
 		issues = append(issues, "integration.jira.defaults.space and integration.jira.defaults.project cannot be combined")
+	}
+	if c.Workspace.Close.EmptyRecordPolicy != "" &&
+		c.Workspace.Close.EmptyRecordPolicy != WorkspaceCloseEmptyRecordPolicyWarn &&
+		c.Workspace.Close.EmptyRecordPolicy != WorkspaceCloseEmptyRecordPolicyRequireConfirmation {
+		issues = append(issues, "workspace.close.empty_record_policy must be one of: warn, require-confirmation")
 	}
 	for name, preset := range c.Workspace.RepoPresets {
 		trimmedName := strings.TrimSpace(name)
@@ -128,6 +142,9 @@ func Merge(global Config, root Config) Config {
 	out := global
 	if root.Workspace.Defaults.Template != "" {
 		out.Workspace.Defaults.Template = root.Workspace.Defaults.Template
+	}
+	if root.Workspace.Close.EmptyRecordPolicy != "" {
+		out.Workspace.Close.EmptyRecordPolicy = root.Workspace.Close.EmptyRecordPolicy
 	}
 	if root.Workspace.Branch.Template != "" {
 		out.Workspace.Branch.Template = root.Workspace.Branch.Template

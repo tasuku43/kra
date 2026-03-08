@@ -359,6 +359,52 @@ func TestCLI_WS_List_JSON_Success(t *testing.T) {
 	}
 }
 
+func TestCLI_WS_List_JSON_IncludesReadOnlyWarningsWithoutMutation(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load workspace meta: %v", err)
+	}
+	meta.Workspace.WorkState = ""
+	meta.Baseline = nil
+	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	code := c.Run([]string{"ws", "list", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("ws list --format json exit code = %d, want %d (stderr=%q)", code, exitOK, errBuf.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	warnings, ok := resp.Result["warnings"].([]any)
+	if !ok || len(warnings) == 0 {
+		t.Fatalf("result.warnings missing: %+v", resp.Result)
+	}
+	if !containsJSONWarning(warnings, formatWorkspaceListMissingWorkStateWarning("WS1")) {
+		t.Fatalf("warnings should include missing work_state: %+v", warnings)
+	}
+	if !containsJSONWarning(warnings, formatWorkspaceListMissingBaselineWarning("WS1")) {
+		t.Fatalf("warnings should include missing baseline: %+v", warnings)
+	}
+
+	updated, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load workspace meta after list: %v", err)
+	}
+	if updated.Workspace.WorkState != "" {
+		t.Fatalf("list should not backfill work_state, got %q", updated.Workspace.WorkState)
+	}
+	if updated.Baseline != nil {
+		t.Fatalf("list should not create baseline")
+	}
+}
+
 func TestCLI_WS_List_JSON_UsageError(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
@@ -411,7 +457,7 @@ func TestListRowsFromFilesystem_ActiveSortsInProgressFirst(t *testing.T) {
 	}
 }
 
-func TestListRowsFromFilesystem_BackfillsMissingMetaWorkStateAsTodo(t *testing.T) {
+func TestListRowsFromFilesystem_DerivesMissingMetaWorkStateAsTodoWithoutMutation(t *testing.T) {
 	root := t.TempDir()
 	wsPath := filepath.Join(root, "workspaces", "WS1")
 	if err := os.MkdirAll(wsPath, 0o755); err != nil {
@@ -437,10 +483,11 @@ func TestListRowsFromFilesystem_BackfillsMissingMetaWorkStateAsTodo(t *testing.T
 		t.Fatalf("write raw meta: %v", err)
 	}
 
-	rows, err := listRowsFromFilesystem(context.Background(), root, "active", false)
+	result, err := listRowsFromFilesystemResult(context.Background(), root, "active", false)
 	if err != nil {
 		t.Fatalf("listRowsFromFilesystem() error: %v", err)
 	}
+	rows := result.Rows
 	if len(rows) != 1 {
 		t.Fatalf("row count = %d, want 1", len(rows))
 	}
@@ -451,12 +498,18 @@ func TestListRowsFromFilesystem_BackfillsMissingMetaWorkStateAsTodo(t *testing.T
 	if err != nil {
 		t.Fatalf("load meta: %v", err)
 	}
-	if updated.Workspace.WorkState != string(workspaceWorkStateTodo) {
-		t.Fatalf("meta work_state = %q, want %q", updated.Workspace.WorkState, workspaceWorkStateTodo)
+	if updated.Workspace.WorkState != "" {
+		t.Fatalf("meta work_state = %q, want blank", updated.Workspace.WorkState)
+	}
+	if !containsString(result.Warnings, formatWorkspaceListMissingWorkStateWarning("WS1")) {
+		t.Fatalf("warnings should include missing work_state: %+v", result.Warnings)
+	}
+	if !containsString(result.Warnings, formatWorkspaceListMissingBaselineWarning("WS1")) {
+		t.Fatalf("warnings should include missing baseline: %+v", result.Warnings)
 	}
 }
 
-func TestListRowsFromFilesystem_BackfillsMissingMetaWorkStateAsInProgress(t *testing.T) {
+func TestListRowsFromFilesystem_DerivesMissingMetaWorkStateAsInProgressWithoutMutation(t *testing.T) {
 	root := t.TempDir()
 	wsPath := filepath.Join(root, "workspaces", "WS1")
 	if err := os.MkdirAll(filepath.Join(wsPath, "repos", "r"), 0o755); err != nil {
@@ -502,10 +555,11 @@ func TestListRowsFromFilesystem_BackfillsMissingMetaWorkStateAsInProgress(t *tes
 		t.Fatalf("save baseline: %v", err)
 	}
 
-	rows, err := listRowsFromFilesystem(context.Background(), root, "active", false)
+	result, err := listRowsFromFilesystemResult(context.Background(), root, "active", false)
 	if err != nil {
 		t.Fatalf("listRowsFromFilesystem() error: %v", err)
 	}
+	rows := result.Rows
 	if len(rows) != 1 {
 		t.Fatalf("row count = %d, want 1", len(rows))
 	}
@@ -519,12 +573,18 @@ func TestListRowsFromFilesystem_BackfillsMissingMetaWorkStateAsInProgress(t *tes
 	if updated.Baseline == nil {
 		t.Fatalf("meta baseline should be stored in .kra.meta.json")
 	}
-	if updated.Workspace.WorkState != string(workspaceWorkStateInProgress) {
-		t.Fatalf("meta work_state = %q, want %q", updated.Workspace.WorkState, workspaceWorkStateInProgress)
+	if updated.Workspace.WorkState != "" {
+		t.Fatalf("meta work_state = %q, want blank", updated.Workspace.WorkState)
+	}
+	if !containsString(result.Warnings, formatWorkspaceListMissingWorkStateWarning("WS1")) {
+		t.Fatalf("warnings should include missing work_state: %+v", result.Warnings)
+	}
+	if containsString(result.Warnings, formatWorkspaceListMissingBaselineWarning("WS1")) {
+		t.Fatalf("warnings should not include missing baseline when canonical baseline exists: %+v", result.Warnings)
 	}
 }
 
-func TestListRowsFromFilesystem_CreatesBaselineWhenMissing(t *testing.T) {
+func TestListRowsFromFilesystem_DoesNotCreateBaselineWhenMissing(t *testing.T) {
 	root := t.TempDir()
 	wsPath := filepath.Join(root, "workspaces", "WS1")
 	if err := os.MkdirAll(wsPath, 0o755); err != nil {
@@ -552,12 +612,12 @@ func TestListRowsFromFilesystem_CreatesBaselineWhenMissing(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load meta after list: %v", err)
 	}
-	if updated.Baseline == nil {
-		t.Fatalf("baseline should be created in .kra.meta.json")
+	if updated.Baseline != nil {
+		t.Fatalf("baseline should remain absent after read-only list")
 	}
 }
 
-func TestListRowsFromFilesystem_IgnoresLegacyBaselineWhenMetaBaselineMissing(t *testing.T) {
+func TestListRowsFromFilesystem_DoesNotReadLegacyBaselineWhenMetaBaselineMissing(t *testing.T) {
 	root := t.TempDir()
 	wsPath := filepath.Join(root, "workspaces", "WS1")
 	if err := os.MkdirAll(filepath.Join(wsPath, "repos", "r"), 0o755); err != nil {
@@ -568,6 +628,7 @@ func TestListRowsFromFilesystem_IgnoresLegacyBaselineWhenMetaBaselineMissing(t *
 	}
 	meta := newWorkspaceMetaFileForCreate("WS1", "title", "", 100)
 	meta.Baseline = nil
+	meta.Workspace.WorkState = ""
 	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
 		t.Fatalf("write meta: %v", err)
 	}
@@ -590,10 +651,11 @@ func TestListRowsFromFilesystem_IgnoresLegacyBaselineWhenMetaBaselineMissing(t *
 		t.Fatalf("write legacy baseline: %v", err)
 	}
 
-	rows, err := listRowsFromFilesystem(context.Background(), root, "active", false)
+	result, err := listRowsFromFilesystemResult(context.Background(), root, "active", false)
 	if err != nil {
 		t.Fatalf("listRowsFromFilesystem() error: %v", err)
 	}
+	rows := result.Rows
 	if len(rows) != 1 {
 		t.Fatalf("row count = %d, want 1", len(rows))
 	}
@@ -604,14 +666,20 @@ func TestListRowsFromFilesystem_IgnoresLegacyBaselineWhenMetaBaselineMissing(t *
 	if err != nil {
 		t.Fatalf("load meta: %v", err)
 	}
-	if updated.Baseline == nil {
-		t.Fatalf("meta baseline should be created even when legacy baseline file exists")
+	if updated.Baseline != nil {
+		t.Fatalf("meta baseline should remain absent on read-only list")
+	}
+	if !containsString(result.Warnings, formatWorkspaceListMissingWorkStateWarning("WS1")) {
+		t.Fatalf("warnings should include missing work_state: %+v", result.Warnings)
+	}
+	if !containsString(result.Warnings, formatWorkspaceListMissingBaselineWarning("WS1")) {
+		t.Fatalf("warnings should include missing baseline: %+v", result.Warnings)
 	}
 }
 
 func TestPrintWSListHuman_EmptyRowsUsesIndentedNone(t *testing.T) {
 	var out bytes.Buffer
-	printWSListHuman(&out, nil, "active", false, false)
+	printWSListHuman(&out, nil, nil, "active", false, false)
 	got := out.String()
 
 	if !strings.Contains(got, "Workspaces(active):\n\n") {
@@ -646,4 +714,22 @@ func TestCountWorkspaceReposFromFilesystem_DeduplicatesMetaAndDirs(t *testing.T)
 	if got != 3 {
 		t.Fatalf("repo count = %d, want 3", got)
 	}
+}
+
+func containsString(items []string, want string) bool {
+	for _, item := range items {
+		if item == want {
+			return true
+		}
+	}
+	return false
+}
+
+func containsJSONWarning(warnings []any, want string) bool {
+	for _, warning := range warnings {
+		if got, ok := warning.(string); ok && got == want {
+			return true
+		}
+	}
+	return false
 }

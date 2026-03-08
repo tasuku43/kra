@@ -49,7 +49,7 @@ Backlog is managed by epic/prefix under `docs/dev/backlog/*.md`.
 
 - [x] `docs/dev/backlog/FS-STATE.md` (`8/8` done)
 - [x] `docs/dev/backlog/MVP.md` (`19/19` done)
-- [ ] `docs/dev/backlog/UX-WS.md` (`30/32` done)
+- [ ] `docs/dev/backlog/UX-WS.md` (`31/32` done)
 - [x] `docs/dev/backlog/UX-REPO.md` (`3/3` done)
 - [x] `docs/dev/backlog/UX-CORE.md` (`13/13` done)
 - [x] `docs/dev/backlog/ARCH.md` (`10/10` done)
@@ -59,7 +59,7 @@ Backlog is managed by epic/prefix under `docs/dev/backlog/*.md`.
 - [x] `docs/dev/backlog/CONFIG.md` (`6/6` done)
 - [x] `docs/dev/backlog/DOC-QUALITY.md` (`5/5` done)
 - [x] `docs/dev/backlog/TEMPLATE-WS.md` (`4/4` done)
-- [ ] `docs/dev/backlog/OPS.md` (`12/15` done)
+- [x] `docs/dev/backlog/OPS.md` (`15/15` done)
 - [x] `docs/dev/backlog/PUBLIC.md` (`7/7` done)
 - [x] `docs/dev/backlog/PROVIDER.md` (`1/1` done)
 - [x] `docs/dev/backlog/WS-STATE.md` (`1/1` done)
