@@ -95,7 +95,7 @@ func (p *memorySyncPort) SetStatus(_ context.Context, cmuxWorkspaceID string, en
 		}
 	}
 	if !replaced {
-		rows = append(rows, entry)
+		rows = append([]SyncStatusEntry{entry}, rows...)
 	}
 	p.statuses[cmuxWorkspaceID] = rows
 	return nil
@@ -241,10 +241,13 @@ func TestServiceSync_ReconcilesTaskNamespace(t *testing.T) {
 	if len(syncPort.setCalls) != 4 {
 		t.Fatalf("set calls = %+v, want 4 calls", syncPort.setCalls)
 	}
-	if syncPort.setCalls[0].entry.Key != "task:TASK-003" || syncPort.setCalls[1].entry.Key != "task:TASK-001" || syncPort.setCalls[2].entry.Key != "task:TASK-004" || syncPort.setCalls[3].entry.Key != "task:TASK-002" {
-		t.Fatalf("set calls = %+v, want markdown order TASK-003/TASK-001/TASK-004/TASK-002", syncPort.setCalls)
+	if syncPort.setCalls[0].entry.Key != "task:TASK-002" || syncPort.setCalls[1].entry.Key != "task:TASK-004" || syncPort.setCalls[2].entry.Key != "task:TASK-001" || syncPort.setCalls[3].entry.Key != "task:TASK-003" {
+		t.Fatalf("set calls = %+v, want reverse replay TASK-002/TASK-004/TASK-001/TASK-003", syncPort.setCalls)
 	}
-	if got := syncPort.setCalls[0].entry; got.Value != "○ TASK-003 Draft docs" || got.Color != "#ffffff" {
+	if got := syncPort.statuses["cmux-1"]; len(got) != 5 || got[0].Key != "task:TASK-003" || got[1].Key != "task:TASK-001" || got[2].Key != "task:TASK-004" || got[3].Key != "task:TASK-002" {
+		t.Fatalf("statuses = %+v, want rendered order TASK-003/TASK-001/TASK-004/TASK-002", got)
+	}
+	if got := syncPort.statuses["cmux-1"][0]; got.Value != "○ TASK-003 Draft docs" || got.Color != "#ffffff" {
 		t.Fatalf("todo sync entry = %+v, want white todo pill", got)
 	}
 	if len(syncPort.clearCalls) != 3 {

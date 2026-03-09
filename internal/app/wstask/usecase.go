@@ -306,8 +306,10 @@ func (s *Service) Sync(ctx context.Context, root string, workspaceID string) (Sy
 			}
 			result.ClearCount++
 		}
-		for _, want := range desired {
-			if err := s.syncPort.SetStatus(ctx, target, want); err != nil {
+		// cmux inserts newly created status pills at the head, so replay in reverse
+		// to preserve the declaration order in the rendered sidebar.
+		for i := len(desired) - 1; i >= 0; i-- {
+			if err := s.syncPort.SetStatus(ctx, target, desired[i]); err != nil {
 				return SyncResult{}, err
 			}
 			result.SetCount++

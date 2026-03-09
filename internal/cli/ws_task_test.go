@@ -52,7 +52,7 @@ func (f *fakeWSTaskSyncClient) SetStatus(_ context.Context, workspace string, la
 		}
 	}
 	if !replaced {
-		rows = append(rows, entry)
+		rows = append([]cmuxctl.StatusEntry{entry}, rows...)
 	}
 	f.statuses[workspace] = rows
 	return nil
@@ -334,8 +334,14 @@ func TestCLI_WSTaskSync_JSON_ReconcilesCMUXTaskNamespace(t *testing.T) {
 	if len(syncClient.setCalls) != 4 {
 		t.Fatalf("set calls = %+v, want 4 calls", syncClient.setCalls)
 	}
-	if syncClient.setCalls[0].Key != "task:TASK-003" || syncClient.setCalls[0].Value != "○ TASK-003 Draft docs" || syncClient.setCalls[0].Color != "#ffffff" {
-		t.Fatalf("todo set call = %+v, want first set to follow markdown order", syncClient.setCalls[0])
+	if syncClient.setCalls[0].Key != "task:TASK-002" || syncClient.setCalls[1].Key != "task:TASK-004" || syncClient.setCalls[2].Key != "task:TASK-001" || syncClient.setCalls[3].Key != "task:TASK-003" {
+		t.Fatalf("set calls = %+v, want reverse replay order", syncClient.setCalls)
+	}
+	if got := syncClient.statuses["cmux-1"]; len(got) != 5 || got[0].Key != "task:TASK-003" || got[1].Key != "task:TASK-001" || got[2].Key != "task:TASK-004" || got[3].Key != "task:TASK-002" {
+		t.Fatalf("statuses = %+v, want rendered order TASK-003/TASK-001/TASK-004/TASK-002", got)
+	}
+	if got := syncClient.statuses["cmux-1"][0]; got.Value != "○ TASK-003 Draft docs" || got.Color != "#ffffff" {
+		t.Fatalf("todo pill = %+v, want markdown-leading task with white color", got)
 	}
 	if len(syncClient.clearCalls) != 3 {
 		t.Fatalf("clear calls = %+v, want 3 calls", syncClient.clearCalls)
@@ -428,11 +434,14 @@ func TestCLI_WSTaskLauncher_UpdatesSelectedTaskAndSyncs(t *testing.T) {
 	if len(syncClient.setCalls) != 2 {
 		t.Fatalf("set calls = %+v, want two task pills", syncClient.setCalls)
 	}
-	if syncClient.setCalls[0].Key != "task:TASK-001" || syncClient.setCalls[0].Value != "○ TASK-001 First" {
-		t.Fatalf("first set call = %+v, want todo pill for TASK-001", syncClient.setCalls[0])
+	if syncClient.setCalls[0].Key != "task:TASK-002" || syncClient.setCalls[0].Value != "✔ TASK-002 Second" {
+		t.Fatalf("first set call = %+v, want reverse replay to start from tail task", syncClient.setCalls[0])
 	}
-	if syncClient.setCalls[1].Key != "task:TASK-002" || syncClient.setCalls[1].Value != "✔ TASK-002 Second" {
-		t.Fatalf("second set call = %+v, want done pill for TASK-002", syncClient.setCalls[1])
+	if syncClient.setCalls[1].Key != "task:TASK-001" || syncClient.setCalls[1].Value != "○ TASK-001 First" {
+		t.Fatalf("second set call = %+v, want reverse replay to end at head task", syncClient.setCalls[1])
+	}
+	if got := syncClient.statuses["cmux-1"]; len(got) != 2 || got[0].Key != "task:TASK-001" || got[1].Key != "task:TASK-002" {
+		t.Fatalf("statuses = %+v, want rendered order TASK-001/TASK-002", got)
 	}
 }
 
