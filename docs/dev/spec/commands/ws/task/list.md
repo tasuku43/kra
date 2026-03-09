@@ -1,6 +1,6 @@
 ---
 title: "`kra ws task list`"
-status: planned
+status: implemented
 ---
 
 # `kra ws task list [--id <workspace-id>] [--current] [--select] [--format human|json]`
@@ -26,19 +26,23 @@ List structured tasks for one workspace from `tasks.md`.
 
 ## Human output
 
-- Print one summary header:
-  - `Tasks: X total (doing Y, blocked Z, todo A, done B)`
-- Render sections in fixed order:
-  - `Doing`
-  - `Blocked`
-  - `Todo`
-  - `Done`
-- Omit empty sections.
-- Within each section, preserve file order from `tasks.md`.
-- Default row shape is summary-first:
-  - `• TASK-001: short title`
-- The command may optionally render a muted description preview under each row, but title-first
-  summary remains the stable default contract.
+- Render one `Tasks:` section.
+- Render task rows directly under `Tasks:` as one flat list.
+- Preserve file order from `tasks.md`.
+- Row shape:
+  - `<icon> TASK-001: short title`
+- Status icon mapping:
+  - `todo = ○`
+  - `doing = ●`
+  - `blocked = ▲`
+  - `done = ✔`
+- In color-capable terminals, apply semantic colors by task status:
+  - `todo -> text.muted`
+  - `doing -> status.info`
+  - `blocked -> status.warning`
+  - `done -> status.success`
+- When there are no structured tasks, render `(none)` under `Tasks:`.
+- Do not render a summary line or status subsections in human output.
 
 ## JSON envelope
 

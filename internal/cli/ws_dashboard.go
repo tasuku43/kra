@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/tasuku43/kra/internal/app/contextcmd"
+	"github.com/tasuku43/kra/internal/app/wstask"
 	"github.com/tasuku43/kra/internal/core/workspacerisk"
 	"github.com/tasuku43/kra/internal/infra/appports"
 	"github.com/tasuku43/kra/internal/infra/paths"
@@ -29,6 +30,7 @@ type wsDashboardRow struct {
 	RepoCount int
 	Risk      workspacerisk.WorkspaceRisk
 	Coverage  workspaceOutputCoverage
+	Tasks     wstask.Overview
 }
 
 type wsDashboardSummary struct {
@@ -46,8 +48,15 @@ type wsDashboardResult struct {
 	Summary     wsDashboardSummary
 	Workspaces  []wsDashboardRow
 	Warnings    []string
-	Detail      *workspaceRiskDetail
+	Detail      *wsDashboardDetail
 	DetailCover *workspaceOutputCoverageSummary
+}
+
+type wsDashboardDetail struct {
+	WorkspaceID string
+	Risk        workspacerisk.WorkspaceRisk
+	Repos       []repoRiskItem
+	Tasks       wstask.Overview
 }
 
 func (c *CLI) runWSDashboard(args []string) int {
@@ -242,6 +251,20 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 
 	items := make([]wsDashboardRow, 0, len(rows))
 	coverageByWorkspace := make(map[string]workspaceOutputCoverageSummary, len(rows))
+	taskByWorkspace := map[string]wstask.Overview{}
+	taskSvc := newWorkspaceTaskService()
+	for _, row := range rows {
+		taskResult, taskErr := taskSvc.Overview(root, row.ID, opts.scope)
+		if taskErr != nil {
+			warnings = append(warnings, fmt.Sprintf("load workspace tasks %s: %v", row.ID, taskErr))
+			taskByWorkspace[row.ID] = wstask.Overview{
+				Summary: wstask.SummaryInvalid,
+				Warning: taskErr.Error(),
+			}
+			continue
+		}
+		taskByWorkspace[row.ID] = taskResult.Overview
+	}
 	riskTotals := map[string]int{
 		string(workspacerisk.WorkspaceRiskClean):    0,
 		string(workspacerisk.WorkspaceRiskUnpushed): 0,
@@ -275,6 +298,7 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 			RepoCount: row.RepoCount,
 			Risk:      risk,
 			Coverage:  coverage.Coverage,
+			Tasks:     taskByWorkspace[row.ID],
 		})
 	}
 
@@ -291,11 +315,20 @@ func buildWSDashboardResult(root string, opts wsDashboardOptions, debugf func(st
 	}
 	debugPhasef(debugf, "ws-dashboard", "summary_counts", summaryStart, "active=%d archived=%d", activeCount, archivedCount)
 
-	var detail *workspaceRiskDetail
+	var detail *wsDashboardDetail
 	var detailCoverage *workspaceOutputCoverageSummary
 	if opts.showDetail {
+		risk := workspacerisk.WorkspaceRiskUnknown
+		repos := []repoRiskItem(nil)
 		if d, ok := riskByWorkspace[opts.workspace]; ok {
-			detail = &d
+			risk = d.risk
+			repos = d.perRepo
+		}
+		detail = &wsDashboardDetail{
+			WorkspaceID: opts.workspace,
+			Risk:        risk,
+			Repos:       repos,
+			Tasks:       taskByWorkspace[opts.workspace],
 		}
 		if coverage, ok := coverageByWorkspace[opts.workspace]; ok {
 			coverageCopy := coverage
@@ -362,6 +395,7 @@ func writeWSDashboardJSON(out io.Writer, result wsDashboardResult) int {
 			"risk":       string(row.Risk),
 			"coverage":   string(row.Coverage),
 			"repo_count": row.RepoCount,
+			"tasks":      wsListJSONTaskSummary(row.Tasks),
 		})
 	}
 
@@ -380,17 +414,28 @@ func writeWSDashboardJSON(out io.Writer, result wsDashboardResult) int {
 		"warnings":   result.Warnings,
 	}
 	if result.Detail != nil {
-		repos := make([]map[string]any, 0, len(result.Detail.perRepo))
-		for _, r := range result.Detail.perRepo {
+		repos := make([]map[string]any, 0, len(result.Detail.Repos))
+		for _, r := range result.Detail.Repos {
 			repos = append(repos, map[string]any{
 				"alias": r.alias,
 				"risk":  string(r.state),
 			})
 		}
+		activeItems := map[string]any{
+			"doing":   wsDashboardJSONTaskItems(result.Detail.Tasks.ItemsByStatus(wstask.StatusDoing)),
+			"blocked": wsDashboardJSONTaskItems(result.Detail.Tasks.ItemsByStatus(wstask.StatusBlocked)),
+		}
 		payload["detail"] = map[string]any{
-			"workspace_id": result.Detail.id,
-			"risk":         string(result.Detail.risk),
+			"workspace_id": result.Detail.WorkspaceID,
+			"risk":         string(result.Detail.Risk),
 			"repos":        repos,
+			"tasks": map[string]any{
+				"summary":      string(result.Detail.Tasks.Summary),
+				"warning":      result.Detail.Tasks.Warning,
+				"task_state":   string(result.Detail.Tasks.TaskState),
+				"counts":       wsDashboardJSONTaskCounts(result.Detail.Tasks),
+				"active_items": activeItems,
+			},
 		}
 		if result.DetailCover != nil {
 			payload["detail"].(map[string]any)["coverage"] = map[string]any{
@@ -450,7 +495,7 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 	} else {
 		for _, row := range result.Workspaces {
 			line := fmt.Sprintf(
-				"%s%s %s: %s  %s:%s  %s:%d",
+				"%s%s %s: %s  %s:%s  %s:%d  %s",
 				uiIndent,
 				styleMuted("•", useColor),
 				row.ID,
@@ -459,6 +504,7 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 				renderDashboardWorkspaceRisk(row.Risk, useColor),
 				styleMuted("repos", useColor),
 				row.RepoCount,
+				styleMuted(row.Tasks.SummaryText(), useColor),
 			)
 			line += fmt.Sprintf("  %s:%s", styleMuted("coverage", useColor), renderDashboardCoverage(row.Coverage, useColor))
 			rows = append(rows, line)
@@ -470,17 +516,40 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 	})
 
 	if result.Detail != nil {
-		lines := make([]string, 0, len(result.Detail.perRepo)+4)
-		lines = append(lines, fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleAccent("workspace", useColor), result.Detail.id))
-		lines = append(lines, fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("risk", useColor), renderDashboardWorkspaceRisk(result.Detail.risk, useColor)))
+		lines := make([]string, 0, len(result.Detail.Repos)+2)
+		lines = append(lines, fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleAccent("workspace", useColor), result.Detail.WorkspaceID))
+		lines = append(lines, fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("risk", useColor), renderDashboardWorkspaceRisk(result.Detail.Risk, useColor)))
 		if result.DetailCover != nil {
 			lines = append(lines, fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("coverage", useColor), renderDashboardCoverage(result.DetailCover.Coverage, useColor)))
 			lines = append(lines, fmt.Sprintf("%s%s %s: notes=%d artifacts=%d", uiIndent, styleMuted("•", useColor), styleMuted("coverage_counts", useColor), result.DetailCover.NotesCount, result.DetailCover.ArtifactsCount))
 		}
-		for _, repo := range result.Detail.perRepo {
+		for _, repo := range result.Detail.Repos {
 			lines = append(lines, fmt.Sprintf("%s%s %s (%s)", uiIndent+uiIndent, styleMuted("-", useColor), repo.alias, renderRepoRiskState(repo.state, useColor)))
 		}
 		printSection(out, styleBold("Detail:", useColor), lines, sectionRenderOptions{
+			blankAfterHeading: true,
+			trailingBlank:     true,
+		})
+
+		taskLines := []string{fmt.Sprintf("%s%s", uiIndent, result.Detail.Tasks.SummaryText())}
+		doing := result.Detail.Tasks.ItemsByStatus(wstask.StatusDoing)
+		if len(doing) > 0 {
+			taskLines = append(taskLines, fmt.Sprintf("%sDoing:", uiIndent))
+			for _, item := range doing {
+				taskLines = append(taskLines, fmt.Sprintf("%s%s%s: %s", uiIndent+uiIndent, styleMuted("-", useColor), item.ID, item.Title))
+			}
+		}
+		blocked := result.Detail.Tasks.ItemsByStatus(wstask.StatusBlocked)
+		if len(blocked) > 0 {
+			taskLines = append(taskLines, fmt.Sprintf("%sBlocked:", uiIndent))
+			for _, item := range blocked {
+				taskLines = append(taskLines, fmt.Sprintf("%s%s%s: %s", uiIndent+uiIndent, styleMuted("-", useColor), item.ID, item.Title))
+			}
+		}
+		for i := range taskLines {
+			taskLines[i] = styleMuted(taskLines[i], useColor)
+		}
+		printSection(out, styleBold("Tasks:", useColor), taskLines, sectionRenderOptions{
 			blankAfterHeading: true,
 			trailingBlank:     true,
 		})
@@ -496,6 +565,31 @@ func printWSDashboardHuman(out io.Writer, result wsDashboardResult, useColor boo
 			trailingBlank:     true,
 		})
 	}
+}
+
+func wsDashboardJSONTaskCounts(tasks wstask.Overview) map[string]any {
+	if tasks.Summary != wstask.SummaryCounts {
+		return nil
+	}
+	return map[string]any{
+		"total":   tasks.Counts.Total,
+		"doing":   tasks.Counts.Doing,
+		"blocked": tasks.Counts.Blocked,
+		"todo":    tasks.Counts.Todo,
+		"done":    tasks.Counts.Done,
+	}
+}
+
+func wsDashboardJSONTaskItems(items []wstask.Item) []map[string]any {
+	out := make([]map[string]any, 0, len(items))
+	for _, item := range items {
+		out = append(out, map[string]any{
+			"id":     item.ID,
+			"title":  item.Title,
+			"status": string(item.Status),
+		})
+	}
+	return out
 }
 
 func renderDashboardWorkspaceRisk(risk workspacerisk.WorkspaceRisk, useColor bool) string {

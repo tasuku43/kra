@@ -67,6 +67,13 @@ type Notification struct {
 	CreatedAt   int64
 }
 
+type StatusEntry struct {
+	Key   string
+	Value string
+	Icon  string
+	Color string
+}
+
 func NewClient() *Client {
 	return &Client{Runner: execRunner{}}
 }
@@ -267,6 +274,49 @@ func (c *Client) SetStatus(ctx context.Context, workspace string, label string, 
 	return nil
 }
 
+func (c *Client) ClearStatus(ctx context.Context, workspace string, label string) error {
+	workspace = strings.TrimSpace(workspace)
+	label = strings.TrimSpace(label)
+	if workspace == "" {
+		return fmt.Errorf("workspace is required")
+	}
+	if label == "" {
+		return fmt.Errorf("label is required")
+	}
+	_, stderr, err := c.run(ctx, false, false, "clear-status", label, "--workspace", workspace)
+	if err != nil {
+		return commandError("clear-status", stderr, err)
+	}
+	return nil
+}
+
+func (c *Client) ListStatus(ctx context.Context, workspace string) ([]StatusEntry, error) {
+	workspace = strings.TrimSpace(workspace)
+	if workspace == "" {
+		return nil, fmt.Errorf("workspace is required")
+	}
+	stdout, stderr, err := c.run(ctx, false, false, "list-status", "--workspace", workspace)
+	if err != nil {
+		return nil, commandError("list-status", stderr, err)
+	}
+	trimmed := strings.TrimSpace(string(stdout))
+	if trimmed == "" || trimmed == "No status entries" {
+		return nil, nil
+	}
+	lines := strings.Split(trimmed, "\n")
+	entries := make([]StatusEntry, 0, len(lines))
+	for _, line := range lines {
+		entry, ok, perr := parseStatusEntryLine(line)
+		if perr != nil {
+			return nil, perr
+		}
+		if ok {
+			entries = append(entries, entry)
+		}
+	}
+	return entries, nil
+}
+
 func (c *Client) Log(ctx context.Context, message string, level string, source string, workspace string) error {
 	message = strings.TrimSpace(message)
 	level = strings.TrimSpace(level)
@@ -431,6 +481,46 @@ func (c *Client) BrowserStateLoad(ctx context.Context, workspace string, surface
 		return commandError("browser state load", stderr, err)
 	}
 	return nil
+}
+
+func parseStatusEntryLine(line string) (StatusEntry, bool, error) {
+	line = strings.TrimSpace(line)
+	if line == "" {
+		return StatusEntry{}, false, nil
+	}
+	key, rest, ok := strings.Cut(line, "=")
+	if !ok {
+		return StatusEntry{}, false, fmt.Errorf("parse list-status line: invalid entry: %q", line)
+	}
+	key = strings.TrimSpace(key)
+	rest = strings.TrimSpace(rest)
+	if key == "" || rest == "" {
+		return StatusEntry{}, false, fmt.Errorf("parse list-status line: invalid entry: %q", line)
+	}
+
+	entry := StatusEntry{Key: key}
+	cut := len(rest)
+	for _, marker := range []string{" icon=", " color="} {
+		if idx := strings.Index(rest, marker); idx >= 0 && idx < cut {
+			cut = idx
+		}
+	}
+	entry.Value = strings.TrimSpace(rest[:cut])
+	if entry.Value == "" {
+		return StatusEntry{}, false, fmt.Errorf("parse list-status line: invalid entry: %q", line)
+	}
+	if cut < len(rest) {
+		tokens := strings.Fields(strings.TrimSpace(rest[cut:]))
+		for _, token := range tokens {
+			switch {
+			case strings.HasPrefix(token, "icon="):
+				entry.Icon = strings.TrimSpace(strings.TrimPrefix(token, "icon="))
+			case strings.HasPrefix(token, "color="):
+				entry.Color = strings.TrimSpace(strings.TrimPrefix(token, "color="))
+			}
+		}
+	}
+	return entry, true, nil
 }
 
 func (c *Client) ReadScreen(ctx context.Context, workspace string, surface string, lines int, scrollback bool) (string, error) {

@@ -204,6 +204,8 @@ func (c *CLI) printWSUsage(w io.Writer) {
   kra ws close [--id <id> | --current | --select | --multi-select] [action-args...]
   kra ws reopen [--id <id> | --current | --select] [action-args...]
   kra ws purge [--id <id> | --current | --select] [action-args...]
+  kra ws task [--id <id> | --current | --select]
+  kra ws task <subcommand> [args]
   kra ws log [--id <id> | --current] [--] <message>
   kra ws list|ls [--archived] [--tree] [--format human|tsv|json]
   kra ws dashboard [--archived] [--workspace <id>] [--format human|json]
@@ -272,6 +274,54 @@ func (c *CLI) printWSDashboardUsage(w io.Writer) {
   kra ws dashboard [--archived] [--workspace <id>] [--format human|json]
 
 Show operational dashboard for workspaces.
+`)
+}
+
+func (c *CLI) printWSTaskUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws task [--id <workspace-id> | --current | --select]
+  kra ws task <subcommand> [args]
+
+Subcommands:
+  (no subcommand)   Launch task status picker for one workspace
+  list|ls          List structured workspace tasks
+  add              Add one structured task
+  status           Set one task status explicitly
+  sync             Sync task declaration into cmux sidebar
+  help             Show this help
+`)
+}
+
+func (c *CLI) printWSTaskListUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws task list [--id <workspace-id>] [--current] [--select] [--format human|json]
+  kra ws task ls [--id <workspace-id>] [--current] [--select] [--format human|json]
+
+List structured workspace-local tasks.
+`)
+}
+
+func (c *CLI) printWSTaskAddUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws task add [--id <workspace-id>] [--current] [--select] --title "<text>" [--description "<text>"] [--format human|json]
+
+Add one structured workspace-local task.
+`)
+}
+
+func (c *CLI) printWSTaskStatusUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws task status [--id <workspace-id>] [--current] [--select] <task-id> <todo|doing|blocked|done> [--format human|json]
+
+Set one structured task to the requested status and then sync cmux task pills.
+`)
+}
+
+func (c *CLI) printWSTaskSyncUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws task sync [--id <workspace-id>] [--current] [--select] [--format human|json]
+
+Reconcile workspace task declaration into cmux sidebar state.
 `)
 }
 
