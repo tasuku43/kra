@@ -1,6 +1,6 @@
 ---
 title: "Workspace task examples"
-status: planned
+status: implemented
 ---
 
 # Workspace task examples
@@ -66,6 +66,7 @@ When an AI agent edits `tasks.md` directly:
 - preserve non-target task blocks unless intentionally changing them
 - keep one required `status:` line per structured task
 - write new tasks as new `### TASK-<nnn> <title>` blocks
+- when cmux sidebar state matters, run `kra ws task sync` after direct edits
 
 ## Invalid examples
 

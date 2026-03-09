@@ -1,6 +1,6 @@
 ---
 title: "`kra ws task`"
-status: planned
+status: implemented
 ---
 
 # `kra ws task`
@@ -12,11 +12,11 @@ editor.
 
 ## Namespace
 
+- `kra ws task`
 - `kra ws task list`
 - `kra ws task add`
-- `kra ws task start`
-- `kra ws task block`
-- `kra ws task done`
+- `kra ws task status`
+- `kra ws task sync`
 
 ## Source of truth
 
@@ -34,8 +34,13 @@ editor.
   - `--current`
   - `--select`
 - Commands must not auto-resolve workspace from current path unless `--current` is explicitly set.
+- `kra ws task` without a subcommand is a human launcher:
+  - resolve one active workspace target
+  - select one task
+  - select one allowed next status
+  - update the task and exit
 - `list` is read-only and may target both active and archived workspaces.
-- `add`, `start`, `block`, and `done` are mutating commands and are valid only for active workspaces.
+- `add`, `status`, `sync`, and the launcher are valid only for active workspaces.
 
 ## Mutation safety
 
@@ -47,6 +52,32 @@ editor.
 - Any command that encounters duplicate structured task IDs must fail closed.
 - Any command that encounters an invalid structured task-like block that starts with `### TASK-...`
   must fail closed.
+- `status` and the launcher update `tasks.md` first, then invoke `sync`.
+
+## CMUX sync projection
+
+- `tasks.md` remains the single source of truth.
+- `kra ws task sync` reconciles the current declaration into cmux sidebar status pills.
+- `sync` manages only the `task:` namespace in cmux status entries.
+- Projection rules:
+  - `todo`, `doing`, `blocked`, and `done` are projected
+- Projected cmux status shape:
+  - key: `task:TASK-001`
+  - icon: `checklist`
+  - value prefixes:
+    - `todo -> ○ TASK-001 Draft docs`
+    - `doing -> ● TASK-001 Build parser`
+    - `blocked -> ▲ TASK-001 Waiting review`
+    - `done -> ✔ TASK-001 Shipped`
+- Suggested color semantics:
+  - `todo -> default text / white`
+  - `doing -> info`
+  - `blocked -> warning`
+  - `done -> muted`
+- `sync` is a full reconcile:
+  - desired task pills are upserted
+  - stale `task:` pills not present in `tasks.md` are cleared
+- `status` and the launcher reuse the same sync behavior after mutating `tasks.md`.
 
 ## Phase 1 non-goals
 
@@ -54,5 +85,4 @@ editor.
 - task deletion
 - task reordering
 - task rename/edit
-- reverting task state back to `todo`
 - task-specific done criteria

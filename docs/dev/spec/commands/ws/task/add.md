@@ -1,6 +1,6 @@
 ---
 title: "`kra ws task add`"
-status: planned
+status: implemented
 ---
 
 # `kra ws task add [--id <workspace-id>] [--current] [--select] --title "<text>" [--description "<text>"] [--format human|json]`

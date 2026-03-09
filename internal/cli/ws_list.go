@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tasuku43/kra/internal/app/wstask"
 	"github.com/tasuku43/kra/internal/infra/gitutil"
 	"github.com/tasuku43/kra/internal/infra/paths"
 	"github.com/tasuku43/kra/internal/infra/statestore"
@@ -31,6 +32,7 @@ type wsListRow struct {
 	Title     string
 	WorkState workspaceWorkState
 	Repos     []statestore.WorkspaceRepo
+	Tasks     wstask.Overview
 }
 
 type wsListRowsResult struct {
@@ -160,6 +162,23 @@ func (c *CLI) runWSList(args []string) int {
 		return exitError
 	}
 	debugPhasef(c.debugf, "ws-list", "build_rows", rowsStart, "scope=%s count=%d", opts.scope, len(listResult.Rows))
+	taskStart := time.Now()
+	if err := hydrateWSListTaskOverviews(root, opts.scope, listResult.Rows); err != nil {
+		if opts.format == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "ws.list",
+				Error: &cliJSONError{
+					Code:    "internal_error",
+					Message: fmt.Sprintf("load workspace tasks: %v", err),
+				},
+			})
+			return exitError
+		}
+		fmt.Fprintf(c.Err, "load workspace tasks: %v\n", err)
+		return exitError
+	}
+	debugPhasef(c.debugf, "ws-list", "tasks", taskStart, "scope=%s count=%d", opts.scope, len(listResult.Rows))
 	if usedFSFallback {
 		c.debugf("ws list fallback to filesystem-only rows (state db unavailable)")
 	}
@@ -338,6 +357,18 @@ func listRowsFromFilesystemObservedResult(ctx context.Context, root string, scop
 	}, nil
 }
 
+func hydrateWSListTaskOverviews(root string, scope string, rows []wsListRow) error {
+	svc := newWorkspaceTaskService()
+	for i := range rows {
+		result, err := svc.Overview(root, rows[i].ID, scope)
+		if err != nil {
+			return err
+		}
+		rows[i].Tasks = result.Overview
+	}
+	return nil
+}
+
 func countWorkspaceReposFromFilesystem(root string, scope string, workspaceID string, meta workspaceMetaFile) (int, error) {
 	wsBase := filepath.Join(root, "workspaces", workspaceID)
 	if scope == "archived" {
@@ -483,16 +514,38 @@ func parseWSListOptions(args []string) (wsListOptions, error) {
 }
 
 func printWSListTSV(out io.Writer, rows []wsListRow) {
-	fmt.Fprintln(out, "id\tstatus\tupdated_at\trepo_count\ttitle")
+	fmt.Fprintln(out, "id\tstatus\tupdated_at\trepo_count\ttitle\ttask_summary\ttask_total\ttask_doing\ttask_blocked\ttask_todo\ttask_done")
 	for _, row := range rows {
+		taskTotal := ""
+		taskDoing := ""
+		taskBlocked := ""
+		taskTodo := ""
+		taskDone := ""
+		taskSummary := string(row.Tasks.Summary)
+		if taskSummary == "" {
+			taskSummary = string(wstask.SummaryEmpty)
+		}
+		if row.Tasks.Summary == wstask.SummaryCounts {
+			taskTotal = strconv.Itoa(row.Tasks.Counts.Total)
+			taskDoing = strconv.Itoa(row.Tasks.Counts.Doing)
+			taskBlocked = strconv.Itoa(row.Tasks.Counts.Blocked)
+			taskTodo = strconv.Itoa(row.Tasks.Counts.Todo)
+			taskDone = strconv.Itoa(row.Tasks.Counts.Done)
+		}
 		fmt.Fprintf(
 			out,
-			"%s\t%s\t%s\t%d\t%s\n",
+			"%s\t%s\t%s\t%d\t%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			row.ID,
 			row.Status,
 			time.Unix(row.UpdatedAt, 0).UTC().Format(time.RFC3339),
 			row.RepoCount,
 			row.Title,
+			taskSummary,
+			taskTotal,
+			taskDoing,
+			taskBlocked,
+			taskTodo,
+			taskDone,
 		)
 	}
 }
@@ -520,6 +573,7 @@ func printWSListJSON(out io.Writer, rows []wsListRow, warnings []string, scope s
 			}
 			item["repos"] = repos
 		}
+		item["tasks"] = wsListJSONTaskSummary(row.Tasks)
 		items = append(items, item)
 	}
 	_ = writeCLIJSON(out, cliJSONResponse{
@@ -546,6 +600,7 @@ func printWSListHuman(out io.Writer, rows []wsListRow, warnings []string, scope 
 		maxCols := listTerminalWidth()
 		for _, row := range rows {
 			body = append(body, renderWSListSummaryRow(row, maxCols, useColor))
+			body = append(body, renderWSListTaskSummaryLine(row.Tasks, maxCols, useColor))
 
 			if !tree {
 				continue
@@ -638,6 +693,15 @@ func renderWSListSummaryRow(row wsListRow, maxCols int, useColor bool) string {
 	return truncateDisplay(line, maxCols)
 }
 
+func renderWSListTaskSummaryLine(tasks wstask.Overview, maxCols int, useColor bool) string {
+	line := uiIndent + uiIndent + tasks.SummaryText()
+	line = truncateDisplay(line, maxCols)
+	if useColor {
+		line = styleMuted(line, useColor)
+	}
+	return line
+}
+
 func renderWSListTreeLines(repos []statestore.WorkspaceRepo, maxCols int, useColor bool) []string {
 	repoIndent := uiIndent + uiIndent
 	if len(repos) == 0 {
@@ -692,4 +756,30 @@ func listTerminalWidth() int {
 		return fallback
 	}
 	return v
+}
+
+func wsListJSONTaskSummary(tasks wstask.Overview) map[string]any {
+	summary := tasks.Summary
+	if summary == "" {
+		summary = wstask.SummaryEmpty
+	}
+	out := map[string]any{
+		"summary": string(summary),
+	}
+	if summary != wstask.SummaryInvalid {
+		out["task_state"] = string(tasks.TaskState)
+	}
+	if summary == wstask.SummaryCounts {
+		out["counts"] = map[string]any{
+			"total":   tasks.Counts.Total,
+			"doing":   tasks.Counts.Doing,
+			"blocked": tasks.Counts.Blocked,
+			"todo":    tasks.Counts.Todo,
+			"done":    tasks.Counts.Done,
+		}
+	}
+	if strings.TrimSpace(tasks.Warning) != "" {
+		out["warning"] = tasks.Warning
+	}
+	return out
 }

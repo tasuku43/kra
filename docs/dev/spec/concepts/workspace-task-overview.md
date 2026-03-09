@@ -1,6 +1,6 @@
 ---
 title: "Workspace task overview integration"
-status: planned
+status: implemented
 ---
 
 # Workspace task overview integration

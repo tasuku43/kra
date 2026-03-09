@@ -303,7 +303,7 @@ func TestCLI_WS_List_TSVUsesCompactColumns(t *testing.T) {
 		t.Fatalf("ws list --format tsv exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
 	got := out.String()
-	if !strings.HasPrefix(got, "id\tstatus\tupdated_at\trepo_count\ttitle\n") {
+	if !strings.HasPrefix(got, "id\tstatus\tupdated_at\trepo_count\ttitle\ttask_summary\ttask_total\ttask_doing\ttask_blocked\ttask_todo\ttask_done\n") {
 		t.Fatalf("tsv header mismatch: %q", got)
 	}
 	if strings.Contains(got, "\trisk\t") || strings.Contains(got, "\twork_state\t") {

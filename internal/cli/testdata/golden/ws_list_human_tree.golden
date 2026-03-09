@@ -1,8 +1,10 @@
 Workspaces(active):
 
   • DEMO-3943: Audit current manifest structure
+    tasks: empty
     - kra  branch:main  state:tracked
     - infra  branch:develop  state:missing
   • TEST-002: (no title)
+    tasks: empty
     (no repos)
 

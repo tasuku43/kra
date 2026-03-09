@@ -1,6 +1,6 @@
 ---
 title: "Workspace task contract"
-status: planned
+status: implemented
 ---
 
 # Workspace task contract
@@ -24,6 +24,7 @@ Define one workspace-local, AI-editable structured task contract that remains sa
 - AI agents and humans may read and write `tasks.md` directly.
 - `kra` is not the sole editor for task data.
 - `kra` defines the minimum contract, parses compliant task blocks, and writes a canonical form.
+- `tasks.md` is the single source of truth even when cmux task pills are shown.
 - Arbitrary freeform Markdown may coexist with structured tasks in the same file.
 - `kra` must ignore freeform content outside the structured task section.
 
@@ -62,6 +63,22 @@ Define one workspace-local, AI-editable structured task contract that remains sa
     task block or inserting a new task block
 - `kra` commands must not require tasks to have been created through `kra`.
 
+## Projection policy
+
+- cmux task pills are a projection of `tasks.md`, not an independent state store.
+- `kra ws task sync` reads `tasks.md` and reconciles the cmux `task:` namespace.
+- Direct `tasks.md` edits remain valid as long as the contract is preserved; users or AI agents can
+  run `kra ws task sync` afterward to refresh cmux sidebar state.
+- All task statuses may be projected to cmux in phase 1.
+- `todo` should remain visually quieter than `doing` / `blocked`, but it is still projected so the
+  remaining backlog is visible at a glance.
+- Reconcile is declarative and complete for the `task:` namespace:
+  - all existing `task:` entries are cleared first
+  - tasks present in `tasks.md` are projected again in file order
+  - `task:` entries absent from `tasks.md` are cleared
+  - a valid empty `## Tasks` section therefore clears all existing `task:*` pills
+  - an invalid task-like block fails closed instead of clearing pills opportunistically
+
 ## Task model
 
 - Task fields in phase 1:
@@ -72,6 +89,15 @@ Define one workspace-local, AI-editable structured task contract that remains sa
 - Tasks are flat. Nested tasks and subtasks are out of scope.
 - Task-level done criteria are out of scope.
 - File order is author-controlled and preserved by `kra`.
+
+## Task transitions
+
+- Allowed transitions are:
+  - `todo -> doing|blocked|done`
+  - `doing -> todo|blocked|done`
+  - `blocked -> todo|doing|done`
+  - `done -> todo`
+- Same-state updates are idempotent.
 
 ## Task state derivation
 

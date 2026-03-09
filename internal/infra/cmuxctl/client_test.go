@@ -227,6 +227,52 @@ func TestClientSetStatus_BuildsCommandArgs(t *testing.T) {
 	}
 }
 
+func TestClientClearStatus_BuildsCommandArgs(t *testing.T) {
+	f := &fakeRunner{stdout: []byte("OK\n")}
+	c := &Client{Runner: f}
+
+	if err := c.ClearStatus(context.Background(), "ws-1", "task:TASK-001"); err != nil {
+		t.Fatalf("ClearStatus() error: %v", err)
+	}
+	wantArgs := []string{"clear-status", "task:TASK-001", "--workspace", "ws-1"}
+	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
+		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
+	}
+}
+
+func TestClientListStatus_ParsesPlainOutput(t *testing.T) {
+	f := &fakeRunner{stdout: []byte("task:TASK-001=● TASK-001 Build parser icon=checklist color=#0ea5e9\n")}
+	c := &Client{Runner: f}
+
+	got, err := c.ListStatus(context.Background(), "ws-1")
+	if err != nil {
+		t.Fatalf("ListStatus() error: %v", err)
+	}
+	wantArgs := []string{"list-status", "--workspace", "ws-1"}
+	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
+		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
+	}
+	if len(got) != 1 {
+		t.Fatalf("entries = %+v, want 1 entry", got)
+	}
+	if got[0].Key != "task:TASK-001" || got[0].Value != "● TASK-001 Build parser" || got[0].Icon != "checklist" || got[0].Color != "#0ea5e9" {
+		t.Fatalf("entry = %+v", got[0])
+	}
+}
+
+func TestClientListStatus_NoEntriesReturnsEmpty(t *testing.T) {
+	f := &fakeRunner{stdout: []byte("No status entries\n")}
+	c := &Client{Runner: f}
+
+	got, err := c.ListStatus(context.Background(), "ws-1")
+	if err != nil {
+		t.Fatalf("ListStatus() error: %v", err)
+	}
+	if len(got) != 0 {
+		t.Fatalf("entries = %+v, want empty", got)
+	}
+}
+
 func TestClientLog_RequiresMessage(t *testing.T) {
 	c := &Client{}
 	if err := c.Log(context.Background(), "", "", "", ""); err == nil {

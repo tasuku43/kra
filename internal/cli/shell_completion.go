@@ -54,6 +54,7 @@ var kraCompletionSubcommands = map[string][]string{
 		"close",
 		"reopen",
 		"purge",
+		"task",
 		"log",
 		"help",
 	},
@@ -62,11 +63,13 @@ var kraCompletionSubcommands = map[string][]string{
 var kraCompletionPathSubcommandOrder = []string{
 	"repo preset",
 	"ws import",
+	"ws task",
 }
 
 var kraCompletionPathSubcommands = map[string][]string{
 	"repo preset": {"add", "rm", "remove", "list", "show", "help"},
 	"ws import":   {"jira", "help"},
+	"ws task":     {"list", "ls", "add", "status", "sync", "help"},
 }
 
 var kraCompletionCommandFlagOrder = []string{
@@ -111,6 +114,12 @@ var kraCompletionPathFlagOrder = []string{
 	"ws create",
 	"ws import",
 	"ws import jira",
+	"ws task",
+	"ws task list",
+	"ws task ls",
+	"ws task add",
+	"ws task status",
+	"ws task sync",
 	"ws list",
 	"ws ls",
 	"ws dashboard",
@@ -153,6 +162,12 @@ var kraCompletionPathFlags = map[string][]string{
 	"ws create":          {"--no-prompt", "--template", "--format", "--id", "--title", "--jira", "--help", "-h"},
 	"ws import":          {"--help", "-h"},
 	"ws import jira":     {"--sprint", "--space", "--project", "--jql", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
+	"ws task":            {"--id", "--current", "--select", "--help", "-h"},
+	"ws task list":       {"--id", "--current", "--select", "--format", "--help", "-h"},
+	"ws task ls":         {"--id", "--current", "--select", "--format", "--help", "-h"},
+	"ws task add":        {"--id", "--current", "--select", "--title", "--description", "--format", "--help", "-h"},
+	"ws task status":     {"--id", "--current", "--select", "--format", "--help", "-h"},
+	"ws task sync":       {"--id", "--current", "--select", "--format", "--help", "-h"},
 	"ws list":            {"--archived", "--tree", "--format", "--help", "-h"},
 	"ws ls":              {"--archived", "--tree", "--format", "--help", "-h"},
 	"ws dashboard":       {"--archived", "--workspace", "--format", "--help", "-h"},

@@ -1,6 +1,6 @@
 ---
 title: "`kra ws list` task summary extension"
-status: planned
+status: implemented
 ---
 
 # `kra ws list` task summary extension
