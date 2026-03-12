@@ -78,6 +78,7 @@ The journal file is removed after successful completion.
 `doctor` should classify an unfinished journal as one of:
 
 - `ws_close_resume_ready`
+- `ws_close_reset_ready`
 - `ws_close_manual_required`
 
 `doctor --fix` may resume only when the journal and filesystem state agree on a safe post-rename recovery path.
@@ -86,6 +87,9 @@ The journal file is removed after successful completion.
   - skip directly to finalization when `commit_enabled=false`
 - phase `archive_committed`:
   - resume finalization only
+- phase `risk_checked`:
+  - clear the journal only when filesystem state still matches a pre-rename active workspace
+  - this is for retries after pre-irreversible failures (for example pre-close snapshot/allowlist failures)
 
 ## Non-goals
 

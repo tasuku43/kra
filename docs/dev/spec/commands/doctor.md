@@ -33,6 +33,7 @@ Provide a non-destructive health report for current `KRA_ROOT` to detect operati
 - Detect unfinished lifecycle journals under `KRA_ROOT/.kra/state/operations/ws-close/`
   and classify them as:
   - `ws_close_resume_ready`
+  - `ws_close_reset_ready`
   - `ws_close_manual_required`
 - Detect older half-closed states without journals when filesystem/Git state strongly suggests
   `close-pre` completed but archive finalization did not.

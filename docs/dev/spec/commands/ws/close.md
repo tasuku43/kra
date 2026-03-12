@@ -57,6 +57,8 @@ This flow must be recoverable when interrupted after irreversible filesystem pha
 - Create/update `KRA_ROOT/.kra/state/operations/ws-close/<id>.json`.
 - Journal schema is defined in `docs/dev/spec/concepts/lifecycle-journal.md`.
 - Persist phase `risk_checked` after safety evaluation and before irreversible work begins.
+- If pre-close snapshot fails before any irreversible workspace mutation, remove the just-created journal so
+  a subsequent `ws close` retry is not blocked.
 
 4) Commit pre-close snapshot (default; skipped by `--no-commit`)
 

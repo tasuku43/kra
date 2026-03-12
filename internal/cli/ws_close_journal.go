@@ -223,6 +223,46 @@ func canResumeWSCloseLifecycleJournal(root string, journal wsCloseLifecycleJourn
 	return true, ""
 }
 
+func canResetWSCloseLifecycleJournal(root string, journal wsCloseLifecycleJournal) (bool, string) {
+	if journal.Phase != wsClosePhaseRiskChecked {
+		return false, fmt.Sprintf("phase %s is not resettable", journal.Phase)
+	}
+	if !journal.WorkspacePathPresent || journal.ArchivePathPresent {
+		return false, "journal path state does not describe a pre-rename workspace state"
+	}
+
+	wsPath := filepath.Join(root, "workspaces", journal.WorkspaceID)
+	fi, err := os.Stat(wsPath)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return false, "workspace path is missing"
+		}
+		return false, fmt.Sprintf("stat workspace path: %v", err)
+	}
+	if !fi.IsDir() {
+		return false, "workspace path is not a directory"
+	}
+
+	archivePath := filepath.Join(root, "archive", journal.WorkspaceID)
+	if fi, err := os.Stat(archivePath); err == nil {
+		if fi.IsDir() {
+			return false, "archive path already exists"
+		}
+		return false, "archive path is not a directory"
+	} else if !os.IsNotExist(err) {
+		return false, fmt.Sprintf("stat archive path: %v", err)
+	}
+
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		return false, fmt.Sprintf("load active workspace meta: %v", err)
+	}
+	if strings.TrimSpace(meta.Workspace.Status) != "active" {
+		return false, fmt.Sprintf("active workspace meta status=%q", strings.TrimSpace(meta.Workspace.Status))
+	}
+	return true, ""
+}
+
 func resumeWSCloseLifecycleJournal(ctx context.Context, root string, journal wsCloseLifecycleJournal, debugf func(string, ...any)) error {
 	if ok, reason := canResumeWSCloseLifecycleJournal(root, journal); !ok {
 		return fmt.Errorf("ws close journal requires manual recovery: %s", reason)

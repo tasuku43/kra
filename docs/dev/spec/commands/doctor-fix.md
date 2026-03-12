@@ -26,7 +26,7 @@ This keeps recovery explicit and auditable while reducing operational MTTR.
 - create missing `.kra.meta.json.baseline` for active workspaces when deterministic from current filesystem state
 - normalize missing `workspace.work_state` when canonical metadata can be updated without ambiguity
 - append missing default `.gitignore` patterns for KRA-managed runtime noise
-- resume safe post-rename `ws close` operations from lifecycle journals
+- clear resettable pre-rename `ws close` journals and resume safe post-rename `ws close` operations from lifecycle journals
 
 ## Inputs
 
@@ -66,6 +66,8 @@ This keeps recovery explicit and auditable while reducing operational MTTR.
 - Baseline creation for missing canonical data must use current local filesystem/worktree state only.
 - Close recovery is allowed only when lifecycle journal state and filesystem state agree on a deterministic
   archive-finalization path.
+- Pre-rename journal clearing is allowed only for `risk_checked` journals whose filesystem state still matches
+  the original active workspace (workspace path present, archive path absent, active metadata intact).
 
 ## JSON contract
 

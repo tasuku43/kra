@@ -28,6 +28,7 @@ type cmuxCloseClient interface {
 }
 
 var newCMUXCloseClient = func() cmuxCloseClient { return cmuxctl.NewClient() }
+var commitClosePreSnapshotFn = commitClosePreSnapshot
 
 func (c *CLI) runWSClose(args []string) int {
 	directWorkspaceID := ""
@@ -552,8 +553,9 @@ func (c *CLI) closeWorkspace(ctx context.Context, root string, workspaceID strin
 	}
 	trace := closeCommitTrace{CommitEnabled: doCommit}
 	if doCommit {
-		preSHA, err := commitClosePreSnapshot(ctx, root, workspaceID)
+		preSHA, err := commitClosePreSnapshotFn(ctx, root, workspaceID)
 		if err != nil {
+			_ = removeWSCloseLifecycleJournal(root, workspaceID)
 			return closeCommitTrace{}, fmt.Errorf("commit close pre-snapshot: %w", err)
 		}
 		trace.PreCommitSHA = preSHA
@@ -1301,6 +1303,30 @@ func ensureNoStagedChanges(ctx context.Context, root string) error {
 	return nil
 }
 
+func gitDiffCachedNameOnlyPaths(ctx context.Context, root string, pathspecs ...string) ([]string, error) {
+	args := []string{"diff", "--cached", "--name-only", "-z"}
+	if len(pathspecs) > 0 {
+		args = append(args, "--")
+		args = append(args, pathspecs...)
+	}
+	out, err := gitutil.Run(ctx, root, args...)
+	if err != nil {
+		return nil, err
+	}
+	if out == "" {
+		return nil, nil
+	}
+	paths := make([]string, 0, 8)
+	for _, entry := range strings.Split(out, "\x00") {
+		entry = filepath.Clean(filepath.FromSlash(entry))
+		if entry == "." || entry == "" {
+			continue
+		}
+		paths = append(paths, entry)
+	}
+	return paths, nil
+}
+
 func listWorkspaceNonRepoFiles(wsPath string) ([]string, error) {
 	files := make([]string, 0, 8)
 	reposDir := filepath.Join(wsPath, "repos")
@@ -1370,15 +1396,12 @@ func commitClosePreSnapshot(ctx context.Context, root string, workspaceID string
 		return "", err
 	}
 
-	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", workspacesArg)
+	staged, err := gitDiffCachedNameOnlyPaths(ctx, root, workspacesArg)
 	if err != nil {
 		resetClosePreStaging(ctx, root, workspacesArg)
 		return "", err
 	}
-
-	staged := strings.Fields(out)
 	for _, p := range staged {
-		p = filepath.Clean(filepath.FromSlash(p))
 		if !strings.HasPrefix(p, workspacesPrefix) {
 			resetClosePreStaging(ctx, root, workspacesArg)
 			return "", fmt.Errorf("unexpected staged path outside allowlist: %s", p)
@@ -1427,22 +1450,20 @@ func commitArchiveChange(ctx context.Context, root string, workspaceID string, e
 			return "", err
 		}
 	}
-	out, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", archiveArg, workspacesArg)
+	staged, err := gitDiffCachedNameOnlyPaths(ctx, root, archiveArg, workspacesArg)
 	if err != nil {
 		resetArchiveStaging(ctx, root, resetArgs...)
 		return "", err
 	}
-	workspacesOut, err := gitutil.Run(ctx, root, "diff", "--cached", "--name-only", "--", workspacesArg)
+	workspacesStaged, err := gitDiffCachedNameOnlyPaths(ctx, root, workspacesArg)
 	if err != nil {
 		resetArchiveStaging(ctx, root, resetArgs...)
 		return "", err
 	}
-	hasWorkspacesStage := strings.TrimSpace(workspacesOut) != ""
+	hasWorkspacesStage := len(workspacesStaged) > 0
 
-	staged := strings.Fields(out)
 	stagedSet := make(map[string]struct{}, len(staged))
 	for _, p := range staged {
-		p = filepath.Clean(filepath.FromSlash(p))
 		stagedSet[p] = struct{}{}
 	}
 
@@ -1467,7 +1488,6 @@ func commitArchiveChange(ctx context.Context, root string, workspaceID string, e
 		return "", fmt.Errorf("workspace contains files ignored by git; cannot archive commit: %s", rel)
 	}
 	for _, p := range staged {
-		p = filepath.Clean(filepath.FromSlash(p))
 		if strings.HasPrefix(p, archivePrefix) || strings.HasPrefix(p, workspacesPrefix) {
 			continue
 		}

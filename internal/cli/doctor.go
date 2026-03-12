@@ -467,6 +467,41 @@ func runDoctorFix(root string, mode string, report doctorReport) doctorFixResult
 			}
 			result.Actions[i].Status = "applied"
 			result.Summary.Applied++
+		case "clear_ws_close_journal":
+			workspaceID, err := workspaceIDFromWSCloseJournalTarget(root, result.Actions[i].Target)
+			if err != nil {
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			journal, err := loadWSCloseLifecycleJournal(root, workspaceID)
+			if err != nil {
+				if os.IsNotExist(err) {
+					result.Actions[i].Status = "skipped"
+					result.Actions[i].Reason = "already_missing"
+					result.Summary.Skipped++
+					continue
+				}
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			if ok, reason := canResetWSCloseLifecycleJournal(root, journal); !ok {
+				result.Actions[i].Status = "skipped"
+				result.Actions[i].Reason = "manual_required: " + reason
+				result.Summary.Skipped++
+				continue
+			}
+			if err := removeWSCloseLifecycleJournal(root, workspaceID); err != nil {
+				result.Actions[i].Status = "failed"
+				result.Actions[i].Reason = err.Error()
+				result.Summary.Failed++
+				continue
+			}
+			result.Actions[i].Status = "applied"
+			result.Summary.Applied++
 		case "reconcile_root_gitignore":
 			changed, err := reconcileRootGitignore(root)
 			if err != nil {
@@ -537,6 +572,8 @@ func planDoctorFixActions(report doctorReport) []doctorFixAction {
 			kind = "normalize_workspace_work_state"
 		case "ws_close_resume_ready":
 			kind = "resume_ws_close"
+		case "ws_close_reset_ready":
+			kind = "clear_ws_close_journal"
 		default:
 			continue
 		}
@@ -1151,11 +1188,21 @@ func scanDoctorWSCloseRecovery(
 			addWarn("ws_close_journal_stale", target, "completed ws close journal should be removed")
 			continue
 		}
-		if ok, reason := canResumeWSCloseLifecycleJournal(root, journal); ok {
+		resumeOK, resumeReason := canResumeWSCloseLifecycleJournal(root, journal)
+		resetOK, resetReason := canResetWSCloseLifecycleJournal(root, journal)
+		if resumeOK {
 			addWarn("ws_close_resume_ready", target, fmt.Sprintf("workspace %s close can be resumed with doctor --fix --apply", journal.WorkspaceID))
-		} else {
-			addWarn("ws_close_manual_required", target, fmt.Sprintf("workspace %s close requires manual recovery: %s", journal.WorkspaceID, reason))
+			continue
 		}
+		if resetOK {
+			addWarn("ws_close_reset_ready", target, fmt.Sprintf("workspace %s close journal can be cleared with doctor --fix --apply", journal.WorkspaceID))
+			continue
+		}
+		reason := resumeReason
+		if journal.Phase == wsClosePhaseRiskChecked {
+			reason = resetReason
+		}
+		addWarn("ws_close_manual_required", target, fmt.Sprintf("workspace %s close requires manual recovery: %s", journal.WorkspaceID, reason))
 	}
 
 	scanDoctorLegacyHalfClosedWSClose(root, journalIDs, addWarn)

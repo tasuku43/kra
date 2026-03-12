@@ -210,6 +210,30 @@ func TestCLI_WS_Close_ArchivesWorkspaceRemovesWorktreesCommitsAndUpdatesDB(t *te
 
 }
 
+func TestCLI_WS_Close_AllowsNonASCIIWorkspaceFilesInLifecycleCommits(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
+	notePath := filepath.Join(env.Root, "workspaces", "WS1", "notes", "振り返り議事録.md")
+	if err := os.MkdirAll(filepath.Dir(notePath), 0o755); err != nil {
+		t.Fatalf("mkdir note dir: %v", err)
+	}
+	if err := os.WriteFile(notePath, []byte("# note\n"), 0o644); err != nil {
+		t.Fatalf("write note: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "close", "--commit", "--id", "WS1"})
+	if code != exitOK {
+		t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	if _, statErr := os.Stat(filepath.Join(env.Root, "archive", "WS1", "notes", "振り返り議事録.md")); statErr != nil {
+		t.Fatalf("archived non-ascii note should exist: %v", statErr)
+	}
+}
+
 func TestCLI_WS_Close_DirtyRepo_PromptsAndCanAbort(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
@@ -537,6 +561,35 @@ func TestCLI_WS_Close_PostRenameFailure_PreservesLifecycleJournal(t *testing.T) 
 	}
 	if journal.ArchiveCommitSHA != "" {
 		t.Fatalf("archive_commit_sha should be empty before resume, got %q", journal.ArchiveCommitSHA)
+	}
+}
+
+func TestCLI_WS_Close_PreCloseCommitFailure_ClearsLifecycleJournal(t *testing.T) {
+	testutil.RequireCommand(t, "git")
+
+	env, _ := prepareActiveWorkspaceForCloseTest(t)
+
+	prev := commitClosePreSnapshotFn
+	commitClosePreSnapshotFn = func(ctx context.Context, root string, workspaceID string) (string, error) {
+		return "", errors.New("boom pre-close")
+	}
+	t.Cleanup(func() { commitClosePreSnapshotFn = prev })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "close", "--commit", "--id", "WS1"})
+	if code != exitError {
+		t.Fatalf("ws close exit code = %d, want %d (stderr=%q)", code, exitError, err.String())
+	}
+	if _, statErr := os.Stat(wsCloseJournalPath(env.Root, "WS1")); !os.IsNotExist(statErr) {
+		t.Fatalf("ws close journal should be removed after pre-close failure, stat err=%v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(env.Root, "workspaces", "WS1")); statErr != nil {
+		t.Fatalf("workspace should remain active after pre-close failure: %v", statErr)
+	}
+	if _, statErr := os.Stat(filepath.Join(env.Root, "archive", "WS1")); !os.IsNotExist(statErr) {
+		t.Fatalf("archive should not exist after pre-close failure, stat err=%v", statErr)
 	}
 }
 

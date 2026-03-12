@@ -890,6 +890,34 @@ func TestCLI_Doctor_DetectsWSCloseManualRequired(t *testing.T) {
 	}
 }
 
+func TestCLI_Doctor_DetectsWSCloseResetReady(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
+
+	journal := newWSCloseLifecycleJournal("WS1", true, 100)
+	if err := saveWSCloseLifecycleJournal(env.Root, journal); err != nil {
+		t.Fatalf("save ws close journal: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	code := c.Run([]string{"doctor", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("doctor exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorReport `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !hasDoctorFinding(resp.Result.Findings, "ws_close_reset_ready", wsCloseJournalPath(env.Root, "WS1")) {
+		t.Fatalf("reset-ready finding missing: %+v", resp.Result.Findings)
+	}
+}
+
 func TestCLI_Doctor_DetectsLegacyHalfClosedWSCloseWithoutJournal(t *testing.T) {
 	testutil.RequireCommand(t, "git")
 
@@ -979,6 +1007,56 @@ func TestCLI_Doctor_FixApply_ResumesWSCloseFromJournal(t *testing.T) {
 		if finding.Code == "ws_close_resume_ready" || finding.Code == "ws_close_manual_required" {
 			t.Fatalf("ws close recovery finding should be cleared after resume: %+v", resp.Result.Findings)
 		}
+	}
+}
+
+func TestCLI_Doctor_FixPlan_JSON_IncludesWSCloseResetAction(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
+
+	journal := newWSCloseLifecycleJournal("WS1", true, 100)
+	if err := saveWSCloseLifecycleJournal(env.Root, journal); err != nil {
+		t.Fatalf("save ws close journal: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	code := c.Run([]string{"doctor", "--fix", "--plan", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("doctor fix plan exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	var resp struct {
+		Result doctorFixResult `json:"result"`
+	}
+	if err := json.Unmarshal(out.Bytes(), &resp); err != nil {
+		t.Fatalf("json unmarshal error: %v (raw=%q)", err, out.String())
+	}
+	if !hasDoctorAction(resp.Result.Actions, "clear_ws_close_journal", wsCloseJournalPath(env.Root, "WS1")) {
+		t.Fatalf("ws close journal clear action missing: %+v", resp.Result.Actions)
+	}
+}
+
+func TestCLI_Doctor_FixApply_ClearsResettableWSCloseJournal(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
+
+	journal := newWSCloseLifecycleJournal("WS1", true, 100)
+	if err := saveWSCloseLifecycleJournal(env.Root, journal); err != nil {
+		t.Fatalf("save ws close journal: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+	code := c.Run([]string{"doctor", "--fix", "--apply", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("doctor fix apply exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), errBuf.String())
+	}
+	if _, statErr := os.Stat(wsCloseJournalPath(env.Root, "WS1")); !os.IsNotExist(statErr) {
+		t.Fatalf("ws close journal should be removed after clear, stat err=%v", statErr)
 	}
 }
 
