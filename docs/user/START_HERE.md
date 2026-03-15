@@ -14,4 +14,9 @@ If your source of truth is Jira tickets, use:
 - `docs/user/guides/COMMANDS.md` (`kra ws import jira` usage)
 - `docs/user/guides/CONFIG.md` (Jira base URL/defaults and env vars)
 
+If you want to manage workspace-local tasks or read Markdown in `cmux`, use:
+
+- `docs/user/guides/TASKS.md`
+- `docs/user/guides/WORKSPACE_DOCS.md`
+
 If you want to contribute, start from `docs/dev/README.md`.

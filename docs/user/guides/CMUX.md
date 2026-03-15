@@ -74,6 +74,8 @@ kra ws close --id TASK-1234
 ## Related docs
 
 - Command overview: `docs/user/guides/COMMANDS.md`
+- Workspace task guide: `docs/user/guides/TASKS.md`
+- Workspace docs viewer guide: `docs/user/guides/WORKSPACE_DOCS.md`
 - Shell integration guide: `docs/user/guides/SHELL_INTEGRATION.md`
 - Mapping concept: `docs/dev/spec/concepts/cmux-mapping.md`
 - Open command contract: `docs/dev/spec/commands/ws/open.md`
