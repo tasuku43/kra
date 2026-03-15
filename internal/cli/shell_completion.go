@@ -46,6 +46,7 @@ var kraCompletionSubcommands = map[string][]string{
 		"list",
 		"ls",
 		"dashboard",
+		"doc",
 		"lock",
 		"unlock",
 		"open",
@@ -63,12 +64,14 @@ var kraCompletionSubcommands = map[string][]string{
 var kraCompletionPathSubcommandOrder = []string{
 	"repo preset",
 	"ws import",
+	"ws doc",
 	"ws task",
 }
 
 var kraCompletionPathSubcommands = map[string][]string{
 	"repo preset": {"add", "rm", "remove", "list", "show", "help"},
 	"ws import":   {"jira", "help"},
+	"ws doc":      {"open", "help"},
 	"ws task":     {"list", "ls", "add", "status", "sync", "help"},
 }
 
@@ -114,6 +117,8 @@ var kraCompletionPathFlagOrder = []string{
 	"ws create",
 	"ws import",
 	"ws import jira",
+	"ws doc",
+	"ws doc open",
 	"ws task",
 	"ws task list",
 	"ws task ls",
@@ -162,6 +167,8 @@ var kraCompletionPathFlags = map[string][]string{
 	"ws create":          {"--no-prompt", "--template", "--format", "--id", "--title", "--jira", "--help", "-h"},
 	"ws import":          {"--help", "-h"},
 	"ws import jira":     {"--sprint", "--space", "--project", "--jql", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
+	"ws doc":             {"--help", "-h"},
+	"ws doc open":        {"--id", "--current", "--select", "--surface", "--no-focus", "--format", "--help", "-h"},
 	"ws task":            {"--id", "--current", "--select", "--help", "-h"},
 	"ws task list":       {"--id", "--current", "--select", "--format", "--help", "-h"},
 	"ws task ls":         {"--id", "--current", "--select", "--format", "--help", "-h"},

@@ -58,6 +58,32 @@ type Surface struct {
 	PaneID   string
 }
 
+type PaneCreateResult struct {
+	WorkspaceRef string
+	WindowRef    string
+	PaneRef      string
+	SurfaceRef   string
+	Type         string
+}
+
+type MarkdownOpenResult struct {
+	WorkspaceRef     string
+	WindowRef        string
+	PaneRef          string
+	SurfaceRef       string
+	SourcePaneRef    string
+	SourceSurfaceRef string
+	TargetPaneRef    string
+	Path             string
+}
+
+type MoveSurfaceResult struct {
+	WorkspaceRef string
+	WindowRef    string
+	PaneRef      string
+	SurfaceRef   string
+}
+
 type Notification struct {
 	WorkspaceID string
 	SurfaceID   string
@@ -428,6 +454,211 @@ func (c *Client) ListPaneSurfaces(ctx context.Context, workspace string, pane st
 		})
 	}
 	return out, nil
+}
+
+func (c *Client) CreatePane(ctx context.Context, workspace string, direction string) (PaneCreateResult, error) {
+	workspace = strings.TrimSpace(workspace)
+	direction = strings.TrimSpace(direction)
+	if workspace == "" {
+		return PaneCreateResult{}, fmt.Errorf("workspace is required")
+	}
+	if direction == "" {
+		direction = "right"
+	}
+	args := []string{"new-pane", "--workspace", workspace, "--direction", direction}
+	var payload struct {
+		WorkspaceRef string `json:"workspace_ref"`
+		WindowRef    string `json:"window_ref"`
+		PaneRef      string `json:"pane_ref"`
+		SurfaceRef   string `json:"surface_ref"`
+		Type         string `json:"type"`
+	}
+	if err := c.runJSON(ctx, &payload, args...); err != nil {
+		return PaneCreateResult{}, err
+	}
+	return PaneCreateResult{
+		WorkspaceRef: strings.TrimSpace(payload.WorkspaceRef),
+		WindowRef:    strings.TrimSpace(payload.WindowRef),
+		PaneRef:      strings.TrimSpace(payload.PaneRef),
+		SurfaceRef:   strings.TrimSpace(payload.SurfaceRef),
+		Type:         strings.TrimSpace(payload.Type),
+	}, nil
+}
+
+func (c *Client) CreateSplit(ctx context.Context, direction string, workspace string, surface string) (PaneCreateResult, error) {
+	direction = strings.TrimSpace(direction)
+	workspace = strings.TrimSpace(workspace)
+	surface = strings.TrimSpace(surface)
+	if direction == "" {
+		return PaneCreateResult{}, fmt.Errorf("direction is required")
+	}
+	args := []string{"new-split", direction}
+	if workspace != "" {
+		args = append(args, "--workspace", workspace)
+	}
+	if surface != "" {
+		args = append(args, "--surface", surface)
+	}
+	var payload struct {
+		WorkspaceRef string `json:"workspace_ref"`
+		WindowRef    string `json:"window_ref"`
+		PaneRef      string `json:"pane_ref"`
+		SurfaceRef   string `json:"surface_ref"`
+		Type         string `json:"type"`
+	}
+	if err := c.runJSON(ctx, &payload, args...); err != nil {
+		return PaneCreateResult{}, err
+	}
+	return PaneCreateResult{
+		WorkspaceRef: strings.TrimSpace(payload.WorkspaceRef),
+		WindowRef:    strings.TrimSpace(payload.WindowRef),
+		PaneRef:      strings.TrimSpace(payload.PaneRef),
+		SurfaceRef:   strings.TrimSpace(payload.SurfaceRef),
+		Type:         strings.TrimSpace(payload.Type),
+	}, nil
+}
+
+func (c *Client) MarkdownOpen(ctx context.Context, path string, workspace string, surface string) (MarkdownOpenResult, error) {
+	path = strings.TrimSpace(path)
+	workspace = strings.TrimSpace(workspace)
+	surface = strings.TrimSpace(surface)
+	if path == "" {
+		return MarkdownOpenResult{}, fmt.Errorf("path is required")
+	}
+	args := []string{"markdown", "open", path}
+	if workspace != "" {
+		args = append(args, "--workspace", workspace)
+	}
+	if surface != "" {
+		args = append(args, "--surface", surface)
+	}
+	var payload struct {
+		WorkspaceRef     string `json:"workspace_ref"`
+		WindowRef        string `json:"window_ref"`
+		PaneRef          string `json:"pane_ref"`
+		SurfaceRef       string `json:"surface_ref"`
+		SourcePaneRef    string `json:"source_pane_ref"`
+		SourceSurfaceRef string `json:"source_surface_ref"`
+		TargetPaneRef    string `json:"target_pane_ref"`
+		Path             string `json:"path"`
+	}
+	if err := c.runJSON(ctx, &payload, args...); err != nil {
+		return MarkdownOpenResult{}, err
+	}
+	return MarkdownOpenResult{
+		WorkspaceRef:     strings.TrimSpace(payload.WorkspaceRef),
+		WindowRef:        strings.TrimSpace(payload.WindowRef),
+		PaneRef:          strings.TrimSpace(payload.PaneRef),
+		SurfaceRef:       strings.TrimSpace(payload.SurfaceRef),
+		SourcePaneRef:    strings.TrimSpace(payload.SourcePaneRef),
+		SourceSurfaceRef: strings.TrimSpace(payload.SourceSurfaceRef),
+		TargetPaneRef:    strings.TrimSpace(payload.TargetPaneRef),
+		Path:             strings.TrimSpace(payload.Path),
+	}, nil
+}
+
+func (c *Client) MoveSurface(ctx context.Context, surface string, pane string, workspace string, after string, focus bool) (MoveSurfaceResult, error) {
+	surface = strings.TrimSpace(surface)
+	pane = strings.TrimSpace(pane)
+	workspace = strings.TrimSpace(workspace)
+	after = strings.TrimSpace(after)
+	if surface == "" {
+		return MoveSurfaceResult{}, fmt.Errorf("surface is required")
+	}
+	if pane == "" {
+		return MoveSurfaceResult{}, fmt.Errorf("pane is required")
+	}
+	args := []string{"move-surface", "--surface", surface, "--pane", pane}
+	if workspace != "" {
+		args = append(args, "--workspace", workspace)
+	}
+	if after != "" {
+		args = append(args, "--after", after)
+	}
+	args = append(args, "--focus", strconv.FormatBool(focus))
+	var payload struct {
+		WorkspaceRef string `json:"workspace_ref"`
+		WindowRef    string `json:"window_ref"`
+		PaneRef      string `json:"pane_ref"`
+		SurfaceRef   string `json:"surface_ref"`
+	}
+	if err := c.runJSON(ctx, &payload, args...); err != nil {
+		return MoveSurfaceResult{}, err
+	}
+	return MoveSurfaceResult{
+		WorkspaceRef: strings.TrimSpace(payload.WorkspaceRef),
+		WindowRef:    strings.TrimSpace(payload.WindowRef),
+		PaneRef:      strings.TrimSpace(payload.PaneRef),
+		SurfaceRef:   strings.TrimSpace(payload.SurfaceRef),
+	}, nil
+}
+
+func (c *Client) RenameTab(ctx context.Context, workspace string, surface string, title string) error {
+	workspace = strings.TrimSpace(workspace)
+	surface = strings.TrimSpace(surface)
+	title = strings.TrimSpace(title)
+	if surface == "" {
+		return fmt.Errorf("surface is required")
+	}
+	if title == "" {
+		return fmt.Errorf("title is required")
+	}
+	args := []string{"rename-tab", "--surface", surface}
+	if workspace != "" {
+		args = append(args, "--workspace", workspace)
+	}
+	args = append(args, "--title", title)
+	_, stderr, err := c.run(ctx, false, false, args...)
+	if err != nil {
+		return commandError("rename-tab", stderr, err)
+	}
+	return nil
+}
+
+func (c *Client) TabAction(ctx context.Context, workspace string, tab string, action string, title string, url string) error {
+	tab = strings.TrimSpace(tab)
+	action = strings.TrimSpace(action)
+	title = strings.TrimSpace(title)
+	url = strings.TrimSpace(url)
+	workspace = strings.TrimSpace(workspace)
+	if action == "" {
+		return fmt.Errorf("action is required")
+	}
+	args := []string{"tab-action", "--action", action}
+	if tab != "" {
+		args = append(args, "--tab", tab)
+	}
+	if workspace != "" {
+		args = append(args, "--workspace", workspace)
+	}
+	if title != "" {
+		args = append(args, "--title", title)
+	}
+	if url != "" {
+		args = append(args, "--url", url)
+	}
+	_, stderr, err := c.run(ctx, false, false, args...)
+	if err != nil {
+		return commandError("tab-action", stderr, err)
+	}
+	return nil
+}
+
+func (c *Client) CloseSurface(ctx context.Context, workspace string, surface string) error {
+	workspace = strings.TrimSpace(workspace)
+	surface = strings.TrimSpace(surface)
+	if surface == "" {
+		return fmt.Errorf("surface is required")
+	}
+	args := []string{"close-surface", "--surface", surface}
+	if workspace != "" {
+		args = append(args, "--workspace", workspace)
+	}
+	_, stderr, err := c.run(ctx, false, false, args...)
+	if err != nil {
+		return commandError("close-surface", stderr, err)
+	}
+	return nil
 }
 
 func (c *Client) FocusPane(ctx context.Context, pane string, workspace string) error {

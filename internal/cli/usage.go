@@ -204,6 +204,7 @@ func (c *CLI) printWSUsage(w io.Writer) {
   kra ws close [--id <id> | --current | --select | --multi-select] [action-args...]
   kra ws reopen [--id <id> | --current | --select] [action-args...]
   kra ws purge [--id <id> | --current | --select] [action-args...]
+  kra ws doc open [--id <id> | --current | --select] [path]
   kra ws task [--id <id> | --current | --select]
   kra ws task <subcommand> [args]
   kra ws log [--id <id> | --current] [--] <message>
@@ -266,6 +267,25 @@ func (c *CLI) printWSInsightAddUsage(w io.Writer) {
   kra ws insight add --id <workspace-id> --ticket <ticket> --session-id <session-id> --what "<text>" --approved [--context "<text>"] [--why "<text>"] [--next "<text>"] [--tag <tag> ...] [--format human|json]
 
 Save one approved insight document into worklog/insights.
+`)
+}
+
+func (c *CLI) printWSDocUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws doc <subcommand> [args]
+
+Subcommands:
+  open             Open one workspace Markdown file in cmux viewer
+  help             Show this help
+`)
+}
+
+func (c *CLI) printWSDocOpenUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws doc open [--id <workspace-id> | --current | --select] [path] [--surface <id|ref|index>] [--no-focus] [--format human|json]
+
+Open one Markdown file in the workspace using cmux markdown viewer.
+If path is omitted or points to a directory, pick one Markdown file under that scope.
 `)
 }
 
