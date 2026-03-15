@@ -130,6 +130,8 @@ func (c *CLI) runWS(args []string) int {
 		return c.runWSList(args[1:])
 	case "dashboard":
 		return c.runWSDashboard(args[1:])
+	case "doc":
+		return c.runWSDoc(args[1:])
 	case "task":
 		return c.runWSTask(args[1:])
 	case "log":
