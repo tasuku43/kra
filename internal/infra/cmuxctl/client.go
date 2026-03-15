@@ -518,35 +518,6 @@ func (c *Client) CreateSplit(ctx context.Context, direction string, workspace st
 	}, nil
 }
 
-func (c *Client) CreateSurface(ctx context.Context, workspace string, pane string) (PaneCreateResult, error) {
-	workspace = strings.TrimSpace(workspace)
-	pane = strings.TrimSpace(pane)
-	if workspace == "" {
-		return PaneCreateResult{}, fmt.Errorf("workspace is required")
-	}
-	if pane == "" {
-		return PaneCreateResult{}, fmt.Errorf("pane is required")
-	}
-	args := []string{"new-surface", "--workspace", workspace, "--pane", pane}
-	var payload struct {
-		WorkspaceRef string `json:"workspace_ref"`
-		WindowRef    string `json:"window_ref"`
-		PaneRef      string `json:"pane_ref"`
-		SurfaceRef   string `json:"surface_ref"`
-		Type         string `json:"type"`
-	}
-	if err := c.runJSON(ctx, &payload, args...); err != nil {
-		return PaneCreateResult{}, err
-	}
-	return PaneCreateResult{
-		WorkspaceRef: strings.TrimSpace(payload.WorkspaceRef),
-		WindowRef:    strings.TrimSpace(payload.WindowRef),
-		PaneRef:      strings.TrimSpace(payload.PaneRef),
-		SurfaceRef:   strings.TrimSpace(payload.SurfaceRef),
-		Type:         strings.TrimSpace(payload.Type),
-	}, nil
-}
-
 func (c *Client) MarkdownOpen(ctx context.Context, path string, workspace string, surface string) (MarkdownOpenResult, error) {
 	path = strings.TrimSpace(path)
 	workspace = strings.TrimSpace(workspace)

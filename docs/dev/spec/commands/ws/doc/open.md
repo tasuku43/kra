@@ -40,7 +40,6 @@ Open one Markdown document for a workspace in the `cmux` Markdown viewer while k
 
 - Require `cmux` capabilities:
   - `markdown.open`
-  - `workspace.list`
   - `workspace.create`
   - `workspace.rename`
   - `pane.create`
@@ -53,14 +52,14 @@ Open one Markdown document for a workspace in the `cmux` Markdown viewer while k
 
 ## Stage workspace and docs pane slot
 
-- Maintain one shared temp `cmux` workspace for Markdown staging.
+- Use the `KRA_ROOT` `cmux` workspace as the Markdown staging workspace.
 - Persist best-effort slot state under:
   - `.kra/state/cmux-docs.json`
 - Stored state is advisory only.
-- For the shared temp workspace:
-  - prefer stored workspace/pane/surface when still reachable
-  - otherwise rediscover by workspace title `kra:docs-stage`
-  - otherwise create a new temp workspace and rename it to `kra:docs-stage`
+- For the staging workspace:
+  - prefer stored pane/surface when still reachable inside the current `KRA_ROOT` workspace
+  - otherwise inspect the current `KRA_ROOT` workspace and pick one existing surface
+  - if the `KRA_ROOT` workspace mapping is missing or stale, ensure it using the same runtime creation logic as `kra root open`, but do not select it
 - Maintain one logical docs pane slot per target workspace:
   - prefer stored pane when still reachable
   - otherwise rediscover by scanning panes for `docs:*` viewer tabs
@@ -117,4 +116,4 @@ Open one Markdown document for a workspace in the `cmux` Markdown viewer while k
 - `cmux_capability_missing`
   - required `cmux` method missing
 - `cmux_stage_workspace_failed`
-  - temp staging workspace could not be created or rediscovered
+  - root staging workspace could not be ensured or inspected

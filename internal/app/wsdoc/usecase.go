@@ -12,17 +12,13 @@ import (
 	"github.com/tasuku43/kra/internal/infra/cmuxctl"
 )
 
-const (
-	viewerPrefix       = "docs:"
-	stageWorkspaceName = "kra:docs-stage"
-)
+const viewerPrefix = "docs:"
+
+type EnsureStageWorkspaceFunc func(ctx context.Context, root string) (workspaceRef string, code string, msg string)
 
 type Client interface {
 	Capabilities(ctx context.Context) (cmuxctl.Capabilities, error)
 	Identify(ctx context.Context, workspace string, surface string) (map[string]any, error)
-	ListWorkspaces(ctx context.Context) ([]cmuxctl.Workspace, error)
-	CreateWorkspace(ctx context.Context) (string, error)
-	RenameWorkspace(ctx context.Context, workspace string, title string) error
 	ListPanes(ctx context.Context, workspace string) ([]cmuxctl.Pane, error)
 	ListPaneSurfaces(ctx context.Context, workspace string, pane string) ([]cmuxctl.Surface, error)
 	CreatePane(ctx context.Context, workspace string, direction string) (cmuxctl.PaneCreateResult, error)
@@ -34,10 +30,11 @@ type Client interface {
 }
 
 type Service struct {
-	NewClient       func() Client
-	NewMappingStore func(root string) cmuxmap.Store
-	NewDocsStore    func(root string) cmuxdocs.Store
-	Now             func() time.Time
+	NewClient            func() Client
+	NewMappingStore      func(root string) cmuxmap.Store
+	NewDocsStore         func(root string) cmuxdocs.Store
+	EnsureStageWorkspace EnsureStageWorkspaceFunc
+	Now                  func() time.Time
 }
 
 type OpenRequest struct {
@@ -70,17 +67,23 @@ type stageSlot struct {
 	SurfaceRef   string
 }
 
-func NewService(newClient func() Client, newMappingStore func(root string) cmuxmap.Store, newDocsStore func(root string) cmuxdocs.Store) *Service {
+func NewService(
+	newClient func() Client,
+	newMappingStore func(root string) cmuxmap.Store,
+	newDocsStore func(root string) cmuxdocs.Store,
+	ensureStageWorkspace EnsureStageWorkspaceFunc,
+) *Service {
 	return &Service{
-		NewClient:       newClient,
-		NewMappingStore: newMappingStore,
-		NewDocsStore:    newDocsStore,
-		Now:             time.Now,
+		NewClient:            newClient,
+		NewMappingStore:      newMappingStore,
+		NewDocsStore:         newDocsStore,
+		EnsureStageWorkspace: ensureStageWorkspace,
+		Now:                  time.Now,
 	}
 }
 
 func (s *Service) Open(ctx context.Context, req OpenRequest) (OpenResult, string, string) {
-	if s.NewClient == nil || s.NewMappingStore == nil || s.NewDocsStore == nil {
+	if s.NewClient == nil || s.NewMappingStore == nil || s.NewDocsStore == nil || s.EnsureStageWorkspace == nil {
 		return OpenResult{}, "internal_error", "ws doc service is not initialized"
 	}
 
@@ -91,9 +94,6 @@ func (s *Service) Open(ctx context.Context, req OpenRequest) (OpenResult, string
 	}
 	for _, method := range []string{
 		"markdown.open",
-		"workspace.list",
-		"workspace.create",
-		"workspace.rename",
 		"pane.create",
 		"pane.list",
 		"pane.surfaces",
@@ -126,9 +126,9 @@ func (s *Service) Open(ctx context.Context, req OpenRequest) (OpenResult, string
 		return OpenResult{}, "state_write_failed", fmt.Sprintf("load cmux docs state: %v", err)
 	}
 
-	stage, err := s.ensureStageSlot(ctx, client, docsFile.Stage)
-	if err != nil {
-		return OpenResult{}, slotErrorCode(err), err.Error()
+	stage, code, msg := s.ensureStageSlot(ctx, client, req.Root, docsFile.Stage)
+	if code != "" {
+		return OpenResult{}, code, msg
 	}
 	docs, err := s.ensureDocsSlot(ctx, client, cmuxWorkspaceID, req.SurfaceHint, docsFile.Workspaces[req.WorkspaceID])
 	if err != nil {
@@ -194,33 +194,27 @@ func (s *Service) Open(ctx context.Context, req OpenRequest) (OpenResult, string
 	}, "", ""
 }
 
-func (s *Service) ensureStageSlot(ctx context.Context, client Client, current cmuxdocs.Stage) (stageSlot, error) {
-	if slot, ok := s.reuseStoredStage(ctx, client, current); ok {
-		return slot, nil
+func (s *Service) ensureStageSlot(ctx context.Context, client Client, root string, current cmuxdocs.Stage) (stageSlot, string, string) {
+	workspaceRef, code, msg := s.EnsureStageWorkspace(ctx, root)
+	if code != "" {
+		return stageSlot{}, code, msg
 	}
-	if slot, ok, err := s.rediscoverStage(ctx, client); err != nil {
-		return stageSlot{}, err
-	} else if ok {
-		return slot, nil
-	}
-
-	workspaceRef, err := client.CreateWorkspace(ctx)
-	if err != nil {
-		return stageSlot{}, fmt.Errorf("create stage workspace: %w", err)
-	}
-	if err := client.RenameWorkspace(ctx, workspaceRef, stageWorkspaceName); err != nil {
-		return stageSlot{}, fmt.Errorf("rename stage workspace: %w", err)
+	if slot, ok := s.reuseStoredStage(ctx, client, workspaceRef, current); ok {
+		return slot, "", ""
 	}
 	slot, err := s.inspectStageWorkspace(ctx, client, workspaceRef)
 	if err != nil {
-		return stageSlot{}, fmt.Errorf("inspect stage workspace: %w", err)
+		return stageSlot{}, "cmux_stage_workspace_failed", fmt.Sprintf("inspect root workspace for staging: %v", err)
 	}
-	return slot, nil
+	return slot, "", ""
 }
 
-func (s *Service) reuseStoredStage(ctx context.Context, client Client, current cmuxdocs.Stage) (stageSlot, bool) {
-	workspaceRef := strings.TrimSpace(current.WorkspaceRef)
+func (s *Service) reuseStoredStage(ctx context.Context, client Client, workspaceRef string, current cmuxdocs.Stage) (stageSlot, bool) {
+	workspaceRef = strings.TrimSpace(workspaceRef)
 	if workspaceRef == "" {
+		return stageSlot{}, false
+	}
+	if strings.TrimSpace(current.WorkspaceRef) != "" && strings.TrimSpace(current.WorkspaceRef) != workspaceRef {
 		return stageSlot{}, false
 	}
 	if _, err := client.Identify(ctx, workspaceRef, ""); err != nil {
@@ -241,24 +235,6 @@ func (s *Service) reuseStoredStage(ctx context.Context, client Client, current c
 		return stageSlot{}, false
 	}
 	return slot, true
-}
-
-func (s *Service) rediscoverStage(ctx context.Context, client Client) (stageSlot, bool, error) {
-	workspaces, err := client.ListWorkspaces(ctx)
-	if err != nil {
-		return stageSlot{}, false, fmt.Errorf("list stage workspaces: %w", err)
-	}
-	for _, workspace := range workspaces {
-		if strings.TrimSpace(workspace.Title) != stageWorkspaceName {
-			continue
-		}
-		slot, err := s.inspectStageWorkspace(ctx, client, workspace.Ref)
-		if err != nil {
-			return stageSlot{}, false, fmt.Errorf("inspect stage workspace: %w", err)
-		}
-		return slot, true, nil
-	}
-	return stageSlot{}, false, nil
 }
 
 func (s *Service) inspectStageWorkspace(ctx context.Context, client Client, workspaceRef string) (stageSlot, error) {
@@ -402,8 +378,6 @@ func slotErrorCode(err error) string {
 		return "cmux_list_surfaces_failed"
 	case strings.Contains(msg, "create docs pane"):
 		return "cmux_docs_pane_failed"
-	case strings.Contains(msg, "stage workspace"), strings.Contains(msg, "workspace.list"), strings.Contains(msg, "workspace.create"), strings.Contains(msg, "workspace.rename"):
-		return "cmux_stage_workspace_failed"
 	default:
 		return "internal_error"
 	}

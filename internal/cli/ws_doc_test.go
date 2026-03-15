@@ -16,7 +16,6 @@ import (
 
 type fakeCLIWSDocClient struct {
 	capabilities      cmuxctl.Capabilities
-	createWorkspaceID string
 	listPanes         map[string][]cmuxctl.Pane
 	listPaneSurfaces  map[string][]cmuxctl.Surface
 	createPaneResult  cmuxctl.PaneCreateResult
@@ -31,18 +30,6 @@ func (f *fakeCLIWSDocClient) Capabilities(_ context.Context) (cmuxctl.Capabiliti
 
 func (f *fakeCLIWSDocClient) Identify(context.Context, string, string) (map[string]any, error) {
 	return map[string]any{"ok": true}, nil
-}
-
-func (f *fakeCLIWSDocClient) ListWorkspaces(context.Context) ([]cmuxctl.Workspace, error) {
-	return nil, nil
-}
-
-func (f *fakeCLIWSDocClient) CreateWorkspace(context.Context) (string, error) {
-	return f.createWorkspaceID, nil
-}
-
-func (f *fakeCLIWSDocClient) RenameWorkspace(context.Context, string, string) error {
-	return nil
 }
 
 func (f *fakeCLIWSDocClient) ListPanes(_ context.Context, workspace string) ([]cmuxctl.Pane, error) {
@@ -133,20 +120,16 @@ func TestCLIWSDocOpenJSONSuccess(t *testing.T) {
 
 	fake := &fakeCLIWSDocClient{
 		capabilities: cmuxctl.Capabilities{Methods: map[string]struct{}{
-			"markdown.open":    {},
-			"workspace.list":   {},
-			"workspace.create": {},
-			"workspace.rename": {},
-			"pane.create":      {},
-			"pane.list":        {},
-			"pane.surfaces":    {},
-			"surface.move":     {},
-			"surface.close":    {},
+			"markdown.open": {},
+			"pane.create":   {},
+			"pane.list":     {},
+			"pane.surfaces": {},
+			"surface.move":  {},
+			"surface.close": {},
 		}},
-		createWorkspaceID: "workspace:stage",
 		listPanes: map[string][]cmuxctl.Pane{
-			"workspace:stage": {{Ref: "pane:stage", Index: 0, Focused: true}},
-			"CMUX-1":          {{Ref: "pane:9", Index: 0}},
+			"workspace:root": {{Ref: "pane:stage", Index: 0, Focused: true}},
+			"CMUX-1":         {{Ref: "pane:9", Index: 0}},
 		},
 		listPaneSurfaces: map[string][]cmuxctl.Surface{
 			"pane:stage": {
@@ -176,6 +159,7 @@ func TestCLIWSDocOpenJSONSuccess(t *testing.T) {
 			func() appwsdoc.Client { return fake },
 			func(root string) cmuxmap.Store { return cmuxmap.NewStore(root) },
 			func(root string) cmuxdocs.Store { return cmuxdocs.NewStore(root) },
+			func(context.Context, string) (string, string, string) { return "workspace:root", "", "" },
 		)
 	}
 	t.Cleanup(func() { newWSDocService = prev })
@@ -205,7 +189,7 @@ func TestCLIWSDocOpenJSONSuccess(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load docs state: %v", err)
 	}
-	if state.Stage.WorkspaceRef != "workspace:stage" {
+	if state.Stage.WorkspaceRef != "workspace:root" {
 		t.Fatalf("stage state = %+v", state.Stage)
 	}
 	if slot := state.Workspaces["WS1"]; slot.PaneRef != "pane:9" || slot.LastViewerRef != "surface:21" {

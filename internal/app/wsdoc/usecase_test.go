@@ -15,11 +15,6 @@ import (
 type fakeClient struct {
 	capabilities        cmuxctl.Capabilities
 	identifyErr         error
-	workspaces          []cmuxctl.Workspace
-	listWorkspacesErr   error
-	createWorkspaceID   string
-	createWorkspaceErr  error
-	renameWorkspaceErr  error
 	listPanes           map[string][]cmuxctl.Pane
 	listPanesErr        map[string]error
 	listPaneSurfaces    map[string][]cmuxctl.Surface
@@ -33,10 +28,6 @@ type fakeClient struct {
 	moveResult          cmuxctl.MoveSurfaceResult
 	moveErr             error
 
-	renameWorkspaceCalls []struct {
-		Workspace string
-		Title     string
-	}
 	renameCalls []struct {
 		Workspace string
 		Surface   string
@@ -64,25 +55,6 @@ func (f *fakeClient) Identify(context.Context, string, string) (map[string]any, 
 		return nil, f.identifyErr
 	}
 	return map[string]any{"ok": true}, nil
-}
-
-func (f *fakeClient) ListWorkspaces(context.Context) ([]cmuxctl.Workspace, error) {
-	if f.listWorkspacesErr != nil {
-		return nil, f.listWorkspacesErr
-	}
-	return append([]cmuxctl.Workspace{}, f.workspaces...), nil
-}
-
-func (f *fakeClient) CreateWorkspace(context.Context) (string, error) {
-	return f.createWorkspaceID, f.createWorkspaceErr
-}
-
-func (f *fakeClient) RenameWorkspace(_ context.Context, workspace string, title string) error {
-	f.renameWorkspaceCalls = append(f.renameWorkspaceCalls, struct {
-		Workspace string
-		Title     string
-	}{Workspace: workspace, Title: title})
-	return f.renameWorkspaceErr
 }
 
 func (f *fakeClient) ListPanes(_ context.Context, workspace string) ([]cmuxctl.Pane, error) {
@@ -139,7 +111,7 @@ func (f *fakeClient) CloseSurface(_ context.Context, workspace string, surface s
 	return nil
 }
 
-func TestServiceOpenCreatesStageWorkspaceAndDocsPane(t *testing.T) {
+func TestServiceOpenUsesRootWorkspaceStageAndCreatesDocsPane(t *testing.T) {
 	root := t.TempDir()
 	if err := cmuxmap.NewStore(root).Save(cmuxmap.File{
 		Version: cmuxmap.CurrentVersion,
@@ -157,20 +129,16 @@ func TestServiceOpenCreatesStageWorkspaceAndDocsPane(t *testing.T) {
 
 	fake := &fakeClient{
 		capabilities: cmuxctl.Capabilities{Methods: map[string]struct{}{
-			"markdown.open":    {},
-			"workspace.list":   {},
-			"workspace.create": {},
-			"workspace.rename": {},
-			"pane.create":      {},
-			"pane.list":        {},
-			"pane.surfaces":    {},
-			"surface.move":     {},
-			"surface.close":    {},
+			"markdown.open": {},
+			"pane.create":   {},
+			"pane.list":     {},
+			"pane.surfaces": {},
+			"surface.move":  {},
+			"surface.close": {},
 		}},
-		createWorkspaceID: "workspace:stage",
 		listPanes: map[string][]cmuxctl.Pane{
-			"workspace:stage": {{Ref: "pane:stage", Index: 0, Focused: true}},
-			"CMUX-1":          {{Ref: "pane:docs", Index: 0}},
+			"CMUX-ROOT": {{Ref: "pane:stage", Index: 0, Focused: true}},
+			"CMUX-1":    {{Ref: "pane:docs", Index: 0}},
 		},
 		listPanesErr: map[string]error{},
 		listPaneSurfaces: map[string][]cmuxctl.Surface{
@@ -200,6 +168,7 @@ func TestServiceOpenCreatesStageWorkspaceAndDocsPane(t *testing.T) {
 		func() Client { return fake },
 		func(root string) cmuxmap.Store { return cmuxmap.NewStore(root) },
 		func(root string) cmuxdocs.Store { return cmuxdocs.NewStore(root) },
+		func(context.Context, string) (string, string, string) { return "CMUX-ROOT", "", "" },
 	)
 	svc.Now = func() time.Time { return time.Unix(1700000000, 0) }
 
@@ -216,9 +185,6 @@ func TestServiceOpenCreatesStageWorkspaceAndDocsPane(t *testing.T) {
 	if result.DocsPaneRef != "pane:docs" || result.ViewerSurfaceRef != "surface:viewer" {
 		t.Fatalf("unexpected result: %+v", result)
 	}
-	if len(fake.renameWorkspaceCalls) != 1 || fake.renameWorkspaceCalls[0].Title != stageWorkspaceName {
-		t.Fatalf("rename workspace calls = %+v", fake.renameWorkspaceCalls)
-	}
 	if len(fake.moveCalls) != 1 || fake.moveCalls[0].After != "surface:bootstrap" || !fake.moveCalls[0].Focus {
 		t.Fatalf("move calls = %+v", fake.moveCalls)
 	}
@@ -233,7 +199,7 @@ func TestServiceOpenCreatesStageWorkspaceAndDocsPane(t *testing.T) {
 	if err != nil {
 		t.Fatalf("load docs state: %v", err)
 	}
-	if state.Stage.WorkspaceRef != "workspace:stage" || state.Stage.SurfaceRef != "surface:stage" {
+	if state.Stage.WorkspaceRef != "CMUX-ROOT" || state.Stage.SurfaceRef != "surface:stage" {
 		t.Fatalf("stage state = %+v", state.Stage)
 	}
 	slot := state.Workspaces["WS1"]
@@ -260,7 +226,7 @@ func TestServiceOpenReusesStoredStageAndDocsPane(t *testing.T) {
 	if err := cmuxdocs.NewStore(root).Save(cmuxdocs.File{
 		Version: cmuxdocs.CurrentVersion,
 		Stage: cmuxdocs.Stage{
-			WorkspaceRef: "workspace:stage",
+			WorkspaceRef: "CMUX-ROOT",
 			PaneRef:      "pane:stage",
 			SurfaceRef:   "surface:stage",
 		},
@@ -277,15 +243,12 @@ func TestServiceOpenReusesStoredStageAndDocsPane(t *testing.T) {
 
 	fake := &fakeClient{
 		capabilities: cmuxctl.Capabilities{Methods: map[string]struct{}{
-			"markdown.open":    {},
-			"workspace.list":   {},
-			"workspace.create": {},
-			"workspace.rename": {},
-			"pane.create":      {},
-			"pane.list":        {},
-			"pane.surfaces":    {},
-			"surface.move":     {},
-			"surface.close":    {},
+			"markdown.open": {},
+			"pane.create":   {},
+			"pane.list":     {},
+			"pane.surfaces": {},
+			"surface.move":  {},
+			"surface.close": {},
 		}},
 		listPanes:    map[string][]cmuxctl.Pane{},
 		listPanesErr: map[string]error{},
@@ -313,6 +276,7 @@ func TestServiceOpenReusesStoredStageAndDocsPane(t *testing.T) {
 		func() Client { return fake },
 		func(root string) cmuxmap.Store { return cmuxmap.NewStore(root) },
 		func(root string) cmuxdocs.Store { return cmuxdocs.NewStore(root) },
+		func(context.Context, string) (string, string, string) { return "CMUX-ROOT", "", "" },
 	)
 
 	result, code, msg := svc.Open(context.Background(), OpenRequest{
@@ -327,9 +291,6 @@ func TestServiceOpenReusesStoredStageAndDocsPane(t *testing.T) {
 	}
 	if result.DocsPaneRef != "pane:docs" {
 		t.Fatalf("unexpected result: %+v", result)
-	}
-	if len(fake.renameWorkspaceCalls) != 0 {
-		t.Fatalf("rename workspace calls = %+v", fake.renameWorkspaceCalls)
 	}
 	if len(fake.moveCalls) != 1 || fake.moveCalls[0].After != "surface:old" || fake.moveCalls[0].Focus {
 		t.Fatalf("move calls = %+v", fake.moveCalls)
@@ -357,7 +318,7 @@ func TestServiceOpenRediscoversDocsPaneWhenStoredPaneIsStale(t *testing.T) {
 	if err := cmuxdocs.NewStore(root).Save(cmuxdocs.File{
 		Version: cmuxdocs.CurrentVersion,
 		Stage: cmuxdocs.Stage{
-			WorkspaceRef: "workspace:stage",
+			WorkspaceRef: "CMUX-ROOT",
 			PaneRef:      "pane:stage",
 			SurfaceRef:   "surface:stage",
 		},
@@ -374,15 +335,12 @@ func TestServiceOpenRediscoversDocsPaneWhenStoredPaneIsStale(t *testing.T) {
 
 	fake := &fakeClient{
 		capabilities: cmuxctl.Capabilities{Methods: map[string]struct{}{
-			"markdown.open":    {},
-			"workspace.list":   {},
-			"workspace.create": {},
-			"workspace.rename": {},
-			"pane.create":      {},
-			"pane.list":        {},
-			"pane.surfaces":    {},
-			"surface.move":     {},
-			"surface.close":    {},
+			"markdown.open": {},
+			"pane.create":   {},
+			"pane.list":     {},
+			"pane.surfaces": {},
+			"surface.move":  {},
+			"surface.close": {},
 		}},
 		listPanes: map[string][]cmuxctl.Pane{
 			"CMUX-1": {
@@ -419,6 +377,7 @@ func TestServiceOpenRediscoversDocsPaneWhenStoredPaneIsStale(t *testing.T) {
 		func() Client { return fake },
 		func(root string) cmuxmap.Store { return cmuxmap.NewStore(root) },
 		func(root string) cmuxdocs.Store { return cmuxdocs.NewStore(root) },
+		func(context.Context, string) (string, string, string) { return "CMUX-ROOT", "", "" },
 	)
 
 	result, code, msg := svc.Open(context.Background(), OpenRequest{
