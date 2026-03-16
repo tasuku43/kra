@@ -19,5 +19,7 @@ Start here if your goal is to use `kra` in daily workflows.
 - `docs/user/guides/SHELL_INTEGRATION.md`
 - `docs/user/guides/WORKSPACE_LIFECYCLE.md`
 - `docs/user/guides/CMUX.md`
+- `docs/user/guides/TASKS.md`
+- `docs/user/guides/WORKSPACE_DOCS.md`
 - `docs/user/guides/REPO_WORKTREE.md`
 - `docs/user/guides/AUTOMATION_JSON.md`

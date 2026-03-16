@@ -54,11 +54,13 @@ kra ws open --id TASK-1234
 When using `cmux`, `kra ws open` creates and opens the corresponding `cmux` workspace if it does not exist, and moves to it if it already exists.
 In single-target open, if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior; with shell integration, it can also sync parent shell `cwd`.
 
-For day-to-day operations (`repo add`, `ws add-repo`, `ws close`), see:
+For day-to-day operations (`repo add`, `ws add-repo`, `ws close`, `ws task`, `ws doc open`), see:
 
 - `docs/user/guides/INSTALL.md`
 - `docs/user/guides/COMMANDS.md`
 - `docs/user/guides/CONFIG.md`
+- `docs/user/guides/TASKS.md`
+- `docs/user/guides/WORKSPACE_DOCS.md`
 
 ## Shell Integration (Recommended)
 
@@ -107,6 +109,29 @@ kra ws add-repo --id TASK-1234
 Details:
 
 - `docs/user/guides/REPO_WORKTREE.md`
+
+### 4) Workspace-local task tracking
+Keep a structured `tasks.md` inside each workspace, update statuses with `kra ws task`, and project the current declaration into `cmux` sidebar task pills when needed.
+
+Example:
+
+```sh
+kra ws task add --current --title "Draft docs"
+kra ws task status --current TASK-001 doing
+```
+
+Guide: `docs/user/guides/TASKS.md`
+
+### 5) Markdown docs viewer for workspace notes
+Open workspace-local Markdown in the `cmux` Markdown viewer and keep related documents collected into one docs pane slot per workspace.
+
+Example:
+
+```sh
+kra ws doc open --current notes/
+```
+
+Guide: `docs/user/guides/WORKSPACE_DOCS.md`
 
 ## Installation
 
@@ -197,6 +222,8 @@ Details:
 - Config guide: `docs/user/guides/CONFIG.md`
 - Workspace lifecycle guide: `docs/user/guides/WORKSPACE_LIFECYCLE.md`
 - cmux integration guide: `docs/user/guides/CMUX.md`
+- Workspace task guide: `docs/user/guides/TASKS.md`
+- Workspace docs viewer guide: `docs/user/guides/WORKSPACE_DOCS.md`
 - Shell integration guide: `docs/user/guides/SHELL_INTEGRATION.md`
 - Repo/worktree guide: `docs/user/guides/REPO_WORKTREE.md`
 - Automation JSON guide: `docs/user/guides/AUTOMATION_JSON.md`

@@ -48,13 +48,37 @@ Notes:
 - `kra ws list --format human|tsv|json`
 - `kra ws dashboard --format human|json`
 - `kra ws open [--id <id> | --current | --select | --multi-select] [--concurrency <n>]`
+- `kra ws doc open [--id <id> | --current | --select] [path] [--surface <id|ref|index>] [--no-focus]`
 - `kra ws add-repo [--id <id> | --current | --select] [--preset <name>]`
 - `kra ws remove-repo [--id <id> | --current | --select]`
+- `kra ws task [--id <id> | --current | --select]`
+- `kra ws task list [--id <id> | --current | --select]`
+- `kra ws task add [--id <id> | --current | --select] --title "<text>"`
+- `kra ws task status [--id <id> | --current | --select] <task-id> <todo|doing|blocked|done>`
+- `kra ws task sync [--id <id> | --current | --select]`
 - `kra ws close [--id <id> | --current | --select | --multi-select]`
 - `kra ws reopen [--id <id> | --current | --select]`
 - `kra ws purge [--id <id> | --current | --select]`
 - `kra ws lock [--id <id> | --current | --select | --multi-select]`
 - `kra ws unlock [--id <id> | --current | --select | --multi-select]`
+
+## Task and doc flows
+
+Use workspace-local tasks when you want a Markdown source of truth that can also project into `cmux` sidebar state.
+
+```sh
+kra ws task add --current --title "Draft docs"
+kra ws task list --current
+kra ws task status --current TASK-001 doing
+```
+
+Use `kra ws doc open` when you want GitHub-like Markdown viewing in `cmux` for workspace-local docs:
+
+```sh
+kra ws doc open --current
+kra ws doc open --current notes/
+kra ws doc open --current tasks.md --no-focus
+```
 
 ## Jira import quickstart
 
@@ -126,6 +150,8 @@ Notes:
 - Shell integration guide: `docs/user/guides/SHELL_INTEGRATION.md`
 - Workspace lifecycle guide: `docs/user/guides/WORKSPACE_LIFECYCLE.md`
 - cmux integration guide: `docs/user/guides/CMUX.md`
+- Workspace task guide: `docs/user/guides/TASKS.md`
+- Workspace docs viewer guide: `docs/user/guides/WORKSPACE_DOCS.md`
 - Repo/worktree guide: `docs/user/guides/REPO_WORKTREE.md`
 - Automation JSON guide: `docs/user/guides/AUTOMATION_JSON.md`
 - Specs: `docs/dev/spec/README.md`
