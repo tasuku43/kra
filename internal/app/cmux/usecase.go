@@ -243,18 +243,21 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 	mapMu.Unlock()
 	if len(existingEntries) > 0 {
 		existing := existingEntries[0]
-		_, ierr := client.Identify(ctx, existing.CMUXWorkspaceID, "")
+		payload, ierr := client.Identify(ctx, existing.CMUXWorkspaceID, "")
+		if ierr == nil {
+			switch identifyWorkspaceHandleState(payload, existing.CMUXWorkspaceID) {
+			case -1:
+				ierr = errCMUXWorkspaceNotFound
+			case 0:
+				return OpenResultItem{}, "cmux_identify_failed", fmt.Sprintf("identify cmux workspace: could not verify requested workspace: %s", existing.CMUXWorkspaceID)
+			}
+		}
 		if ierr == nil {
 			if opts.SelectWorkspace {
 				if err := client.SelectWorkspace(ctx, existing.CMUXWorkspaceID); err != nil {
 					if IsNotFoundError(err) {
 						// runtime entry disappeared between identify and select; recreate below.
-						mapMu.Lock()
-						ws := mapping.Workspaces[target.WorkspaceID]
-						ws.Entries = nil
-						ws.NextOrdinal = 1
-						mapping.Workspaces[target.WorkspaceID] = ws
-						mapMu.Unlock()
+						resetWorkspaceCMUXMapping(mapping, mapMu, target.WorkspaceID)
 					} else {
 						return OpenResultItem{}, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
 					}
@@ -297,12 +300,7 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 				return OpenResultItem{}, "cmux_identify_failed", fmt.Sprintf("identify cmux workspace: %v", ierr)
 			}
 			// stale mapping entry: clear and recreate with ordinal reset.
-			mapMu.Lock()
-			ws := mapping.Workspaces[target.WorkspaceID]
-			ws.Entries = nil
-			ws.NextOrdinal = 1
-			mapping.Workspaces[target.WorkspaceID] = ws
-			mapMu.Unlock()
+			resetWorkspaceCMUXMapping(mapping, mapMu, target.WorkspaceID)
 		}
 	}
 
@@ -505,9 +503,11 @@ func (s *Service) Status(ctx context.Context, root string, workspaceID string) (
 func ReconcileMappingWithRuntime(store cmuxmap.Store, mapping cmuxmap.File, runtime []cmuxctl.Workspace, prune bool) (cmuxmap.File, map[string]bool, int, error) {
 	exists := map[string]bool{}
 	for _, row := range runtime {
-		id := strings.TrimSpace(row.ID)
-		if id != "" {
-			exists[id] = true
+		for _, handle := range []string{row.ID, row.Ref} {
+			handle = strings.TrimSpace(handle)
+			if handle != "" {
+				exists[handle] = true
+			}
 		}
 	}
 	if !prune || len(exists) == 0 {
@@ -545,9 +545,9 @@ func probeAndPruneByID(ctx context.Context, store cmuxmap.Store, mapping *cmuxma
 			if _, ok := statusByID[id]; ok {
 				continue
 			}
-			_, err := client.Identify(ctx, id, "")
+			payload, err := client.Identify(ctx, id, "")
 			if err == nil {
-				statusByID[id] = 1
+				statusByID[id] = identifyWorkspaceHandleState(payload, id)
 				continue
 			}
 			if IsNotFoundError(err) {
@@ -588,6 +588,70 @@ func probeAndPruneByID(ctx context.Context, store cmuxmap.Store, mapping *cmuxma
 		}
 	}
 	return prunedCount, ""
+}
+
+var errCMUXWorkspaceNotFound = fmt.Errorf("cmux workspace not found")
+
+func resetWorkspaceCMUXMapping(mapping *cmuxmap.File, mapMu *sync.Mutex, workspaceID string) {
+	mapMu.Lock()
+	defer mapMu.Unlock()
+	ws := mapping.Workspaces[workspaceID]
+	ws.Entries = nil
+	ws.NextOrdinal = 1
+	mapping.Workspaces[workspaceID] = ws
+}
+
+func identifyWorkspaceHandleState(payload map[string]any, handle string) int {
+	handle = strings.TrimSpace(handle)
+	if handle == "" || payload == nil {
+		return 0
+	}
+	for _, candidate := range []map[string]any{payload, nestedAnyMap(payload, "caller")} {
+		switch workspaceHandleState(candidate, handle) {
+		case 1:
+			return 1
+		case -1:
+			return -1
+		}
+	}
+	if raw, ok := payload["caller"]; ok && raw == nil {
+		return -1
+	}
+	return 0
+}
+
+func nestedAnyMap(payload map[string]any, key string) map[string]any {
+	if payload == nil {
+		return nil
+	}
+	raw, ok := payload[key]
+	if !ok {
+		return nil
+	}
+	child, _ := raw.(map[string]any)
+	return child
+}
+
+func workspaceHandleState(payload map[string]any, handle string) int {
+	if payload == nil {
+		return 0
+	}
+	found := false
+	for _, key := range []string{"workspace_ref", "workspace_id"} {
+		raw, ok := payload[key]
+		if !ok {
+			continue
+		}
+		found = true
+		value, _ := raw.(string)
+		if strings.TrimSpace(value) == handle {
+			return 1
+		}
+	}
+	if found {
+		return -1
+	}
+	return 0
 }
 
 func IsNotFoundError(err error) bool {
