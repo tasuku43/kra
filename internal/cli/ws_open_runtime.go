@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"sort"
 	"strings"
+	"time"
 
 	appcmux "github.com/tasuku43/kra/internal/app/cmux"
 	"github.com/tasuku43/kra/internal/cmuxmap"
@@ -185,7 +186,7 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 	openResult, code, msg := svc.Open(context.Background(), root, targets, concurrency, multi)
 	if code != "" {
 		if code == "cmux_capability_missing" {
-			return c.writeWSOpenCDFallback(outputFormat, workspaceHint, targets, multi, msg)
+			return c.writeWSOpenCDFallback(root, outputFormat, workspaceHint, targets, multi, msg)
 		}
 		return c.writeWSOpenError(outputFormat, code, workspaceHint, msg, exitError)
 	}
@@ -200,6 +201,9 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 			ReusedExisting:  r.ReusedExisting,
 		})
 	}
+	if err := markWSOpenResultsInProgress(root, results, time.Now().Unix()); err != nil {
+		return c.writeWSOpenError(outputFormat, "workspace_state_update_failed", workspaceHint, fmt.Sprintf("advance workspace work_state: %v", err), exitError)
+	}
 	failures := make([]wsOpenFailure, 0, len(openResult.Failures))
 	for _, f := range openResult.Failures {
 		failures = append(failures, wsOpenFailure{
@@ -212,7 +216,7 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 	return c.writeWSOpenResult(outputFormat, multi, results, failures)
 }
 
-func (c *CLI) writeWSOpenCDFallback(format string, workspaceHint string, targets []appcmux.OpenTarget, multi bool, reason string) int {
+func (c *CLI) writeWSOpenCDFallback(root string, format string, workspaceHint string, targets []appcmux.OpenTarget, multi bool, reason string) int {
 	trimmedReason := strings.TrimSpace(reason)
 	if trimmedReason == "" {
 		trimmedReason = "workspace runtime is not available"
@@ -224,6 +228,9 @@ func (c *CLI) writeWSOpenCDFallback(format string, workspaceHint string, targets
 	target := targets[0]
 	if err := emitShellActionCD(target.WorkspacePath); err != nil {
 		return c.writeWSOpenError(format, "internal_error", target.WorkspaceID, fmt.Sprintf("write shell action: %v", err), exitError)
+	}
+	if err := markWorkspaceInProgress(root, target.WorkspaceID, time.Now().Unix()); err != nil {
+		return c.writeWSOpenError(format, "workspace_state_update_failed", target.WorkspaceID, fmt.Sprintf("advance workspace work_state: %v", err), exitError)
 	}
 
 	if format == "json" {
@@ -399,6 +406,30 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 		return exitError
 	}
 	return exitOK
+}
+
+func markWSOpenResultsInProgress(root string, results []wsOpenResult, now int64) error {
+	for _, result := range results {
+		if err := markWorkspaceInProgress(root, result.WorkspaceID, now); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func markWorkspaceInProgress(root string, workspaceID string, now int64) error {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return nil
+	}
+	wsPath := filepath.Join(root, "workspaces", workspaceID)
+	if _, err := setWorkspaceMetaWorkState(wsPath, workspaceWorkStateInProgress, now); err != nil {
+		if os.IsNotExist(err) || strings.Contains(err.Error(), workspaceMetaFilename) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 func parseIntArg(raw string, name string) (int, error) {

@@ -93,6 +93,17 @@ func (f *fakeCMUXOpenClient) Identify(_ context.Context, workspace string, _ str
 	return map[string]any{"workspace_id": workspace}, nil
 }
 
+func assertWorkspaceWorkState(t *testing.T, wsPath string, want workspaceWorkState) {
+	t.Helper()
+	meta, err := loadWorkspaceMetaFile(wsPath)
+	if err != nil {
+		t.Fatalf("load workspace meta: %v", err)
+	}
+	if got := normalizeWorkspaceWorkState(workspaceWorkState(meta.Workspace.WorkState)); got != want {
+		t.Fatalf("workspace.work_state = %q, want %q", meta.Workspace.WorkState, want)
+	}
+}
+
 func TestCLI_CMUX_Open_JSON_RequiresWorkspaceIDWhenOmitted(t *testing.T) {
 	prepareCurrentRootForTest(t)
 
@@ -181,6 +192,7 @@ func TestCLI_CMUX_Open_JSON_Success_PersistsMapping(t *testing.T) {
 	if len(ws.Entries) != 1 || ws.Entries[0].CMUXWorkspaceID != "CMUX-WS-1" || ws.Entries[0].Ordinal != 1 {
 		t.Fatalf("entries = %+v, want one entry with id=CMUX-WS-1 ordinal=1", ws.Entries)
 	}
+	assertWorkspaceWorkState(t, wsPath, workspaceWorkStateInProgress)
 }
 
 func TestCLI_CMUX_Open_JSON_FallbacksToDirectoryWhenCapabilityMissing(t *testing.T) {
@@ -188,6 +200,10 @@ func TestCLI_CMUX_Open_JSON_FallbacksToDirectoryWhenCapabilityMissing(t *testing
 	wsPath := filepath.Join(root, "workspaces", "WS1")
 	if err := os.MkdirAll(wsPath, 0o755); err != nil {
 		t.Fatalf("mkdir workspace: %v", err)
+	}
+	now := time.Now().Unix()
+	if err := writeWorkspaceMetaFile(wsPath, newWorkspaceMetaFileForCreate("WS1", "hello world", "", now)); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
 	}
 	actionFile := filepath.Join(t.TempDir(), "action.sh")
 	t.Setenv(shellActionFileEnv, actionFile)
@@ -237,6 +253,7 @@ func TestCLI_CMUX_Open_JSON_FallbacksToDirectoryWhenCapabilityMissing(t *testing
 	if !strings.HasPrefix(string(action), "cd ") || !strings.Contains(string(action), wsPath) {
 		t.Fatalf("unexpected shell action: %q", string(action))
 	}
+	assertWorkspaceWorkState(t, wsPath, workspaceWorkStateInProgress)
 }
 
 func TestCLI_CMUX_Open_JSON_CapabilityMissing_MultiTargetRemainsError(t *testing.T) {
@@ -393,6 +410,8 @@ func TestCLI_CMUX_Open_JSON_Multi_Success(t *testing.T) {
 	if len(mapping.Workspaces["WS1"].Entries) != 1 || len(mapping.Workspaces["WS2"].Entries) != 1 {
 		t.Fatalf("mapping entries were not created for both targets: %+v", mapping.Workspaces)
 	}
+	assertWorkspaceWorkState(t, wsPath1, workspaceWorkStateInProgress)
+	assertWorkspaceWorkState(t, wsPath2, workspaceWorkStateInProgress)
 }
 
 func TestCLI_CMUX_Open_JSON_MultipleTargetsRequireMulti(t *testing.T) {
@@ -518,6 +537,7 @@ func TestCLI_CMUX_Open_JSON_MultiConcurrency_PartialFailure(t *testing.T) {
 	if len(mapping.Workspaces["WS1"].Entries) != 1 {
 		t.Fatalf("mapping entries for WS1 = %+v, want 1 entry", mapping.Workspaces["WS1"].Entries)
 	}
+	assertWorkspaceWorkState(t, wsPath1, workspaceWorkStateInProgress)
 }
 
 func TestCLI_CMUX_Open_JSON_FailsWhenSetStatusFails(t *testing.T) {
@@ -655,6 +675,7 @@ func TestCLI_WS_Open_JSON_ReusesExistingMapping_AsSwitchFallback(t *testing.T) {
 	if !resp.OK || resp.Action != "ws.open" || resp.Result.CMUXWorkspaceID != "CMUX-EXISTING" || !resp.Result.ReusedExisting {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
+	assertWorkspaceWorkState(t, wsPath, workspaceWorkStateInProgress)
 }
 
 func TestCLI_WS_Open_JSON_RecreatesWhenMappedWorkspaceBecomesNotFoundOnSelect(t *testing.T) {
