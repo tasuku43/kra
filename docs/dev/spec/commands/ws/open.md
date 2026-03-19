@@ -30,6 +30,11 @@ Open cmux workspace(s) from workspace action entrypoint.
 - `--concurrency` is valid only with `--multi-select`.
 - `--multi-select` かつ `--concurrency` 未指定時は、自動並列度（`min(targets, max(2, GOMAXPROCS))`）で goroutine 実行する。
 - JSON mode remains non-interactive.
+- On successful open, advance each succeeded target's `.kra.meta.json.workspace.work_state` to
+  `in-progress`.
+  - transition is monotonic (`todo -> in-progress`)
+  - already `in-progress` workspaces remain unchanged
+  - failed targets must not be advanced
 - 1:1 policy (`kra workspace` : `cmux workspace`):
   - when no mapping exists, create and select a new cmux workspace
   - newly created cmux workspace is labeled with `kra` / `managed by kra` (`icon=tag`, `color=#4F46E5`)

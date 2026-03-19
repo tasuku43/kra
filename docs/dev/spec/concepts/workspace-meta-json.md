@@ -103,6 +103,10 @@ This file is canonical and stored in:
   - may derive transient state in memory
   - must not create missing baseline data
   - must not normalize `workspace.work_state` by writing metadata
+- `ws open`:
+  - on success, advance `workspace.work_state` to `in-progress`
+  - transition is monotonic only (`todo -> in-progress`)
+  - failed targets must not rewrite metadata
 - `ws close`:
   - refresh `repos_restore` from live worktrees before worktree removal.
   - set `workspace.status=archived`.
