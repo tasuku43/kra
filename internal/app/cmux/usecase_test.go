@@ -2,6 +2,7 @@ package cmux
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -14,15 +15,17 @@ import (
 )
 
 type fakeClient struct {
-	capabilities cmuxctl.Capabilities
-	createID     string
-	createErr    error
-	createCmds   []string
-	renameErr    error
-	selectErr    error
-	setStatusErr error
-	identifyErr  map[string]error
-	identifyBy   map[string]map[string]any
+	capabilities   cmuxctl.Capabilities
+	createID       string
+	createErr      error
+	createCmds     []string
+	renameErr      error
+	selectErr      error
+	setStatusErr   error
+	identifyErr    map[string]error
+	identifyBy     map[string]map[string]any
+	listWorkspaces []cmuxctl.Workspace
+	listErr        error
 
 	renameWorkspace string
 	renameTitle     string
@@ -67,7 +70,7 @@ func (f *fakeClient) SetStatus(_ context.Context, workspace string, label string
 }
 
 func (f *fakeClient) ListWorkspaces(context.Context) ([]cmuxctl.Workspace, error) {
-	return nil, nil
+	return f.listWorkspaces, f.listErr
 }
 
 func (f *fakeClient) Identify(_ context.Context, workspace string, _ string) (map[string]any, error) {
@@ -262,6 +265,72 @@ func TestEnsureWorkspace_Select_RecreatesWhenIdentifyDoesNotResolveRequestedWork
 	}
 	if ws.NextOrdinal != 2 {
 		t.Fatalf("next_ordinal = %d, want 2", ws.NextOrdinal)
+	}
+}
+
+func TestEnsureWorkspace_Select_RelinksByRuntimeTitleWhenMappedIDIsStale(t *testing.T) {
+	root := t.TempDir()
+	if err := cmuxmap.NewStore(root).Save(cmuxmap.File{
+		Version: cmuxmap.CurrentVersion,
+		Workspaces: map[string]cmuxmap.WorkspaceMapping{
+			"KRA_ROOT": {
+				NextOrdinal: 2,
+				Entries: []cmuxmap.Entry{
+					{CMUXWorkspaceID: "workspace:12", Ordinal: 1, TitleSnapshot: "KRA_ROOT | KRA_ROOT"},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("save mapping: %v", err)
+	}
+
+	fake := &fakeClient{
+		capabilities: cmuxctl.Capabilities{
+			Methods: map[string]struct{}{
+				"workspace.create": {},
+				"workspace.rename": {},
+				"workspace.select": {},
+			},
+		},
+		identifyErr: map[string]error{
+			"workspace:12": errors.New("cmux identify: Error: not_found: Workspace not found"),
+		},
+		listWorkspaces: []cmuxctl.Workspace{
+			{ID: "workspace:99", Ref: "workspace:99", Title: "KRA_ROOT | KRA_ROOT"},
+		},
+	}
+
+	svc := NewService(
+		func() Client { return fake },
+		func(root string) cmuxmap.Store { return cmuxmap.NewStore(root) },
+	)
+
+	item, code, msg := svc.EnsureWorkspace(context.Background(), root, OpenTarget{
+		WorkspaceID:   "KRA_ROOT",
+		WorkspacePath: root,
+		Title:         "KRA_ROOT",
+		StatusText:    "kra:root",
+	}, true)
+	if code != "" {
+		t.Fatalf("code=%q msg=%q", code, msg)
+	}
+	if item.CMUXWorkspaceID != "workspace:99" || !item.ReusedExisting {
+		t.Fatalf("unexpected item: %+v", item)
+	}
+	if len(fake.createCmds) != 0 {
+		t.Fatalf("create should not run when title relink succeeds: %+v", fake.createCmds)
+	}
+	if fake.selectWorkspace != "workspace:99" {
+		t.Fatalf("select workspace = %q, want %q", fake.selectWorkspace, "workspace:99")
+	}
+
+	mapping, err := cmuxmap.NewStore(root).Load()
+	if err != nil {
+		t.Fatalf("load mapping: %v", err)
+	}
+	ws := mapping.Workspaces["KRA_ROOT"]
+	if len(ws.Entries) != 1 || ws.Entries[0].CMUXWorkspaceID != "workspace:99" {
+		t.Fatalf("mapping = %+v", ws)
 	}
 }
 

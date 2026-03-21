@@ -50,3 +50,5 @@ Persist a 1:N mapping from `kra` workspace IDs to cmux workspace IDs.
 
 - Save operation must ensure parent directory exists.
 - Save operation uses temp-file + rename replacement semantics.
+- On `ws open`, stale `cmux_workspace_id` entries may be relinked to a new runtime workspace handle when
+  exactly one runtime workspace title matches the expected `kra`-formatted title for the same logical workspace.

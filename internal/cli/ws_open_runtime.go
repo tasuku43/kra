@@ -22,6 +22,7 @@ type cmuxOpenClient interface {
 	RenameWorkspace(ctx context.Context, workspace string, title string) error
 	SelectWorkspace(ctx context.Context, workspace string) error
 	SetStatus(ctx context.Context, workspace string, label string, text string, icon string, color string) error
+	ListWorkspaces(ctx context.Context) ([]cmuxctl.Workspace, error)
 	Identify(ctx context.Context, workspace string, surface string) (map[string]any, error)
 }
 
@@ -530,8 +531,8 @@ func (a wsOpenClientAdapter) SetStatus(ctx context.Context, workspace string, la
 	return a.inner.SetStatus(ctx, workspace, label, text, icon, color)
 }
 
-func (a wsOpenClientAdapter) ListWorkspaces(context.Context) ([]cmuxctl.Workspace, error) {
-	return nil, fmt.Errorf("unsupported")
+func (a wsOpenClientAdapter) ListWorkspaces(ctx context.Context) ([]cmuxctl.Workspace, error) {
+	return a.inner.ListWorkspaces(ctx)
 }
 
 func (a wsOpenClientAdapter) Identify(ctx context.Context, workspace string, surface string) (map[string]any, error) {

@@ -37,6 +37,8 @@ type fakeCMUXOpenClient struct {
 	statusIcon      string
 	statusColor     string
 	identifyErr     map[string]error
+	listWorkspaces  []cmuxctl.Workspace
+	listErr         error
 }
 
 func (f *fakeCMUXOpenClient) Capabilities(context.Context) (cmuxctl.Capabilities, error) {
@@ -91,6 +93,10 @@ func (f *fakeCMUXOpenClient) Identify(_ context.Context, workspace string, _ str
 		}
 	}
 	return map[string]any{"workspace_id": workspace}, nil
+}
+
+func (f *fakeCMUXOpenClient) ListWorkspaces(context.Context) ([]cmuxctl.Workspace, error) {
+	return f.listWorkspaces, f.listErr
 }
 
 func assertWorkspaceWorkState(t *testing.T, wsPath string, want workspaceWorkState) {
@@ -753,5 +759,94 @@ func TestCLI_WS_Open_JSON_RecreatesWhenMappedWorkspaceBecomesNotFoundOnSelect(t 
 	}
 	if !resp.OK || resp.Action != "ws.open" || resp.Result.CMUXWorkspaceID != "CMUX-NEW" || resp.Result.ReusedExisting {
 		t.Fatalf("unexpected response: %+v", resp)
+	}
+}
+
+func TestCLI_WS_Open_JSON_RelinksByTitleWhenMappedWorkspaceIDIsStale(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	wsPath := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(wsPath, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	now := time.Now().Unix()
+	if err := writeWorkspaceMetaFile(wsPath, newWorkspaceMetaFileForCreate("WS1", "alpha", "", now)); err != nil {
+		t.Fatalf("write workspace meta: %v", err)
+	}
+	store := cmuxmap.NewStore(root)
+	if err := store.Save(cmuxmap.File{
+		Version: cmuxmap.CurrentVersion,
+		Workspaces: map[string]cmuxmap.WorkspaceMapping{
+			"WS1": {
+				NextOrdinal: 2,
+				Entries: []cmuxmap.Entry{
+					{
+						CMUXWorkspaceID: "CMUX-STALE",
+						Ordinal:         1,
+						TitleSnapshot:   "WS1 | alpha",
+						CreatedAt:       time.Now().UTC().Format(time.RFC3339),
+						LastUsedAt:      time.Now().UTC().Add(-time.Hour).Format(time.RFC3339),
+					},
+				},
+			},
+		},
+	}); err != nil {
+		t.Fatalf("save mapping: %v", err)
+	}
+
+	fake := &fakeCMUXOpenClient{
+		capabilities: cmuxctl.Capabilities{
+			Methods: map[string]struct{}{
+				"workspace.create": {},
+				"workspace.rename": {},
+				"workspace.select": {},
+			},
+		},
+		createID: "CMUX-NEW",
+		identifyErr: map[string]error{
+			"CMUX-STALE": errors.New("cmux identify: Error: not_found: Workspace not found"),
+		},
+		listWorkspaces: []cmuxctl.Workspace{
+			{ID: "CMUX-RELINKED", Ref: "workspace:5", Title: "WS1 | alpha"},
+		},
+	}
+	prevClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient { return fake }
+	t.Cleanup(func() { newCMUXOpenClient = prevClient })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "open", "--format", "json", "--id", "WS1"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, err.String(), out.String())
+	}
+	if len(fake.createCmds) != 0 {
+		t.Fatalf("create should not be called when title relink succeeds: %+v", fake.createCmds)
+	}
+	if fake.selectWorkspace != "CMUX-RELINKED" {
+		t.Fatalf("selected workspace = %q, want %q", fake.selectWorkspace, "CMUX-RELINKED")
+	}
+
+	var resp struct {
+		OK     bool   `json:"ok"`
+		Action string `json:"action"`
+		Result struct {
+			CMUXWorkspaceID string `json:"cmux_workspace_id"`
+			ReusedExisting  bool   `json:"reused_existing"`
+		} `json:"result"`
+	}
+	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
+		t.Fatalf("json unmarshal error: %v (out=%q)", uerr, out.String())
+	}
+	if !resp.OK || resp.Action != "ws.open" || resp.Result.CMUXWorkspaceID != "CMUX-RELINKED" || !resp.Result.ReusedExisting {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	mapping, lerr := cmuxmap.NewStore(root).Load()
+	if lerr != nil {
+		t.Fatalf("load mapping: %v", lerr)
+	}
+	if got := mapping.Workspaces["WS1"].Entries[0].CMUXWorkspaceID; got != "CMUX-RELINKED" {
+		t.Fatalf("mapping cmux_workspace_id = %q, want %q", got, "CMUX-RELINKED")
 	}
 }

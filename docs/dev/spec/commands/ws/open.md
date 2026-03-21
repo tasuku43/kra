@@ -39,6 +39,9 @@ Open cmux workspace(s) from workspace action entrypoint.
   - when no mapping exists, create and select a new cmux workspace
   - newly created cmux workspace is labeled with `kra` / `managed by kra` (`icon=tag`, `color=#4F46E5`)
   - when mapping already exists and runtime workspace is reachable, create is skipped and operation falls back to switch
+  - when saved mapping is stale but exactly one runtime workspace matches the expected `kra` title
+    (`FormatWorkspaceTitle(<workspace-id>, <workspace-title>, <existing-ordinal>)`), update mapping to that runtime workspace and reuse it instead of creating a new one
+  - if title match is missing or ambiguous, stale mapping falls back to new workspace creation
 - cmux capability fallback:
   - when cmux runtime/capabilities are unavailable (`cmux_capability_missing`) and target is single workspace,
     command falls back to directory-open behavior (emit shell action `cd <workspace-path>`)
