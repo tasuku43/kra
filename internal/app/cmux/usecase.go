@@ -256,48 +256,34 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 			if opts.SelectWorkspace {
 				if err := client.SelectWorkspace(ctx, existing.CMUXWorkspaceID); err != nil {
 					if IsNotFoundError(err) {
+						relinked, code, msg := s.tryRelinkWorkspaceByTitle(ctx, client, target, existing, mapping, mapMu, opts)
+						if code != "" {
+							return OpenResultItem{}, code, msg
+						}
+						if relinked != nil {
+							return *relinked, "", ""
+						}
 						// runtime entry disappeared between identify and select; recreate below.
 						resetWorkspaceCMUXMapping(mapping, mapMu, target.WorkspaceID)
 					} else {
 						return OpenResultItem{}, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
 					}
 				} else {
-					now := s.Now().UTC().Format(time.RFC3339)
-					mapMu.Lock()
-					ws := mapping.Workspaces[target.WorkspaceID]
-					ws.Entries = []cmuxmap.Entry{existing}
-					ws.Entries[0].LastUsedAt = now
-					mapping.Workspaces[target.WorkspaceID] = ws
-					mapMu.Unlock()
-					return OpenResultItem{
-						WorkspaceID:     target.WorkspaceID,
-						WorkspacePath:   target.WorkspacePath,
-						CMUXWorkspaceID: existing.CMUXWorkspaceID,
-						Ordinal:         existing.Ordinal,
-						Title:           existing.TitleSnapshot,
-						ReusedExisting:  true,
-					}, "", ""
+					return s.reuseExistingWorkspace(target, existing, mapping, mapMu), "", ""
 				}
 			} else {
-				now := s.Now().UTC().Format(time.RFC3339)
-				mapMu.Lock()
-				ws := mapping.Workspaces[target.WorkspaceID]
-				ws.Entries = []cmuxmap.Entry{existing}
-				ws.Entries[0].LastUsedAt = now
-				mapping.Workspaces[target.WorkspaceID] = ws
-				mapMu.Unlock()
-				return OpenResultItem{
-					WorkspaceID:     target.WorkspaceID,
-					WorkspacePath:   target.WorkspacePath,
-					CMUXWorkspaceID: existing.CMUXWorkspaceID,
-					Ordinal:         existing.Ordinal,
-					Title:           existing.TitleSnapshot,
-					ReusedExisting:  true,
-				}, "", ""
+				return s.reuseExistingWorkspace(target, existing, mapping, mapMu), "", ""
 			}
 		} else {
 			if !IsNotFoundError(ierr) {
 				return OpenResultItem{}, "cmux_identify_failed", fmt.Sprintf("identify cmux workspace: %v", ierr)
+			}
+			relinked, code, msg := s.tryRelinkWorkspaceByTitle(ctx, client, target, existing, mapping, mapMu, opts)
+			if code != "" {
+				return OpenResultItem{}, code, msg
+			}
+			if relinked != nil {
+				return *relinked, "", ""
 			}
 			// stale mapping entry: clear and recreate with ordinal reset.
 			resetWorkspaceCMUXMapping(mapping, mapMu, target.WorkspaceID)
@@ -353,6 +339,82 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 		Title:           cmuxTitle,
 		ReusedExisting:  false,
 	}, "", ""
+}
+
+func (s *Service) reuseExistingWorkspace(target OpenTarget, existing cmuxmap.Entry, mapping *cmuxmap.File, mapMu *sync.Mutex) OpenResultItem {
+	now := s.Now().UTC().Format(time.RFC3339)
+	mapMu.Lock()
+	ws := mapping.Workspaces[target.WorkspaceID]
+	ws.Entries = []cmuxmap.Entry{existing}
+	ws.Entries[0].LastUsedAt = now
+	mapping.Workspaces[target.WorkspaceID] = ws
+	mapMu.Unlock()
+	return OpenResultItem{
+		WorkspaceID:     target.WorkspaceID,
+		WorkspacePath:   target.WorkspacePath,
+		CMUXWorkspaceID: existing.CMUXWorkspaceID,
+		Ordinal:         existing.Ordinal,
+		Title:           existing.TitleSnapshot,
+		ReusedExisting:  true,
+	}
+}
+
+func (s *Service) tryRelinkWorkspaceByTitle(ctx context.Context, client Client, target OpenTarget, existing cmuxmap.Entry, mapping *cmuxmap.File, mapMu *sync.Mutex, opts openOptions) (*OpenResultItem, string, string) {
+	expectedTitle, err := cmuxmap.FormatWorkspaceTitle(target.WorkspaceID, target.Title, existing.Ordinal)
+	if err != nil {
+		return nil, "state_write_failed", fmt.Sprintf("format cmux workspace title: %v", err)
+	}
+	runtime, err := client.ListWorkspaces(ctx)
+	if err != nil {
+		return nil, "cmux_list_failed", fmt.Sprintf("list cmux workspaces: %v", err)
+	}
+	match, ok := findWorkspaceByExactTitle(runtime, expectedTitle)
+	if !ok {
+		return nil, "", ""
+	}
+	entry := existing
+	entry.CMUXWorkspaceID = chooseCMUXWorkspaceHandle(match)
+	entry.TitleSnapshot = strings.TrimSpace(match.Title)
+	if entry.TitleSnapshot == "" {
+		entry.TitleSnapshot = expectedTitle
+	}
+	if opts.SelectWorkspace {
+		if err := client.SelectWorkspace(ctx, entry.CMUXWorkspaceID); err != nil {
+			if IsNotFoundError(err) {
+				return nil, "", ""
+			}
+			return nil, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
+		}
+	}
+	item := s.reuseExistingWorkspace(target, entry, mapping, mapMu)
+	return &item, "", ""
+}
+
+func findWorkspaceByExactTitle(workspaces []cmuxctl.Workspace, title string) (cmuxctl.Workspace, bool) {
+	title = strings.TrimSpace(title)
+	if title == "" {
+		return cmuxctl.Workspace{}, false
+	}
+	var match cmuxctl.Workspace
+	found := false
+	for _, workspace := range workspaces {
+		if strings.TrimSpace(workspace.Title) != title {
+			continue
+		}
+		if found {
+			return cmuxctl.Workspace{}, false
+		}
+		match = workspace
+		found = true
+	}
+	return match, found
+}
+
+func chooseCMUXWorkspaceHandle(workspace cmuxctl.Workspace) string {
+	if id := strings.TrimSpace(workspace.ID); id != "" {
+		return id
+	}
+	return strings.TrimSpace(workspace.Ref)
 }
 
 func shellQuoteSingle(s string) string {
