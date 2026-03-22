@@ -6,6 +6,10 @@ It is useful standalone for workspace lifecycle operations, and becomes more val
 The default workspace template starts with `notes/` and `artifacts/`, and you can extend it with your own files (for example `AGENTS.md`) and directories.
 `<KRA_ROOT>` stores active/archived task workspaces, while `$KRA_HOME` (default: `~/.kra/`) stores shared state such as config and the repo pool.
 
+> [!TIP]
+> Looking for a more inventory-driven workspace tool?
+> [gion](https://github.com/tasuku43/gion) may fit better if you often spin up review, issue, or reproduction environments across multiple repos and want to reconcile them safely with a declarative plan/apply flow.
+
 ## Filesystem Model (At a Glance)
 
 `kra` is built around filesystem-based workspace management under `<KRA_ROOT>`.
