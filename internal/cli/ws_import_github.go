@@ -223,6 +223,13 @@ func (c *CLI) runWSImportGitHubReviewWithOpts(opts wsImportGitHubOpts) int {
 		return c.writeWSImportGitHubRuntimeError(action, outputJSON, "internal_error", fmt.Sprintf("resolve github review requests: %v", err), exitError)
 	}
 	plan, createInputs := buildWSImportGitHubPlan("review", scope, config.GitHubStateOpen, resolved.limit, root, inputs)
+	if len(plan.Items) == 0 {
+		if outputJSON {
+			return c.writeWSImportGitHubJSONResult(action, plan, false, true, "", "")
+		}
+		c.printWSImportGitHubPlanHuman(plan)
+		return exitOK
+	}
 
 	shouldApply := false
 	interactivePromptFlow := !resolved.noPrompt && !resolved.apply
