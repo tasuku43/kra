@@ -142,7 +142,7 @@ func TestCLI_Shell_Completion_Zsh_PrintsCompdef(t *testing.T) {
 	if !strings.Contains(text, "\"ws add-repo\")\n      has_target=0") {
 		t.Fatalf("missing target-selector gate for ws add-repo: %q", text)
 	}
-	if !strings.Contains(text, `flags=("--id" "--current" "--select" "--multi-select" "--help")`) {
+	if !strings.Contains(text, `flags=("--id" "--current" "--select" "--multi-select" "--all" "--help")`) {
 		t.Fatalf("missing selector-first candidates: %q", text)
 	}
 	if !strings.Contains(text, `flags=("--format" "--preset" "--repo" "--branch" "--base-ref" "--yes" "--refresh" "--no-fetch" "--help")`) {
@@ -150,6 +150,12 @@ func TestCLI_Shell_Completion_Zsh_PrintsCompdef(t *testing.T) {
 	}
 	if !strings.Contains(text, `"ws import github issue:--state"`) || !strings.Contains(text, `"open" "closed" "all"`) {
 		t.Fatalf("missing zsh ws import github issue state values: %q", text)
+	}
+	if !strings.Contains(text, "\"ws task sync\")\n      has_target=0") {
+		t.Fatalf("missing target-selector gate for ws task sync: %q", text)
+	}
+	if !strings.Contains(text, `--id|--id=*|--current|--select|--multi-select|--all`) {
+		t.Fatalf("missing target-detection for --all in zsh gate: %q", text)
 	}
 	if strings.Contains(text, "\"-h\"") {
 		t.Fatalf("short help alias should not be suggested in completion: %q", text)
@@ -192,10 +198,16 @@ func TestCLI_Shell_Completion_Bash_PrintsCompleteHook(t *testing.T) {
 	if !strings.Contains(text, `"ws import github issue:--state"`) || !strings.Contains(text, `"open closed all"`) {
 		t.Fatalf("missing bash ws import github issue state values: %q", text)
 	}
+	if !strings.Contains(text, "\"ws task sync\")\n        has_target=0") {
+		t.Fatalf("missing target-selector gate for ws task sync: %q", text)
+	}
+	if !strings.Contains(text, `--id|--id=*|--current|--select|--multi-select|--all`) {
+		t.Fatalf("missing target-detection for --all in bash gate: %q", text)
+	}
 	if !strings.Contains(text, "\"ws add-repo\")\n        has_target=0") {
 		t.Fatalf("missing target-selector gate for ws add-repo: %q", text)
 	}
-	if !strings.Contains(text, `"--id --current --select --multi-select --help"`) {
+	if !strings.Contains(text, `"--id --current --select --multi-select --all --help"`) {
 		t.Fatalf("missing selector-first candidates: %q", text)
 	}
 	if !strings.Contains(text, `"--format --preset --repo --branch --base-ref --yes --refresh --no-fetch --help"`) {
@@ -241,7 +253,7 @@ func TestRenderShellCompletionScript_UnsupportedShell(t *testing.T) {
 }
 
 func TestKraCompletionCommandFlags_WS_FocusTargetSelectors(t *testing.T) {
-	want := []string{"--id", "--current", "--select", "--multi-select", "--help"}
+	want := []string{"--id", "--current", "--select", "--multi-select", "--all", "--help"}
 	got := completionRenderableFlags(kraCompletionCommandFlags["ws"])
 	if !reflect.DeepEqual(got, want) {
 		t.Fatalf("ws command flags = %v, want %v", got, want)

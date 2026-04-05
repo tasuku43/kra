@@ -3,15 +3,16 @@ title: "`kra ws task sync`"
 status: implemented
 ---
 
-# `kra ws task sync [--id <workspace-id>] [--current] [--select] [--format human|json]`
+# `kra ws task sync [--id <workspace-id>] [--current] [--select | --all] [--format human|json]`
 
 ## Purpose
 
-Project the current `tasks.md` declaration into cmux sidebar task pills for one active workspace.
+Project the current `tasks.md` declaration into cmux sidebar task pills for one or more active workspaces.
 
 ## Behavior
 
 - Resolve target workspace using the shared `ws` targeting contract.
+- `--all` resolves all active workspaces non-interactively and syncs them in parallel.
 - Command is valid only for active workspaces.
 - Read structured tasks from `tasks.md` using the workspace task contract.
 - Build desired cmux task pills from the current declaration:
@@ -37,6 +38,10 @@ Project the current `tasks.md` declaration into cmux sidebar task pills for one 
 - `todo` should use a quiet default-text/white color so backlog stays visible without overpowering
   `doing` and `blocked`.
 - If no mapped cmux workspace exists, return success with `state=skipped`.
+- In `--all` mode, each workspace is handled independently:
+  - one workspace failure must not prevent other targets from syncing
+  - skipped workspaces still count as successful results with `state=skipped`
+  - overall command returns partial failure when any workspace fails
 
 ## Human output
 
@@ -44,6 +49,7 @@ Project the current `tasks.md` declaration into cmux sidebar task pills for one 
   - `task sync: applied N (set X, cleared Y)`
   - or `task sync skipped: ...`
 - Also include the target workspace ID in the result section.
+- In `--all` mode, render an aggregate summary plus per-workspace sync lines.
 
 ## JSON envelope
 
@@ -57,4 +63,14 @@ Project the current `tasks.md` declaration into cmux sidebar task pills for one 
     - `set`
     - `cleared`
     - `warning` (optional)
+- In `--all` mode, `result` is batch-shaped:
+  - `count`
+  - `succeeded`
+  - `failed`
+  - `skipped`
+  - `targets`
+  - `set`
+  - `cleared`
+  - `workspaces[]`
+  - `failures[]`
 - `error`

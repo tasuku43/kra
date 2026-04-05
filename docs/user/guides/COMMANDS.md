@@ -49,7 +49,7 @@ Notes:
 - `kra ws import github review [--org <name> | --repo <owner/name>]`
 - `kra ws list --format human|tsv|json`
 - `kra ws dashboard --format human|json`
-- `kra ws open [--id <id> | --current | --select | --multi-select] [--concurrency <n>]`
+- `kra ws open [--id <id> | --current | --select | --multi-select | --all] [--concurrency <n>]`
 - `kra ws doc open [--id <id> | --current | --select] [path] [--surface <id|ref|index>] [--no-focus]`
 - `kra ws add-repo [--id <id> | --current | --select] [--preset <name>]`
 - `kra ws remove-repo [--id <id> | --current | --select]`
@@ -57,7 +57,7 @@ Notes:
 - `kra ws task list [--id <id> | --current | --select]`
 - `kra ws task add [--id <id> | --current | --select] --title "<text>"`
 - `kra ws task status [--id <id> | --current | --select] <task-id> <todo|doing|blocked|done>`
-- `kra ws task sync [--id <id> | --current | --select]`
+- `kra ws task sync [--id <id> | --current | --select | --all]`
 - `kra ws close [--id <id> | --current | --select | --multi-select]`
 - `kra ws reopen [--id <id> | --current | --select]`
 - `kra ws purge [--id <id> | --current | --select]`
@@ -121,6 +121,7 @@ Many workspace actions share a common target model:
 - `--current`: resolve workspace from your current directory context
 - `--select`: choose target interactively from the workspace selector
 - `--multi-select`: choose multiple targets interactively and run one supported action for all selected workspaces
+- `--all`: target all active workspaces non-interactively
 
 Typical examples:
 

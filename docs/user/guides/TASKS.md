@@ -41,6 +41,7 @@ kra ws task add --current --title "Review examples"
 kra ws task list --current
 kra ws task status --current TASK-001 doing
 kra ws task sync --current
+kra ws task sync --all
 ```
 
 `kra ws task` without a subcommand is also available as a human launcher for one active workspace.

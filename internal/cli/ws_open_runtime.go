@@ -32,6 +32,7 @@ var newCMUXMapStore = func(root string) cmuxmap.Store { return cmuxmap.NewStore(
 func (c *CLI) runWSOpenRuntime(args []string) int {
 	outputFormat := "human"
 	multi := false
+	all := false
 	concurrency := 1
 	concurrencyExplicit := false
 	targetIDs := make([]string, 0, 4)
@@ -41,6 +42,10 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 			c.printWSOpenUsage(c.Out)
 			return exitOK
 		case "--multi-select":
+			multi = true
+			args = args[1:]
+		case "--all":
+			all = true
 			multi = true
 			args = args[1:]
 		case "--format":
@@ -124,10 +129,13 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 	if concurrency > 1 && !multi {
 		return c.writeWSOpenError(outputFormat, "invalid_argument", "", "--concurrency requires --multi-select", exitUsage)
 	}
+	if all && len(targetIDs) > 0 {
+		return c.writeWSOpenError(outputFormat, "invalid_argument", "", "--all cannot be used with explicit targets", exitUsage)
+	}
 	if !multi && len(targetIDs) > 1 {
 		return c.writeWSOpenError(outputFormat, "invalid_argument", "", "multiple targets require --multi-select", exitUsage)
 	}
-	if multi && len(targetIDs) == 0 && outputFormat == "json" {
+	if multi && !all && len(targetIDs) == 0 && outputFormat == "json" {
 		return c.writeWSOpenError(outputFormat, "non_interactive_selection_required", "", "open --multi-select requires explicit targets in --format json mode", exitUsage)
 	}
 	for _, workspaceID := range targetIDs {
@@ -151,13 +159,26 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 
 	if len(targetIDs) == 0 {
 		if outputFormat == "json" {
-			return c.writeWSOpenError(outputFormat, "invalid_argument", "", "workspace id is required in --format json mode", exitUsage)
+			if !all {
+				return c.writeWSOpenError(outputFormat, "invalid_argument", "", "workspace id is required in --format json mode", exitUsage)
+			}
 		}
-		selectedIDs, selErr := c.selectWorkspacesForWSOpen(root, multi)
-		if selErr != nil {
-			return c.writeWSOpenError(outputFormat, "workspace_not_found", "", selErr.Error(), exitError)
+		if all {
+			allIDs, listErr := listWorkspaceIDsByStatus(context.Background(), root, "active")
+			if listErr != nil {
+				return c.writeWSOpenError(outputFormat, "workspace_not_found", "", fmt.Sprintf("list workspaces: %v", listErr), exitError)
+			}
+			if len(allIDs) == 0 {
+				return c.writeWSOpenError(outputFormat, "workspace_not_found", "", "no active workspaces available", exitError)
+			}
+			targetIDs = allIDs
+		} else {
+			selectedIDs, selErr := c.selectWorkspacesForWSOpen(root, multi)
+			if selErr != nil {
+				return c.writeWSOpenError(outputFormat, "workspace_not_found", "", selErr.Error(), exitError)
+			}
+			targetIDs = selectedIDs
 		}
-		targetIDs = selectedIDs
 	}
 	if multi && !concurrencyExplicit {
 		concurrency = defaultWSOpenConcurrency(len(targetIDs))
