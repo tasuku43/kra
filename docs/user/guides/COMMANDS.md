@@ -22,7 +22,7 @@ kra ws dashboard
 Notes:
 
 - `kra ws create` uses the default workspace template unless you pass `--template`; the baseline template starts with `notes/` and `artifacts/`.
-- Ticket provider integrations are designed to be extensible; current documented support is Jira (`kra ws create --jira`, `kra ws import jira`).
+- Ticket/provider integrations are designed to be extensible; current implemented support is Jira (`kra ws create --jira`, `kra ws import jira`), and GitHub import is specified separately for upcoming `kra ws import github issue|review`.
 
 ## Root commands
 
@@ -45,6 +45,8 @@ Notes:
 - `kra ws create [--no-prompt] [--template <name>] <id>`
 - `kra ws create --jira <ticket-url>`
 - `kra ws import jira [--sprint ... | --jql ...]`
+- `kra ws import github issue [--org <name> | --repo <owner/name>] [--state open|closed|all]` (planned)
+- `kra ws import github review [--org <name> | --repo <owner/name>]` (planned)
 - `kra ws list --format human|tsv|json`
 - `kra ws dashboard --format human|json`
 - `kra ws open [--id <id> | --current | --select | --multi-select] [--concurrency <n>]`

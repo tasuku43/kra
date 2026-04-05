@@ -73,6 +73,8 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/select.md`: Workspace targeting options (`--id` / `--current` / `--select`)
   - `commands/ws/create.md`: `kra ws create`
   - `commands/ws/select-multi.md`: `kra ws --select --multi`
+  - `commands/ws/import/github-issue.md`: `kra ws import github issue`
+  - `commands/ws/import/github-review.md`: `kra ws import github review`
   - `commands/ws/import/jira.md`: `kra ws import jira`
   - `commands/ws/dashboard.md`: `kra ws dashboard`
   - `commands/ws/open.md`: `kra ws open`
