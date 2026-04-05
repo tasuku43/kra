@@ -88,7 +88,7 @@ var kraCompletionCommandFlags = map[string][]string{
 	"init":    {"--root", "--context", "--format", "--help", "-h"},
 	"doctor":  {"--format", "--fix", "--plan", "--apply", "--help", "-h"},
 	"version": {"--help", "-h"},
-	"ws":      {"--id", "--current", "--select", "--multi-select", "--help", "-h"},
+	"ws":      {"--id", "--current", "--select", "--multi-select", "--all", "--help", "-h"},
 }
 
 var kraCompletionPathFlagOrder = []string{
@@ -182,11 +182,11 @@ var kraCompletionPathFlags = map[string][]string{
 	"ws task ls":              {"--id", "--current", "--select", "--format", "--help", "-h"},
 	"ws task add":             {"--id", "--current", "--select", "--title", "--description", "--format", "--help", "-h"},
 	"ws task status":          {"--id", "--current", "--select", "--format", "--help", "-h"},
-	"ws task sync":            {"--id", "--current", "--select", "--format", "--help", "-h"},
+	"ws task sync":            {"--id", "--current", "--select", "--all", "--format", "--help", "-h"},
 	"ws list":                 {"--archived", "--tree", "--format", "--help", "-h"},
 	"ws ls":                   {"--archived", "--tree", "--format", "--help", "-h"},
 	"ws dashboard":            {"--archived", "--workspace", "--format", "--help", "-h"},
-	"ws open":                 {"--id", "--current", "--select", "--multi-select", "--concurrency", "--format", "--help", "-h"},
+	"ws open":                 {"--id", "--current", "--select", "--multi-select", "--all", "--concurrency", "--format", "--help", "-h"},
 	"ws add-repo":             {"--id", "--current", "--select", "--format", "--preset", "--repo", "--branch", "--base-ref", "--yes", "--refresh", "--no-fetch", "--help", "-h"},
 	"ws remove-repo":          {"--id", "--current", "--select", "--format", "--repo", "--yes", "--force", "--help", "-h"},
 	"ws close":                {"--id", "--current", "--select", "--multi-select", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
@@ -205,6 +205,7 @@ var kraCompletionPathFlagValues = map[string]map[string][]string{
 
 var kraCompletionTargetRequiredPaths = []string{
 	"ws open",
+	"ws task sync",
 	"ws add-repo",
 	"ws remove-repo",
 	"ws close",
@@ -217,6 +218,7 @@ var kraCompletionTargetSelectorFlags = []string{
 	"--current",
 	"--select",
 	"--multi-select",
+	"--all",
 	"--help",
 }
 
@@ -415,7 +417,7 @@ func renderBashTargetSelectorGateCases() string {
 			"        has_target=0",
 			"        for ((j=1; j<COMP_CWORD; j++)); do",
 			"          case \"${COMP_WORDS[j]}\" in",
-			"            --id|--id=*|--current|--select) has_target=1; break ;;",
+			"            --id|--id=*|--current|--select|--multi-select|--all) has_target=1; break ;;",
 			"          esac",
 			"        done",
 			"        if [[ ${has_target} -eq 0 ]]; then",
@@ -582,7 +584,7 @@ func renderZshTargetSelectorGateCases() string {
 			"      has_target=0",
 			"      for (( j=2; j<CURRENT; j++ )); do",
 			"        case \"${words[j]}\" in",
-			"          --id|--id=*|--current|--select) has_target=1; break ;;",
+			"          --id|--id=*|--current|--select|--multi-select|--all) has_target=1; break ;;",
 			"        esac",
 			"      done",
 			"      if [[ ${has_target} -eq 0 ]]; then",
@@ -606,7 +608,7 @@ func completionFlagsWithoutTargetSelectors(path string) []string {
 	out := make([]string, 0, len(flags))
 	for _, flag := range flags {
 		switch flag {
-		case "--id", "--current", "--select":
+		case "--id", "--current", "--select", "--multi-select", "--all":
 			continue
 		default:
 			out = append(out, flag)

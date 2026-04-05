@@ -391,6 +391,57 @@ func TestCLI_WSTaskSync_JSON_ClearsMissingTaskNamespaceEntries(t *testing.T) {
 	}
 }
 
+func TestCLI_WSTaskSync_JSON_All_Success(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath1 := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	wsPath2 := seedWorkspaceMeta(t, env.Root, "active", "WS2")
+	writeWorkspaceTasksFile(t, wsPath1, "## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+	writeWorkspaceTasksFile(t, wsPath2, "## Tasks\n\n### TASK-002 Second\nstatus: doing\n")
+	seedCMUXWorkspaceMapping(t, env.Root, "WS1", "cmux-1")
+	seedCMUXWorkspaceMapping(t, env.Root, "WS2", "cmux-2")
+	syncClient := newFakeWSTaskSyncClient()
+	useFakeWSTaskSyncClient(t, syncClient)
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "sync", "--all", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("ws task sync --all exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, err.String(), out.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "ws.task.sync" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if got := resp.Result["count"]; got != float64(2) {
+		t.Fatalf("result.count = %v, want 2", got)
+	}
+	if got := resp.Result["set"]; got != float64(2) {
+		t.Fatalf("result.set = %v, want 2", got)
+	}
+	if got := resp.Result["failed"]; got != float64(0) {
+		t.Fatalf("result.failed = %v, want 0", got)
+	}
+}
+
+func TestCLI_WSTaskSync_JSON_All_RejectsID(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "sync", "--id", "WS1", "--all", "--format", "json"})
+	if code != exitUsage {
+		t.Fatalf("ws task sync exit code = %d, want %d", code, exitUsage)
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if resp.OK || resp.Error.Code != "invalid_argument" || !strings.Contains(resp.Error.Message, "--id and --all cannot be used together") {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+}
+
 func TestCLI_WSTaskLauncher_UpdatesSelectedTaskAndSyncs(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)

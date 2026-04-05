@@ -3,7 +3,7 @@ title: "`kra ws open`"
 status: implemented
 ---
 
-# `kra ws open [--id <id> | --current | --select | --multi-select] [--concurrency <n>] [--format human|json]`
+# `kra ws open [--id <id> | --current | --select | --multi-select | --all] [--concurrency <n>] [--format human|json]`
 
 ## Purpose
 
@@ -16,6 +16,7 @@ Open cmux workspace(s) from workspace action entrypoint.
   - `--current`
   - `--select`
   - `--multi-select`
+  - `--all`
 - batch options:
   - `--multi-select`
   - `--concurrency <n>`
@@ -27,7 +28,9 @@ Open cmux workspace(s) from workspace action entrypoint.
 - `--current` resolves workspace from current path under `workspaces/<id>/...`.
 - `--select` opens workspace selector and resolves target workspace(s) interactively.
 - `--multi-select` enables multi-target open flow.
+- `--all` resolves all active workspaces non-interactively and runs the same multi-target open flow.
 - `--concurrency` is valid only with `--multi-select`.
+- `--all` uses the same multi-target runtime path, so `--concurrency` is also valid with `--all`.
 - `--multi-select` かつ `--concurrency` 未指定時は、自動並列度（`min(targets, max(2, GOMAXPROCS))`）で goroutine 実行する。
 - JSON mode remains non-interactive.
 - On successful open, advance each succeeded target's `.kra.meta.json.workspace.work_state` to

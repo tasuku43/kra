@@ -120,7 +120,7 @@ func TestCLI_CMUX_Open_JSON_RequiresWorkspaceIDWhenOmitted(t *testing.T) {
 	if code != exitUsage {
 		t.Fatalf("exit code = %d, want %d", code, exitUsage)
 	}
-	if !strings.Contains(err.String(), "ws open requires one of --id <id>, --current, --select, or --multi-select") {
+	if !strings.Contains(err.String(), "ws open requires one of --id <id>, --current, --select, --multi-select, or --all") {
 		t.Fatalf("stderr should explain missing target mode: %q", err.String())
 	}
 }
@@ -418,6 +418,71 @@ func TestCLI_CMUX_Open_JSON_Multi_Success(t *testing.T) {
 	}
 	assertWorkspaceWorkState(t, wsPath1, workspaceWorkStateInProgress)
 	assertWorkspaceWorkState(t, wsPath2, workspaceWorkStateInProgress)
+}
+
+func TestCLI_CMUX_Open_JSON_All_Success(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	wsPath1 := filepath.Join(root, "workspaces", "WS1")
+	wsPath2 := filepath.Join(root, "workspaces", "WS2")
+	if err := os.MkdirAll(wsPath1, 0o755); err != nil {
+		t.Fatalf("mkdir workspace1: %v", err)
+	}
+	if err := os.MkdirAll(wsPath2, 0o755); err != nil {
+		t.Fatalf("mkdir workspace2: %v", err)
+	}
+	now := time.Now().Unix()
+	if err := writeWorkspaceMetaFile(wsPath1, newWorkspaceMetaFileForCreate("WS1", "alpha", "", now)); err != nil {
+		t.Fatalf("write workspace1 meta: %v", err)
+	}
+	if err := writeWorkspaceMetaFile(wsPath2, newWorkspaceMetaFileForCreate("WS2", "beta", "", now)); err != nil {
+		t.Fatalf("write workspace2 meta: %v", err)
+	}
+
+	fake := &fakeCMUXOpenClient{
+		capabilities: cmuxctl.Capabilities{
+			Methods: map[string]struct{}{
+				"workspace.create": {},
+				"workspace.rename": {},
+				"workspace.select": {},
+			},
+		},
+		createIDs: []string{"CMUX-WS-1", "CMUX-WS-2"},
+	}
+	prevClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient { return fake }
+	t.Cleanup(func() { newCMUXOpenClient = prevClient })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "open", "--format", "json", "--all"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, err.String(), out.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "ws.open" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if got := resp.Result["count"]; got != float64(2) {
+		t.Fatalf("result.count = %v, want 2", got)
+	}
+	assertWorkspaceWorkState(t, wsPath1, workspaceWorkStateInProgress)
+	assertWorkspaceWorkState(t, wsPath2, workspaceWorkStateInProgress)
+}
+
+func TestCLI_CMUX_Open_JSON_All_RejectsExplicitTargets(t *testing.T) {
+	prepareCurrentRootForTest(t)
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "open", "--format", "json", "--all", "--workspace", "WS1"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if resp.OK || resp.Error.Code != "invalid_argument" || !strings.Contains(resp.Error.Message, "--all cannot be used with explicit targets") {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
 }
 
 func TestCLI_CMUX_Open_JSON_MultipleTargetsRequireMulti(t *testing.T) {

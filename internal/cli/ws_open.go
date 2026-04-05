@@ -13,6 +13,7 @@ func (c *CLI) runWSOpen(args []string) int {
 	useCurrent := false
 	selectMode := false
 	multiSelectMode := false
+	allMode := false
 	passthrough := make([]string, 0, len(args))
 	for i := 0; i < len(args); i++ {
 		arg := strings.TrimSpace(args[i])
@@ -36,6 +37,10 @@ func (c *CLI) runWSOpen(args []string) int {
 			selectMode = true
 			multiSelectMode = true
 			passthrough = append(passthrough, "--multi-select")
+		case "--all":
+			allMode = true
+			multiSelectMode = true
+			passthrough = append(passthrough, "--all")
 		default:
 			if strings.HasPrefix(arg, "--id=") {
 				targetID = strings.TrimSpace(strings.TrimPrefix(arg, "--id="))
@@ -71,6 +76,21 @@ func (c *CLI) runWSOpen(args []string) int {
 		c.printWSOpenUsage(c.Err)
 		return exitUsage
 	}
+	if allMode && targetID != "" {
+		fmt.Fprintln(c.Err, "--all and --id cannot be used together")
+		c.printWSOpenUsage(c.Err)
+		return exitUsage
+	}
+	if allMode && useCurrent {
+		fmt.Fprintln(c.Err, "--all and --current cannot be used together")
+		c.printWSOpenUsage(c.Err)
+		return exitUsage
+	}
+	if allMode && selectMode {
+		fmt.Fprintln(c.Err, "--all and --select cannot be used together")
+		c.printWSOpenUsage(c.Err)
+		return exitUsage
+	}
 	if targetID != "" {
 		if err := validateWorkspaceID(targetID); err != nil {
 			fmt.Fprintf(c.Err, "invalid workspace id: %v\n", err)
@@ -100,8 +120,8 @@ func (c *CLI) runWSOpen(args []string) int {
 	if targetID != "" {
 		passthrough = append(passthrough, "--workspace", targetID)
 	}
-	if !useCurrent && !selectMode && targetID == "" {
-		fmt.Fprintln(c.Err, "ws open requires one of --id <id>, --current, --select, or --multi-select")
+	if !useCurrent && !selectMode && !allMode && targetID == "" {
+		fmt.Fprintln(c.Err, "ws open requires one of --id <id>, --current, --select, --multi-select, or --all")
 		c.printWSOpenUsage(c.Err)
 		return exitUsage
 	}

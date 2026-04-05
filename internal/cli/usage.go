@@ -198,7 +198,7 @@ func (c *CLI) printWSUsage(w io.Writer) {
 	b.WriteString(`Usage:
   kra ws [--id <id> | --current | --select | --multi-select]
   kra ws create [--no-prompt] [--template <name>] [--format human|json] <id>
-  kra ws open [--id <id> | --current | --select | --multi-select] [--concurrency <n>] [--format human|json]
+  kra ws open [--id <id> | --current | --select | --multi-select | --all] [--concurrency <n>] [--format human|json]
   kra ws add-repo [--id <id> | --current | --select] [action-args...]
   kra ws remove-repo [--id <id> | --current | --select] [action-args...]
   kra ws close [--id <id> | --current | --select | --multi-select] [action-args...]
@@ -229,7 +229,7 @@ Run:
 
 func (c *CLI) printWSOpenUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws open [--id <id> | --current | --select | --multi-select] [--concurrency <n>] [--format human|json]
+  kra ws open [--id <id> | --current | --select | --multi-select | --all] [--concurrency <n>] [--format human|json]
 
 Open workspace runtime flow.
 `)
@@ -339,7 +339,7 @@ Set one structured task to the requested status and then sync cmux task pills.
 
 func (c *CLI) printWSTaskSyncUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws task sync [--id <workspace-id>] [--current] [--select] [--format human|json]
+  kra ws task sync [--id <workspace-id>] [--current] [--select | --all] [--format human|json]
 
 Reconcile workspace task declaration into cmux sidebar state.
 `)
