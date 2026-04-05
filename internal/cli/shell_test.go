@@ -148,6 +148,9 @@ func TestCLI_Shell_Completion_Zsh_PrintsCompdef(t *testing.T) {
 	if !strings.Contains(text, `flags=("--format" "--preset" "--repo" "--branch" "--base-ref" "--yes" "--refresh" "--no-fetch" "--help")`) {
 		t.Fatalf("missing post-selector candidates: %q", text)
 	}
+	if !strings.Contains(text, `"ws import github issue:--state"`) || !strings.Contains(text, `"open" "closed" "all"`) {
+		t.Fatalf("missing zsh ws import github issue state values: %q", text)
+	}
 	if strings.Contains(text, "\"-h\"") {
 		t.Fatalf("short help alias should not be suggested in completion: %q", text)
 	}
@@ -186,6 +189,9 @@ func TestCLI_Shell_Completion_Bash_PrintsCompleteHook(t *testing.T) {
 	if !strings.Contains(text, "\"ws import github review\")") || !strings.Contains(text, "--repo") {
 		t.Fatalf("missing ws import github review flag candidates: %q", text)
 	}
+	if !strings.Contains(text, `"ws import github issue:--state"`) || !strings.Contains(text, `"open closed all"`) {
+		t.Fatalf("missing bash ws import github issue state values: %q", text)
+	}
 	if !strings.Contains(text, "\"ws add-repo\")\n        has_target=0") {
 		t.Fatalf("missing target-selector gate for ws add-repo: %q", text)
 	}
@@ -221,6 +227,9 @@ func TestCLI_Shell_Completion_Fish_PrintsCompleteRules(t *testing.T) {
 	}
 	if !strings.Contains(text, " -l base-ref") || !strings.Contains(text, " -l sprint") {
 		t.Fatalf("missing fish flag candidates: %q", text)
+	}
+	if !strings.Contains(text, `__fish_seen_subcommand_from issue`) || !strings.Contains(text, ` -l state -a "open closed all"`) {
+		t.Fatalf("missing fish ws import github issue state values: %q", text)
 	}
 }
 

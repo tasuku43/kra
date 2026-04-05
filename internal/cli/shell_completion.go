@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -196,6 +197,12 @@ var kraCompletionPathFlags = map[string][]string{
 	"ws unlock":               {"--id", "--current", "--select", "--multi-select", "--format", "--help", "-h"},
 }
 
+var kraCompletionPathFlagValues = map[string]map[string][]string{
+	"ws import github issue": {
+		"--state": {"open", "closed", "all"},
+	},
+}
+
 var kraCompletionTargetRequiredPaths = []string{
 	"ws open",
 	"ws add-repo",
@@ -277,6 +284,18 @@ _kra_completion() {
     return 0
   fi
 
+  if [[ -n "${subcmd2}" ]]; then
+    path="${cmd} ${subcmd} ${subcmd2}"
+  elif [[ -n "${subcmd}" ]]; then
+    path="${cmd} ${subcmd}"
+  else
+    path="${cmd}"
+  fi
+
+  case "${path}:${prev}" in
+%s
+  esac
+
   if [[ -z "${subcmd}" ]]; then
     case "${cmd}" in
 %s
@@ -294,7 +313,7 @@ _kra_completion() {
   return 0
 }
 complete -o default -F _kra_completion kra
-`, strings.Join(kraCompletionTopWords(), " "), renderBashTargetSelectorGateCases(), renderBashCommandFlagCases(), renderBashPathFlagCases(), renderBashSubcommandCases(), renderBashPathSubcommandCases())
+`, strings.Join(kraCompletionTopWords(), " "), renderBashTargetSelectorGateCases(), renderBashCommandFlagCases(), renderBashPathFlagCases(), renderBashFlagValueCases(), renderBashSubcommandCases(), renderBashPathSubcommandCases())
 }
 
 func renderBashCommandFlagCases() string {
@@ -360,6 +379,30 @@ func renderBashPathSubcommandCases() string {
 			"        fi",
 			"        ;;",
 		)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func renderBashFlagValueCases() string {
+	lines := make([]string, 0, len(kraCompletionPathFlagValues)*3)
+	for _, path := range kraCompletionPathFlagOrder {
+		byFlag, ok := kraCompletionPathFlagValues[path]
+		if !ok {
+			continue
+		}
+		flags := sortedCompletionFlagValueKeys(byFlag)
+		for _, flag := range flags {
+			values := byFlag[flag]
+			if len(values) == 0 {
+				continue
+			}
+			lines = append(lines,
+				fmt.Sprintf("    %q)", path+":"+flag),
+				fmt.Sprintf("      COMPREPLY=( $(compgen -W %q -- \"${cur}\") )", strings.Join(values, " ")),
+				"      return 0",
+				"      ;;",
+			)
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -435,6 +478,17 @@ _kra_completion() {
     return 0
   fi
 
+  if [[ -n "${subcmd2}" ]]; then
+    path="${cmd} ${subcmd} ${subcmd2}"
+  elif [[ -n "${subcmd}" ]]; then
+    path="${cmd} ${subcmd}"
+  else
+    path="${cmd}"
+  fi
+  case "${path}:${words[CURRENT-1]}" in
+%s
+  esac
+
   sub=()
   if [[ -z "${subcmd}" ]]; then
     case "$cmd" in
@@ -458,7 +512,7 @@ _kra_completion() {
   fi
 }
 compdef _kra_completion kra
-`, zshQuotedWords(kraCompletionTopWords()), renderZshTargetSelectorGateCases(), renderZshCommandFlagCases(), renderZshPathFlagCases(), renderZshSubcommandCases(), renderZshPathSubcommandCases())
+`, zshQuotedWords(kraCompletionTopWords()), renderZshTargetSelectorGateCases(), renderZshCommandFlagCases(), renderZshPathFlagCases(), renderZshFlagValueCases(), renderZshSubcommandCases(), renderZshPathSubcommandCases())
 }
 
 func renderZshCommandFlagCases() string {
@@ -497,6 +551,25 @@ func renderZshPathSubcommandCases() string {
 	lines := make([]string, 0, len(kraCompletionPathSubcommandOrder))
 	for _, path := range kraCompletionPathSubcommandOrder {
 		lines = append(lines, fmt.Sprintf("    %q) sub2=(%s) ;;", path, zshQuotedWords(kraCompletionPathSubcommands[path])))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func renderZshFlagValueCases() string {
+	lines := make([]string, 0, len(kraCompletionPathFlagValues))
+	for _, path := range kraCompletionPathFlagOrder {
+		byFlag, ok := kraCompletionPathFlagValues[path]
+		if !ok {
+			continue
+		}
+		flags := sortedCompletionFlagValueKeys(byFlag)
+		for _, flag := range flags {
+			values := byFlag[flag]
+			if len(values) == 0 {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("    %q) compadd -V kra_values -- %s; return 0 ;;", path+":"+flag, zshQuotedWords(values)))
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -621,6 +694,20 @@ func renderFishCompletionScript() string {
 			b.WriteString(renderFishFlagCompletionLine(cond, flag))
 		}
 	}
+	for _, path := range kraCompletionPathFlagOrder {
+		byFlag, ok := kraCompletionPathFlagValues[path]
+		if !ok {
+			continue
+		}
+		flags := sortedCompletionFlagValueKeys(byFlag)
+		for _, flag := range flags {
+			values := byFlag[flag]
+			if len(values) == 0 {
+				continue
+			}
+			b.WriteString(renderFishFlagValueCompletionLines(path, flag, values))
+		}
+	}
 	return b.String()
 }
 
@@ -629,6 +716,22 @@ func renderFishFlagCompletionLine(cond string, flag string) string {
 		return fmt.Sprintf("complete -c kra -n %q -l %s\n", cond, strings.TrimPrefix(flag, "--"))
 	}
 	return ""
+}
+
+func renderFishFlagValueCompletionLines(path string, flag string, values []string) string {
+	if len(values) == 0 || !strings.HasPrefix(flag, "--") {
+		return ""
+	}
+	return fmt.Sprintf("complete -c kra -n %q -l %s -a %q\n", fishConditionForPath(path), strings.TrimPrefix(flag, "--"), strings.Join(values, " "))
+}
+
+func sortedCompletionFlagValueKeys(m map[string][]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 func fishConditionForPath(path string) string {
