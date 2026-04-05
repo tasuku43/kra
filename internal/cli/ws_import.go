@@ -15,6 +15,8 @@ func (c *CLI) runWSImport(args []string) int {
 	case "-h", "--help", "help":
 		c.printWSImportUsage(c.Out)
 		return exitOK
+	case "github":
+		return c.runWSImportGitHub(args[1:])
 	case "jira":
 		return c.runWSImportJira(args[1:])
 	default:

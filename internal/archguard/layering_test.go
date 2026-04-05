@@ -78,6 +78,7 @@ func TestCLIDirectInfraImportsAreAllowlisted(t *testing.T) {
 		"ws_doc_service.go":      {},
 		"ws_git_helpers.go":      {},
 		"ws_import_jira.go":      {},
+		"ws_import_github.go":    {},
 		"ws_insight.go":          {},
 		"ws_launcher.go":         {},
 		"ws_list.go":             {},

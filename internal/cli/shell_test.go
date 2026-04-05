@@ -180,6 +180,12 @@ func TestCLI_Shell_Completion_Bash_PrintsCompleteHook(t *testing.T) {
 	if !strings.Contains(text, "\"ws import jira\")") || !strings.Contains(text, "--sprint") {
 		t.Fatalf("missing ws import jira flag candidates: %q", text)
 	}
+	if !strings.Contains(text, "\"ws import github issue\")") || !strings.Contains(text, "--state") {
+		t.Fatalf("missing ws import github issue flag candidates: %q", text)
+	}
+	if !strings.Contains(text, "\"ws import github review\")") || !strings.Contains(text, "--repo") {
+		t.Fatalf("missing ws import github review flag candidates: %q", text)
+	}
 	if !strings.Contains(text, "\"ws add-repo\")\n        has_target=0") {
 		t.Fatalf("missing target-selector gate for ws add-repo: %q", text)
 	}

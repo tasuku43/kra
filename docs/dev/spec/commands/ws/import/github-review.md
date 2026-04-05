@@ -1,6 +1,6 @@
 ---
 title: "`kra ws import github review`"
-status: proposed
+status: implemented
 ---
 
 # `kra ws import github review`
@@ -47,6 +47,9 @@ This command is for workspace creation (0..N), not for actions on existing works
 - Workspace id must be normalized to lowercase and use:
   - `owner-repo-pr-<number>`
 - Typical workspace title source is the GitHub pull request title.
+- After workspace creation, the matching repository is automatically added to the workspace.
+- Auto-added repository branch behavior:
+  - use the pull request head branch (`headRefName`)
 
 ## Plan/apply flow
 

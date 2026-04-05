@@ -1,18 +1,18 @@
 ---
 title: "`kra ws import github issue`"
-status: proposed
+status: implemented
 ---
 
 # `kra ws import github issue`
 
 ## Purpose
 
-Import GitHub issues into local workspaces in bulk with a plan-first flow.
+Import GitHub issues into local workspaces in bulk with a selector-first flow.
 This command is for workspace creation (0..N), not for actions on existing workspaces.
 
 ## Command forms
 
-- `kra ws import github issue [--org <name> | --repo <owner/name>] [--state open|closed|all] [--limit <n>] [--apply] [--no-prompt] [--format human|json]`
+- `kra ws import github issue [--org <name> | --repo <owner/name>] [--state open|closed|all] [--limit <n>]`
 
 ## Input rules
 
@@ -25,11 +25,9 @@ This command is for workspace creation (0..N), not for actions on existing works
 - If scope is still unresolved after config lookup, fail with usage guidance asking for `--org` or `--repo`.
 - `--state` default is `open`.
 - `--state` allowed values are `open`, `closed`, `all`.
-- Legacy `--json` is supported as an alias for `--format json`.
 - `--limit` default is `30` and valid range is `1..200`.
-- With `--no-prompt`:
-  - if `--apply` is set, execute apply.
-  - if `--apply` is not set, print plan only and exit with success.
+- Initial implementation is interactive-only.
+- `--format`, `--json`, `--apply`, and `--no-prompt` are not supported for `github issue` import.
 
 ## Resolution rules
 
@@ -46,19 +44,25 @@ This command is for workspace creation (0..N), not for actions on existing works
 - Workspace id must be normalized to lowercase and use:
   - `owner-repo-issue-<number>`
 - Typical workspace title source is the GitHub issue title.
+- After workspace creation, the matching repository is automatically added to the workspace.
+- Auto-added repository branch behavior:
+  - use the standard workspace branch template (`workspace.branch.template`)
+  - do not prompt per issue for a branch name
 
-## Plan/apply flow
+## Selection/create flow
 
-- Default behavior is plan-only (dry-run equivalent).
-- In prompt mode:
-  - print plan (`To Create`, `Skipped`, `Failed`) and include
-    `apply this plan? [Enter=yes / n=no]` after plan body.
-  - Enter means apply.
-- In non-prompt mode:
-  - apply only when `--apply` is explicitly provided.
-- `--apply` is best-effort:
-  - continue creating other items even when some items fail.
-- After apply (human output):
+- First collect candidates from the resolved scope and state filter.
+- Pre-existing workspaces are classified before selection:
+  - active workspace with same ID -> `skip`
+  - archived workspace with same ID -> `skip`
+  - invalid derived workspace ID -> `fail`
+- Remaining candidates are shown in the shared interactive selector UI.
+- User can multi-select issues with space and confirm with Enter.
+- After selection, prompt:
+  - `create <N> workspaces? [Enter=yes / n=no]`
+- Creation is best-effort:
+  - continue creating other selected items even when some items fail.
+- After create (human output):
   - print `Result:` with summary counts and completion message.
 
 ## Conflict policy
@@ -72,83 +76,13 @@ This command is for workspace creation (0..N), not for actions on existing works
 ## Output
 
 - Human output should include:
-  - `Plan:`
-  - bullet-based `source` and `filters`
-  - `to create (N)` list
+  - interactive issue selector for creatable candidates
+  - confirmation prompt for selected count
+  - `Result:`
+  - summary counts after execution
   - `skipped (N)` list (`already_active` reason is omitted for readability)
   - `failed (N)` list with reason/message
-- In prompt mode (human):
-  - include `apply this plan? [Enter=yes / n=no]` as the last plan line.
-- After apply (human):
-  - `Result:` + `create=<n> skipped=<n> failed=<n>`
-- JSON output (`--format json`) must provide equivalent information in the shared envelope.
-
-### JSON contract (`--format json`)
-
-- `stdout` must contain JSON only.
-- Prompts and progress logs must go to `stderr`.
-- In plan-only mode, items must be classified with `action=create|skip|fail`.
-- Top-level shape must follow `docs/dev/spec/concepts/output-contract.md`:
-  - `ok`
-  - `action=ws.import.github.issue`
-  - `result` containing import details (`source`, `filters`, `summary`, `items`, `applied`)
-  - `error` when `ok=false`
-
-Example shape:
-
-```json
-{
-  "ok": true,
-  "action": "ws.import.github.issue",
-  "result": {
-    "source": {
-      "type": "github",
-      "mode": "issue"
-    },
-    "filters": {
-      "scope": {
-        "kind": "org",
-        "value": "my-org"
-      },
-      "state": "open",
-      "limit": 30
-    },
-    "summary": {
-      "candidates": 18,
-      "to_create": 12,
-      "skipped": 4,
-      "failed": 2
-    },
-    "items": [
-      {
-        "repo": "my-org/api",
-        "number": 101,
-        "title": "API retry logic",
-        "workspace_id": "my-org-api-issue-101",
-        "action": "create"
-      },
-      {
-        "repo": "my-org/web",
-        "number": 99,
-        "title": "Old task",
-        "workspace_id": "my-org-web-issue-99",
-        "action": "skip",
-        "reason": "already_active"
-      },
-      {
-        "repo": "my-org/infra",
-        "number": 120,
-        "title": "Broken task",
-        "workspace_id": "my-org-infra-issue-120",
-        "action": "fail",
-        "reason": "fetch_failed",
-        "message": "github query timeout"
-      }
-    ],
-    "applied": false
-  }
-}
-```
+- Machine-readable JSON output is reserved for a later iteration.
 
 ## Reason codes
 

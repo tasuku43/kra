@@ -48,6 +48,40 @@ func TestCLI_WS_Import_Jira_Help_ShowsUsage(t *testing.T) {
 	}
 }
 
+func TestCLI_WS_Import_GitHub_Help_ShowsUsage(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "import", "github", "--help"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d", code, exitOK)
+	}
+	if !strings.Contains(out.String(), "kra ws import github") {
+		t.Fatalf("stdout missing ws import github usage: %q", out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Import_GitHub_Review_Help_ShowsUsage(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "import", "github", "review", "--help"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d", code, exitOK)
+	}
+	if !strings.Contains(out.String(), "kra ws import github review") {
+		t.Fatalf("stdout missing ws import github review usage: %q", out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
+	}
+}
+
 func TestCLI_WS_Import_Jira_DefaultModeRequiresSpaceWhenNoConfig(t *testing.T) {
 	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
