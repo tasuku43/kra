@@ -2,6 +2,7 @@ package cli
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 )
 
@@ -69,10 +70,11 @@ var kraCompletionPathSubcommandOrder = []string{
 }
 
 var kraCompletionPathSubcommands = map[string][]string{
-	"repo preset": {"add", "rm", "remove", "list", "show", "help"},
-	"ws import":   {"jira", "help"},
-	"ws doc":      {"open", "help"},
-	"ws task":     {"list", "ls", "add", "status", "sync", "help"},
+	"repo preset":      {"add", "rm", "remove", "list", "show", "help"},
+	"ws import":        {"github", "jira", "help"},
+	"ws import github": {"issue", "review", "help"},
+	"ws doc":           {"open", "help"},
+	"ws task":          {"list", "ls", "add", "status", "sync", "help"},
 }
 
 var kraCompletionCommandFlagOrder = []string{
@@ -116,6 +118,9 @@ var kraCompletionPathFlagOrder = []string{
 	"shell completion",
 	"ws create",
 	"ws import",
+	"ws import github",
+	"ws import github issue",
+	"ws import github review",
 	"ws import jira",
 	"ws doc",
 	"ws doc open",
@@ -140,53 +145,62 @@ var kraCompletionPathFlagOrder = []string{
 }
 
 var kraCompletionPathFlags = map[string][]string{
-	"context current":    {"--format", "--help", "-h"},
-	"context list":       {"--format", "--help", "-h"},
-	"context create":     {"--path", "--use", "--format", "--help", "-h"},
-	"context use":        {"--format", "--help", "-h"},
-	"context rename":     {"--format", "--help", "-h"},
-	"context rm":         {"--format", "--help", "-h"},
-	"root current":       {"--format", "--help", "-h"},
-	"root open":          {"--format", "--help", "-h"},
-	"repo add":           {"--format", "--help", "-h"},
-	"repo discover":      {"--org", "--provider", "--help", "-h"},
-	"repo preset":        {"--help", "-h"},
-	"repo preset add":    {"--yes", "--help", "-h"},
-	"repo preset rm":     {"--help", "-h"},
-	"repo preset remove": {"--help", "-h"},
-	"repo preset list":   {"--help", "-h"},
-	"repo preset show":   {"--help", "-h"},
-	"repo remove":        {"--format", "--help", "-h"},
-	"repo gc":            {"--format", "--yes", "--help", "-h"},
-	"template create":    {"--name", "--from", "--help", "-h"},
-	"template remove":    {"--name", "--help", "-h"},
-	"template rm":        {"--name", "--help", "-h"},
-	"template validate":  {"--name", "--help", "-h"},
-	"shell init":         {"--with-completion", "--help", "-h"},
-	"shell completion":   {"--help", "-h"},
-	"ws create":          {"--no-prompt", "--template", "--format", "--id", "--title", "--jira", "--help", "-h"},
-	"ws import":          {"--help", "-h"},
-	"ws import jira":     {"--sprint", "--space", "--project", "--jql", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
-	"ws doc":             {"--help", "-h"},
-	"ws doc open":        {"--id", "--current", "--select", "--surface", "--no-focus", "--format", "--help", "-h"},
-	"ws task":            {"--id", "--current", "--select", "--help", "-h"},
-	"ws task list":       {"--id", "--current", "--select", "--format", "--help", "-h"},
-	"ws task ls":         {"--id", "--current", "--select", "--format", "--help", "-h"},
-	"ws task add":        {"--id", "--current", "--select", "--title", "--description", "--format", "--help", "-h"},
-	"ws task status":     {"--id", "--current", "--select", "--format", "--help", "-h"},
-	"ws task sync":       {"--id", "--current", "--select", "--format", "--help", "-h"},
-	"ws list":            {"--archived", "--tree", "--format", "--help", "-h"},
-	"ws ls":              {"--archived", "--tree", "--format", "--help", "-h"},
-	"ws dashboard":       {"--archived", "--workspace", "--format", "--help", "-h"},
-	"ws open":            {"--id", "--current", "--select", "--multi-select", "--concurrency", "--format", "--help", "-h"},
-	"ws add-repo":        {"--id", "--current", "--select", "--format", "--preset", "--repo", "--branch", "--base-ref", "--yes", "--refresh", "--no-fetch", "--help", "-h"},
-	"ws remove-repo":     {"--id", "--current", "--select", "--format", "--repo", "--yes", "--force", "--help", "-h"},
-	"ws close":           {"--id", "--current", "--select", "--multi-select", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
-	"ws reopen":          {"--id", "--current", "--select", "--format", "--no-commit", "--dry-run", "--help", "-h"},
-	"ws purge":           {"--id", "--current", "--select", "--no-prompt", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
-	"ws log":             {"--id", "--current", "--help", "-h"},
-	"ws lock":            {"--id", "--current", "--select", "--multi-select", "--format", "--help", "-h"},
-	"ws unlock":          {"--id", "--current", "--select", "--multi-select", "--format", "--help", "-h"},
+	"context current":         {"--format", "--help", "-h"},
+	"context list":            {"--format", "--help", "-h"},
+	"context create":          {"--path", "--use", "--format", "--help", "-h"},
+	"context use":             {"--format", "--help", "-h"},
+	"context rename":          {"--format", "--help", "-h"},
+	"context rm":              {"--format", "--help", "-h"},
+	"root current":            {"--format", "--help", "-h"},
+	"root open":               {"--format", "--help", "-h"},
+	"repo add":                {"--format", "--help", "-h"},
+	"repo discover":           {"--org", "--provider", "--help", "-h"},
+	"repo preset":             {"--help", "-h"},
+	"repo preset add":         {"--yes", "--help", "-h"},
+	"repo preset rm":          {"--help", "-h"},
+	"repo preset remove":      {"--help", "-h"},
+	"repo preset list":        {"--help", "-h"},
+	"repo preset show":        {"--help", "-h"},
+	"repo remove":             {"--format", "--help", "-h"},
+	"repo gc":                 {"--format", "--yes", "--help", "-h"},
+	"template create":         {"--name", "--from", "--help", "-h"},
+	"template remove":         {"--name", "--help", "-h"},
+	"template rm":             {"--name", "--help", "-h"},
+	"template validate":       {"--name", "--help", "-h"},
+	"shell init":              {"--with-completion", "--help", "-h"},
+	"shell completion":        {"--help", "-h"},
+	"ws create":               {"--no-prompt", "--template", "--format", "--id", "--title", "--jira", "--help", "-h"},
+	"ws import":               {"--help", "-h"},
+	"ws import github":        {"--help", "-h"},
+	"ws import github issue":  {"--org", "--repo", "--state", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
+	"ws import github review": {"--org", "--repo", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
+	"ws import jira":          {"--sprint", "--space", "--project", "--jql", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
+	"ws doc":                  {"--help", "-h"},
+	"ws doc open":             {"--id", "--current", "--select", "--surface", "--no-focus", "--format", "--help", "-h"},
+	"ws task":                 {"--id", "--current", "--select", "--help", "-h"},
+	"ws task list":            {"--id", "--current", "--select", "--format", "--help", "-h"},
+	"ws task ls":              {"--id", "--current", "--select", "--format", "--help", "-h"},
+	"ws task add":             {"--id", "--current", "--select", "--title", "--description", "--format", "--help", "-h"},
+	"ws task status":          {"--id", "--current", "--select", "--format", "--help", "-h"},
+	"ws task sync":            {"--id", "--current", "--select", "--format", "--help", "-h"},
+	"ws list":                 {"--archived", "--tree", "--format", "--help", "-h"},
+	"ws ls":                   {"--archived", "--tree", "--format", "--help", "-h"},
+	"ws dashboard":            {"--archived", "--workspace", "--format", "--help", "-h"},
+	"ws open":                 {"--id", "--current", "--select", "--multi-select", "--concurrency", "--format", "--help", "-h"},
+	"ws add-repo":             {"--id", "--current", "--select", "--format", "--preset", "--repo", "--branch", "--base-ref", "--yes", "--refresh", "--no-fetch", "--help", "-h"},
+	"ws remove-repo":          {"--id", "--current", "--select", "--format", "--repo", "--yes", "--force", "--help", "-h"},
+	"ws close":                {"--id", "--current", "--select", "--multi-select", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
+	"ws reopen":               {"--id", "--current", "--select", "--format", "--no-commit", "--dry-run", "--help", "-h"},
+	"ws purge":                {"--id", "--current", "--select", "--no-prompt", "--force", "--format", "--no-commit", "--dry-run", "--help", "-h"},
+	"ws log":                  {"--id", "--current", "--help", "-h"},
+	"ws lock":                 {"--id", "--current", "--select", "--multi-select", "--format", "--help", "-h"},
+	"ws unlock":               {"--id", "--current", "--select", "--multi-select", "--format", "--help", "-h"},
+}
+
+var kraCompletionPathFlagValues = map[string]map[string][]string{
+	"ws import github issue": {
+		"--state": {"open", "closed", "all"},
+	},
 }
 
 var kraCompletionTargetRequiredPaths = []string{
@@ -270,6 +284,18 @@ _kra_completion() {
     return 0
   fi
 
+  if [[ -n "${subcmd2}" ]]; then
+    path="${cmd} ${subcmd} ${subcmd2}"
+  elif [[ -n "${subcmd}" ]]; then
+    path="${cmd} ${subcmd}"
+  else
+    path="${cmd}"
+  fi
+
+  case "${path}:${prev}" in
+%s
+  esac
+
   if [[ -z "${subcmd}" ]]; then
     case "${cmd}" in
 %s
@@ -287,7 +313,7 @@ _kra_completion() {
   return 0
 }
 complete -o default -F _kra_completion kra
-`, strings.Join(kraCompletionTopWords(), " "), renderBashTargetSelectorGateCases(), renderBashCommandFlagCases(), renderBashPathFlagCases(), renderBashSubcommandCases(), renderBashPathSubcommandCases())
+`, strings.Join(kraCompletionTopWords(), " "), renderBashTargetSelectorGateCases(), renderBashCommandFlagCases(), renderBashPathFlagCases(), renderBashFlagValueCases(), renderBashSubcommandCases(), renderBashPathSubcommandCases())
 }
 
 func renderBashCommandFlagCases() string {
@@ -353,6 +379,30 @@ func renderBashPathSubcommandCases() string {
 			"        fi",
 			"        ;;",
 		)
+	}
+	return strings.Join(lines, "\n")
+}
+
+func renderBashFlagValueCases() string {
+	lines := make([]string, 0, len(kraCompletionPathFlagValues)*3)
+	for _, path := range kraCompletionPathFlagOrder {
+		byFlag, ok := kraCompletionPathFlagValues[path]
+		if !ok {
+			continue
+		}
+		flags := sortedCompletionFlagValueKeys(byFlag)
+		for _, flag := range flags {
+			values := byFlag[flag]
+			if len(values) == 0 {
+				continue
+			}
+			lines = append(lines,
+				fmt.Sprintf("    %q)", path+":"+flag),
+				fmt.Sprintf("      COMPREPLY=( $(compgen -W %q -- \"${cur}\") )", strings.Join(values, " ")),
+				"      return 0",
+				"      ;;",
+			)
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -428,6 +478,17 @@ _kra_completion() {
     return 0
   fi
 
+  if [[ -n "${subcmd2}" ]]; then
+    path="${cmd} ${subcmd} ${subcmd2}"
+  elif [[ -n "${subcmd}" ]]; then
+    path="${cmd} ${subcmd}"
+  else
+    path="${cmd}"
+  fi
+  case "${path}:${words[CURRENT-1]}" in
+%s
+  esac
+
   sub=()
   if [[ -z "${subcmd}" ]]; then
     case "$cmd" in
@@ -451,7 +512,7 @@ _kra_completion() {
   fi
 }
 compdef _kra_completion kra
-`, zshQuotedWords(kraCompletionTopWords()), renderZshTargetSelectorGateCases(), renderZshCommandFlagCases(), renderZshPathFlagCases(), renderZshSubcommandCases(), renderZshPathSubcommandCases())
+`, zshQuotedWords(kraCompletionTopWords()), renderZshTargetSelectorGateCases(), renderZshCommandFlagCases(), renderZshPathFlagCases(), renderZshFlagValueCases(), renderZshSubcommandCases(), renderZshPathSubcommandCases())
 }
 
 func renderZshCommandFlagCases() string {
@@ -490,6 +551,25 @@ func renderZshPathSubcommandCases() string {
 	lines := make([]string, 0, len(kraCompletionPathSubcommandOrder))
 	for _, path := range kraCompletionPathSubcommandOrder {
 		lines = append(lines, fmt.Sprintf("    %q) sub2=(%s) ;;", path, zshQuotedWords(kraCompletionPathSubcommands[path])))
+	}
+	return strings.Join(lines, "\n")
+}
+
+func renderZshFlagValueCases() string {
+	lines := make([]string, 0, len(kraCompletionPathFlagValues))
+	for _, path := range kraCompletionPathFlagOrder {
+		byFlag, ok := kraCompletionPathFlagValues[path]
+		if !ok {
+			continue
+		}
+		flags := sortedCompletionFlagValueKeys(byFlag)
+		for _, flag := range flags {
+			values := byFlag[flag]
+			if len(values) == 0 {
+				continue
+			}
+			lines = append(lines, fmt.Sprintf("    %q) compadd -V kra_values -- %s; return 0 ;;", path+":"+flag, zshQuotedWords(values)))
+		}
 	}
 	return strings.Join(lines, "\n")
 }
@@ -614,6 +694,20 @@ func renderFishCompletionScript() string {
 			b.WriteString(renderFishFlagCompletionLine(cond, flag))
 		}
 	}
+	for _, path := range kraCompletionPathFlagOrder {
+		byFlag, ok := kraCompletionPathFlagValues[path]
+		if !ok {
+			continue
+		}
+		flags := sortedCompletionFlagValueKeys(byFlag)
+		for _, flag := range flags {
+			values := byFlag[flag]
+			if len(values) == 0 {
+				continue
+			}
+			b.WriteString(renderFishFlagValueCompletionLines(path, flag, values))
+		}
+	}
 	return b.String()
 }
 
@@ -622,6 +716,22 @@ func renderFishFlagCompletionLine(cond string, flag string) string {
 		return fmt.Sprintf("complete -c kra -n %q -l %s\n", cond, strings.TrimPrefix(flag, "--"))
 	}
 	return ""
+}
+
+func renderFishFlagValueCompletionLines(path string, flag string, values []string) string {
+	if len(values) == 0 || !strings.HasPrefix(flag, "--") {
+		return ""
+	}
+	return fmt.Sprintf("complete -c kra -n %q -l %s -a %q\n", fishConditionForPath(path), strings.TrimPrefix(flag, "--"), strings.Join(values, " "))
+}
+
+func sortedCompletionFlagValueKeys(m map[string][]string) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	slices.Sort(keys)
+	return keys
 }
 
 func fishConditionForPath(path string) string {

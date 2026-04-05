@@ -14,6 +14,10 @@ const (
 	JiraTypeSprint = "sprint"
 	JiraTypeJQL    = "jql"
 
+	GitHubStateOpen   = "open"
+	GitHubStateClosed = "closed"
+	GitHubStateAll    = "all"
+
 	WorkspaceCloseEmptyRecordPolicyWarn                = "warn"
 	WorkspaceCloseEmptyRecordPolicyRequireConfirmation = "require-confirmation"
 )
@@ -47,7 +51,8 @@ type WorkspaceRepoPreset struct {
 }
 
 type IntegrationConfig struct {
-	Jira JiraConfig `yaml:"jira"`
+	Jira   JiraConfig   `yaml:"jira"`
+	GitHub GitHubConfig `yaml:"github"`
 }
 
 type JiraConfig struct {
@@ -59,6 +64,26 @@ type JiraDefaults struct {
 	Space   string `yaml:"space"`
 	Project string `yaml:"project"`
 	Type    string `yaml:"type"`
+}
+
+type GitHubConfig struct {
+	Defaults GitHubDefaults `yaml:"defaults"`
+}
+
+type GitHubDefaults struct {
+	Issue  GitHubIssueDefaults  `yaml:"issue"`
+	Review GitHubReviewDefaults `yaml:"review"`
+}
+
+type GitHubIssueDefaults struct {
+	Org   string `yaml:"org"`
+	Repo  string `yaml:"repo"`
+	State string `yaml:"state"`
+}
+
+type GitHubReviewDefaults struct {
+	Org  string `yaml:"org"`
+	Repo string `yaml:"repo"`
 }
 
 func LoadFile(path string) (Config, error) {
@@ -93,6 +118,11 @@ func (c *Config) Normalize() {
 	c.Integration.Jira.Defaults.Space = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.Defaults.Space))
 	c.Integration.Jira.Defaults.Project = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.Defaults.Project))
 	c.Integration.Jira.Defaults.Type = strings.ToLower(strings.TrimSpace(c.Integration.Jira.Defaults.Type))
+	c.Integration.GitHub.Defaults.Issue.Org = strings.TrimSpace(c.Integration.GitHub.Defaults.Issue.Org)
+	c.Integration.GitHub.Defaults.Issue.Repo = strings.TrimSpace(c.Integration.GitHub.Defaults.Issue.Repo)
+	c.Integration.GitHub.Defaults.Issue.State = strings.ToLower(strings.TrimSpace(c.Integration.GitHub.Defaults.Issue.State))
+	c.Integration.GitHub.Defaults.Review.Org = strings.TrimSpace(c.Integration.GitHub.Defaults.Review.Org)
+	c.Integration.GitHub.Defaults.Review.Repo = strings.TrimSpace(c.Integration.GitHub.Defaults.Review.Repo)
 }
 
 func (c Config) Validate() error {
@@ -110,6 +140,18 @@ func (c Config) Validate() error {
 	}
 	if c.Integration.Jira.Defaults.Space != "" && c.Integration.Jira.Defaults.Project != "" {
 		issues = append(issues, "integration.jira.defaults.space and integration.jira.defaults.project cannot be combined")
+	}
+	if c.Integration.GitHub.Defaults.Issue.State != "" &&
+		c.Integration.GitHub.Defaults.Issue.State != GitHubStateOpen &&
+		c.Integration.GitHub.Defaults.Issue.State != GitHubStateClosed &&
+		c.Integration.GitHub.Defaults.Issue.State != GitHubStateAll {
+		issues = append(issues, "integration.github.defaults.issue.state must be one of: open, closed, all")
+	}
+	if c.Integration.GitHub.Defaults.Issue.Org != "" && c.Integration.GitHub.Defaults.Issue.Repo != "" {
+		issues = append(issues, "integration.github.defaults.issue.org and integration.github.defaults.issue.repo cannot be combined")
+	}
+	if c.Integration.GitHub.Defaults.Review.Org != "" && c.Integration.GitHub.Defaults.Review.Repo != "" {
+		issues = append(issues, "integration.github.defaults.review.org and integration.github.defaults.review.repo cannot be combined")
 	}
 	if c.Workspace.Close.EmptyRecordPolicy != "" &&
 		c.Workspace.Close.EmptyRecordPolicy != WorkspaceCloseEmptyRecordPolicyWarn &&
@@ -168,6 +210,21 @@ func Merge(global Config, root Config) Config {
 	}
 	if root.Integration.Jira.Defaults.Type != "" {
 		out.Integration.Jira.Defaults.Type = root.Integration.Jira.Defaults.Type
+	}
+	if root.Integration.GitHub.Defaults.Issue.Org != "" {
+		out.Integration.GitHub.Defaults.Issue.Org = root.Integration.GitHub.Defaults.Issue.Org
+	}
+	if root.Integration.GitHub.Defaults.Issue.Repo != "" {
+		out.Integration.GitHub.Defaults.Issue.Repo = root.Integration.GitHub.Defaults.Issue.Repo
+	}
+	if root.Integration.GitHub.Defaults.Issue.State != "" {
+		out.Integration.GitHub.Defaults.Issue.State = root.Integration.GitHub.Defaults.Issue.State
+	}
+	if root.Integration.GitHub.Defaults.Review.Org != "" {
+		out.Integration.GitHub.Defaults.Review.Org = root.Integration.GitHub.Defaults.Review.Org
+	}
+	if root.Integration.GitHub.Defaults.Review.Repo != "" {
+		out.Integration.GitHub.Defaults.Review.Repo = root.Integration.GitHub.Defaults.Review.Repo
 	}
 	out.Normalize()
 	return out

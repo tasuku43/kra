@@ -376,8 +376,49 @@ func (c *CLI) printWSImportUsage(w io.Writer) {
   kra ws import <source> [args]
 
 Sources:
+  github            Import workspaces from GitHub issues or review requests
   jira              Import workspaces from Jira issues
   help              Show this help
+`)
+}
+
+func (c *CLI) printWSImportGitHubUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws import github <mode> [args]
+
+Modes:
+  issue             Import workspaces from GitHub issues
+  review            Import workspaces from GitHub review requests
+  help              Show this help
+`)
+}
+
+func (c *CLI) printWSImportGitHubIssueUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws import github issue [--org <name> | --repo <owner/name>] [--state open|closed|all] [--limit <n>] [--apply] [--no-prompt] [--format human|json]
+
+Plan-first bulk workspace creation from GitHub issues.
+
+Rules:
+  --org and --repo are mutually exclusive.
+  If both are omitted, scope is resolved from config defaults.
+  --state default is open (supported: open, closed, all).
+  --limit default is 30 (range: 1..200).
+`)
+}
+
+func (c *CLI) printWSImportGitHubReviewUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws import github review [--org <name> | --repo <owner/name>] [--limit <n>] [--apply] [--no-prompt] [--format human|json]
+
+Plan-first bulk workspace creation from GitHub review requests.
+
+Rules:
+  --org and --repo are mutually exclusive.
+  If both are omitted, scope is resolved from config defaults.
+  Review candidates are open pull requests with review-requested=@me.
+  Draft pull requests are included.
+  --limit default is 30 (range: 1..200).
 `)
 }
 

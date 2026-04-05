@@ -2,6 +2,7 @@ package cli
 
 import (
 	"bytes"
+	"context"
 	"encoding/base64"
 	"errors"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tasuku43/kra/internal/app/wsimport"
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
@@ -45,6 +47,75 @@ func TestCLI_WS_Import_Jira_Help_ShowsUsage(t *testing.T) {
 	}
 	if err.Len() != 0 {
 		t.Fatalf("stderr not empty: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Import_GitHub_Help_ShowsUsage(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "import", "github", "--help"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d", code, exitOK)
+	}
+	if !strings.Contains(out.String(), "kra ws import github") {
+		t.Fatalf("stdout missing ws import github usage: %q", out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Import_GitHub_Review_Help_ShowsUsage(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "import", "github", "review", "--help"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d", code, exitOK)
+	}
+	if !strings.Contains(out.String(), "kra ws import github review") {
+		t.Fatalf("stdout missing ws import github review usage: %q", out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Import_GitHub_Review_EmptyPlan_ExitsWithoutPrompt(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	rootConfigPath := filepath.Join(env.Root, ".kra", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
+		t.Fatalf("mkdir root config dir: %v", err)
+	}
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  github:\n    defaults:\n      review:\n        org: chatwork\n"), 0o644); err != nil {
+		t.Fatalf("write root config: %v", err)
+	}
+
+	prevFactory := newWSImportGitHubPort
+	newWSImportGitHubPort = func() wsimport.GitHubImportPort {
+		return stubGitHubImportPort{}
+	}
+	t.Cleanup(func() {
+		newWSImportGitHubPort = prevFactory
+	})
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "import", "github", "review"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), err.String())
+	}
+	if !strings.Contains(out.String(), "Plan:") {
+		t.Fatalf("stdout missing plan: %q", out.String())
+	}
+	if strings.Contains(out.String(), "apply this plan?") || strings.Contains(err.String(), "apply this plan?") {
+		t.Fatalf("prompt should be omitted for empty plan (stdout=%q stderr=%q)", out.String(), err.String())
 	}
 }
 
@@ -956,4 +1027,18 @@ func TestCLI_WS_Import_Jira_ProjectAlias_WorksLikeSpace(t *testing.T) {
 	if !strings.Contains(out.String(), "sprint=55") {
 		t.Fatalf("stdout missing resolved sprint: %q", out.String())
 	}
+}
+
+type stubGitHubImportPort struct{}
+
+func (stubGitHubImportPort) CheckAuth(ctx context.Context) error {
+	return nil
+}
+
+func (stubGitHubImportPort) SearchIssues(ctx context.Context, scope wsimport.GitHubScope, state string, maxResults int) ([]wsimport.GitHubIssue, error) {
+	return nil, nil
+}
+
+func (stubGitHubImportPort) SearchReviewPullRequests(ctx context.Context, scope wsimport.GitHubScope, maxResults int) ([]wsimport.GitHubPullRequest, error) {
+	return nil, nil
 }

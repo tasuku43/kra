@@ -191,7 +191,7 @@ func (c *CLI) runWSImportJira(args []string) int {
 	}
 
 	ctx := context.Background()
-	svc := wsimport.NewService(appports.NewWSImportJiraPortWithBaseURL(cfg.Integration.Jira.BaseURL))
+	svc := wsimport.NewService(appports.NewWSImportJiraPortWithBaseURL(cfg.Integration.Jira.BaseURL), nil)
 	jql := ""
 	source := wsImportJiraSource{Type: "jira", Mode: "jql"}
 	if opts.sprintSet {

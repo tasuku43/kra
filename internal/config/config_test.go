@@ -18,7 +18,12 @@ func TestLoadFile_MissingIsEmpty(t *testing.T) {
 		cfg.Integration.Jira.BaseURL != "" ||
 		cfg.Integration.Jira.Defaults.Space != "" ||
 		cfg.Integration.Jira.Defaults.Project != "" ||
-		cfg.Integration.Jira.Defaults.Type != "" {
+		cfg.Integration.Jira.Defaults.Type != "" ||
+		cfg.Integration.GitHub.Defaults.Issue.Org != "" ||
+		cfg.Integration.GitHub.Defaults.Issue.Repo != "" ||
+		cfg.Integration.GitHub.Defaults.Issue.State != "" ||
+		cfg.Integration.GitHub.Defaults.Review.Org != "" ||
+		cfg.Integration.GitHub.Defaults.Review.Repo != "" {
 		t.Fatalf("LoadFile() = %+v, want zero-value config", cfg)
 	}
 }
@@ -43,6 +48,13 @@ integration:
     defaults:
       space: " abc "
       type: " JQL "
+  github:
+    defaults:
+      issue:
+        org: " my-org "
+        state: " CLOSED "
+      review:
+        repo: " my-org/api "
 `), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -72,6 +84,15 @@ integration:
 	}
 	if cfg.Integration.Jira.Defaults.Type != JiraTypeJQL {
 		t.Fatalf("integration.jira.defaults.type = %q, want %q", cfg.Integration.Jira.Defaults.Type, JiraTypeJQL)
+	}
+	if cfg.Integration.GitHub.Defaults.Issue.Org != "my-org" {
+		t.Fatalf("integration.github.defaults.issue.org = %q, want %q", cfg.Integration.GitHub.Defaults.Issue.Org, "my-org")
+	}
+	if cfg.Integration.GitHub.Defaults.Issue.State != GitHubStateClosed {
+		t.Fatalf("integration.github.defaults.issue.state = %q, want %q", cfg.Integration.GitHub.Defaults.Issue.State, GitHubStateClosed)
+	}
+	if cfg.Integration.GitHub.Defaults.Review.Repo != "my-org/api" {
+		t.Fatalf("integration.github.defaults.review.repo = %q, want %q", cfg.Integration.GitHub.Defaults.Review.Repo, "my-org/api")
 	}
 }
 
@@ -132,6 +153,28 @@ integration:
 	}
 	if !strings.Contains(err.Error(), "integration.jira.base_url") {
 		t.Fatalf("error = %q, want base_url hint", err)
+	}
+}
+
+func TestLoadFile_GitHubConflictFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(`
+integration:
+  github:
+    defaults:
+      issue:
+        org: my-org
+        repo: my-org/api
+`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatalf("LoadFile() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "integration.github.defaults.issue.org and integration.github.defaults.issue.repo") {
+		t.Fatalf("error = %q, want github issue conflict hint", err)
 	}
 }
 
@@ -212,6 +255,17 @@ func TestMerge_RootOverridesGlobal(t *testing.T) {
 					Type:    JiraTypeJQL,
 				},
 			},
+			GitHub: GitHubConfig{
+				Defaults: GitHubDefaults{
+					Issue: GitHubIssueDefaults{
+						Repo:  "root/api",
+						State: GitHubStateClosed,
+					},
+					Review: GitHubReviewDefaults{
+						Org: "root-org",
+					},
+				},
+			},
 		},
 	}
 
@@ -239,5 +293,14 @@ func TestMerge_RootOverridesGlobal(t *testing.T) {
 	}
 	if got.Integration.Jira.Defaults.Type != JiraTypeJQL {
 		t.Fatalf("integration.jira.defaults.type = %q, want %q", got.Integration.Jira.Defaults.Type, JiraTypeJQL)
+	}
+	if got.Integration.GitHub.Defaults.Issue.Repo != "root/api" {
+		t.Fatalf("integration.github.defaults.issue.repo = %q, want %q", got.Integration.GitHub.Defaults.Issue.Repo, "root/api")
+	}
+	if got.Integration.GitHub.Defaults.Issue.State != GitHubStateClosed {
+		t.Fatalf("integration.github.defaults.issue.state = %q, want %q", got.Integration.GitHub.Defaults.Issue.State, GitHubStateClosed)
+	}
+	if got.Integration.GitHub.Defaults.Review.Org != "root-org" {
+		t.Fatalf("integration.github.defaults.review.org = %q, want %q", got.Integration.GitHub.Defaults.Review.Org, "root-org")
 	}
 }

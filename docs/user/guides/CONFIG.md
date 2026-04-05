@@ -49,6 +49,13 @@ integration:
       # choose one:
       space: APP
       # project: APP
+  github:
+    defaults:
+      issue:
+        org: my-org
+        state: open # open | closed | all
+      review:
+        org: my-org
 ```
 
 Key behavior:
@@ -69,6 +76,15 @@ Key behavior:
   - Allowed values: `sprint`, `jql`.
 - `integration.jira.defaults.space` / `integration.jira.defaults.project`
   - Default Jira project scope for sprint mode.
+  - Do not set both at once (it is treated as invalid).
+- `integration.github.defaults.issue.org` / `integration.github.defaults.issue.repo`
+  - Default GitHub issue import scope for `kra ws import github issue`.
+  - Do not set both at once (it is treated as invalid).
+- `integration.github.defaults.issue.state`
+  - Default issue state for `kra ws import github issue`.
+  - Allowed values: `open`, `closed`, `all`.
+- `integration.github.defaults.review.org` / `integration.github.defaults.review.repo`
+  - Default GitHub review import scope for `kra ws import github review`.
   - Do not set both at once (it is treated as invalid).
 
 ## Environment variables (Jira)
