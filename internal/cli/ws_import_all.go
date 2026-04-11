@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 
 	"github.com/tasuku43/kra/internal/app/wsimport"
 	"github.com/tasuku43/kra/internal/config"
@@ -60,40 +61,81 @@ func (c *CLI) runWSImportAll(args []string) int {
 	plan := wsImportAllPlan{Targets: wsImportAllTargets(opts.target)}
 	var jiraCreateInputs []wsimport.WorkspaceInput
 	var githubCreateInputs []wsimport.GitHubWorkspaceInput
-
+	type planResult struct {
+		jiraPlan     *wsImportJiraPlan
+		jiraInputs   []wsimport.WorkspaceInput
+		githubPlan   *wsImportGitHubPlan
+		githubInputs []wsimport.GitHubWorkspaceInput
+		usageErr     string
+		runtimeErr   string
+	}
+	var (
+		wg      sync.WaitGroup
+		mu      sync.Mutex
+		results []planResult
+	)
+	run := func(fn func() planResult) {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			result := fn()
+			mu.Lock()
+			results = append(results, result)
+			mu.Unlock()
+		}()
+	}
 	if opts.target == config.ImportTargetJira || opts.target == config.ImportTargetBoth {
-		jiraPlan, createInputs, err := c.prepareWSImportJiraPlan(ctx, root, cfg, wsImportJiraOpts{
-			limit:        opts.limit,
-			apply:        opts.apply,
-			noPrompt:     opts.noPrompt,
-			outputFormat: opts.outputFormat,
-		})
-		if err != nil {
-			msg := err.Error()
-			if strings.HasPrefix(msg, "usage: ") {
-				return c.writeWSImportAllUsageError(outputJSON, strings.TrimPrefix(msg, "usage: "))
+		run(func() planResult {
+			jiraPlan, createInputs, err := c.prepareWSImportJiraPlan(ctx, root, cfg, wsImportJiraOpts{
+				limit:        opts.limit,
+				apply:        opts.apply,
+				noPrompt:     opts.noPrompt,
+				outputFormat: opts.outputFormat,
+			})
+			if err != nil {
+				msg := err.Error()
+				if strings.HasPrefix(msg, "usage: ") {
+					return planResult{usageErr: strings.TrimPrefix(msg, "usage: ")}
+				}
+				return planResult{runtimeErr: msg}
 			}
-			return c.writeWSImportAllRuntimeError(outputJSON, "internal_error", msg, exitError)
-		}
-		plan.Jira = &jiraPlan
-		jiraCreateInputs = createInputs
+			return planResult{jiraPlan: &jiraPlan, jiraInputs: createInputs}
+		})
 	}
 	if opts.target == config.ImportTargetGitHubReview || opts.target == config.ImportTargetBoth {
-		githubOpts, err := applyWSImportGitHubReviewConfigDefaults(wsImportGitHubOpts{
-			limit:        opts.limit,
-			apply:        opts.apply,
-			noPrompt:     opts.noPrompt,
-			outputFormat: opts.outputFormat,
-		}, cfg)
-		if err != nil {
-			return c.writeWSImportAllUsageError(outputJSON, err.Error())
+		run(func() planResult {
+			githubOpts, err := applyWSImportGitHubReviewConfigDefaults(wsImportGitHubOpts{
+				limit:        opts.limit,
+				apply:        opts.apply,
+				noPrompt:     opts.noPrompt,
+				outputFormat: opts.outputFormat,
+			}, cfg)
+			if err != nil {
+				return planResult{usageErr: err.Error()}
+			}
+			githubPlan, createInputs, err := c.prepareWSImportGitHubReviewPlan(ctx, root, cfg, githubOpts)
+			if err != nil {
+				return planResult{runtimeErr: err.Error()}
+			}
+			return planResult{githubPlan: &githubPlan, githubInputs: createInputs}
+		})
+	}
+	wg.Wait()
+	for _, result := range results {
+		if result.usageErr != "" {
+			return c.writeWSImportAllUsageError(outputJSON, result.usageErr)
 		}
-		githubPlan, createInputs, err := c.prepareWSImportGitHubReviewPlan(ctx, root, cfg, githubOpts)
-		if err != nil {
-			return c.writeWSImportAllRuntimeError(outputJSON, "internal_error", err.Error(), exitError)
+		if result.runtimeErr != "" {
+			return c.writeWSImportAllRuntimeError(outputJSON, "internal_error", result.runtimeErr, exitError)
 		}
-		plan.GitHub = &githubPlan
-		githubCreateInputs = createInputs
+		if result.jiraPlan != nil {
+			plan.Jira = result.jiraPlan
+			jiraCreateInputs = result.jiraInputs
+		}
+		if result.githubPlan != nil {
+			plan.GitHub = result.githubPlan
+			githubCreateInputs = result.githubInputs
+		}
 	}
 	plan.Summary = summarizeWSImportAllPlan(plan)
 

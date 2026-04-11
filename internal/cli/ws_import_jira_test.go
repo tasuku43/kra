@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tasuku43/kra/internal/app/wsimport"
 	"github.com/tasuku43/kra/internal/testutil"
@@ -236,6 +237,67 @@ func TestCLI_WS_Import_All_TargetFromConfig_GitHubReviewOnly(t *testing.T) {
 	}
 	if !strings.Contains(out.String(), "[github-review] example-org/web#7: Only review") {
 		t.Fatalf("stdout missing github review item: %q", out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Import_All_PreparesProvidersInParallel(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	rootConfigPath := filepath.Join(env.Root, ".kra", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
+		t.Fatalf("mkdir root config dir: %v", err)
+	}
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  import:\n    defaults:\n      target: both\n  jira:\n    defaults:\n      space: SREP\n      type: sprint\n      sprint_selection: current\n  github:\n    defaults:\n      review:\n        org: example-org\n"), 0o644); err != nil {
+		t.Fatalf("write root config: %v", err)
+	}
+
+	prevJiraFactory := newWSImportJiraPort
+	newWSImportJiraPort = func(baseURL string) wsimport.JiraIssueListPort {
+		return stubJiraImportPort{
+			delay: 200 * time.Millisecond,
+			sprints: []wsimport.JiraSprint{
+				{ID: 21157, Name: "SREP スプリント 20", State: "active", OriginBoardID: 1},
+			},
+			issuesByJQL: []wsimport.JiraIssue{
+				{Key: "SREP-5100", Summary: "Parallel jira", TicketURL: "https://jira.example.com/browse/SREP-5100"},
+			},
+		}
+	}
+	t.Cleanup(func() {
+		newWSImportJiraPort = prevJiraFactory
+	})
+
+	prevGitHubFactory := newWSImportGitHubPort
+	newWSImportGitHubPort = func() wsimport.GitHubImportPort {
+		return stubGitHubImportPort{
+			delay: 200 * time.Millisecond,
+			reviews: []wsimport.GitHubPullRequest{
+				{Repository: "example-org/api", Number: 77, Title: "Parallel review", URL: "https://github.com/example-org/api/pull/77", HeadRef: "feature/pr-77"},
+			},
+		}
+	}
+	t.Cleanup(func() {
+		newWSImportGitHubPort = prevGitHubFactory
+	})
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	start := time.Now()
+	code := c.Run([]string{"ws", "import", "all", "--no-prompt"})
+	elapsed := time.Since(start)
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), err.String())
+	}
+	if elapsed >= 350*time.Millisecond {
+		t.Fatalf("elapsed = %v, want provider prep to run in parallel", elapsed)
+	}
+	if !strings.Contains(out.String(), "[jira] SREP-5100: Parallel jira") || !strings.Contains(out.String(), "[github-review] example-org/api#77: Parallel review") {
+		t.Fatalf("stdout missing merged provider plans: %q", out.String())
 	}
 	if err.Len() != 0 {
 		t.Fatalf("stderr not empty: %q", err.String())
@@ -1201,9 +1263,13 @@ func TestCLI_WS_Import_Jira_ProjectAlias_WorksLikeSpace(t *testing.T) {
 type stubJiraImportPort struct {
 	issuesByJQL []wsimport.JiraIssue
 	sprints     []wsimport.JiraSprint
+	delay       time.Duration
 }
 
 func (s stubJiraImportPort) SearchIssuesByJQL(ctx context.Context, jql string, maxResults int) ([]wsimport.JiraIssue, error) {
+	if s.delay > 0 {
+		time.Sleep(s.delay)
+	}
 	return s.issuesByJQL, nil
 }
 
@@ -1233,6 +1299,7 @@ func (s stubJiraImportPort) ListProjectOpenSprints(ctx context.Context, projectK
 
 type stubGitHubImportPort struct {
 	reviews []wsimport.GitHubPullRequest
+	delay   time.Duration
 }
 
 func (stubGitHubImportPort) CheckAuth(ctx context.Context) error {
@@ -1244,5 +1311,8 @@ func (stubGitHubImportPort) SearchIssues(ctx context.Context, scope wsimport.Git
 }
 
 func (s stubGitHubImportPort) SearchReviewPullRequests(ctx context.Context, scope wsimport.GitHubScope, maxResults int) ([]wsimport.GitHubPullRequest, error) {
+	if s.delay > 0 {
+		time.Sleep(s.delay)
+	}
 	return s.reviews, nil
 }
