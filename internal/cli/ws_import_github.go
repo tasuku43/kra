@@ -142,14 +142,10 @@ func (c *CLI) runWSImportGitHubIssueWithOpts(opts wsImportGitHubOpts) int {
 		return c.writeWSImportGitHubUsageError(action, err.Error(), c.printWSImportGitHubIssueUsage, outputJSON)
 	}
 
-	svc := wsimport.NewService(nil, newWSImportGitHubPort())
-	ctx := context.Background()
-	scope := wsimport.GitHubScope{Kind: resolved.scopeKind, Value: resolved.scopeValue}
-	inputs, err := svc.ResolveGitHubIssueWorkspaceInputs(ctx, scope, resolved.state, resolved.limit)
+	plan, createInputs, err := c.prepareWSImportGitHubIssuePlan(context.Background(), root, cfg, resolved)
 	if err != nil {
-		return c.writeWSImportGitHubRuntimeError(action, outputJSON, "internal_error", fmt.Sprintf("resolve github issues: %v", err), exitError)
+		return c.writeWSImportGitHubRuntimeError(action, outputJSON, "internal_error", err.Error(), exitError)
 	}
-	plan, createInputs := buildWSImportGitHubPlan("issue", scope, resolved.state, resolved.limit, root, inputs)
 	if outputJSON {
 		return c.writeWSImportGitHubJSONResult(action, plan, false, plan.Summary.Failed == 0, "conflict", "interactive issue selection is required")
 	}
@@ -180,21 +176,7 @@ func (c *CLI) runWSImportGitHubIssueWithOpts(opts wsImportGitHubOpts) int {
 		fmt.Fprintln(c.Err, "aborted")
 		return exitError
 	}
-	createdCount := 0
-	for _, in := range selected {
-		if _, err := c.createWorkspaceAtRoot(root, in.ID, in.Title, in.SourceURL, defaultWorkspaceTemplateName); err != nil {
-			markWSImportGitHubCreateItemAsFailed(&plan, in, classifyWSImportGitHubCreateFailureReason(err), err.Error())
-			plan.Summary.Failed++
-			continue
-		}
-		if err := c.autoAttachGitHubRepoToWorkspace(ctx, root, cfg, in.ID, in.Repository, in.Branch); err != nil {
-			markWSImportGitHubCreateItemAsFailed(&plan, in, "create_failed", err.Error())
-			plan.Summary.Failed++
-			continue
-		}
-		createdCount++
-	}
-	plan.Summary.ToCreate = createdCount
+	c.applyWSImportGitHubPlan(context.Background(), root, cfg, &plan, selected)
 	c.printWSImportGitHubResultHuman(plan)
 	if plan.Summary.Failed > 0 {
 		return exitError
@@ -215,14 +197,10 @@ func (c *CLI) runWSImportGitHubReviewWithOpts(opts wsImportGitHubOpts) int {
 		return c.writeWSImportGitHubUsageError(action, err.Error(), c.printWSImportGitHubReviewUsage, outputJSON)
 	}
 
-	svc := wsimport.NewService(nil, newWSImportGitHubPort())
-	ctx := context.Background()
-	scope := wsimport.GitHubScope{Kind: resolved.scopeKind, Value: resolved.scopeValue}
-	inputs, err := svc.ResolveGitHubReviewWorkspaceInputs(ctx, scope, resolved.limit)
+	plan, createInputs, err := c.prepareWSImportGitHubReviewPlan(context.Background(), root, cfg, resolved)
 	if err != nil {
-		return c.writeWSImportGitHubRuntimeError(action, outputJSON, "internal_error", fmt.Sprintf("resolve github review requests: %v", err), exitError)
+		return c.writeWSImportGitHubRuntimeError(action, outputJSON, "internal_error", err.Error(), exitError)
 	}
-	plan, createInputs := buildWSImportGitHubPlan("review", scope, config.GitHubStateOpen, resolved.limit, root, inputs)
 	if len(plan.Items) == 0 {
 		if outputJSON {
 			return c.writeWSImportGitHubJSONResult(action, plan, false, true, "", "")
@@ -265,21 +243,7 @@ func (c *CLI) runWSImportGitHubReviewWithOpts(opts wsImportGitHubOpts) int {
 		}
 	}
 	if shouldApply {
-		createdCount := 0
-		for _, in := range createInputs {
-			if _, err := c.createWorkspaceAtRoot(root, in.ID, in.Title, in.SourceURL, defaultWorkspaceTemplateName); err != nil {
-				markWSImportGitHubCreateItemAsFailed(&plan, in, classifyWSImportGitHubCreateFailureReason(err), err.Error())
-				plan.Summary.Failed++
-				continue
-			}
-			if err := c.autoAttachGitHubRepoToWorkspace(ctx, root, cfg, in.ID, in.Repository, in.Branch); err != nil {
-				markWSImportGitHubCreateItemAsFailed(&plan, in, "create_failed", err.Error())
-				plan.Summary.Failed++
-				continue
-			}
-			createdCount++
-		}
-		plan.Summary.ToCreate = createdCount
+		c.applyWSImportGitHubPlan(context.Background(), root, cfg, &plan, createInputs)
 	}
 	if outputJSON {
 		return c.writeWSImportGitHubJSONResult(action, plan, shouldApply, plan.Summary.Failed == 0, "conflict", "import completed with failures")
@@ -298,6 +262,46 @@ func (c *CLI) runWSImportGitHubReviewWithOpts(opts wsImportGitHubOpts) int {
 		return exitError
 	}
 	return exitOK
+}
+
+func (c *CLI) prepareWSImportGitHubIssuePlan(ctx context.Context, root string, _ config.Config, opts wsImportGitHubOpts) (wsImportGitHubPlan, []wsimport.GitHubWorkspaceInput, error) {
+	svc := wsimport.NewService(nil, newWSImportGitHubPort())
+	scope := wsimport.GitHubScope{Kind: opts.scopeKind, Value: opts.scopeValue}
+	inputs, err := svc.ResolveGitHubIssueWorkspaceInputs(ctx, scope, opts.state, opts.limit)
+	if err != nil {
+		return wsImportGitHubPlan{}, nil, fmt.Errorf("resolve github issues: %w", err)
+	}
+	plan, createInputs := buildWSImportGitHubPlan("issue", scope, opts.state, opts.limit, root, inputs)
+	return plan, createInputs, nil
+}
+
+func (c *CLI) prepareWSImportGitHubReviewPlan(ctx context.Context, root string, _ config.Config, opts wsImportGitHubOpts) (wsImportGitHubPlan, []wsimport.GitHubWorkspaceInput, error) {
+	svc := wsimport.NewService(nil, newWSImportGitHubPort())
+	scope := wsimport.GitHubScope{Kind: opts.scopeKind, Value: opts.scopeValue}
+	inputs, err := svc.ResolveGitHubReviewWorkspaceInputs(ctx, scope, opts.limit)
+	if err != nil {
+		return wsImportGitHubPlan{}, nil, fmt.Errorf("resolve github review requests: %w", err)
+	}
+	plan, createInputs := buildWSImportGitHubPlan("review", scope, config.GitHubStateOpen, opts.limit, root, inputs)
+	return plan, createInputs, nil
+}
+
+func (c *CLI) applyWSImportGitHubPlan(ctx context.Context, root string, cfg config.Config, plan *wsImportGitHubPlan, createInputs []wsimport.GitHubWorkspaceInput) {
+	createdCount := 0
+	for _, in := range createInputs {
+		if _, err := c.createWorkspaceAtRoot(root, in.ID, in.Title, in.SourceURL, defaultWorkspaceTemplateName); err != nil {
+			markWSImportGitHubCreateItemAsFailed(plan, in, classifyWSImportGitHubCreateFailureReason(err), err.Error())
+			plan.Summary.Failed++
+			continue
+		}
+		if err := c.autoAttachGitHubRepoToWorkspace(ctx, root, cfg, in.ID, in.Repository, in.Branch); err != nil {
+			markWSImportGitHubCreateItemAsFailed(plan, in, "create_failed", err.Error())
+			plan.Summary.Failed++
+			continue
+		}
+		createdCount++
+	}
+	plan.Summary.ToCreate = createdCount
 }
 
 func parseWSImportGitHubOpts(args []string, supportsState bool) (wsImportGitHubOpts, error) {

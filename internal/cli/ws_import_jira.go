@@ -26,6 +26,10 @@ const (
 	wsImportJiraMaxLimit     = 200
 )
 
+var newWSImportJiraPort = func(baseURL string) wsimport.JiraIssueListPort {
+	return appports.NewWSImportJiraPortWithBaseURL(baseURL)
+}
+
 type wsImportJiraOpts struct {
 	sprintValue  string
 	sprintSet    bool
@@ -33,6 +37,7 @@ type wsImportJiraOpts struct {
 	jql          string
 	board        string
 	spaceKey     string
+	sprintSelect string
 	limit        int
 	apply        bool
 	noPrompt     bool
@@ -190,46 +195,14 @@ func (c *CLI) runWSImportJira(args []string) int {
 		return writeUsageError(err.Error())
 	}
 
-	ctx := context.Background()
-	svc := wsimport.NewService(appports.NewWSImportJiraPortWithBaseURL(cfg.Integration.Jira.BaseURL), nil)
-	jql := ""
-	source := wsImportJiraSource{Type: "jira", Mode: "jql"}
-	if opts.sprintSet {
-		sprintQueryValue := opts.sprintValue
-		sprintDisplayValue := opts.sprintValue
-		if strings.TrimSpace(sprintQueryValue) == "" {
-			chosen, err := c.selectWSImportJiraSprintFromSpace(ctx, svc, opts.spaceKey)
-			if err != nil {
-				return writeUsageError(fmt.Sprintf("resolve sprint: %v", err))
-			}
-			sprintQueryValue = strconv.Itoa(chosen.ID)
-			sprintDisplayValue = chosen.Name
-		}
-		jql = buildWSImportJiraSprintJQL(opts.spaceKey, sprintQueryValue)
-		source.Mode = "sprint"
-		source.Sprint = sprintDisplayValue
-	} else {
-		jql = strings.TrimSpace(opts.jql)
-		if jql == "" {
-			prompted, promptErr := c.promptLine("jql: ")
-			if promptErr != nil {
-				return writeRuntimeError("internal_error", fmt.Sprintf("read jql: %v", promptErr))
-			}
-			jql = strings.TrimSpace(prompted)
-			if jql == "" {
-				return writeUsageError("jql is required")
-			}
-		}
-		source.JQL = jql
-	}
-	c.debugf("ws import jira: resolved mode=%s jql=%q", source.Mode, jql)
-
-	inputs, err := svc.ResolveWorkspaceInputsByJQL(ctx, jql, opts.limit)
+	plan, createInputs, err := c.prepareWSImportJiraPlan(context.Background(), root, cfg, opts)
 	if err != nil {
-		return writeRuntimeError("internal_error", fmt.Sprintf("resolve jira issues: %v", err))
+		msg := err.Error()
+		if strings.HasPrefix(msg, "usage: ") {
+			return writeUsageError(strings.TrimPrefix(msg, "usage: "))
+		}
+		return writeRuntimeError("internal_error", msg)
 	}
-
-	plan, createInputs := buildWSImportJiraPlan(source, opts.limit, root, inputs)
 
 	shouldApply := false
 	interactivePromptFlow := !opts.noPrompt && !opts.apply
@@ -268,16 +241,7 @@ func (c *CLI) runWSImportJira(args []string) int {
 		}
 	}
 	if shouldApply {
-		createdCount := 0
-		for _, in := range createInputs {
-			if _, err := c.createWorkspaceAtRoot(root, in.ID, in.Title, in.SourceURL, defaultWorkspaceTemplateName); err != nil {
-				markWSImportJiraCreateItemAsFailed(&plan, in, classifyWSImportJiraCreateFailureReason(err), err.Error())
-				plan.Summary.Failed++
-				continue
-			}
-			createdCount++
-		}
-		plan.Summary.ToCreate = createdCount
+		c.applyWSImportJiraPlan(root, &plan, createInputs)
 	}
 
 	if outputJSON {
@@ -303,6 +267,64 @@ func (c *CLI) runWSImportJira(args []string) int {
 		return exitError
 	}
 	return exitOK
+}
+
+func (c *CLI) prepareWSImportJiraPlan(ctx context.Context, root string, cfg config.Config, opts wsImportJiraOpts) (wsImportJiraPlan, []wsimport.WorkspaceInput, error) {
+	resolved, err := applyWSImportJiraConfigDefaults(opts, cfg)
+	if err != nil {
+		return wsImportJiraPlan{}, nil, fmt.Errorf("usage: %w", err)
+	}
+	svc := wsimport.NewService(newWSImportJiraPort(cfg.Integration.Jira.BaseURL), nil)
+	jql := ""
+	source := wsImportJiraSource{Type: "jira", Mode: "jql"}
+	if resolved.sprintSet {
+		sprintQueryValue := resolved.sprintValue
+		sprintDisplayValue := resolved.sprintValue
+		if strings.TrimSpace(sprintQueryValue) == "" {
+			chosen, err := c.selectWSImportJiraSprintFromSpace(ctx, svc, resolved.spaceKey, resolved.sprintSelect)
+			if err != nil {
+				return wsImportJiraPlan{}, nil, fmt.Errorf("usage: resolve sprint: %w", err)
+			}
+			sprintQueryValue = strconv.Itoa(chosen.ID)
+			sprintDisplayValue = chosen.Name
+		}
+		jql = buildWSImportJiraSprintJQL(resolved.spaceKey, sprintQueryValue)
+		source.Mode = "sprint"
+		source.Sprint = sprintDisplayValue
+	} else {
+		jql = strings.TrimSpace(resolved.jql)
+		if jql == "" {
+			prompted, promptErr := c.promptLine("jql: ")
+			if promptErr != nil {
+				return wsImportJiraPlan{}, nil, fmt.Errorf("read jql: %w", promptErr)
+			}
+			jql = strings.TrimSpace(prompted)
+			if jql == "" {
+				return wsImportJiraPlan{}, nil, fmt.Errorf("usage: jql is required")
+			}
+		}
+		source.JQL = jql
+	}
+	c.debugf("ws import jira: resolved mode=%s jql=%q", source.Mode, jql)
+	inputs, err := svc.ResolveWorkspaceInputsByJQL(ctx, jql, resolved.limit)
+	if err != nil {
+		return wsImportJiraPlan{}, nil, fmt.Errorf("resolve jira issues: %w", err)
+	}
+	plan, createInputs := buildWSImportJiraPlan(source, resolved.limit, root, inputs)
+	return plan, createInputs, nil
+}
+
+func (c *CLI) applyWSImportJiraPlan(root string, plan *wsImportJiraPlan, createInputs []wsimport.WorkspaceInput) {
+	createdCount := 0
+	for _, in := range createInputs {
+		if _, err := c.createWorkspaceAtRoot(root, in.ID, in.Title, in.SourceURL, defaultWorkspaceTemplateName); err != nil {
+			markWSImportJiraCreateItemAsFailed(plan, in, classifyWSImportJiraCreateFailureReason(err), err.Error())
+			plan.Summary.Failed++
+			continue
+		}
+		createdCount++
+	}
+	plan.Summary.ToCreate = createdCount
 }
 
 func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
@@ -447,6 +469,9 @@ func applyWSImportJiraConfigDefaults(opts wsImportJiraOpts, cfg config.Config) (
 	}
 
 	if resolved.sprintSet {
+		if strings.TrimSpace(resolved.sprintSelect) == "" {
+			resolved.sprintSelect = firstNonEmpty(cfg.Integration.Jira.Defaults.SprintSelection, config.JiraSprintSelectionPrompt)
+		}
 		if strings.TrimSpace(resolved.spaceKey) == "" {
 			switch {
 			case cfg.Integration.Jira.Defaults.Space != "" && cfg.Integration.Jira.Defaults.Project != "":
@@ -460,7 +485,9 @@ func applyWSImportJiraConfigDefaults(opts wsImportJiraOpts, cfg config.Config) (
 		if strings.TrimSpace(resolved.spaceKey) == "" {
 			return wsImportJiraOpts{}, fmt.Errorf("--sprint requires --space (or --project)")
 		}
-		if resolved.noPrompt && strings.TrimSpace(resolved.sprintValue) == "" {
+		if resolved.noPrompt &&
+			strings.TrimSpace(resolved.sprintValue) == "" &&
+			resolved.sprintSelect != config.JiraSprintSelectionCurrent {
 			return wsImportJiraOpts{}, fmt.Errorf("--no-prompt requires --sprint <id|name> or --jql <expr>")
 		}
 		return resolved, nil
@@ -560,7 +587,7 @@ func isDigitsOnly(v string) bool {
 	return true
 }
 
-func (c *CLI) selectWSImportJiraSprintFromSpace(ctx context.Context, svc *wsimport.Service, spaceKey string) (wsImportJiraSprintCandidate, error) {
+func (c *CLI) selectWSImportJiraSprintFromSpace(ctx context.Context, svc *wsimport.Service, spaceKey string, sprintSelect string) (wsImportJiraSprintCandidate, error) {
 	sprints, err := svc.ListProjectOpenSprints(ctx, spaceKey, 200)
 	if err != nil {
 		return wsImportJiraSprintCandidate{}, err
@@ -610,6 +637,10 @@ func (c *CLI) selectWSImportJiraSprintFromSpace(ctx context.Context, svc *wsimpo
 		return candidates[i].Name < candidates[j].Name
 	})
 
+	if strings.TrimSpace(sprintSelect) == config.JiraSprintSelectionCurrent {
+		return selectCurrentWSImportJiraSprintCandidate(candidates), nil
+	}
+
 	if selected, ok, err := c.trySelectWSImportJiraSprintWithSelector(candidates); err != nil {
 		return wsImportJiraSprintCandidate{}, err
 	} else if ok {
@@ -629,6 +660,41 @@ func (c *CLI) selectWSImportJiraSprintFromSpace(ctx context.Context, svc *wsimpo
 		return wsImportJiraSprintCandidate{}, err
 	}
 	return candidates[idx], nil
+}
+
+func selectCurrentWSImportJiraSprintCandidate(candidates []wsImportJiraSprintCandidate) wsImportJiraSprintCandidate {
+	active := make([]wsImportJiraSprintCandidate, 0, len(candidates))
+	future := make([]wsImportJiraSprintCandidate, 0, len(candidates))
+	for _, candidate := range candidates {
+		switch strings.ToLower(strings.TrimSpace(candidate.State)) {
+		case "active":
+			active = append(active, candidate)
+		case "future":
+			future = append(future, candidate)
+		}
+	}
+	switch {
+	case len(active) > 0:
+		return selectNewestWSImportJiraSprintCandidate(active)
+	case len(future) > 0:
+		return selectNewestWSImportJiraSprintCandidate(future)
+	default:
+		return selectNewestWSImportJiraSprintCandidate(candidates)
+	}
+}
+
+func selectNewestWSImportJiraSprintCandidate(candidates []wsImportJiraSprintCandidate) wsImportJiraSprintCandidate {
+	best := candidates[0]
+	for _, candidate := range candidates[1:] {
+		if candidate.ID > best.ID {
+			best = candidate
+			continue
+		}
+		if candidate.ID == best.ID && candidate.Name > best.Name {
+			best = candidate
+		}
+	}
+	return best
 }
 
 func (c *CLI) trySelectWSImportJiraSprintWithSelector(candidates []wsImportJiraSprintCandidate) (wsImportJiraSprintCandidate, bool, error) {

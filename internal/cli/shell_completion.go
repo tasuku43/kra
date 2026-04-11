@@ -71,7 +71,7 @@ var kraCompletionPathSubcommandOrder = []string{
 
 var kraCompletionPathSubcommands = map[string][]string{
 	"repo preset":      {"add", "rm", "remove", "list", "show", "help"},
-	"ws import":        {"github", "jira", "help"},
+	"ws import":        {"all", "github", "jira", "help"},
 	"ws import github": {"issue", "review", "help"},
 	"ws doc":           {"open", "help"},
 	"ws task":          {"list", "ls", "add", "status", "sync", "help"},
@@ -122,6 +122,7 @@ var kraCompletionPathFlagOrder = []string{
 	"ws import github issue",
 	"ws import github review",
 	"ws import jira",
+	"ws import all",
 	"ws doc",
 	"ws doc open",
 	"ws task",
@@ -171,6 +172,7 @@ var kraCompletionPathFlags = map[string][]string{
 	"shell completion":        {"--help", "-h"},
 	"ws create":               {"--no-prompt", "--template", "--format", "--id", "--title", "--jira", "--help", "-h"},
 	"ws import":               {"--help", "-h"},
+	"ws import all":           {"--target", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
 	"ws import github":        {"--help", "-h"},
 	"ws import github issue":  {"--org", "--repo", "--state", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
 	"ws import github review": {"--org", "--repo", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
@@ -200,6 +202,9 @@ var kraCompletionPathFlags = map[string][]string{
 var kraCompletionPathFlagValues = map[string]map[string][]string{
 	"ws import github issue": {
 		"--state": {"open", "closed", "all"},
+	},
+	"ws import all": {
+		"--target": {"jira", "github-review", "both"},
 	},
 }
 

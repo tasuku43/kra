@@ -50,6 +50,23 @@ func TestCLI_WS_Import_Jira_Help_ShowsUsage(t *testing.T) {
 	}
 }
 
+func TestCLI_WS_Import_All_Help_ShowsUsage(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "import", "all", "--help"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d", code, exitOK)
+	}
+	if !strings.Contains(out.String(), "kra ws import all") {
+		t.Fatalf("stdout missing ws import all usage: %q", out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
+	}
+}
+
 func TestCLI_WS_Import_GitHub_Help_ShowsUsage(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -116,6 +133,112 @@ func TestCLI_WS_Import_GitHub_Review_EmptyPlan_ExitsWithoutPrompt(t *testing.T) 
 	}
 	if strings.Contains(out.String(), "apply this plan?") || strings.Contains(err.String(), "apply this plan?") {
 		t.Fatalf("prompt should be omitted for empty plan (stdout=%q stderr=%q)", out.String(), err.String())
+	}
+}
+
+func TestCLI_WS_Import_All_PromptDecline_PrintsCombinedPlan(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	rootConfigPath := filepath.Join(env.Root, ".kra", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
+		t.Fatalf("mkdir root config dir: %v", err)
+	}
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  import:\n    defaults:\n      target: both\n  jira:\n    defaults:\n      type: jql\n  github:\n    defaults:\n      review:\n        org: example-org\n"), 0o644); err != nil {
+		t.Fatalf("write root config: %v", err)
+	}
+
+	prevJiraFactory := newWSImportJiraPort
+	newWSImportJiraPort = func(baseURL string) wsimport.JiraIssueListPort {
+		return stubJiraImportPort{
+			issuesByJQL: []wsimport.JiraIssue{
+				{Key: "PROJ-500", Summary: "Jira item", TicketURL: "https://jira.example.com/browse/PROJ-500"},
+			},
+		}
+	}
+	t.Cleanup(func() {
+		newWSImportJiraPort = prevJiraFactory
+	})
+
+	prevGitHubFactory := newWSImportGitHubPort
+	newWSImportGitHubPort = func() wsimport.GitHubImportPort {
+		return stubGitHubImportPort{
+			reviews: []wsimport.GitHubPullRequest{
+				{Repository: "example-org/api", Number: 42, Title: "Review item", URL: "https://github.com/example-org/api/pull/42", HeadRef: "feature/pr-42"},
+			},
+		}
+	}
+	t.Cleanup(func() {
+		newWSImportGitHubPort = prevGitHubFactory
+	})
+
+	var in bytes.Buffer
+	in.WriteString("assignee=currentUser()\n")
+	in.WriteString("n\n")
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	c.In = &in
+
+	code := c.Run([]string{"ws", "import", "all"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), err.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"Plan:",
+		"targets: jira, github-review",
+		"[jira] PROJ-500: Jira item",
+		"[github-review] example-org/api#42: Review item",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in stdout:\n%s", want, got)
+		}
+	}
+	if !strings.Contains(err.String(), "jql: ") {
+		t.Fatalf("stderr missing jira jql prompt: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Import_All_TargetFromConfig_GitHubReviewOnly(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	rootConfigPath := filepath.Join(env.Root, ".kra", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
+		t.Fatalf("mkdir root config dir: %v", err)
+	}
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  import:\n    defaults:\n      target: github-review\n  github:\n    defaults:\n      review:\n        org: example-org\n"), 0o644); err != nil {
+		t.Fatalf("write root config: %v", err)
+	}
+
+	prevGitHubFactory := newWSImportGitHubPort
+	newWSImportGitHubPort = func() wsimport.GitHubImportPort {
+		return stubGitHubImportPort{
+			reviews: []wsimport.GitHubPullRequest{
+				{Repository: "example-org/web", Number: 7, Title: "Only review", URL: "https://github.com/example-org/web/pull/7", HeadRef: "feature/review-7"},
+			},
+		}
+	}
+	t.Cleanup(func() {
+		newWSImportGitHubPort = prevGitHubFactory
+	})
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "import", "all", "--no-prompt"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), err.String())
+	}
+	if strings.Contains(out.String(), "[jira]") {
+		t.Fatalf("stdout should not include jira items: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "[github-review] example-org/web#7: Only review") {
+		t.Fatalf("stdout missing github review item: %q", out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
 	}
 }
 
@@ -881,6 +1004,52 @@ func TestCLI_WS_Import_Jira_SprintNoValue_PromptSelectsFromSpaceSprintList(t *te
 	}
 }
 
+func TestCLI_WS_Import_Jira_SprintNoValue_ConfigCurrent_PrefersActiveSprint(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	rootConfigPath := filepath.Join(env.Root, ".kra", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
+		t.Fatalf("mkdir root config dir: %v", err)
+	}
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  jira:\n    defaults:\n      sprint_selection: current\n"), 0o644); err != nil {
+		t.Fatalf("write root config: %v", err)
+	}
+
+	prevJiraFactory := newWSImportJiraPort
+	newWSImportJiraPort = func(baseURL string) wsimport.JiraIssueListPort {
+		return stubJiraImportPort{
+			sprints: []wsimport.JiraSprint{
+				{ID: 21157, Name: "SREP スプリント 20", State: "active", OriginBoardID: 1},
+				{ID: 21666, Name: "SREP スプリント 21", State: "future", OriginBoardID: 1},
+			},
+			issuesByJQL: []wsimport.JiraIssue{
+				{Key: "SREP-5000", Summary: "Latest sprint import", TicketURL: "https://jira.example.com/browse/SREP-5000"},
+			},
+		}
+	}
+	t.Cleanup(func() {
+		newWSImportJiraPort = prevJiraFactory
+	})
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "import", "jira", "--sprint", "--space", "SREP", "--no-prompt"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), err.String())
+	}
+	if strings.Contains(out.String(), "Select sprint:") || strings.Contains(out.String(), "Sprints(active/future):") {
+		t.Fatalf("stdout should not prompt for sprint selection: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "sprint=SREP スプリント 20") {
+		t.Fatalf("stdout missing current sprint selection: %q", out.String())
+	}
+	if err.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", err.String())
+	}
+}
+
 func TestCLI_WS_Import_Jira_SprintNoValue_ShowsOnlyActiveFuture(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
@@ -1029,7 +1198,42 @@ func TestCLI_WS_Import_Jira_ProjectAlias_WorksLikeSpace(t *testing.T) {
 	}
 }
 
-type stubGitHubImportPort struct{}
+type stubJiraImportPort struct {
+	issuesByJQL []wsimport.JiraIssue
+	sprints     []wsimport.JiraSprint
+}
+
+func (s stubJiraImportPort) SearchIssuesByJQL(ctx context.Context, jql string, maxResults int) ([]wsimport.JiraIssue, error) {
+	return s.issuesByJQL, nil
+}
+
+func (s stubJiraImportPort) ListScrumBoards(ctx context.Context) ([]wsimport.JiraBoard, error) {
+	return nil, nil
+}
+
+func (s stubJiraImportPort) ListScrumBoardsByProject(ctx context.Context, projectKey string) ([]wsimport.JiraBoard, error) {
+	return nil, nil
+}
+
+func (s stubJiraImportPort) ListBoardSprintsActiveFuture(ctx context.Context, boardID int) ([]wsimport.JiraSprint, error) {
+	return nil, nil
+}
+
+func (s stubJiraImportPort) GetSprint(ctx context.Context, sprintID int) (wsimport.JiraSprint, error) {
+	return wsimport.JiraSprint{}, nil
+}
+
+func (s stubJiraImportPort) ListBoardProjectKeys(ctx context.Context, boardID int) ([]string, error) {
+	return nil, nil
+}
+
+func (s stubJiraImportPort) ListProjectOpenSprints(ctx context.Context, projectKey string, maxResults int) ([]wsimport.JiraSprint, error) {
+	return s.sprints, nil
+}
+
+type stubGitHubImportPort struct {
+	reviews []wsimport.GitHubPullRequest
+}
 
 func (stubGitHubImportPort) CheckAuth(ctx context.Context) error {
 	return nil
@@ -1039,6 +1243,6 @@ func (stubGitHubImportPort) SearchIssues(ctx context.Context, scope wsimport.Git
 	return nil, nil
 }
 
-func (stubGitHubImportPort) SearchReviewPullRequests(ctx context.Context, scope wsimport.GitHubScope, maxResults int) ([]wsimport.GitHubPullRequest, error) {
-	return nil, nil
+func (s stubGitHubImportPort) SearchReviewPullRequests(ctx context.Context, scope wsimport.GitHubScope, maxResults int) ([]wsimport.GitHubPullRequest, error) {
+	return s.reviews, nil
 }

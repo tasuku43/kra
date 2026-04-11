@@ -60,11 +60,17 @@ integration:
     defaults:
       space: DEMO
       type: sprint # sprint | jql
+      sprint_selection: prompt # prompt | current
+  import:
+    defaults:
+      target: both # jira | github-review | both
 ```
 
 Notes:
 - `integration.jira.defaults.space` and `integration.jira.defaults.project` are aliases for the same scope concept.
 - Only one of them may be active at a time.
+- `integration.jira.defaults.sprint_selection` is used when `--sprint` is selected but no sprint value is given.
+- `integration.import.defaults.target` controls the default source set for `kra ws import all`.
 - `workspace.close.empty_record_policy` controls how `ws close` reacts when a workspace has no substantive
   `notes/` or `artifacts/` record.
 - `workspace.repo_presets` is a map keyed by preset name.
@@ -76,7 +82,14 @@ Notes:
 - `integration.jira.defaults.type` must be one of:
   - `sprint`
   - `jql`
+- `integration.jira.defaults.sprint_selection` must be one of:
+  - `prompt`
+  - `current`
 - `integration.jira.defaults.space` and `integration.jira.defaults.project` must not be combined.
+- `integration.import.defaults.target` must be one of:
+  - `jira`
+  - `github-review`
+  - `both`
 - `workspace.close.empty_record_policy` must be one of:
   - `warn`
   - `require-confirmation`

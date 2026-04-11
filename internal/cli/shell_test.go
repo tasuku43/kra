@@ -151,6 +151,12 @@ func TestCLI_Shell_Completion_Zsh_PrintsCompdef(t *testing.T) {
 	if !strings.Contains(text, `"ws import github issue:--state"`) || !strings.Contains(text, `"open" "closed" "all"`) {
 		t.Fatalf("missing zsh ws import github issue state values: %q", text)
 	}
+	if !strings.Contains(text, "\"ws import all\") flags=(") || !strings.Contains(text, "--target") {
+		t.Fatalf("missing zsh ws import all flag candidates: %q", text)
+	}
+	if !strings.Contains(text, `"ws import all:--target"`) || !strings.Contains(text, `"jira" "github-review" "both"`) {
+		t.Fatalf("missing zsh ws import all target values: %q", text)
+	}
 	if !strings.Contains(text, "\"ws task sync\")\n      has_target=0") {
 		t.Fatalf("missing target-selector gate for ws task sync: %q", text)
 	}
@@ -195,8 +201,14 @@ func TestCLI_Shell_Completion_Bash_PrintsCompleteHook(t *testing.T) {
 	if !strings.Contains(text, "\"ws import github review\")") || !strings.Contains(text, "--repo") {
 		t.Fatalf("missing ws import github review flag candidates: %q", text)
 	}
+	if !strings.Contains(text, "\"ws import all\")") || !strings.Contains(text, "--target") {
+		t.Fatalf("missing ws import all flag candidates: %q", text)
+	}
 	if !strings.Contains(text, `"ws import github issue:--state"`) || !strings.Contains(text, `"open closed all"`) {
 		t.Fatalf("missing bash ws import github issue state values: %q", text)
+	}
+	if !strings.Contains(text, `"ws import all:--target"`) || !strings.Contains(text, `"jira github-review both"`) {
+		t.Fatalf("missing bash ws import all target values: %q", text)
 	}
 	if !strings.Contains(text, "\"ws task sync\")\n        has_target=0") {
 		t.Fatalf("missing target-selector gate for ws task sync: %q", text)
@@ -242,6 +254,9 @@ func TestCLI_Shell_Completion_Fish_PrintsCompleteRules(t *testing.T) {
 	}
 	if !strings.Contains(text, `__fish_seen_subcommand_from issue`) || !strings.Contains(text, ` -l state -a "open closed all"`) {
 		t.Fatalf("missing fish ws import github issue state values: %q", text)
+	}
+	if !strings.Contains(text, `__fish_seen_subcommand_from all`) || !strings.Contains(text, ` -l target -a "jira github-review both"`) {
+		t.Fatalf("missing fish ws import all target values: %q", text)
 	}
 }
 
