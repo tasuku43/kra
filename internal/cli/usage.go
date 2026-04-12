@@ -376,9 +376,23 @@ func (c *CLI) printWSImportUsage(w io.Writer) {
   kra ws import <source> [args]
 
 Sources:
+  all               Import workspaces from configured sources in one run
   github            Import workspaces from GitHub issues or review requests
   jira              Import workspaces from Jira issues
   help              Show this help
+`)
+}
+
+func (c *CLI) printWSImportAllUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws import all [--target jira|github-review|both] [--limit <n>] [--apply] [--no-prompt] [--format human|json]
+
+Plan-first bulk workspace creation from Jira and/or GitHub review requests.
+
+Rules:
+  Scope/mode resolution is config-first and reuses existing jira/github review defaults.
+  --target default is integration.import.defaults.target, falling back to both.
+  --limit default is 30 (range: 1..200) and applies per source.
 `)
 }
 

@@ -24,6 +24,10 @@ This command is for workspace creation (0..N), not for actions on existing works
   - `<current-root>/.kra/config.yaml` -> `integration.jira.defaults.type`
   - `~/.kra/config.yaml` -> `integration.jira.defaults.type`
   - fallback `sprint`
+- When `--sprint` is selected and its value is omitted, sprint selection mode is resolved from config:
+  - `<current-root>/.kra/config.yaml` -> `integration.jira.defaults.sprint_selection`
+  - `~/.kra/config.yaml` -> `integration.jira.defaults.sprint_selection`
+  - fallback `prompt`
 - `--space` is the primary scope key option for sprint mode.
 - `--project` is an alias of `--space` (same behavior).
 - `--space`/`--project` is required with sprint mode after config resolution.
@@ -61,11 +65,13 @@ This command is for workspace creation (0..N), not for actions on existing works
   - read `integration.jira.defaults.space` or `integration.jira.defaults.project` from config.
   - if both keys are active at the same time, fail with a clear config error.
 - If value is omitted (`--sprint` only):
-  - in prompt mode, list `Active + Future` sprints under `--space/--project` and ask selection.
+  - with `sprint_selection=prompt`, list `Active + Future` sprints under `--space/--project` and ask selection.
   - when TTY is available, use shared interactive selector UI.
   - when TTY is not available, fallback to numbered text prompt.
+  - with `sprint_selection=current`, auto-select the current sprint candidate.
+  - current means: prefer `active`; if no active sprint exists, use the newest `future` sprint.
   - build JQL with selected sprint id.
-  - in `--no-prompt`, return usage/error and ask for explicit `--sprint <id|name>` or `--jql`.
+  - in `--no-prompt`, prompt mode still requires explicit `--sprint <id|name>` or `--jql`, but `sprint_selection=current` is allowed.
 
 ### Kanban/non-sprint usage
 

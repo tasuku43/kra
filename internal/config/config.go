@@ -14,9 +14,16 @@ const (
 	JiraTypeSprint = "sprint"
 	JiraTypeJQL    = "jql"
 
+	JiraSprintSelectionPrompt  = "prompt"
+	JiraSprintSelectionCurrent = "current"
+
 	GitHubStateOpen   = "open"
 	GitHubStateClosed = "closed"
 	GitHubStateAll    = "all"
+
+	ImportTargetJira         = "jira"
+	ImportTargetGitHubReview = "github-review"
+	ImportTargetBoth         = "both"
 
 	WorkspaceCloseEmptyRecordPolicyWarn                = "warn"
 	WorkspaceCloseEmptyRecordPolicyRequireConfirmation = "require-confirmation"
@@ -53,6 +60,15 @@ type WorkspaceRepoPreset struct {
 type IntegrationConfig struct {
 	Jira   JiraConfig   `yaml:"jira"`
 	GitHub GitHubConfig `yaml:"github"`
+	Import ImportConfig `yaml:"import"`
+}
+
+type ImportConfig struct {
+	Defaults ImportDefaults `yaml:"defaults"`
+}
+
+type ImportDefaults struct {
+	Target string `yaml:"target"`
 }
 
 type JiraConfig struct {
@@ -61,9 +77,10 @@ type JiraConfig struct {
 }
 
 type JiraDefaults struct {
-	Space   string `yaml:"space"`
-	Project string `yaml:"project"`
-	Type    string `yaml:"type"`
+	Space           string `yaml:"space"`
+	Project         string `yaml:"project"`
+	Type            string `yaml:"type"`
+	SprintSelection string `yaml:"sprint_selection"`
 }
 
 type GitHubConfig struct {
@@ -118,11 +135,13 @@ func (c *Config) Normalize() {
 	c.Integration.Jira.Defaults.Space = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.Defaults.Space))
 	c.Integration.Jira.Defaults.Project = strings.ToUpper(strings.TrimSpace(c.Integration.Jira.Defaults.Project))
 	c.Integration.Jira.Defaults.Type = strings.ToLower(strings.TrimSpace(c.Integration.Jira.Defaults.Type))
+	c.Integration.Jira.Defaults.SprintSelection = strings.ToLower(strings.TrimSpace(c.Integration.Jira.Defaults.SprintSelection))
 	c.Integration.GitHub.Defaults.Issue.Org = strings.TrimSpace(c.Integration.GitHub.Defaults.Issue.Org)
 	c.Integration.GitHub.Defaults.Issue.Repo = strings.TrimSpace(c.Integration.GitHub.Defaults.Issue.Repo)
 	c.Integration.GitHub.Defaults.Issue.State = strings.ToLower(strings.TrimSpace(c.Integration.GitHub.Defaults.Issue.State))
 	c.Integration.GitHub.Defaults.Review.Org = strings.TrimSpace(c.Integration.GitHub.Defaults.Review.Org)
 	c.Integration.GitHub.Defaults.Review.Repo = strings.TrimSpace(c.Integration.GitHub.Defaults.Review.Repo)
+	c.Integration.Import.Defaults.Target = strings.ToLower(strings.TrimSpace(c.Integration.Import.Defaults.Target))
 }
 
 func (c Config) Validate() error {
@@ -138,6 +157,11 @@ func (c Config) Validate() error {
 		c.Integration.Jira.Defaults.Type != JiraTypeJQL {
 		issues = append(issues, "integration.jira.defaults.type must be one of: sprint, jql")
 	}
+	if c.Integration.Jira.Defaults.SprintSelection != "" &&
+		c.Integration.Jira.Defaults.SprintSelection != JiraSprintSelectionPrompt &&
+		c.Integration.Jira.Defaults.SprintSelection != JiraSprintSelectionCurrent {
+		issues = append(issues, "integration.jira.defaults.sprint_selection must be one of: prompt, current")
+	}
 	if c.Integration.Jira.Defaults.Space != "" && c.Integration.Jira.Defaults.Project != "" {
 		issues = append(issues, "integration.jira.defaults.space and integration.jira.defaults.project cannot be combined")
 	}
@@ -152,6 +176,12 @@ func (c Config) Validate() error {
 	}
 	if c.Integration.GitHub.Defaults.Review.Org != "" && c.Integration.GitHub.Defaults.Review.Repo != "" {
 		issues = append(issues, "integration.github.defaults.review.org and integration.github.defaults.review.repo cannot be combined")
+	}
+	if c.Integration.Import.Defaults.Target != "" &&
+		c.Integration.Import.Defaults.Target != ImportTargetJira &&
+		c.Integration.Import.Defaults.Target != ImportTargetGitHubReview &&
+		c.Integration.Import.Defaults.Target != ImportTargetBoth {
+		issues = append(issues, "integration.import.defaults.target must be one of: jira, github-review, both")
 	}
 	if c.Workspace.Close.EmptyRecordPolicy != "" &&
 		c.Workspace.Close.EmptyRecordPolicy != WorkspaceCloseEmptyRecordPolicyWarn &&
@@ -211,6 +241,9 @@ func Merge(global Config, root Config) Config {
 	if root.Integration.Jira.Defaults.Type != "" {
 		out.Integration.Jira.Defaults.Type = root.Integration.Jira.Defaults.Type
 	}
+	if root.Integration.Jira.Defaults.SprintSelection != "" {
+		out.Integration.Jira.Defaults.SprintSelection = root.Integration.Jira.Defaults.SprintSelection
+	}
 	if root.Integration.GitHub.Defaults.Issue.Org != "" {
 		out.Integration.GitHub.Defaults.Issue.Org = root.Integration.GitHub.Defaults.Issue.Org
 	}
@@ -225,6 +258,9 @@ func Merge(global Config, root Config) Config {
 	}
 	if root.Integration.GitHub.Defaults.Review.Repo != "" {
 		out.Integration.GitHub.Defaults.Review.Repo = root.Integration.GitHub.Defaults.Review.Repo
+	}
+	if root.Integration.Import.Defaults.Target != "" {
+		out.Integration.Import.Defaults.Target = root.Integration.Import.Defaults.Target
 	}
 	out.Normalize()
 	return out

@@ -19,11 +19,13 @@ func TestLoadFile_MissingIsEmpty(t *testing.T) {
 		cfg.Integration.Jira.Defaults.Space != "" ||
 		cfg.Integration.Jira.Defaults.Project != "" ||
 		cfg.Integration.Jira.Defaults.Type != "" ||
+		cfg.Integration.Jira.Defaults.SprintSelection != "" ||
 		cfg.Integration.GitHub.Defaults.Issue.Org != "" ||
 		cfg.Integration.GitHub.Defaults.Issue.Repo != "" ||
 		cfg.Integration.GitHub.Defaults.Issue.State != "" ||
 		cfg.Integration.GitHub.Defaults.Review.Org != "" ||
-		cfg.Integration.GitHub.Defaults.Review.Repo != "" {
+		cfg.Integration.GitHub.Defaults.Review.Repo != "" ||
+		cfg.Integration.Import.Defaults.Target != "" {
 		t.Fatalf("LoadFile() = %+v, want zero-value config", cfg)
 	}
 }
@@ -48,6 +50,7 @@ integration:
     defaults:
       space: " abc "
       type: " JQL "
+      sprint_selection: " CURRENT "
   github:
     defaults:
       issue:
@@ -55,6 +58,9 @@ integration:
         state: " CLOSED "
       review:
         repo: " my-org/api "
+  import:
+    defaults:
+      target: " GITHUB-REVIEW "
 `), 0o644); err != nil {
 		t.Fatalf("write config: %v", err)
 	}
@@ -85,6 +91,9 @@ integration:
 	if cfg.Integration.Jira.Defaults.Type != JiraTypeJQL {
 		t.Fatalf("integration.jira.defaults.type = %q, want %q", cfg.Integration.Jira.Defaults.Type, JiraTypeJQL)
 	}
+	if cfg.Integration.Jira.Defaults.SprintSelection != JiraSprintSelectionCurrent {
+		t.Fatalf("integration.jira.defaults.sprint_selection = %q, want %q", cfg.Integration.Jira.Defaults.SprintSelection, JiraSprintSelectionCurrent)
+	}
 	if cfg.Integration.GitHub.Defaults.Issue.Org != "my-org" {
 		t.Fatalf("integration.github.defaults.issue.org = %q, want %q", cfg.Integration.GitHub.Defaults.Issue.Org, "my-org")
 	}
@@ -93,6 +102,9 @@ integration:
 	}
 	if cfg.Integration.GitHub.Defaults.Review.Repo != "my-org/api" {
 		t.Fatalf("integration.github.defaults.review.repo = %q, want %q", cfg.Integration.GitHub.Defaults.Review.Repo, "my-org/api")
+	}
+	if cfg.Integration.Import.Defaults.Target != ImportTargetGitHubReview {
+		t.Fatalf("integration.import.defaults.target = %q, want %q", cfg.Integration.Import.Defaults.Target, ImportTargetGitHubReview)
 	}
 }
 
@@ -113,6 +125,26 @@ integration:
 	}
 	if !strings.Contains(err.Error(), "integration.jira.defaults.type") {
 		t.Fatalf("error = %q, want defaults.type hint", err)
+	}
+}
+
+func TestLoadFile_InvalidSprintSelectionFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(`
+integration:
+  jira:
+    defaults:
+      sprint_selection: newest
+`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatalf("LoadFile() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "integration.jira.defaults.sprint_selection") {
+		t.Fatalf("error = %q, want sprint_selection hint", err)
 	}
 }
 
@@ -178,6 +210,26 @@ integration:
 	}
 }
 
+func TestLoadFile_InvalidImportTargetFails(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "config.yaml")
+	if err := os.WriteFile(path, []byte(`
+integration:
+  import:
+    defaults:
+      target: github
+`), 0o644); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	_, err := LoadFile(path)
+	if err == nil {
+		t.Fatalf("LoadFile() error = nil, want non-nil")
+	}
+	if !strings.Contains(err.Error(), "integration.import.defaults.target") {
+		t.Fatalf("error = %q, want import target hint", err)
+	}
+}
+
 func TestLoadFile_RepoPresetEmptyReposFails(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "config.yaml")
 	if err := os.WriteFile(path, []byte(`
@@ -232,9 +284,13 @@ func TestMerge_RootOverridesGlobal(t *testing.T) {
 			Jira: JiraConfig{
 				BaseURL: "https://jira.global.example.com",
 				Defaults: JiraDefaults{
-					Space: "TEAM",
-					Type:  JiraTypeSprint,
+					Space:           "TEAM",
+					Type:            JiraTypeSprint,
+					SprintSelection: JiraSprintSelectionPrompt,
 				},
+			},
+			Import: ImportConfig{
+				Defaults: ImportDefaults{Target: ImportTargetJira},
 			},
 		},
 	}
@@ -251,8 +307,9 @@ func TestMerge_RootOverridesGlobal(t *testing.T) {
 			Jira: JiraConfig{
 				BaseURL: "https://jira.root.example.com",
 				Defaults: JiraDefaults{
-					Project: "APP",
-					Type:    JiraTypeJQL,
+					Project:         "APP",
+					Type:            JiraTypeJQL,
+					SprintSelection: JiraSprintSelectionCurrent,
 				},
 			},
 			GitHub: GitHubConfig{
@@ -265,6 +322,9 @@ func TestMerge_RootOverridesGlobal(t *testing.T) {
 						Org: "root-org",
 					},
 				},
+			},
+			Import: ImportConfig{
+				Defaults: ImportDefaults{Target: ImportTargetBoth},
 			},
 		},
 	}
@@ -294,6 +354,9 @@ func TestMerge_RootOverridesGlobal(t *testing.T) {
 	if got.Integration.Jira.Defaults.Type != JiraTypeJQL {
 		t.Fatalf("integration.jira.defaults.type = %q, want %q", got.Integration.Jira.Defaults.Type, JiraTypeJQL)
 	}
+	if got.Integration.Jira.Defaults.SprintSelection != JiraSprintSelectionCurrent {
+		t.Fatalf("integration.jira.defaults.sprint_selection = %q, want %q", got.Integration.Jira.Defaults.SprintSelection, JiraSprintSelectionCurrent)
+	}
 	if got.Integration.GitHub.Defaults.Issue.Repo != "root/api" {
 		t.Fatalf("integration.github.defaults.issue.repo = %q, want %q", got.Integration.GitHub.Defaults.Issue.Repo, "root/api")
 	}
@@ -302,5 +365,8 @@ func TestMerge_RootOverridesGlobal(t *testing.T) {
 	}
 	if got.Integration.GitHub.Defaults.Review.Org != "root-org" {
 		t.Fatalf("integration.github.defaults.review.org = %q, want %q", got.Integration.GitHub.Defaults.Review.Org, "root-org")
+	}
+	if got.Integration.Import.Defaults.Target != ImportTargetBoth {
+		t.Fatalf("integration.import.defaults.target = %q, want %q", got.Integration.Import.Defaults.Target, ImportTargetBoth)
 	}
 }
