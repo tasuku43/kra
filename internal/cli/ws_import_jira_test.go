@@ -343,7 +343,6 @@ func TestCLI_WS_Import_All_HidesSkippedDetailsAndZeroFailedSection(t *testing.T)
 		return stubJiraImportPort{
 			issuesByJQL: []wsimport.JiraIssue{
 				{Key: "PROJ-600", Summary: "Skipped jira item", TicketURL: "https://jira.example.com/browse/PROJ-600"},
-				{Key: "PROJ-601", Summary: "Create jira item", TicketURL: "https://jira.example.com/browse/PROJ-601"},
 			},
 		}
 	}
@@ -372,17 +371,23 @@ func TestCLI_WS_Import_All_HidesSkippedDetailsAndZeroFailedSection(t *testing.T)
 		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), err.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "summary: create=1 skipped=1 failed=0") {
+	if !strings.Contains(got, "summary: create=0 skipped=1 failed=0") {
 		t.Fatalf("stdout missing summary line: %q", got)
 	}
 	if !strings.Contains(got, "skipped (1)") {
 		t.Fatalf("stdout missing skipped count: %q", got)
+	}
+	if !strings.Contains(got, "to create (0)") {
+		t.Fatalf("stdout missing zero create count: %q", got)
 	}
 	if strings.Contains(got, "Skipped jira item") {
 		t.Fatalf("stdout should hide skipped item details: %q", got)
 	}
 	if strings.Contains(got, "failed (0)") {
 		t.Fatalf("stdout should hide zero failed section: %q", got)
+	}
+	if strings.Contains(got, "apply this plan?") || strings.Contains(err.String(), "apply this plan?") {
+		t.Fatalf("prompt should be omitted when create=0 (stdout=%q stderr=%q)", got, err.String())
 	}
 }
 

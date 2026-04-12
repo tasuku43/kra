@@ -138,6 +138,16 @@ func (c *CLI) runWSImportAll(args []string) int {
 		}
 	}
 	plan.Summary = summarizeWSImportAllPlan(plan)
+	if plan.Summary.ToCreate == 0 {
+		if outputJSON {
+			return c.writeWSImportAllJSONResult(plan, false, plan.Summary.Failed == 0, "conflict", "one or more import items failed in plan")
+		}
+		c.printWSImportAllPlanHuman(plan)
+		if plan.Summary.Failed > 0 {
+			return exitError
+		}
+		return exitOK
+	}
 
 	shouldApply := false
 	interactivePromptFlow := !opts.noPrompt && !opts.apply
