@@ -9,6 +9,7 @@ import (
 func (c *CLI) printRootUsage(w io.Writer) {
 	commands := []string{
 		"  init              Initialize KRA_ROOT",
+		"  agent             Agent-oriented bootstrap prompt",
 		"  context           Context commands",
 		"  root              Root commands",
 		"  repo              Repository pool commands",
@@ -24,9 +25,26 @@ func (c *CLI) printRootUsage(w io.Writer) {
 
 	fmt.Fprintf(
 		w,
-		"Usage:\n  kra [global-flags] <command> [args]\n  kra --version\n\nCommands:\n%s\n\nGlobal flags:\n  --debug            Enable debug logging to <KRA_ROOT>/.kra/logs/\n  --version          Print version and exit\n  --help, -h         Show this help\n\nRun:\n  kra <command> --help\n",
+		"Usage:\n  kra [global-flags] <command> [args]\n  kra --version\n\nCommands:\n%s\n\nGlobal flags:\n  --debug            Enable debug logging to <KRA_ROOT>/.kra/logs/\n  --version          Print version and exit\n  --help, -h         Show this help\n\nRun:\n  kra <command> --help\n  kra help <command-path> --mode agent\n",
 		strings.Join(commands, "\n"),
 	)
+}
+
+func (c *CLI) printHelpUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra help <command-path> [--mode human|agent] [--format text|json]
+
+Show command help through a selected view.
+
+Examples:
+  kra help ws close
+  kra help ws close --mode agent
+  kra help ws close --mode agent --format json
+
+Notes:
+  - human mode delegates to the existing command usage output.
+  - agent mode prints automation-oriented command contracts.
+`)
 }
 
 func (c *CLI) printContextUsage(w io.Writer) {
@@ -50,6 +68,29 @@ Subcommands:
 
 Notes:
   - context use/rm in --format json mode require explicit <name> (non-interactive)
+`)
+}
+
+func (c *CLI) printAgentUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra agent <subcommand> [args]
+
+Subcommands:
+  prompt [--format text|json]
+                   Print the global agent bootstrap prompt for kra
+  help              Show this help
+`)
+}
+
+func (c *CLI) printAgentPromptUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra agent prompt [--format text|json]
+
+Print the global agent bootstrap prompt for kra.
+
+Examples:
+  kra agent prompt
+  kra agent prompt --format json
 `)
 }
 

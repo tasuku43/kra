@@ -129,8 +129,7 @@ func TestCLI_Shell_Completion_Zsh_PrintsCompdef(t *testing.T) {
 		t.Fatalf("missing command candidates: %q", text)
 	}
 	deprecatedSkill := "ag" + "ent-skills"
-	deprecatedCommand := `"` + "ag" + `ent")`
-	if strings.Contains(text, deprecatedSkill) || strings.Contains(text, deprecatedCommand) {
+	if strings.Contains(text, deprecatedSkill) {
 		t.Fatalf("deprecated completion tokens should be removed: %q", text)
 	}
 	if !strings.Contains(text, "\"ws add-repo\") flags=(") || !strings.Contains(text, "--base-ref") {
@@ -182,8 +181,7 @@ func TestCLI_Shell_Completion_Bash_PrintsCompleteHook(t *testing.T) {
 		t.Fatalf("missing bash complete hook: %q", text)
 	}
 	deprecatedSkill := "ag" + "ent-skills"
-	deprecatedCommand := `"` + "ag" + `ent"`
-	if strings.Contains(text, deprecatedSkill) || strings.Contains(text, deprecatedCommand) {
+	if strings.Contains(text, deprecatedSkill) {
 		t.Fatalf("deprecated completion tokens should be removed: %q", text)
 	}
 	if !strings.Contains(text, "context") || !strings.Contains(text, "add-repo") {

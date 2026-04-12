@@ -8,6 +8,7 @@ import (
 
 var kraCompletionRootCommands = []string{
 	"init",
+	"agent",
 	"context",
 	"root",
 	"repo",
@@ -27,6 +28,7 @@ var kraCompletionGlobalFlags = []string{
 }
 
 var kraCompletionSubcommandOrder = []string{
+	"agent",
 	"context",
 	"root",
 	"repo",
@@ -36,6 +38,7 @@ var kraCompletionSubcommandOrder = []string{
 }
 
 var kraCompletionSubcommands = map[string][]string{
+	"agent":    {"prompt", "help"},
 	"context":  {"current", "list", "create", "use", "rename", "rm", "help"},
 	"root":     {"current", "open", "help"},
 	"repo":     {"add", "discover", "preset", "remove", "gc", "help"},
@@ -79,20 +82,25 @@ var kraCompletionPathSubcommands = map[string][]string{
 
 var kraCompletionCommandFlagOrder = []string{
 	"init",
+	"agent",
 	"doctor",
+	"help",
 	"version",
 	"ws",
 }
 
 var kraCompletionCommandFlags = map[string][]string{
 	"init":    {"--root", "--context", "--format", "--help", "-h"},
+	"agent":   {"--help", "-h"},
 	"doctor":  {"--format", "--fix", "--plan", "--apply", "--help", "-h"},
+	"help":    {"--mode", "--format", "--help", "-h"},
 	"version": {"--help", "-h"},
 	"ws":      {"--id", "--current", "--select", "--multi-select", "--all", "--help", "-h"},
 }
 
 var kraCompletionPathFlagOrder = []string{
 	"context current",
+	"agent prompt",
 	"context list",
 	"context create",
 	"context use",
@@ -146,6 +154,7 @@ var kraCompletionPathFlagOrder = []string{
 }
 
 var kraCompletionPathFlags = map[string][]string{
+	"agent prompt":            {"--format", "--help", "-h"},
 	"context current":         {"--format", "--help", "-h"},
 	"context list":            {"--format", "--help", "-h"},
 	"context create":          {"--path", "--use", "--format", "--help", "-h"},

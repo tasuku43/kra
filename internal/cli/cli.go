@@ -63,6 +63,9 @@ func (c *CLI) Run(args []string) int {
 
 	switch args[0] {
 	case "-h", "--help", "help":
+		if args[0] == "help" {
+			return c.runHelp(args[1:])
+		}
 		c.printRootUsage(c.Out)
 		return exitOK
 	case "version":
@@ -80,6 +83,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runTemplate(args[1:])
 	case "shell":
 		return c.runShell(args[1:])
+	case "agent":
+		return c.runAgent(args[1:])
 	case "ws":
 		return c.runWS(args[1:])
 	case "doctor":
