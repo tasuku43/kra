@@ -720,10 +720,13 @@ func (c *CLI) printWSImportGitHubPlanHuman(plan wsImportGitHubPlan) {
 		fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, styleInfo("to create", useColor), plan.Summary.ToCreate),
 	}
 	body = append(body, renderWSImportGitHubPlanItems(plan.Items, "create", connectorMuted)...)
-	body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, styleWarn("skipped", useColor), plan.Summary.Skipped))
-	body = append(body, renderWSImportGitHubPlanItems(plan.Items, "skip", connectorMuted)...)
-	body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, styleError("failed", useColor), plan.Summary.Failed))
-	body = append(body, renderWSImportGitHubPlanItems(plan.Items, "fail", connectorMuted)...)
+	if plan.Summary.Skipped > 0 {
+		body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, styleWarn("skipped", useColor), plan.Summary.Skipped))
+	}
+	if plan.Summary.Failed > 0 {
+		body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, styleError("failed", useColor), plan.Summary.Failed))
+		body = append(body, renderWSImportGitHubPlanItems(plan.Items, "fail", connectorMuted)...)
+	}
 	for _, line := range renderSectionAtoms(newSectionAtom(styleBold("Plan:", useColor), body, sectionRenderOptions{
 		blankAfterHeading: false,
 		trailingBlank:     true,

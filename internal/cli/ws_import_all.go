@@ -382,13 +382,17 @@ func (c *CLI) printWSImportAllPlanHuman(plan wsImportAllPlan) {
 	bullet := styleMuted("•", useColor)
 	body := []string{
 		fmt.Sprintf("%s%s %s %s", uiIndent, bullet, styleAccent("targets:", useColor), strings.Join(plan.Targets, ", ")),
+		fmt.Sprintf("%s%s %s %s %s", uiIndent, bullet, styleAccent("summary:", useColor), styleInfo(fmt.Sprintf("create=%d", plan.Summary.ToCreate), useColor), styleWarn(fmt.Sprintf("skipped=%d", plan.Summary.Skipped), useColor)+" "+styleError(fmt.Sprintf("failed=%d", plan.Summary.Failed), useColor)),
 		fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, styleInfo("to create", useColor), plan.Summary.ToCreate),
 	}
 	body = append(body, renderWSImportAllCreateItems(plan, useColor)...)
-	body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, styleWarn("skipped", useColor), plan.Summary.Skipped))
-	body = append(body, renderWSImportAllNonCreateItems(plan, "skip", useColor)...)
-	body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, styleError("failed", useColor), plan.Summary.Failed))
-	body = append(body, renderWSImportAllNonCreateItems(plan, "fail", useColor)...)
+	if plan.Summary.Skipped > 0 {
+		body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, styleWarn("skipped", useColor), plan.Summary.Skipped))
+	}
+	if plan.Summary.Failed > 0 {
+		body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, styleError("failed", useColor), plan.Summary.Failed))
+		body = append(body, renderWSImportAllNonCreateItems(plan, "fail", useColor)...)
+	}
 	for _, line := range renderSectionAtoms(newSectionAtom(styleBold("Plan:", useColor), body, sectionRenderOptions{
 		blankAfterHeading: false,
 		trailingBlank:     true,
@@ -428,7 +432,7 @@ func renderWSImportAllItems(plan wsImportAllPlan, action string, useColor bool) 
 			if it.Action != action {
 				continue
 			}
-			labels = append(labels, "[jira] "+renderWSImportJiraPlanItemLabel(it))
+			labels = append(labels, renderWSImportAllJiraItemLabel(it))
 		}
 	}
 	if plan.GitHub != nil {
@@ -436,7 +440,7 @@ func renderWSImportAllItems(plan wsImportAllPlan, action string, useColor bool) 
 			if it.Action != action {
 				continue
 			}
-			labels = append(labels, "[github-review] "+renderWSImportGitHubPlanItemLabel(it))
+			labels = append(labels, renderWSImportAllGitHubItemLabel(it))
 		}
 	}
 	if len(labels) == 0 {
@@ -451,4 +455,44 @@ func renderWSImportAllItems(plan wsImportAllPlan, action string, useColor bool) 
 		lines = append(lines, fmt.Sprintf("%s%s%s", uiIndent+uiIndent, styleMuted(connector, useColor), label))
 	}
 	return lines
+}
+
+func renderWSImportAllJiraItemLabel(it wsImportJiraItem) string {
+	base := fmt.Sprintf("[jira] %s: %s", strings.TrimSpace(it.IssueKey), formatWorkspaceTitle(it.Title))
+	switch it.Action {
+	case "skip":
+		reason := strings.TrimSpace(it.Reason)
+		if reason != "" && !strings.EqualFold(reason, "already_active") {
+			return fmt.Sprintf("%s (%s)", base, reason)
+		}
+	case "fail":
+		reason := strings.TrimSpace(it.Reason)
+		message := strings.TrimSpace(it.Message)
+		if reason != "" && message != "" {
+			return fmt.Sprintf("%s (%s: %s)", base, reason, message)
+		} else if reason != "" {
+			return fmt.Sprintf("%s (%s)", base, reason)
+		}
+	}
+	return base
+}
+
+func renderWSImportAllGitHubItemLabel(it wsImportGitHubItem) string {
+	base := fmt.Sprintf("[github-review] %s#%d: %s", strings.TrimSpace(it.Repo), it.Number, formatWorkspaceTitle(it.Title))
+	switch it.Action {
+	case "skip":
+		reason := strings.TrimSpace(it.Reason)
+		if reason != "" && !strings.EqualFold(reason, "already_active") {
+			return fmt.Sprintf("%s (%s)", base, reason)
+		}
+	case "fail":
+		reason := strings.TrimSpace(it.Reason)
+		message := strings.TrimSpace(it.Message)
+		if reason != "" && message != "" {
+			return fmt.Sprintf("%s (%s: %s)", base, reason, message)
+		} else if reason != "" {
+			return fmt.Sprintf("%s (%s)", base, reason)
+		}
+	}
+	return base
 }

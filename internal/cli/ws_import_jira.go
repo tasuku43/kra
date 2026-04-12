@@ -809,10 +809,13 @@ func (c *CLI) printWSImportJiraPlanHuman(plan wsImportJiraPlan) {
 	}
 	body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, toCreateLabel, plan.Summary.ToCreate))
 	body = append(body, renderWSImportJiraPlanItems(plan.Items, "create", connectorMuted)...)
-	body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, skippedLabel, plan.Summary.Skipped))
-	body = append(body, renderWSImportJiraPlanItems(plan.Items, "skip", connectorMuted)...)
-	body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, failedLabel, plan.Summary.Failed))
-	body = append(body, renderWSImportJiraPlanItems(plan.Items, "fail", connectorMuted)...)
+	if plan.Summary.Skipped > 0 {
+		body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, skippedLabel, plan.Summary.Skipped))
+	}
+	if plan.Summary.Failed > 0 {
+		body = append(body, fmt.Sprintf("%s%s %s (%d)", uiIndent, bullet, failedLabel, plan.Summary.Failed))
+		body = append(body, renderWSImportJiraPlanItems(plan.Items, "fail", connectorMuted)...)
+	}
 
 	for _, line := range renderSectionAtoms(newSectionAtom(styleBold("Plan:", useColor), body, sectionRenderOptions{
 		blankAfterHeading: false,

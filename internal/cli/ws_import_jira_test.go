@@ -189,8 +189,11 @@ func TestCLI_WS_Import_All_PromptDecline_PrintsCombinedPlan(t *testing.T) {
 	for _, want := range []string{
 		"Plan:",
 		"targets: jira, github-review",
-		"[jira] PROJ-500: Jira item",
-		"[github-review] example-org/api#42: Review item",
+		"summary: create=2 skipped=0 failed=0",
+		"[jira] PROJ-500",
+		"Jira item",
+		"[github-review] example-org/api#42",
+		"Review item",
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("missing %q in stdout:\n%s", want, got)
@@ -198,6 +201,9 @@ func TestCLI_WS_Import_All_PromptDecline_PrintsCombinedPlan(t *testing.T) {
 	}
 	if !strings.Contains(err.String(), "jql: ") {
 		t.Fatalf("stderr missing jira jql prompt: %q", err.String())
+	}
+	if strings.Contains(got, "failed (0)") || strings.Contains(got, "skipped (0)") {
+		t.Fatalf("stdout should hide zero-count skipped/failed sections:\n%s", got)
 	}
 }
 
@@ -235,8 +241,14 @@ func TestCLI_WS_Import_All_TargetFromConfig_GitHubReviewOnly(t *testing.T) {
 	if strings.Contains(out.String(), "[jira]") {
 		t.Fatalf("stdout should not include jira items: %q", out.String())
 	}
-	if !strings.Contains(out.String(), "[github-review] example-org/web#7: Only review") {
+	if !strings.Contains(out.String(), "summary: create=1 skipped=0 failed=0") {
+		t.Fatalf("stdout missing summary line: %q", out.String())
+	}
+	if !strings.Contains(out.String(), "[github-review] example-org/web#7") || !strings.Contains(out.String(), "Only review") {
 		t.Fatalf("stdout missing github review item: %q", out.String())
+	}
+	if strings.Contains(out.String(), "failed (0)") || strings.Contains(out.String(), "skipped (0)") {
+		t.Fatalf("stdout should hide zero-count skipped/failed sections: %q", out.String())
 	}
 	if err.Len() != 0 {
 		t.Fatalf("stderr not empty: %q", err.String())
@@ -296,11 +308,81 @@ func TestCLI_WS_Import_All_PreparesProvidersInParallel(t *testing.T) {
 	if elapsed >= 350*time.Millisecond {
 		t.Fatalf("elapsed = %v, want provider prep to run in parallel", elapsed)
 	}
-	if !strings.Contains(out.String(), "[jira] SREP-5100: Parallel jira") || !strings.Contains(out.String(), "[github-review] example-org/api#77: Parallel review") {
+	if !strings.Contains(out.String(), "summary: create=2 skipped=0 failed=0") ||
+		!strings.Contains(out.String(), "[jira] SREP-5100") ||
+		!strings.Contains(out.String(), "Parallel jira") ||
+		!strings.Contains(out.String(), "[github-review] example-org/api#77") ||
+		!strings.Contains(out.String(), "Parallel review") {
 		t.Fatalf("stdout missing merged provider plans: %q", out.String())
+	}
+	if strings.Contains(out.String(), "failed (0)") || strings.Contains(out.String(), "skipped (0)") {
+		t.Fatalf("stdout should hide zero-count skipped/failed sections: %q", out.String())
 	}
 	if err.Len() != 0 {
 		t.Fatalf("stderr not empty: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Import_All_HidesSkippedDetailsAndZeroFailedSection(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	rootConfigPath := filepath.Join(env.Root, ".kra", "config.yaml")
+	if err := os.MkdirAll(filepath.Dir(rootConfigPath), 0o755); err != nil {
+		t.Fatalf("mkdir root config dir: %v", err)
+	}
+	if err := os.WriteFile(rootConfigPath, []byte("integration:\n  import:\n    defaults:\n      target: both\n  jira:\n    defaults:\n      type: jql\n  github:\n    defaults:\n      review:\n        org: example-org\n"), 0o644); err != nil {
+		t.Fatalf("write root config: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(env.Root, "workspaces", "PROJ-600"), 0o755); err != nil {
+		t.Fatalf("seed active workspace: %v", err)
+	}
+
+	prevJiraFactory := newWSImportJiraPort
+	newWSImportJiraPort = func(baseURL string) wsimport.JiraIssueListPort {
+		return stubJiraImportPort{
+			issuesByJQL: []wsimport.JiraIssue{
+				{Key: "PROJ-600", Summary: "Skipped jira item", TicketURL: "https://jira.example.com/browse/PROJ-600"},
+				{Key: "PROJ-601", Summary: "Create jira item", TicketURL: "https://jira.example.com/browse/PROJ-601"},
+			},
+		}
+	}
+	t.Cleanup(func() {
+		newWSImportJiraPort = prevJiraFactory
+	})
+
+	prevGitHubFactory := newWSImportGitHubPort
+	newWSImportGitHubPort = func() wsimport.GitHubImportPort {
+		return stubGitHubImportPort{}
+	}
+	t.Cleanup(func() {
+		newWSImportGitHubPort = prevGitHubFactory
+	})
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	var in bytes.Buffer
+	in.WriteString("assignee=currentUser()\n")
+	in.WriteString("n\n")
+	c := New(&out, &err)
+	c.In = &in
+
+	code := c.Run([]string{"ws", "import", "all"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), err.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "summary: create=1 skipped=1 failed=0") {
+		t.Fatalf("stdout missing summary line: %q", got)
+	}
+	if !strings.Contains(got, "skipped (1)") {
+		t.Fatalf("stdout missing skipped count: %q", got)
+	}
+	if strings.Contains(got, "Skipped jira item") {
+		t.Fatalf("stdout should hide skipped item details: %q", got)
+	}
+	if strings.Contains(got, "failed (0)") {
+		t.Fatalf("stdout should hide zero failed section: %q", got)
 	}
 }
 
@@ -583,11 +665,11 @@ func TestCLI_WS_Import_Jira_NoPromptWithoutApply_PrintsPlanWithSkipAndFail(t *te
 	if !strings.Contains(got, "Plan:") {
 		t.Fatalf("stdout missing plan heading: %q", got)
 	}
-	if !strings.Contains(got, "PROJ-101: Already exists") {
-		t.Fatalf("stdout missing skipped item label: %q", got)
+	if !strings.Contains(got, "skipped (1)") {
+		t.Fatalf("stdout missing skipped count: %q", got)
 	}
-	if strings.Contains(got, "(already_active)") {
-		t.Fatalf("stdout should hide already_active reason: %q", got)
+	if strings.Contains(got, "PROJ-101: Already exists") || strings.Contains(got, "(already_active)") {
+		t.Fatalf("stdout should hide skipped item details: %q", got)
 	}
 	if !strings.Contains(got, "invalid_workspace_id") {
 		t.Fatalf("stdout missing fail reason: %q", got)
