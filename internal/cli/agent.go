@@ -79,6 +79,24 @@ var defaultAgentPrompt = agentPromptSpec{
 	},
 }
 
+var briefAgentPrompt = agentPromptSpec{
+	WhatKraIs: []string{
+		"kra = workspace lifecycle CLI (init -> ws create -> ws add-repo -> open -> close/reopen/purge).",
+	},
+	AutomationRules: []string{
+		"Automation: prefer --id over --current/--select, --format json where supported.",
+	},
+	SafeCommands: []string{
+		"Safe JSON-first: kra doctor | ws list | root current | ws open/close/create/add-repo.",
+	},
+	DestructiveCommands: []string{
+		"Destructive: kra ws purge (run --dry-run first).",
+	},
+	DrillDownCommands: []string{
+		"Drill down: kra help <command-path> --mode agent",
+	},
+}
+
 func (c *CLI) runAgent(args []string) int {
 	if len(args) == 0 {
 		c.printAgentUsage(c.Err)
@@ -99,12 +117,15 @@ func (c *CLI) runAgent(args []string) int {
 
 func (c *CLI) runAgentPrompt(args []string) int {
 	outputFormat := "text"
+	brief := false
 	for i := 0; i < len(args); i++ {
 		arg := strings.TrimSpace(args[i])
 		switch arg {
 		case "-h", "--help", "help":
 			c.printAgentPromptUsage(c.Out)
 			return exitOK
+		case "--brief":
+			brief = true
 		case "--format":
 			if i+1 >= len(args) {
 				fmt.Fprintln(c.Err, "--format requires a value")
@@ -131,11 +152,19 @@ func (c *CLI) runAgentPrompt(args []string) int {
 		return exitUsage
 	}
 	if outputFormat == "json" {
+		spec := defaultAgentPrompt
+		if brief {
+			spec = briefAgentPrompt
+		}
 		_ = writeCLIJSON(c.Out, cliJSONResponse{
 			OK:     true,
 			Action: "agent.prompt",
-			Result: defaultAgentPrompt,
+			Result: spec,
 		})
+		return exitOK
+	}
+	if brief {
+		c.printAgentPromptBrief(briefAgentPrompt)
 		return exitOK
 	}
 	c.printAgentPrompt(defaultAgentPrompt)
@@ -153,6 +182,24 @@ func (c *CLI) printAgentPrompt(spec agentPromptSpec) {
 	writeAgentPromptSection(c.Out, "Commands to avoid without explicit flags", spec.CommandsToAvoidWithoutFlags)
 	writeAgentPromptSection(c.Out, "Recovery basics", spec.RecoveryBasics)
 	writeAgentPromptSection(c.Out, "Drill down", spec.DrillDownCommands)
+}
+
+func (c *CLI) printAgentPromptBrief(spec agentPromptSpec) {
+	for _, line := range spec.WhatKraIs {
+		fmt.Fprintln(c.Out, line)
+	}
+	for _, line := range spec.AutomationRules {
+		fmt.Fprintln(c.Out, line)
+	}
+	for _, line := range spec.SafeCommands {
+		fmt.Fprintln(c.Out, line)
+	}
+	for _, line := range spec.DestructiveCommands {
+		fmt.Fprintln(c.Out, line)
+	}
+	for _, line := range spec.DrillDownCommands {
+		fmt.Fprintln(c.Out, line)
+	}
 }
 
 func writeAgentPromptSection(w io.Writer, title string, items []string) {
