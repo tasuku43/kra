@@ -154,7 +154,7 @@ var kraCompletionPathFlagOrder = []string{
 }
 
 var kraCompletionPathFlags = map[string][]string{
-	"agent prompt":            {"--format", "--help", "-h"},
+	"agent prompt":            {"--brief", "--format", "--help", "-h"},
 	"context current":         {"--format", "--help", "-h"},
 	"context list":            {"--format", "--help", "-h"},
 	"context create":          {"--path", "--use", "--format", "--help", "-h"},

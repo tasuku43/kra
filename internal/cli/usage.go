@@ -76,7 +76,7 @@ func (c *CLI) printAgentUsage(w io.Writer) {
   kra agent <subcommand> [args]
 
 Subcommands:
-  prompt [--format text|json]
+  prompt [--brief] [--format text|json]
                    Print the global agent bootstrap prompt for kra
   help              Show this help
 `)
@@ -84,12 +84,13 @@ Subcommands:
 
 func (c *CLI) printAgentPromptUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra agent prompt [--format text|json]
+  kra agent prompt [--brief] [--format text|json]
 
 Print the global agent bootstrap prompt for kra.
 
 Examples:
   kra agent prompt
+  kra agent prompt --brief
   kra agent prompt --format json
 `)
 }
