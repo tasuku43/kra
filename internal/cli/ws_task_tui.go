@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math"
 	"os"
 	"strings"
 	"time"
@@ -28,12 +29,25 @@ type wsTaskTUIRow struct {
 	Y           int
 }
 
+type wsTaskTUISummary struct {
+	Total   int
+	Done    int
+	Todo    int
+	Doing   int
+	Blocked int
+}
+
 type wsTaskTUITickMsg time.Time
 type wsTaskTUIMode string
 
 const (
 	wsTaskTUIModeRead  wsTaskTUIMode = "read"
 	wsTaskTUIModeWrite wsTaskTUIMode = "write"
+
+	// TASKS header, blank line, two summary lines, and a blank spacer.
+	wsTaskTUIContentTopY = 5
+	// TASKS header, blank line, and one scroll/status spacer.
+	wsTaskTUIRootContentTopY = 3
 )
 
 type wsTaskTUIModel struct {
@@ -42,16 +56,18 @@ type wsTaskTUIModel struct {
 	opts    wsTaskTUIOptions
 	service *wstask.Service
 
-	model   wstask.ViewModel
-	rows    []wsTaskTUIRow
-	cursor  int
-	scroll  int
-	width   int
-	height  int
-	message string
-	err     error
-	quit    bool
-	mode    wsTaskTUIMode
+	model    wstask.ViewModel
+	full     wstask.ViewModel
+	rows     []wsTaskTUIRow
+	cursor   int
+	scroll   int
+	width    int
+	height   int
+	message  string
+	err      error
+	quit     bool
+	mode     wsTaskTUIMode
+	showDone bool
 
 	useColor bool
 }
@@ -125,6 +141,7 @@ func newWSTaskTUIModel(root string, target wsTaskTarget, opts wsTaskTUIOptions, 
 		width:    80,
 		height:   24,
 		mode:     wsTaskTUIModeRead,
+		showDone: !opts.todoOnly || opts.includeDone,
 		useColor: useColor,
 	}
 	m.reload("")
@@ -231,6 +248,14 @@ func (m wsTaskTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case 'q':
 				m.quit = true
 				return m, tea.Quit
+			case 'h':
+				m.showDone = !m.showDone
+				message := "done hidden"
+				if m.showDone {
+					message = "done shown"
+				}
+				m.reload(message)
+				return m, nil
 			case 'i':
 				m.mode = wsTaskTUIModeWrite
 				m.message = "write mode"
@@ -270,19 +295,23 @@ func (m wsTaskTUIModel) View() string {
 	fmt.Fprintf(&b, "%s  %s  %s\n\n", styleBold("TASKS", m.useColor), styleAccent(m.model.WorkspaceID, m.useColor), styleMuted("mode: "+string(m.mode), m.useColor))
 	if m.err != nil {
 		fmt.Fprintf(&b, "%s\n\n", styleError(fmt.Sprintf("error: %v", m.err), m.useColor))
-	} else if m.model.Empty {
+	} else if m.full.Empty {
 		fmt.Fprintf(&b, "%s\n\n", styleMuted("No structured tasks.", m.useColor))
+	} else if m.model.Empty {
+		fmt.Fprintf(&b, "%s\n", m.renderSummary(summarizeWSTaskItems(m.full.Items)))
+		m.writeScrollHint(&b)
+		fmt.Fprintf(&b, "%s\n", styleMuted("No visible tasks. Press h to show done.", m.useColor))
 	} else if len(m.model.Workspaces) > 0 {
-		fullY := 2
+		m.writeScrollHint(&b)
+		fullY := wsTaskTUIRootContentTopY - 1
 		for _, workspace := range m.model.Workspaces {
 			fullY++
-			var line string
-			if strings.TrimSpace(workspace.Title) == "" {
-				line = styleAccent(workspace.ID, m.useColor)
-			} else {
-				line = fmt.Sprintf("%s  %s", styleAccent(workspace.ID, m.useColor), workspace.Title)
-			}
+			line := m.renderWorkspaceHeading(workspace)
 			m.writeVisibleLine(&b, fullY, line)
+			for _, summaryLine := range strings.Split(m.renderSummary(m.workspaceSummary(workspace.ID, workspace.Items)), "\n") {
+				fullY++
+				m.writeVisibleLine(&b, fullY, summaryLine)
+			}
 			for _, row := range m.rows {
 				if row.WorkspaceID != workspace.ID {
 					continue
@@ -294,6 +323,8 @@ func (m wsTaskTUIModel) View() string {
 			m.writeVisibleLine(&b, fullY, "")
 		}
 	} else {
+		fmt.Fprintf(&b, "%s\n", m.renderSummary(summarizeWSTaskItems(m.full.Items)))
+		m.writeScrollHint(&b)
 		for _, row := range m.rows {
 			m.writeVisibleLine(&b, row.Y, m.renderRow(row))
 		}
@@ -304,15 +335,114 @@ func (m wsTaskTUIModel) View() string {
 	}
 	fmt.Fprintf(&b, "%s\n", styleMuted("source: "+m.model.Path, m.useColor))
 	if m.mode == wsTaskTUIModeWrite {
-		fmt.Fprintf(&b, "%s\n", styleMuted("write: wheel scroll  click/space toggles done  d/t/g/b set status  esc read  q quit", m.useColor))
+		fmt.Fprintf(&b, "%s\n", styleMuted("write: wheel scroll  click/space toggles done  d/t/g/b set status  h show/hide done  esc read  q quit", m.useColor))
 	} else {
-		fmt.Fprintf(&b, "%s\n", styleMuted("read: wheel scroll  click selects  i write  q quit", m.useColor))
+		fmt.Fprintf(&b, "%s\n", styleMuted("read: wheel scroll  click selects  h show/hide done  i write  q quit", m.useColor))
 	}
 	return b.String()
 }
 
+func (m wsTaskTUIModel) writeScrollHint(b *strings.Builder) {
+	if m.maxScroll() == 0 {
+		b.WriteByte('\n')
+		return
+	}
+	fmt.Fprintf(b, "%s\n", styleMuted(fmt.Sprintf("scroll %d/%d", m.scroll, m.maxScroll()), m.useColor))
+}
+
+func (m wsTaskTUIModel) renderWorkspaceHeading(workspace wstask.ViewWorkspace) string {
+	title := strings.TrimSpace(workspace.Title)
+	label := styleAccent(workspace.ID, m.useColor)
+	if title != "" {
+		label = fmt.Sprintf("%s  %s", label, title)
+	}
+	return label
+}
+
+func (m wsTaskTUIModel) workspaceSummary(workspaceID string, fallback []wstask.Item) wsTaskTUISummary {
+	for _, workspace := range m.full.Workspaces {
+		if workspace.ID == workspaceID {
+			return summarizeWSTaskItems(workspace.Items)
+		}
+	}
+	return summarizeWSTaskItems(fallback)
+}
+
+func (m wsTaskTUIModel) renderSummary(summary wsTaskTUISummary) string {
+	bar := renderWSTaskProgressBar(summary, m.useColor)
+	counts := fmt.Sprintf(
+		"Todo %d   Doing %d   Blocked %d   Done %d",
+		summary.Todo,
+		summary.Doing,
+		summary.Blocked,
+		summary.Done,
+	)
+	if summary.Blocked > 0 {
+		counts = fmt.Sprintf(
+			"Todo %d   Doing %d   %s   Done %d",
+			summary.Todo,
+			summary.Doing,
+			styleWarn(fmt.Sprintf("Blocked %d", summary.Blocked), m.useColor),
+			summary.Done,
+		)
+	}
+	return fmt.Sprintf(
+		"%s  %s\n%s",
+		styleBold("Progress", m.useColor),
+		fmt.Sprintf("%d/%d  %s  %d%%", summary.Done, summary.Total, bar, summary.Percent()),
+		styleMuted(counts, m.useColor),
+	)
+}
+
+func summarizeWSTaskItems(items []wstask.Item) wsTaskTUISummary {
+	summary := wsTaskTUISummary{Total: len(items)}
+	for _, item := range items {
+		switch item.Status {
+		case wstask.StatusDone:
+			summary.Done++
+		case wstask.StatusTodo:
+			summary.Todo++
+		case wstask.StatusDoing:
+			summary.Doing++
+		case wstask.StatusBlocked:
+			summary.Blocked++
+		}
+	}
+	return summary
+}
+
+func (s wsTaskTUISummary) Percent() int {
+	if s.Total == 0 {
+		return 0
+	}
+	return int(math.Round(float64(s.Done) * 100 / float64(s.Total)))
+}
+
+func renderWSTaskProgressBar(summary wsTaskTUISummary, useColor bool) string {
+	return renderWSTaskProgressBarWidth(summary, 16, useColor)
+}
+
+func renderWSTaskProgressBarWidth(summary wsTaskTUISummary, width int, useColor bool) string {
+	if width < 1 {
+		width = 1
+	}
+	if summary.Total == 0 {
+		return styleMuted(strings.Repeat("░", width), useColor)
+	}
+	filled := int(math.Round(float64(summary.Done) * float64(width) / float64(summary.Total)))
+	if filled < 0 {
+		filled = 0
+	}
+	if filled > width {
+		filled = width
+	}
+	done := strings.Repeat("█", filled)
+	remaining := strings.Repeat("░", width-filled)
+	return styleSuccess(done, useColor) + styleMuted(remaining, useColor)
+}
+
 func (m wsTaskTUIModel) writeVisibleLine(b *strings.Builder, fullY int, line string) {
-	start := 2 + m.scroll
+	start := m.contentTopY() + m.scroll
 	end := start + m.viewportHeight()
 	if fullY < start || fullY >= end {
 		return
@@ -330,10 +460,28 @@ func (m wsTaskTUIModel) renderRow(row wsTaskTUIRow) string {
 }
 
 func (m *wsTaskTUIModel) reload(message string) {
-	model, err := buildWSTaskTUIModel(m.root, m.target, m.opts, m.service)
+	fullOpts := m.opts
+	fullOpts.todoOnly = false
+	fullOpts.includeDone = true
+	fullModel, err := buildWSTaskTUIModel(m.root, m.target, fullOpts, m.service)
 	if err != nil {
 		m.err = err
 		m.model = wstask.ViewModel{WorkspaceID: m.target.workspaceID, Path: m.root, Empty: true}
+		m.full = m.model
+		m.rows = nil
+		m.message = message
+		m.cursor = 0
+		return
+	}
+
+	displayOpts := m.opts
+	displayOpts.todoOnly = !m.showDone
+	displayOpts.includeDone = m.showDone
+	model, err := buildWSTaskTUIModel(m.root, m.target, displayOpts, m.service)
+	if err != nil {
+		m.err = err
+		m.model = wstask.ViewModel{WorkspaceID: m.target.workspaceID, Path: m.root, Empty: true}
+		m.full = fullModel
 		m.rows = nil
 		m.message = message
 		m.cursor = 0
@@ -341,6 +489,7 @@ func (m *wsTaskTUIModel) reload(message string) {
 	}
 	m.err = nil
 	m.model = model
+	m.full = fullModel
 	m.rows = buildWSTaskTUIRows(model)
 	if m.cursor >= len(m.rows) {
 		m.cursor = len(m.rows) - 1
@@ -399,10 +548,10 @@ func buildWSTaskTUIModel(root string, target wsTaskTarget, opts wsTaskTUIOptions
 
 func buildWSTaskTUIRows(model wstask.ViewModel) []wsTaskTUIRow {
 	rows := make([]wsTaskTUIRow, 0, len(model.Items))
-	y := 2
+	y := contentTopYForWSTaskTUIModel(model)
 	if len(model.Workspaces) > 0 {
 		for _, workspace := range model.Workspaces {
-			y++
+			y += 3
 			for _, item := range workspace.Items {
 				rows = append(rows, wsTaskTUIRow{WorkspaceID: workspace.ID, TaskID: item.ID, Item: item, Y: y})
 				y++
@@ -443,6 +592,17 @@ func (m wsTaskTUIModel) rowIndexAtY(y int) int {
 	return -1
 }
 
+func (m wsTaskTUIModel) contentTopY() int {
+	return contentTopYForWSTaskTUIModel(m.model)
+}
+
+func contentTopYForWSTaskTUIModel(model wstask.ViewModel) int {
+	if len(model.Workspaces) > 0 {
+		return wsTaskTUIRootContentTopY
+	}
+	return wsTaskTUIContentTopY
+}
+
 func (m wsTaskTUIModel) viewportHeight() int {
 	if m.height <= 0 {
 		return 18
@@ -458,20 +618,20 @@ func (m wsTaskTUIModel) viewportHeight() int {
 }
 
 func (m wsTaskTUIModel) contentBottomY() int {
-	bottom := 2
+	bottom := m.contentTopY()
 	for _, row := range m.rows {
 		if row.Y > bottom {
 			bottom = row.Y
 		}
 	}
 	if len(m.model.Workspaces) > 0 {
-		bottom += len(m.model.Workspaces) * 2
+		bottom++
 	}
 	return bottom
 }
 
 func (m wsTaskTUIModel) maxScroll() int {
-	maxScroll := m.contentBottomY() - 2 - m.viewportHeight() + 1
+	maxScroll := m.contentBottomY() - m.contentTopY() - m.viewportHeight() + 1
 	if maxScroll < 0 {
 		return 0
 	}
@@ -493,13 +653,13 @@ func (m *wsTaskTUIModel) ensureCursorVisible() {
 		return
 	}
 	rowY := m.rows[m.cursor].Y
-	top := 2 + m.scroll
+	top := m.contentTopY() + m.scroll
 	bottom := top + m.viewportHeight() - 1
 	if rowY < top {
-		m.scroll = rowY - 2
+		m.scroll = rowY - m.contentTopY()
 	}
 	if rowY > bottom {
-		m.scroll = rowY - 2 - m.viewportHeight() + 1
+		m.scroll = rowY - m.contentTopY() - m.viewportHeight() + 1
 	}
 	if m.scroll < 0 {
 		m.scroll = 0
