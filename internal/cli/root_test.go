@@ -110,3 +110,174 @@ func TestCLI_Root_Open_JSON_FallbackToCD(t *testing.T) {
 		t.Fatalf("unexpected action: %q", string(action))
 	}
 }
+
+func TestCLI_RootMigrate_PlanDoesNotWrite(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	if err := os.MkdirAll(filepath.Join(root, "templates", "default"), 0o755); err != nil {
+		t.Fatalf("mkdir default template: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "workspaces", "WS1"), 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"root", "migrate"})
+	if code != exitOK {
+		t.Fatalf("exit code=%d, want=%d (stderr=%q)", code, exitOK, err.String())
+	}
+	if !strings.Contains(out.String(), "plan: 5 action(s)") {
+		t.Fatalf("stdout missing plan count: %q", out.String())
+	}
+	for _, path := range []string{
+		filepath.Join(root, ".cmux", "dock.json"),
+		filepath.Join(root, "templates", "default", ".cmux", "dock.json"),
+		filepath.Join(root, "templates", "default", "tasks.md"),
+		filepath.Join(root, "workspaces", "WS1", ".cmux", "dock.json"),
+		filepath.Join(root, "workspaces", "WS1", "tasks.md"),
+	} {
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("plan should not write %s, stat err=%v", path, statErr)
+		}
+	}
+}
+
+func TestCLI_RootMigrate_ApplyWritesDefaultTemplateAndActiveWorkspaces(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	if err := os.MkdirAll(filepath.Join(root, "templates", "default"), 0o755); err != nil {
+		t.Fatalf("mkdir default template: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "workspaces", "WS1"), 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(root, "archive", "OLD1"), 0o755); err != nil {
+		t.Fatalf("mkdir archived workspace: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"root", "migrate", "--apply"})
+	if code != exitOK {
+		t.Fatalf("exit code=%d, want=%d (stderr=%q)", code, exitOK, err.String())
+	}
+	if !strings.Contains(out.String(), "apply: 5 action(s)") {
+		t.Fatalf("stdout missing apply count: %q", out.String())
+	}
+	for _, path := range []string{
+		filepath.Join(root, ".cmux", "dock.json"),
+		filepath.Join(root, "templates", "default", ".cmux", "dock.json"),
+		filepath.Join(root, "templates", "default", "tasks.md"),
+		filepath.Join(root, "workspaces", "WS1", ".cmux", "dock.json"),
+		filepath.Join(root, "workspaces", "WS1", "tasks.md"),
+	} {
+		if _, statErr := os.Stat(path); statErr != nil {
+			t.Fatalf("expected migrated path %s: %v", path, statErr)
+		}
+	}
+	rootDock, readErr := os.ReadFile(filepath.Join(root, ".cmux", "dock.json"))
+	if readErr != nil {
+		t.Fatalf("read root dock: %v", readErr)
+	}
+	assertDockJSONCommandContains(t, rootDock, "kra ws task view --all --todo-only --watch --refresh 2s")
+	if _, statErr := os.Stat(filepath.Join(root, "archive", "OLD1", ".cmux", "dock.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("archived workspace should not be migrated by default, stat err=%v", statErr)
+	}
+}
+
+func TestCLI_RootMigrate_DoesNotOverwriteExistingFiles(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	ws := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(filepath.Join(root, "templates", "default", ".cmux"), 0o755); err != nil {
+		t.Fatalf("mkdir template .cmux: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(ws, ".cmux"), 0o755); err != nil {
+		t.Fatalf("mkdir workspace .cmux: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "templates", "default", ".cmux", "dock.json"), []byte("custom dock\n"), 0o644); err != nil {
+		t.Fatalf("write template dock: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, "tasks.md"), []byte("custom tasks\n"), 0o644); err != nil {
+		t.Fatalf("write workspace tasks: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"root", "migrate", "--apply"})
+	if code != exitOK {
+		t.Fatalf("exit code=%d, want=%d (stderr=%q)", code, exitOK, err.String())
+	}
+	templateDock, readErr := os.ReadFile(filepath.Join(root, "templates", "default", ".cmux", "dock.json"))
+	if readErr != nil {
+		t.Fatalf("read template dock: %v", readErr)
+	}
+	if string(templateDock) != "custom dock\n" {
+		t.Fatalf("template dock was overwritten: %q", string(templateDock))
+	}
+	workspaceTasks, readErr := os.ReadFile(filepath.Join(ws, "tasks.md"))
+	if readErr != nil {
+		t.Fatalf("read workspace tasks: %v", readErr)
+	}
+	if string(workspaceTasks) != "custom tasks\n" {
+		t.Fatalf("workspace tasks were overwritten: %q", string(workspaceTasks))
+	}
+}
+
+func TestCLI_RootMigrate_ApplyUsesDetectedShellInitForManagedDockCommand(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		t.Fatalf("user home dir: %v", homeErr)
+	}
+	t.Setenv("SHELL", "/bin/zsh")
+	if err := os.WriteFile(filepath.Join(home, ".zshrc"), []byte("export PATH=$PATH\n"), 0o644); err != nil {
+		t.Fatalf("write .zshrc: %v", err)
+	}
+	ws := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(filepath.Join(root, "templates", "default", ".cmux"), 0o755); err != nil {
+		t.Fatalf("mkdir template .cmux: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(ws, ".cmux"), 0o755); err != nil {
+		t.Fatalf("mkdir workspace .cmux: %v", err)
+	}
+	oldDock := `{
+  "controls": [
+    {
+      "id": "kra-tasks",
+      "title": "Tasks",
+      "command": "kra ws task view --current --watch --refresh 2s",
+      "cwd": ".",
+      "height": 420
+    }
+  ]
+}
+`
+	if err := os.WriteFile(filepath.Join(ws, ".cmux", "dock.json"), []byte(oldDock), 0o644); err != nil {
+		t.Fatalf("write workspace dock: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"root", "migrate", "--apply"})
+	if code != exitOK {
+		t.Fatalf("exit code=%d, want=%d (stderr=%q)", code, exitOK, err.String())
+	}
+	dockBytes, readErr := os.ReadFile(filepath.Join(ws, ".cmux", "dock.json"))
+	if readErr != nil {
+		t.Fatalf("read workspace dock: %v", readErr)
+	}
+	var dock cmuxDockConfig
+	if err := json.Unmarshal(dockBytes, &dock); err != nil {
+		t.Fatalf("unmarshal dock: %v", err)
+	}
+	if len(dock.Controls) != 1 {
+		t.Fatalf("controls len = %d, want 1", len(dock.Controls))
+	}
+	want := "source ~/.zshrc; kra ws task view --current --watch --refresh 2s"
+	if dock.Controls[0].Command != want {
+		t.Fatalf("dock command = %q, want %q", dock.Controls[0].Command, want)
+	}
+}

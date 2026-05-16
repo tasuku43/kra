@@ -13,7 +13,8 @@ Structured tasks are stored in `<workspace>/tasks.md`.
 
 - `tasks.md` is the source of truth
 - `kra` is not the only editor; direct Markdown edits are allowed
-- `kra ws task sync` projects the current task state into `cmux` sidebar `task:` entries
+- the cmux Dock can show a constantly refreshed task list, but it is only a view over `tasks.md`
+- `kra ws task sync` is deprecated and no longer updates cmux task pills
 
 Canonical task shape:
 
@@ -39,19 +40,22 @@ Allowed statuses:
 kra ws task add --current --title "Draft docs"
 kra ws task add --current --title "Review examples"
 kra ws task list --current
+kra ws task view --current
 kra ws task status --current TASK-001 doing
-kra ws task sync --current
-kra ws task sync --all
 ```
 
 `kra ws task` without a subcommand is also available as a human launcher for one active workspace.
 
+New default workspaces include `tasks.md` and `.cmux/dock.json`. The Dock control runs `kra ws task view --current --watch --refresh 2s` from the workspace root so the cmux right sidebar can keep the current task state visible. When needed, the generated command prefixes the detected shell init file such as `source ~/.zshrc`. Existing roots and active workspaces can be updated with `kra root migrate --apply`; existing custom files are not overwritten.
+
 ## Common commands
 
 - `kra ws task list` or `kra ws task ls` lists structured tasks from `tasks.md` and works for active and archived workspaces.
+- `kra ws task view` renders a read-only terminal list in `tasks.md` order; use `--watch --refresh 2s` for a constantly refreshed Dock view.
+- `kra ws task view --all --todo-only` renders active workspace tasks across the root and hides completed tasks; add `--include-done` when you want completed tasks too.
 - `kra ws task add --title "<text>"` lazily creates `tasks.md` and `## Tasks` when missing, and new tasks always start as `todo`.
-- `kra ws task status <task-id> <todo|doing|blocked|done>` updates one task status and then runs the same reconcile behavior as `kra ws task sync`.
-- `kra ws task sync` refreshes the `cmux` sidebar task pills from the current `tasks.md`.
+- `kra ws task status <task-id> <todo|doing|blocked|done>` updates one task status.
+- `kra ws task sync` is a deprecated no-op kept for compatibility; use `kra ws task view` and Dock.
 
 ## Reading the list
 
@@ -68,17 +72,13 @@ This keeps backlog and in-progress items visible without requiring `cmux`.
 
 You can edit `tasks.md` directly as long as the structured task contract is preserved.
 
-Typical pattern:
-
-1. update `tasks.md`
-2. run `kra ws task sync --current`
-
-This is useful when an agent or a user wants to batch-edit descriptions in Markdown first and refresh the sidebar afterward.
+After direct edits, run `kra ws task view --current` or use the cmux Dock to inspect the rendered state.
 
 ## Scope and limits
 
 - `list` can read both active and archived workspaces
-- `add`, `status`, `sync`, and the launcher are active-workspace operations
+- `add`, `status`, and the launcher are active-workspace operations
+- `sync` is deprecated and performs no cmux updates
 - phase 1 does not include task delete, reorder, rename, or nested subtasks
 
 ## Related docs
@@ -90,4 +90,4 @@ This is useful when an agent or a user wants to batch-edit descriptions in Markd
 - Add contract: `docs/dev/spec/commands/ws/task/add.md`
 - List contract: `docs/dev/spec/commands/ws/task/list.md`
 - Status contract: `docs/dev/spec/commands/ws/task/status.md`
-- Sync contract: `docs/dev/spec/commands/ws/task/sync.md`
+- Deprecated sync contract: `docs/dev/spec/commands/ws/task/sync.md`

@@ -93,6 +93,48 @@ func TestCLI_WSCreate_TemplateOption_CopiesSelectedTemplate(t *testing.T) {
 	}
 }
 
+func TestCLI_WSCreate_CopiesDockAndTasksFromTemplate(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	custom := filepath.Join(env.Root, "templates", "dock-template")
+	if err := os.MkdirAll(filepath.Join(custom, ".cmux"), 0o755); err != nil {
+		t.Fatalf("mkdir custom/.cmux: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(custom, ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
+		t.Fatalf("write custom dock.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(custom, "tasks.md"), []byte(defaultWorkspaceTasksContent), 0o644); err != nil {
+		t.Fatalf("write custom tasks.md: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"ws", "create", "--no-prompt", "--template", "dock-template", "WS-TPL-DOCK"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, errBuf.String())
+	}
+
+	wsPath := filepath.Join(env.Root, "workspaces", "WS-TPL-DOCK")
+	dockBytes, readErr := os.ReadFile(filepath.Join(wsPath, ".cmux", "dock.json"))
+	if readErr != nil {
+		t.Fatalf("read workspace dock.json: %v", readErr)
+	}
+	assertDefaultDockJSON(t, dockBytes)
+	tasksBytes, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	if readErr != nil {
+		t.Fatalf("read workspace tasks.md: %v", readErr)
+	}
+	if string(tasksBytes) != defaultWorkspaceTasksContent {
+		t.Fatalf("tasks.md mismatch: %q", string(tasksBytes))
+	}
+	if _, err := os.Stat(filepath.Join(wsPath, "repos", ".cmux", "dock.json")); !os.IsNotExist(err) {
+		t.Fatalf("dock.json should not be created under repos/, stat err=%v", err)
+	}
+}
+
 func TestCLI_WSCreate_UsesRootConfigDefaultTemplateWhenTemplateOmitted(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)

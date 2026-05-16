@@ -23,6 +23,28 @@ Provide root-level helpers around the conceptual `KRA_ROOT`.
   - when cmux capability is unavailable, fallback to shell-action `cd <KRA_ROOT>`
     - json: `mode=fallback-cd`, `runtime_available=false`
 
+- `kra root migrate [--apply] [--format human|json]`
+  - plan by default; mutate only when `--apply` is set
+  - add missing default template task Dock scaffold:
+    - `.cmux/dock.json`
+    - `templates/default/.cmux/dock.json`
+    - `templates/default/tasks.md`
+  - add the same missing scaffold to active existing workspaces:
+    - `workspaces/<id>/.cmux/dock.json`
+    - `workspaces/<id>/tasks.md`
+  - do not touch archived workspaces
+  - do not overwrite existing files
+  - do not write under `workspaces/<id>/repos/`
+  - do not commit automatically
+  - Dock command generation may prefix the task view command with a detected shell init file so `kra`
+    is available in cmux Dock execution:
+    - zsh: `source ~/.zshrc; kra ws task view --current --watch --refresh 2s`
+    - bash: source the first existing file from `~/.bashrc`, `~/.bash_profile`, `~/.profile`
+    - fish: `source ~/.config/fish/config.fish`
+  - only managed `kra-tasks` Dock controls are updated; custom commands are left unchanged
+  - root Dock command is `kra ws task view --all --todo-only --watch --refresh 2s`
+  - workspace Dock command is `kra ws task view --current --watch --refresh 2s`
+
 ## Error handling
 
 - invalid arguments: `exitUsage` (json code: `invalid_argument`)

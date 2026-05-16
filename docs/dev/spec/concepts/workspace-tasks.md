@@ -24,7 +24,7 @@ Define one workspace-local, AI-editable structured task contract that remains sa
 - AI agents and humans may read and write `tasks.md` directly.
 - `kra` is not the sole editor for task data.
 - `kra` defines the minimum contract, parses compliant task blocks, and writes a canonical form.
-- `tasks.md` is the single source of truth even when cmux task pills are shown.
+- `tasks.md` is the single source of truth for task state.
 - Arbitrary freeform Markdown may coexist with structured tasks in the same file.
 - `kra` must ignore freeform content outside the structured task section.
 
@@ -63,21 +63,14 @@ Define one workspace-local, AI-editable structured task contract that remains sa
     task block or inserting a new task block
 - `kra` commands must not require tasks to have been created through `kra`.
 
-## Projection policy
+## View policy
 
-- cmux task pills are a projection of `tasks.md`, not an independent state store.
-- `kra ws task sync` reads `tasks.md` and reconciles the cmux `task:` namespace.
+- cmux Dock is the supported persistent task view.
+- `kra ws task view` reads `tasks.md` and renders the current structured task state for terminal or
+  Dock use.
 - Direct `tasks.md` edits remain valid as long as the contract is preserved; users or AI agents can
-  run `kra ws task sync` afterward to refresh cmux sidebar state.
-- All task statuses may be projected to cmux in phase 1.
-- `todo` should remain visually quieter than `doing` / `blocked`, but it is still projected so the
-  remaining backlog is visible at a glance.
-- Reconcile is declarative and complete for the `task:` namespace:
-  - all existing `task:` entries are cleared first
-  - tasks present in `tasks.md` are projected again in file order
-  - `task:` entries absent from `tasks.md` are cleared
-  - a valid empty `## Tasks` section therefore clears all existing `task:*` pills
-  - an invalid task-like block fails closed instead of clearing pills opportunistically
+  run `kra ws task view` afterward or rely on Dock watch refresh.
+- `kra ws task sync` is deprecated and no longer updates cmux task pills.
 
 ## Task model
 

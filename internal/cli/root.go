@@ -26,6 +26,8 @@ func (c *CLI) runRoot(args []string) int {
 		return c.runRootCurrent(args[1:])
 	case "open":
 		return c.runRootOpen(args[1:])
+	case "migrate":
+		return c.runRootMigrate(args[1:])
 	default:
 		fmt.Fprintf(c.Err, "unknown command: %q\n", strings.Join(append([]string{"root"}, args[0]), " "))
 		c.printRootCommandUsage(c.Err)
@@ -102,6 +104,18 @@ func (c *CLI) runRootCurrent(args []string) int {
 	}
 	fmt.Fprintln(c.Out, root)
 	return exitOK
+}
+
+func (c *CLI) resolveRootForRootCommand(format string, action string) (string, int) {
+	wd, err := os.Getwd()
+	if err != nil {
+		return "", c.writeRootRuntimeError(format, action, "internal_error", fmt.Sprintf("get working dir: %v", err))
+	}
+	root, err := paths.ResolveExistingRoot(wd)
+	if err != nil {
+		return "", c.writeRootRuntimeError(format, action, "not_found", fmt.Sprintf("resolve KRA_ROOT: %v", err))
+	}
+	return root, exitOK
 }
 
 func (c *CLI) runRootOpen(args []string) int {

@@ -27,7 +27,10 @@ Create a workspace template scaffold under the current root.
 - Create scaffold at `<current-root>/templates/<name>/`:
   - `notes/`
   - `artifacts/`
+  - `.cmux/dock.json`
   - `AGENTS.md` (default guidance content)
+  - `tasks.md`
+  - scaffold matches the default template shape because custom templates are expected to be drop-in workspace seeds
 - when `--from <template>` is provided:
   - resolve source template from `<current-root>/templates/<template>/`
   - validate source template with shared template validation rules

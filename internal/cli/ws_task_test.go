@@ -7,11 +7,13 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/tasuku43/kra/internal/app/wstask"
 	"github.com/tasuku43/kra/internal/cmuxmap"
 	"github.com/tasuku43/kra/internal/infra/appports"
 	"github.com/tasuku43/kra/internal/infra/cmuxctl"
+	"github.com/tasuku43/kra/internal/infra/paths"
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
@@ -161,7 +163,7 @@ func TestCLI_WSTaskAdd_JSON_CreatesTaskDocumentAndPreservesOutsideContent(t *tes
 	}
 }
 
-func TestCLI_WSTaskStatus_JSON_AllowsDoneToTodoAndClearsCMUXTaskStatus(t *testing.T) {
+func TestCLI_WSTaskStatus_JSON_AllowsDoneToTodoWithoutSync(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
@@ -191,12 +193,8 @@ func TestCLI_WSTaskStatus_JSON_AllowsDoneToTodoAndClearsCMUXTaskStatus(t *testin
 	if got := task["status"]; got != "todo" {
 		t.Fatalf("task.status = %v, want %q", got, "todo")
 	}
-	syncResult, ok := resp.Result["sync"].(map[string]any)
-	if !ok {
-		t.Fatalf("result.sync missing: %+v", resp.Result)
-	}
-	if got := syncResult["set"]; got != float64(1) {
-		t.Fatalf("sync.set = %v, want 1", got)
+	if _, ok := resp.Result["sync"]; ok {
+		t.Fatalf("result.sync should be absent after sync deprecation: %+v", resp.Result)
 	}
 
 	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
@@ -206,8 +204,8 @@ func TestCLI_WSTaskStatus_JSON_AllowsDoneToTodoAndClearsCMUXTaskStatus(t *testin
 	if !bytes.Contains(content, []byte("status: todo")) {
 		t.Fatalf("tasks.md should be updated to todo: %q", string(content))
 	}
-	if len(syncClient.setCalls) != 1 || syncClient.setCalls[0].Key != "task:TASK-001" || syncClient.setCalls[0].Value != "○ TASK-001 Start me" {
-		t.Fatalf("set calls = %+v, want todo pill for task:TASK-001", syncClient.setCalls)
+	if len(syncClient.setCalls) != 0 || len(syncClient.clearCalls) != 0 {
+		t.Fatalf("cmux sync calls = set:%+v clear:%+v, want none", syncClient.setCalls, syncClient.clearCalls)
 	}
 }
 
@@ -262,6 +260,203 @@ func TestCLI_WSTaskList_HumanUsesTasksSectionHeading(t *testing.T) {
 	}
 }
 
+func TestCLI_WSTaskView_Current_GroupsByStatus(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 調査する\nstatus: todo\n\n### TASK-002 実装方針をまとめる\nstatus: doing\n\n### TASK-003 テストを書く\nstatus: todo\n\n### TASK-004 API仕様の確認待ち\nstatus: blocked\n\n### TASK-000 POCする\nstatus: done\n")
+	realRoot, realErr := filepath.EvalSymlinks(env.Root)
+	if realErr != nil {
+		t.Fatalf("eval root: %v", realErr)
+	}
+	realWSPath, realErr := filepath.EvalSymlinks(wsPath)
+	if realErr != nil {
+		t.Fatalf("eval workspace path: %v", realErr)
+	}
+	if err := paths.WriteCurrentContext(realRoot); err != nil {
+		t.Fatalf("WriteCurrentContext(%q): %v", realRoot, err)
+	}
+	prevWD, wdErr := os.Getwd()
+	if wdErr != nil {
+		t.Fatalf("get wd: %v", wdErr)
+	}
+	if err := os.Chdir(realWSPath); err != nil {
+		t.Fatalf("chdir workspace: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prevWD) })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--current", "--no-color"})
+	if code != exitOK {
+		t.Fatalf("ws task view exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"TASKS  WS1",
+		"  ○ TASK-001  調査する",
+		"  ● TASK-002  実装方針をまとめる",
+		"  ○ TASK-003  テストを書く",
+		"  ▲ TASK-004  API仕様の確認待ち",
+		"  ✔ TASK-000  POCする",
+		"updated:",
+		"source: " + filepath.Join(realWSPath, "tasks.md"),
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout missing %q: %q", want, got)
+		}
+	}
+	if strings.Index(got, "TASK-001") > strings.Index(got, "TASK-002") ||
+		strings.Index(got, "TASK-002") > strings.Index(got, "TASK-003") ||
+		strings.Index(got, "TASK-003") > strings.Index(got, "TASK-004") ||
+		strings.Index(got, "TASK-004") > strings.Index(got, "TASK-000") {
+		t.Fatalf("tasks are not in file order: %q", got)
+	}
+}
+
+func TestCLI_WSTaskView_EmptyWhenTasksFileMissing(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--id", "WS1", "--no-color"})
+	if code != exitOK {
+		t.Fatalf("ws task view exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "No structured tasks.") || !strings.Contains(got, "source: "+filepath.Join(wsPath, "tasks.md")) {
+		t.Fatalf("stdout missing empty state: %q", got)
+	}
+}
+
+func TestCLI_WSTaskView_EmptyWhenNoStructuredTasks(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "# Notes\n\noutside\n")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--id", "WS1", "--no-color"})
+	if code != exitOK {
+		t.Fatalf("ws task view exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	if got := out.String(); !strings.Contains(got, "No structured tasks.") {
+		t.Fatalf("stdout missing empty state: %q", got)
+	}
+}
+
+func TestCLI_WSTaskView_InvalidContractFailsClosed(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: todo\n\n### TASK-001 Second\nstatus: doing\n")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--id", "WS1", "--no-color"})
+	if code != exitError {
+		t.Fatalf("ws task view exit code = %d, want %d", code, exitError)
+	}
+	if got := out.String(); !strings.Contains(got, "error:") || !strings.Contains(got, "duplicate task id") {
+		t.Fatalf("stdout missing fail-closed error: %q", got)
+	}
+}
+
+func TestCLI_WSTaskView_InvalidRefreshReturnsUsage(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	seedWorkspaceMeta(t, env.Root, "active", "WS1")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--id", "WS1", "--refresh", "0s"})
+	if code != exitUsage {
+		t.Fatalf("ws task view exit code = %d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(err.String(), "--refresh must be greater than 0") {
+		t.Fatalf("stderr missing refresh validation: %q", err.String())
+	}
+}
+
+func TestCLI_WSTaskView_AllTodoOnlyListsActiveWorkspaceOpenTasks(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	ws1 := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	ws2 := seedWorkspaceMeta(t, env.Root, "active", "WS2")
+	archived := seedWorkspaceMeta(t, env.Root, "archived", "OLD1")
+	writeWorkspaceTasksFile(t, ws1, "## Tasks\n\n### TASK-001 First todo\nstatus: todo\n\n### TASK-002 First done\nstatus: done\n")
+	writeWorkspaceTasksFile(t, ws2, "## Tasks\n\n### TASK-003 Second doing\nstatus: doing\n")
+	writeWorkspaceTasksFile(t, archived, "## Tasks\n\n### TASK-004 Archived todo\nstatus: todo\n")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--all", "--todo-only", "--no-color"})
+	if code != exitOK {
+		t.Fatalf("ws task view exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	for _, want := range []string{
+		"TASKS  KRA_ROOT",
+		"WS1  WS1",
+		"  ○ TASK-001  First todo",
+		"WS2  WS2",
+		"  ● TASK-003  Second doing",
+		"source: " + env.Root,
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("stdout missing %q: %q", want, got)
+		}
+	}
+	for _, unwanted := range []string{"First done", "Archived todo"} {
+		if strings.Contains(got, unwanted) {
+			t.Fatalf("stdout should not contain %q: %q", unwanted, got)
+		}
+	}
+}
+
+func TestCLI_WSTaskView_AllIncludeDoneShowsDone(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	ws1 := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, ws1, "## Tasks\n\n### TASK-001 First done\nstatus: done\n")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--all", "--todo-only", "--include-done", "--no-color"})
+	if code != exitOK {
+		t.Fatalf("ws task view exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	if got := out.String(); !strings.Contains(got, "WS1  WS1") || !strings.Contains(got, "  ✔ TASK-001  First done") {
+		t.Fatalf("stdout missing done task: %q", got)
+	}
+}
+
+func TestPrintWSTaskView_NoColor(t *testing.T) {
+	var out bytes.Buffer
+	printWSTaskView(&out, wstask.ViewModel{
+		WorkspaceID: "WS1",
+		Path:        "/root/workspaces/WS1/tasks.md",
+		Groups: []wstask.ViewGroup{{
+			Status: wstask.StatusDoing,
+			Title:  "Doing",
+			Items:  []wstask.Item{{ID: "TASK-001", Title: "Build", Status: wstask.StatusDoing}},
+		}},
+	}, time.Date(2026, 5, 16, 18, 42, 10, 0, time.Local), false)
+	if got := out.String(); strings.Contains(got, "\x1b[") {
+		t.Fatalf("no-color renderer emitted ANSI: %q", got)
+	}
+}
+
 func TestRenderWSTaskListRow_DoingUsesInfoColor(t *testing.T) {
 	got := renderWSTaskListRow(wstask.Item{
 		ID:     "TASK-001",
@@ -295,7 +490,7 @@ func TestCLI_WSTaskAdd_JSON_RejectsArchivedWorkspace(t *testing.T) {
 	}
 }
 
-func TestCLI_WSTaskSync_JSON_ReconcilesCMUXTaskNamespace(t *testing.T) {
+func TestCLI_WSTaskSync_JSON_DeprecatedNoOp(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
@@ -325,30 +520,24 @@ func TestCLI_WSTaskSync_JSON_ReconcilesCMUXTaskNamespace(t *testing.T) {
 	if !ok {
 		t.Fatalf("result.sync missing: %+v", resp.Result)
 	}
-	if got := syncResult["set"]; got != float64(4) {
-		t.Fatalf("sync.set = %v, want 4", got)
+	if got := syncResult["state"]; got != "skipped" {
+		t.Fatalf("sync.state = %v, want skipped", got)
 	}
-	if got := syncResult["cleared"]; got != float64(3) {
-		t.Fatalf("sync.cleared = %v, want 3", got)
+	if warning, _ := syncResult["warning"].(string); !strings.Contains(warning, "deprecated") {
+		t.Fatalf("sync.warning = %v, want deprecated warning", syncResult["warning"])
 	}
-	if len(syncClient.setCalls) != 4 {
-		t.Fatalf("set calls = %+v, want 4 calls", syncClient.setCalls)
+	if got := syncResult["set"]; got != float64(0) {
+		t.Fatalf("sync.set = %v, want 0", got)
 	}
-	if syncClient.setCalls[0].Key != "task:TASK-002" || syncClient.setCalls[1].Key != "task:TASK-004" || syncClient.setCalls[2].Key != "task:TASK-001" || syncClient.setCalls[3].Key != "task:TASK-003" {
-		t.Fatalf("set calls = %+v, want reverse replay order", syncClient.setCalls)
+	if got := syncResult["cleared"]; got != float64(0) {
+		t.Fatalf("sync.cleared = %v, want 0", got)
 	}
-	if got := syncClient.statuses["cmux-1"]; len(got) != 5 || got[0].Key != "task:TASK-003" || got[1].Key != "task:TASK-001" || got[2].Key != "task:TASK-004" || got[3].Key != "task:TASK-002" {
-		t.Fatalf("statuses = %+v, want rendered order TASK-003/TASK-001/TASK-004/TASK-002", got)
-	}
-	if got := syncClient.statuses["cmux-1"][0]; got.Value != "○ TASK-003 Draft docs" || got.Color != "#ffffff" {
-		t.Fatalf("todo pill = %+v, want markdown-leading task with white color", got)
-	}
-	if len(syncClient.clearCalls) != 3 {
-		t.Fatalf("clear calls = %+v, want 3 calls", syncClient.clearCalls)
+	if len(syncClient.setCalls) != 0 || len(syncClient.clearCalls) != 0 {
+		t.Fatalf("cmux sync calls = set:%+v clear:%+v, want none", syncClient.setCalls, syncClient.clearCalls)
 	}
 }
 
-func TestCLI_WSTaskSync_JSON_ClearsMissingTaskNamespaceEntries(t *testing.T) {
+func TestCLI_WSTaskSync_JSON_DoesNotClearMissingTaskNamespaceEntries(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
@@ -377,17 +566,14 @@ func TestCLI_WSTaskSync_JSON_ClearsMissingTaskNamespaceEntries(t *testing.T) {
 	if !ok {
 		t.Fatalf("result.sync missing: %+v", resp.Result)
 	}
-	if got := syncResult["set"]; got != float64(0) {
-		t.Fatalf("sync.set = %v, want 0", got)
+	if got := syncResult["state"]; got != "skipped" {
+		t.Fatalf("sync.state = %v, want skipped", got)
 	}
-	if got := syncResult["cleared"]; got != float64(2) {
-		t.Fatalf("sync.cleared = %v, want 2", got)
+	if warning, _ := syncResult["warning"].(string); !strings.Contains(warning, "deprecated") {
+		t.Fatalf("sync.warning = %v, want deprecated warning", syncResult["warning"])
 	}
-	if len(syncClient.setCalls) != 0 {
-		t.Fatalf("set calls = %+v, want none", syncClient.setCalls)
-	}
-	if len(syncClient.clearCalls) != 2 {
-		t.Fatalf("clear calls = %+v, want 2 calls", syncClient.clearCalls)
+	if len(syncClient.setCalls) != 0 || len(syncClient.clearCalls) != 0 {
+		t.Fatalf("cmux sync calls = set:%+v clear:%+v, want none", syncClient.setCalls, syncClient.clearCalls)
 	}
 }
 
@@ -417,8 +603,11 @@ func TestCLI_WSTaskSync_JSON_All_Success(t *testing.T) {
 	if got := resp.Result["count"]; got != float64(2) {
 		t.Fatalf("result.count = %v, want 2", got)
 	}
-	if got := resp.Result["set"]; got != float64(2) {
-		t.Fatalf("result.set = %v, want 2", got)
+	if got := resp.Result["set"]; got != float64(0) {
+		t.Fatalf("result.set = %v, want 0", got)
+	}
+	if got := resp.Result["skipped"]; got != float64(2) {
+		t.Fatalf("result.skipped = %v, want 2", got)
 	}
 	if got := resp.Result["failed"]; got != float64(0) {
 		t.Fatalf("result.failed = %v, want 0", got)
@@ -442,7 +631,7 @@ func TestCLI_WSTaskSync_JSON_All_RejectsID(t *testing.T) {
 	}
 }
 
-func TestCLI_WSTaskLauncher_UpdatesSelectedTaskAndSyncs(t *testing.T) {
+func TestCLI_WSTaskLauncher_UpdatesSelectedTaskWithoutSync(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
@@ -482,17 +671,8 @@ func TestCLI_WSTaskLauncher_UpdatesSelectedTaskAndSyncs(t *testing.T) {
 	if !bytes.Contains(content, []byte("### TASK-002 Second\nstatus: done")) {
 		t.Fatalf("tasks.md should be updated to done: %q", string(content))
 	}
-	if len(syncClient.setCalls) != 2 {
-		t.Fatalf("set calls = %+v, want two task pills", syncClient.setCalls)
-	}
-	if syncClient.setCalls[0].Key != "task:TASK-002" || syncClient.setCalls[0].Value != "✔ TASK-002 Second" {
-		t.Fatalf("first set call = %+v, want reverse replay to start from tail task", syncClient.setCalls[0])
-	}
-	if syncClient.setCalls[1].Key != "task:TASK-001" || syncClient.setCalls[1].Value != "○ TASK-001 First" {
-		t.Fatalf("second set call = %+v, want reverse replay to end at head task", syncClient.setCalls[1])
-	}
-	if got := syncClient.statuses["cmux-1"]; len(got) != 2 || got[0].Key != "task:TASK-001" || got[1].Key != "task:TASK-002" {
-		t.Fatalf("statuses = %+v, want rendered order TASK-001/TASK-002", got)
+	if len(syncClient.setCalls) != 0 || len(syncClient.clearCalls) != 0 {
+		t.Fatalf("cmux sync calls = set:%+v clear:%+v, want none", syncClient.setCalls, syncClient.clearCalls)
 	}
 }
 

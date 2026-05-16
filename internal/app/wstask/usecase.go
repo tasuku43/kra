@@ -72,6 +72,27 @@ type ListResult struct {
 	Overview Overview
 }
 
+type ViewGroup struct {
+	Status Status
+	Title  string
+	Items  []Item
+}
+
+type ViewModel struct {
+	WorkspaceID string
+	Path        string
+	Items       []Item
+	Workspaces  []ViewWorkspace
+	Groups      []ViewGroup
+	Empty       bool
+}
+
+type ViewWorkspace struct {
+	ID    string
+	Title string
+	Items []Item
+}
+
 type AddResult struct {
 	Path string
 	Task Item
@@ -188,6 +209,26 @@ func (s *Service) List(root string, workspaceID string, scope string) (ListResul
 	return ListResult{
 		Path:     snapshot.Path,
 		Overview: buildOverview(doc.items(), ""),
+	}, nil
+}
+
+func (s *Service) View(root string, workspaceID string, scope string) (ViewModel, error) {
+	result, err := s.List(root, workspaceID, scope)
+	if err != nil {
+		return ViewModel{}, err
+	}
+	overview := result.Overview
+	return ViewModel{
+		WorkspaceID: workspaceID,
+		Path:        result.Path,
+		Items:       append([]Item{}, overview.Items...),
+		Groups: []ViewGroup{
+			{Status: StatusDoing, Title: "Doing", Items: overview.ItemsByStatus(StatusDoing)},
+			{Status: StatusBlocked, Title: "Blocked", Items: overview.ItemsByStatus(StatusBlocked)},
+			{Status: StatusTodo, Title: "Todo", Items: overview.ItemsByStatus(StatusTodo)},
+			{Status: StatusDone, Title: "Done", Items: overview.ItemsByStatus(StatusDone)},
+		},
+		Empty: overview.Counts.Total == 0,
 	}, nil
 }
 

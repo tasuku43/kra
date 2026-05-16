@@ -31,6 +31,18 @@ The following paths are forbidden at template root (`templates/<name>/`):
 
 If any reserved path exists, validation fails.
 
+## Default scaffold
+
+Generated default templates include:
+
+- `notes/`
+- `artifacts/`
+- `.cmux/dock.json`
+- `AGENTS.md`
+- `tasks.md`
+
+`.cmux/` is template-managed cmux project configuration. `tasks.md` remains the workspace task source of truth at `<workspace>/tasks.md`.
+
 ## Entry constraints
 
 - Symlinks are forbidden.
@@ -43,4 +55,3 @@ One shared validation implementation is used by:
 
 - `kra ws create` (preflight before any workspace directory creation)
 - `kra template validate`
-
