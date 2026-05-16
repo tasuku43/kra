@@ -45,8 +45,14 @@ Initialize a kra root and filesystem-first runtime metadata.
   - create:
     - `<root>/templates/default/notes/`
     - `<root>/templates/default/artifacts/`
+    - `<root>/templates/default/.cmux/dock.json`
     - `<root>/templates/default/AGENTS.md`
+    - `<root>/templates/default/tasks.md`
   - do not overwrite existing `templates/default/` content
+  - existing roots with an already-present `templates/default/` are not retroactively updated by init; use `kra root migrate --apply` to add missing default template and active workspace scaffold
+- Ensure `<root>/.cmux/dock.json` exists on first init
+  - Dock command lists active workspace tasks with `kra ws task view --all --todo-only --watch --refresh 2s`
+  - do not overwrite existing root Dock config
 - Ensure `<root>/.kra/config.yaml` exists on first init
   - create default content:
     - `workspace.defaults.template = default`
@@ -60,7 +66,10 @@ Initialize a kra root and filesystem-first runtime metadata.
   - `<root>/.gitignore`
   - `<root>/.kra/config.yaml`
   - `<root>/AGENTS.md`
+  - `<root>/.cmux/dock.json` (if created)
   - `<root>/templates/default/AGENTS.md` (if created)
+  - `<root>/templates/default/.cmux/dock.json` (if created)
+  - `<root>/templates/default/tasks.md` (if created)
 - Write `.gitignore` such that `workspaces/**/repos/**` is ignored
 - Default `.gitignore` entries managed by `kra init` should also include:
   - `.DS_Store`

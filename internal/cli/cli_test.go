@@ -418,6 +418,24 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(root, "templates", "default", "AGENTS.md")); statErr != nil {
 		t.Fatalf("default template AGENTS.md not created: %v", statErr)
 	}
+	rootDockBytes, statErr := os.ReadFile(filepath.Join(root, ".cmux", "dock.json"))
+	if statErr != nil {
+		t.Fatalf("root .cmux/dock.json not created: %v", statErr)
+	}
+	assertDockJSONCommandContains(t, rootDockBytes, "kra ws task view --all --todo-only --watch --refresh 2s")
+	dockPath := filepath.Join(root, "templates", "default", ".cmux", "dock.json")
+	dockBytes, statErr := os.ReadFile(dockPath)
+	if statErr != nil {
+		t.Fatalf("default template .cmux/dock.json not created: %v", statErr)
+	}
+	assertDefaultDockJSON(t, dockBytes)
+	tasksBytes, statErr := os.ReadFile(filepath.Join(root, "templates", "default", "tasks.md"))
+	if statErr != nil {
+		t.Fatalf("default template tasks.md not created: %v", statErr)
+	}
+	if string(tasksBytes) != defaultWorkspaceTasksContent {
+		t.Fatalf("default template tasks.md content mismatch: %q", string(tasksBytes))
+	}
 	rootConfigPath := filepath.Join(root, ".kra", "config.yaml")
 	rootConfigBytes, statErr := os.ReadFile(rootConfigPath)
 	if statErr != nil {
@@ -445,10 +463,13 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	}
 	tracked := strings.Fields(runGit(t, root, "ls-files"))
 	wantTracked := map[string]bool{
-		".gitignore":                  true,
-		".kra/config.yaml":            true,
-		"AGENTS.md":                   true,
-		"templates/default/AGENTS.md": true,
+		".gitignore":                        true,
+		".cmux/dock.json":                   true,
+		".kra/config.yaml":                  true,
+		"AGENTS.md":                         true,
+		"templates/default/.cmux/dock.json": true,
+		"templates/default/AGENTS.md":       true,
+		"templates/default/tasks.md":        true,
 	}
 	if len(tracked) != len(wantTracked) {
 		t.Fatalf("tracked file count = %d, want %d (files=%q)", len(tracked), len(wantTracked), strings.Join(tracked, ", "))
@@ -466,6 +487,76 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 		t.Fatalf("current-context = %q, ok=%v, want %q", contextRoot, ok, root)
 	}
 
+}
+
+func TestCLI_Init_DoesNotOverwriteExistingDefaultTemplate(t *testing.T) {
+	root := t.TempDir()
+	setKraHomeForTest(t)
+	setGitIdentity(t)
+
+	existingDefault := filepath.Join(root, "templates", "default")
+	if err := os.MkdirAll(existingDefault, 0o755); err != nil {
+		t.Fatalf("mkdir existing default template: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(existingDefault, "tasks.md"), []byte("existing tasks\n"), 0o644); err != nil {
+		t.Fatalf("write existing tasks.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(existingDefault, "custom.txt"), []byte("keep\n"), 0o644); err != nil {
+		t.Fatalf("write custom template file: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"init", "--root", root, "--context", "test"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+
+	got, readErr := os.ReadFile(filepath.Join(existingDefault, "tasks.md"))
+	if readErr != nil {
+		t.Fatalf("read existing tasks.md: %v", readErr)
+	}
+	if string(got) != "existing tasks\n" {
+		t.Fatalf("existing tasks.md was overwritten: %q", string(got))
+	}
+	if _, statErr := os.Stat(filepath.Join(existingDefault, ".cmux", "dock.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("init should not add dock.json to existing default template, stat err=%v", statErr)
+	}
+}
+
+func assertDefaultDockJSON(t *testing.T, b []byte) {
+	t.Helper()
+	assertDockJSONCommandContains(t, b, "kra ws task view --current --watch --refresh 2s")
+}
+
+func assertDockJSONCommandContains(t *testing.T, b []byte, commandPart string) {
+	t.Helper()
+	var got struct {
+		Controls []struct {
+			ID      string `json:"id"`
+			Title   string `json:"title"`
+			Command string `json:"command"`
+			Cwd     string `json:"cwd"`
+			Height  int    `json:"height"`
+		} `json:"controls"`
+	}
+	if err := json.Unmarshal(b, &got); err != nil {
+		t.Fatalf("dock.json is not valid JSON: %v", err)
+	}
+	if len(got.Controls) != 1 {
+		t.Fatalf("dock.json controls length = %d, want 1", len(got.Controls))
+	}
+	ctrl := got.Controls[0]
+	if ctrl.ID != "kra-tasks" {
+		t.Fatalf("dock.json controls[0].id = %q, want %q", ctrl.ID, "kra-tasks")
+	}
+	if !strings.Contains(ctrl.Command, commandPart) {
+		t.Fatalf("dock.json command missing task view: %q", ctrl.Command)
+	}
+	if ctrl.Cwd != "." {
+		t.Fatalf("dock.json cwd = %q, want %q", ctrl.Cwd, ".")
+	}
 }
 
 func TestCLI_Init_CreatesMissingKRARootDirectory(t *testing.T) {
@@ -640,8 +731,17 @@ func seedDefaultTemplate(t *testing.T, root string) {
 	if err := os.MkdirAll(filepath.Join(root, "templates", "default", "artifacts"), 0o755); err != nil {
 		t.Fatalf("create default template artifacts/: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(root, "templates", "default", ".cmux"), 0o755); err != nil {
+		t.Fatalf("create default template .cmux/: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(root, "templates", "default", "AGENTS.md"), []byte("workspace guide\n"), 0o644); err != nil {
 		t.Fatalf("write default template AGENTS.md: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "templates", "default", ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
+		t.Fatalf("write default template .cmux/dock.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(root, "templates", "default", "tasks.md"), []byte(defaultWorkspaceTasksContent), 0o644); err != nil {
+		t.Fatalf("write default template tasks.md: %v", err)
 	}
 }
 
@@ -698,6 +798,18 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	}
 	if strings.TrimSpace(string(guideBytes)) != "workspace guide" {
 		t.Fatalf("AGENTS.md mismatch: %q", string(guideBytes))
+	}
+	dockBytes, statErr := os.ReadFile(filepath.Join(wsDir, ".cmux", "dock.json"))
+	if statErr != nil {
+		t.Fatalf(".cmux/dock.json not created: %v", statErr)
+	}
+	assertDefaultDockJSON(t, dockBytes)
+	tasksBytes, statErr := os.ReadFile(filepath.Join(wsDir, "tasks.md"))
+	if statErr != nil {
+		t.Fatalf("tasks.md not created: %v", statErr)
+	}
+	if string(tasksBytes) != defaultWorkspaceTasksContent {
+		t.Fatalf("tasks.md mismatch: %q", string(tasksBytes))
 	}
 	metaBytes, statErr := os.ReadFile(filepath.Join(wsDir, workspaceMetaFilename))
 	if statErr != nil {

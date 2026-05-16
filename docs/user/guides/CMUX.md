@@ -25,12 +25,18 @@ Ticket System     Filesystem (KRA_ROOT)       cmux
 PROJ-1234  --->   workspaces/PROJ-1234/ --->  workspace: PROJ-1234
                   ├─ repos/
                   │  (no repo attached)
+                  ├─ .cmux/
+                  │  └─ dock.json
+                  ├─ tasks.md
                   ├─ notes/
                   └─ artifacts/
 
 PROJ-1235  --->   workspaces/PROJ-1235/ --->  workspace: PROJ-1235
                   ├─ repos/
                   │  └─ backend/
+                  ├─ .cmux/
+                  │  └─ dock.json
+                  ├─ tasks.md
                   ├─ notes/
                   └─ artifacts/
 
@@ -39,9 +45,71 @@ PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
                   │  ├─ api/
                   │  ├─ web/
                   │  └─ infra/
+                  ├─ .cmux/
+                  │  └─ dock.json
+                  ├─ tasks.md
                   ├─ notes/
                   └─ artifacts/
 ```
+
+## Dock task view
+
+KRA_ROOT can also have `.cmux/dock.json`. The root Dock is useful for seeing open tasks across active workspaces:
+
+```json
+{
+  "controls": [
+    {
+      "id": "kra-tasks",
+      "title": "Tasks",
+      "command": "kra ws task view --all --todo-only --watch --refresh 2s",
+      "cwd": ".",
+      "height": 420
+    }
+  ]
+}
+```
+
+New default workspaces include `.cmux/dock.json`. cmux reads this project Dock config from the workspace root and can show a right-sidebar `Tasks` control.
+
+Default `.cmux/dock.json`:
+
+```json
+{
+  "controls": [
+    {
+      "id": "kra-tasks",
+      "title": "Tasks",
+      "command": "kra ws task view --current --watch --refresh 2s",
+      "cwd": ".",
+      "height": 420
+    }
+  ]
+}
+```
+
+The command runs:
+
+```sh
+kra ws task view --current --watch --refresh 2s
+```
+
+When `kra` is made available by shell startup files, generated Dock configs may prefix the command with the detected shell init file. For example, zsh users may see:
+
+```sh
+source ~/.zshrc; kra ws task view --current --watch --refresh 2s
+```
+
+This makes the Dock a constantly visible view of `<workspace>/tasks.md`. The task source of truth remains `<workspace>/tasks.md`; `kra ws task sync` is deprecated and no longer refreshes cmux task pills. The project Dock config may trigger a cmux trust prompt the first time the workspace is opened.
+
+`kra init` does not overwrite an existing `templates/default/`, and template changes are not applied retroactively by init. For an existing root and active workspaces, run:
+
+```sh
+kra root migrate
+kra root migrate --apply
+```
+
+The migration adds missing `.cmux/dock.json`, `templates/default/.cmux/dock.json`, `templates/default/tasks.md`, `workspaces/<id>/.cmux/dock.json`, and `workspaces/<id>/tasks.md` without overwriting custom files.
 
 ## Open behavior
 

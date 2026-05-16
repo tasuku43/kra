@@ -67,6 +67,37 @@ func TestCLI_TemplateValidate_Name_Success(t *testing.T) {
 	}
 }
 
+func TestCLI_TemplateValidate_AllowsCMUXDockAndTasks(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	tmpl := filepath.Join(env.Root, "templates", "with-dock")
+	if err := os.MkdirAll(filepath.Join(tmpl, ".cmux"), 0o755); err != nil {
+		t.Fatalf("mkdir .cmux/: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpl, ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
+		t.Fatalf("write dock.json: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(tmpl, "tasks.md"), []byte(defaultWorkspaceTasksContent), 0o644); err != nil {
+		t.Fatalf("write tasks.md: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	c := New(&out, &errBuf)
+
+	code := c.Run([]string{"template", "validate", "--name", "with-dock"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, errBuf.String())
+	}
+	if !strings.Contains(out.String(), "✔ with-dock") {
+		t.Fatalf("stdout missing template name: %q", out.String())
+	}
+	if errBuf.Len() != 0 {
+		t.Fatalf("stderr not empty: %q", errBuf.String())
+	}
+}
+
 func TestCLI_TemplateValidate_Name_NotFound_ShowsAvailable(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)

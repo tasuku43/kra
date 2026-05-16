@@ -27,12 +27,19 @@ func TestCLI_TemplateCreate_NameFlag_CreatesScaffold(t *testing.T) {
 	for _, rel := range []string{
 		filepath.Join("templates", "custom", "notes"),
 		filepath.Join("templates", "custom", "artifacts"),
+		filepath.Join("templates", "custom", ".cmux", "dock.json"),
 		filepath.Join("templates", "custom", "AGENTS.md"),
+		filepath.Join("templates", "custom", "tasks.md"),
 	} {
 		if _, statErr := os.Stat(filepath.Join(env.Root, rel)); statErr != nil {
 			t.Fatalf("missing scaffold path %q: %v", rel, statErr)
 		}
 	}
+	dockBytes, readErr := os.ReadFile(filepath.Join(env.Root, "templates", "custom", ".cmux", "dock.json"))
+	if readErr != nil {
+		t.Fatalf("read scaffold dock.json: %v", readErr)
+	}
+	assertDefaultDockJSON(t, dockBytes)
 	if !strings.Contains(out.String(), "✔ custom") {
 		t.Fatalf("stdout missing created template name: %q", out.String())
 	}

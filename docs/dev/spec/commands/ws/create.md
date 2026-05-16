@@ -52,6 +52,8 @@ Create a workspace from a root-local template.
   - validation reports all found violations (not first-only)
 - Create `<current-root>/workspaces/<id>/`
 - Copy `templates/<name>/` contents into `workspaces/<id>/` (static copy, no placeholder expansion).
+  - with the generated default template, this includes `.cmux/dock.json` and `tasks.md`
+  - template changes are not retroactive for existing workspaces
 - Prompt for `title` and store it in workspace metadata (`.kra.meta.json`)
   - if in a no-prompt mode, store an empty title
   - if `--title` is provided, use it and do not prompt

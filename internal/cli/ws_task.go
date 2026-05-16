@@ -1,14 +1,16 @@
 package cli
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/signal"
 	"sort"
 	"strings"
-	"sync"
+	"time"
 
 	appws "github.com/tasuku43/kra/internal/app/ws"
 	"github.com/tasuku43/kra/internal/app/wstask"
@@ -44,6 +46,15 @@ type wsTaskListOptions struct {
 	format string
 }
 
+type wsTaskViewOptions struct {
+	target      wsTaskTargetOptions
+	watch       bool
+	refresh     time.Duration
+	noColor     bool
+	todoOnly    bool
+	includeDone bool
+}
+
 type wsTaskAddOptions struct {
 	target      wsTaskTargetOptions
 	title       string
@@ -71,9 +82,9 @@ type wsTaskSyncBatchItem struct {
 
 type wsTaskStatusExecution struct {
 	Transition wstask.TransitionResult
-	Sync       wstask.SyncResult
-	SyncErr    error
 }
+
+const deprecatedWSTaskSyncWarning = "task sync is deprecated; use kra ws task view or cmux Dock instead"
 
 func (c *CLI) runWSTask(args []string) int {
 	if len(args) == 0 {
@@ -87,6 +98,8 @@ func (c *CLI) runWSTask(args []string) int {
 		return exitOK
 	case "list", "ls":
 		return c.runWSTaskList(args[1:])
+	case "view":
+		return c.runWSTaskView(args[1:])
 	case "add":
 		return c.runWSTaskAdd(args[1:])
 	case "status":
@@ -101,6 +114,159 @@ func (c *CLI) runWSTask(args []string) int {
 		c.printWSTaskUsage(c.Err)
 		return exitUsage
 	}
+}
+
+func (c *CLI) runWSTaskView(args []string) int {
+	opts, err := parseWSTaskViewOptions(args)
+	if err != nil {
+		if err == errHelpRequested {
+			c.printWSTaskViewUsage(c.Out)
+			return exitOK
+		}
+		fmt.Fprintf(c.Err, "%v\n", err)
+		c.printWSTaskViewUsage(c.Err)
+		return exitUsage
+	}
+
+	root := ""
+	target := wsTaskTarget{}
+	if opts.target.useAll {
+		resolvedRoot, code := c.resolveRootForRootCommand("human", "ws.task.view")
+		if code != exitOK {
+			return code
+		}
+		root = resolvedRoot
+	} else {
+		resolvedTarget, resolvedRoot, _, code := c.resolveWSTaskTarget(opts.target, "view", "human", true, "active")
+		if code != exitOK {
+			return code
+		}
+		target = resolvedTarget
+		root = resolvedRoot
+	}
+
+	useColor := writerSupportsColor(c.Out) && !opts.noColor
+	if !opts.watch {
+		return c.renderWSTaskViewOnce(root, target, opts, useColor)
+	}
+
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt)
+	defer stop()
+	ticker := time.NewTicker(opts.refresh)
+	defer ticker.Stop()
+	previousKey := ""
+	hadFrame := false
+	first := true
+	for {
+		if !first {
+			select {
+			case <-ctx.Done():
+				return exitOK
+			case <-ticker.C:
+			}
+		}
+		first = false
+		key, frame := c.buildWSTaskViewWatchFrame(root, target, opts, useColor)
+		if key != previousKey {
+			if hadFrame {
+				clearWSTaskView(c.Out)
+			}
+			_, _ = c.Out.Write(frame)
+			previousKey = key
+			hadFrame = true
+		}
+		select {
+		case <-ctx.Done():
+			return exitOK
+		default:
+		}
+	}
+}
+
+func (c *CLI) buildWSTaskViewWatchFrame(root string, target wsTaskTarget, opts wsTaskViewOptions, useColor bool) (string, []byte) {
+	result, err := c.buildWSTaskViewModel(root, target, opts)
+	if err != nil {
+		key := "error:" + err.Error()
+		var frame bytes.Buffer
+		fmt.Fprintf(&frame, "%s\n", styleError(fmt.Sprintf("error: %v", err), useColor))
+		return key, frame.Bytes()
+	}
+	key := renderWSTaskViewModelKey(result)
+	var frame bytes.Buffer
+	printWSTaskView(&frame, result, time.Now(), useColor)
+	return key, frame.Bytes()
+}
+
+func (c *CLI) renderWSTaskViewOnce(root string, target wsTaskTarget, opts wsTaskViewOptions, useColor bool) int {
+	return c.renderWSTaskViewFrame(c.Out, root, target, opts, useColor)
+}
+
+func (c *CLI) renderWSTaskViewFrame(out io.Writer, root string, target wsTaskTarget, opts wsTaskViewOptions, useColor bool) int {
+	result, err := c.buildWSTaskViewModel(root, target, opts)
+	if err != nil {
+		fmt.Fprintf(out, "%s\n", styleError(fmt.Sprintf("error: %v", err), useColor))
+		return exitError
+	}
+	printWSTaskView(out, result, time.Now(), useColor)
+	return exitOK
+}
+
+func (c *CLI) buildWSTaskViewModel(root string, target wsTaskTarget, opts wsTaskViewOptions) (wstask.ViewModel, error) {
+	if opts.target.useAll {
+		rows, err := listRowsFromFilesystem(context.Background(), root, "active", false)
+		if err != nil {
+			return wstask.ViewModel{}, err
+		}
+		model := wstask.ViewModel{
+			WorkspaceID: "KRA_ROOT",
+			Path:        root,
+		}
+		service := newWorkspaceTaskService()
+		for _, row := range rows {
+			result, err := service.View(root, row.ID, "active")
+			if err != nil {
+				return wstask.ViewModel{}, fmt.Errorf("%s: %w", row.ID, err)
+			}
+			workspace := wstask.ViewWorkspace{
+				ID:    row.ID,
+				Title: row.Title,
+			}
+			for _, item := range result.Items {
+				if shouldSkipWSTaskViewItem(item, opts) {
+					continue
+				}
+				workspace.Items = append(workspace.Items, item)
+			}
+			if len(workspace.Items) > 0 {
+				model.Workspaces = append(model.Workspaces, workspace)
+				model.Items = append(model.Items, workspace.Items...)
+			}
+		}
+		model.Empty = len(model.Items) == 0
+		return model, nil
+	}
+	result, err := newWorkspaceTaskService().View(root, target.workspaceID, target.scope)
+	if err != nil {
+		return wstask.ViewModel{}, err
+	}
+	result.Items = filterWSTaskViewItems(result.Items, opts)
+	result.Empty = len(result.Items) == 0
+	return result, nil
+}
+
+func filterWSTaskViewItems(items []wstask.Item, opts wsTaskViewOptions) []wstask.Item {
+	out := make([]wstask.Item, 0, len(items))
+	for _, item := range items {
+		if shouldSkipWSTaskViewItem(item, opts) {
+			continue
+		}
+		out = append(out, item)
+	}
+	return out
+}
+
+func shouldSkipWSTaskViewItem(item wstask.Item, opts wsTaskViewOptions) bool {
+	return opts.todoOnly && !opts.includeDone && item.Status == wstask.StatusDone
 }
 
 func (c *CLI) runWSTaskLauncher(args []string) int {
@@ -288,15 +454,12 @@ func (c *CLI) runWSTaskSync(args []string) int {
 		return c.runWSTaskSyncAll(opts.format)
 	}
 
-	target, root, _, code := c.resolveWSTaskTarget(opts.target, "sync", opts.format, false, "active")
+	target, _, _, code := c.resolveWSTaskTarget(opts.target, "sync", opts.format, false, "active")
 	if code != exitOK {
 		return code
 	}
 
-	result, err := newWorkspaceTaskService().Sync(context.Background(), root, target.workspaceID)
-	if err != nil {
-		return c.writeWSTaskRuntimeError(opts.format, "ws.task.sync", target.workspaceID, err)
-	}
+	result := deprecatedWSTaskSyncResult(0)
 
 	if opts.format == "json" {
 		return writeWSTaskSyncJSON(c.Out, target.workspaceID, result)
@@ -322,7 +485,7 @@ func (c *CLI) runWSTaskSyncAll(format string) int {
 		return c.writeWSTaskRuntimeError(format, "ws.task.sync", "", errNoActiveWorkspaces)
 	}
 
-	items := executeWSTaskSyncBatch(context.Background(), root, workspaceIDs)
+	items := executeDeprecatedWSTaskSyncBatch(workspaceIDs)
 	if format == "json" {
 		return writeWSTaskSyncBatchJSON(c.Out, items)
 	}
@@ -335,11 +498,8 @@ func (c *CLI) executeWSTaskStatus(root string, workspaceID string, taskID string
 	if err != nil {
 		return wsTaskStatusExecution{}, err
 	}
-	syncResult, syncErr := service.Sync(context.Background(), root, workspaceID)
 	return wsTaskStatusExecution{
 		Transition: transition,
-		Sync:       syncResult,
-		SyncErr:    syncErr,
 	}, nil
 }
 
@@ -507,6 +667,139 @@ func parseWSTaskListOptions(args []string) (wsTaskListOptions, error) {
 		return wsTaskListOptions{}, fmt.Errorf("unsupported --format: %q (supported: human, json)", opts.format)
 	}
 	return opts, nil
+}
+
+func parseWSTaskViewOptions(args []string) (wsTaskViewOptions, error) {
+	opts := wsTaskViewOptions{refresh: 2 * time.Second}
+	rest := append([]string{}, args...)
+	for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
+		arg := strings.TrimSpace(rest[0])
+		switch {
+		case arg == "-h" || arg == "--help" || arg == "help":
+			return wsTaskViewOptions{}, errHelpRequested
+		case arg == "--current":
+			opts.target.useCurrent = true
+			rest = rest[1:]
+		case arg == "--select":
+			opts.target.useSelect = true
+			rest = rest[1:]
+		case arg == "--all":
+			opts.target.useAll = true
+			rest = rest[1:]
+		case arg == "--watch":
+			opts.watch = true
+			rest = rest[1:]
+		case arg == "--no-color":
+			opts.noColor = true
+			rest = rest[1:]
+		case arg == "--todo-only":
+			opts.todoOnly = true
+			rest = rest[1:]
+		case arg == "--include-done":
+			opts.includeDone = true
+			rest = rest[1:]
+		case arg == "--id":
+			if len(rest) < 2 {
+				return wsTaskViewOptions{}, fmt.Errorf("--id requires a value")
+			}
+			opts.target.workspaceID = strings.TrimSpace(rest[1])
+			rest = rest[2:]
+		case arg == "--refresh":
+			if len(rest) < 2 {
+				return wsTaskViewOptions{}, fmt.Errorf("--refresh requires a value")
+			}
+			refresh, err := parseWSTaskViewRefresh(rest[1])
+			if err != nil {
+				return wsTaskViewOptions{}, err
+			}
+			opts.refresh = refresh
+			rest = rest[2:]
+		case strings.HasPrefix(arg, "--id="):
+			opts.target.workspaceID = strings.TrimSpace(strings.TrimPrefix(arg, "--id="))
+			rest = rest[1:]
+		case strings.HasPrefix(arg, "--refresh="):
+			refresh, err := parseWSTaskViewRefresh(strings.TrimPrefix(arg, "--refresh="))
+			if err != nil {
+				return wsTaskViewOptions{}, err
+			}
+			opts.refresh = refresh
+			rest = rest[1:]
+		case strings.HasPrefix(arg, "--current="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--current=")) != "" {
+				return wsTaskViewOptions{}, fmt.Errorf("--current does not take a value")
+			}
+			opts.target.useCurrent = true
+			rest = rest[1:]
+		case strings.HasPrefix(arg, "--select="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--select=")) != "" {
+				return wsTaskViewOptions{}, fmt.Errorf("--select does not take a value")
+			}
+			opts.target.useSelect = true
+			rest = rest[1:]
+		case strings.HasPrefix(arg, "--all="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--all=")) != "" {
+				return wsTaskViewOptions{}, fmt.Errorf("--all does not take a value")
+			}
+			opts.target.useAll = true
+			rest = rest[1:]
+		case strings.HasPrefix(arg, "--watch="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--watch=")) != "" {
+				return wsTaskViewOptions{}, fmt.Errorf("--watch does not take a value")
+			}
+			opts.watch = true
+			rest = rest[1:]
+		case strings.HasPrefix(arg, "--no-color="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--no-color=")) != "" {
+				return wsTaskViewOptions{}, fmt.Errorf("--no-color does not take a value")
+			}
+			opts.noColor = true
+			rest = rest[1:]
+		case strings.HasPrefix(arg, "--todo-only="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--todo-only=")) != "" {
+				return wsTaskViewOptions{}, fmt.Errorf("--todo-only does not take a value")
+			}
+			opts.todoOnly = true
+			rest = rest[1:]
+		case strings.HasPrefix(arg, "--include-done="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--include-done=")) != "" {
+				return wsTaskViewOptions{}, fmt.Errorf("--include-done does not take a value")
+			}
+			opts.includeDone = true
+			rest = rest[1:]
+		default:
+			return wsTaskViewOptions{}, fmt.Errorf("unknown flag for ws task view: %q", arg)
+		}
+	}
+	if len(rest) > 0 {
+		return wsTaskViewOptions{}, fmt.Errorf("unexpected args for ws task view: %q", strings.Join(rest, " "))
+	}
+	if opts.target.useAll {
+		if opts.target.workspaceID != "" {
+			return wsTaskViewOptions{}, fmt.Errorf("--id and --all cannot be used together")
+		}
+		if opts.target.useCurrent {
+			return wsTaskViewOptions{}, fmt.Errorf("--current and --all cannot be used together")
+		}
+		if opts.target.useSelect {
+			return wsTaskViewOptions{}, fmt.Errorf("--select and --all cannot be used together")
+		}
+		return opts, nil
+	}
+	if err := validateWSTaskTargetOptions(opts.target); err != nil {
+		return wsTaskViewOptions{}, err
+	}
+	return opts, nil
+}
+
+func parseWSTaskViewRefresh(raw string) (time.Duration, error) {
+	refresh, err := time.ParseDuration(strings.TrimSpace(raw))
+	if err != nil {
+		return 0, fmt.Errorf("invalid --refresh duration: %w", err)
+	}
+	if refresh <= 0 {
+		return 0, fmt.Errorf("--refresh must be greater than 0")
+	}
+	return refresh, nil
 }
 
 func parseWSTaskAddOptions(args []string) (wsTaskAddOptions, error) {
@@ -934,11 +1227,7 @@ func writeWSTaskStatusJSON(out io.Writer, workspaceID string, result wsTaskStatu
 				"status":          string(result.Transition.Task.Status),
 				"changed":         result.Transition.Task.Changed,
 			},
-			"sync": syncResultMap(result.Sync),
 		},
-	}
-	if result.SyncErr != nil {
-		payload.Warnings = []string{fmt.Sprintf("task sync failed: %v", result.SyncErr)}
 	}
 	_ = writeCLIJSON(out, payload)
 	return exitOK
@@ -1046,11 +1335,6 @@ func printWSTaskStatusHuman(out io.Writer, workspaceID string, result wsTaskStat
 		styleMuted(fmt.Sprintf("previous: %s", result.Transition.Task.PreviousStatus), useColor),
 		styleMuted(fmt.Sprintf("status: %s", result.Transition.Task.Status), useColor),
 	}
-	if result.SyncErr != nil {
-		lines = append(lines, styleWarn(fmt.Sprintf("task sync failed: %v", result.SyncErr), useColor))
-	} else {
-		lines = append(lines, renderWSTaskSyncSummary(result.Sync, useColor))
-	}
 	printResultSection(out, useColor, lines...)
 }
 
@@ -1076,52 +1360,24 @@ func renderWSTaskSyncSummary(result wstask.SyncResult, useColor bool) string {
 	)
 }
 
-func executeWSTaskSyncBatch(ctx context.Context, root string, workspaceIDs []string) []wsTaskSyncBatchItem {
-	type indexedResult struct {
-		index int
-		item  wsTaskSyncBatchItem
-	}
-
-	workerLimit := defaultWSOpenConcurrency(len(workspaceIDs))
-	if workerLimit < 1 {
-		workerLimit = 1
-	}
-
-	service := newWorkspaceTaskService()
-	jobs := make(chan int)
-	results := make(chan indexedResult, len(workspaceIDs))
-	var wg sync.WaitGroup
-	for i := 0; i < workerLimit; i++ {
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
-			for idx := range jobs {
-				workspaceID := workspaceIDs[idx]
-				result, err := service.Sync(ctx, root, workspaceID)
-				results <- indexedResult{
-					index: idx,
-					item: wsTaskSyncBatchItem{
-						WorkspaceID: workspaceID,
-						Sync:        result,
-						Error:       err,
-					},
-				}
-			}
-		}()
-	}
-	for i := range workspaceIDs {
-		jobs <- i
-	}
-	close(jobs)
-	wg.Wait()
-	close(results)
-
+func executeDeprecatedWSTaskSyncBatch(workspaceIDs []string) []wsTaskSyncBatchItem {
 	items := make([]wsTaskSyncBatchItem, len(workspaceIDs))
-	for result := range results {
-		items[result.index] = result.item
+	for i, workspaceID := range workspaceIDs {
+		items[i] = wsTaskSyncBatchItem{
+			WorkspaceID: workspaceID,
+			Sync:        deprecatedWSTaskSyncResult(0),
+		}
 	}
 	sort.Slice(items, func(i, j int) bool { return items[i].WorkspaceID < items[j].WorkspaceID })
 	return items
+}
+
+func deprecatedWSTaskSyncResult(targets int) wstask.SyncResult {
+	return wstask.SyncResult{
+		State:       wstask.SyncStateSkipped,
+		Targets:     targets,
+		WarningText: deprecatedWSTaskSyncWarning,
+	}
 }
 
 func printWSTaskSyncBatchHuman(out io.Writer, errOut io.Writer, items []wsTaskSyncBatchItem, useColor bool) int {
@@ -1163,6 +1419,89 @@ func printWSTaskSyncBatchHuman(out io.Writer, errOut io.Writer, items []wsTaskSy
 
 func renderWSTaskListRow(item wstask.Item, useColor bool) string {
 	return fmt.Sprintf("%s%s %s: %s", uiIndent, renderWSTaskStatusMarker(item.Status, useColor), item.ID, item.Title)
+}
+
+func printWSTaskView(out io.Writer, model wstask.ViewModel, updated time.Time, useColor bool) {
+	fmt.Fprintf(out, "%s  %s\n\n", styleBold("TASKS", useColor), styleAccent(model.WorkspaceID, useColor))
+	if model.Empty {
+		fmt.Fprintf(out, "%s\n\n", styleMuted("No structured tasks.", useColor))
+	} else if len(model.Workspaces) > 0 {
+		for _, workspace := range model.Workspaces {
+			title := strings.TrimSpace(workspace.Title)
+			if title == "" {
+				fmt.Fprintf(out, "%s\n", styleAccent(workspace.ID, useColor))
+			} else {
+				fmt.Fprintf(out, "%s  %s\n", styleAccent(workspace.ID, useColor), title)
+			}
+			for _, item := range workspace.Items {
+				fmt.Fprintf(out, "%s%s %s  %s\n", uiIndent, renderWSTaskStatusMarker(item.Status, useColor), styleAccent(item.ID, useColor), item.Title)
+			}
+			fmt.Fprintln(out)
+		}
+	} else {
+		for _, item := range model.Items {
+			fmt.Fprintf(out, "%s%s %s  %s\n", uiIndent, renderWSTaskStatusMarker(item.Status, useColor), styleAccent(item.ID, useColor), item.Title)
+		}
+		fmt.Fprintln(out)
+	}
+	fmt.Fprintf(out, "%s\n", styleMuted("updated: "+updated.Format("2006-01-02 15:04:05"), useColor))
+	fmt.Fprintf(out, "%s\n", styleMuted("source: "+model.Path, useColor))
+}
+
+func renderWSTaskViewModelKey(model wstask.ViewModel) string {
+	var b strings.Builder
+	b.WriteString(model.WorkspaceID)
+	b.WriteByte('\n')
+	b.WriteString(model.Path)
+	b.WriteByte('\n')
+	if model.Empty {
+		b.WriteString("empty\n")
+	}
+	for _, workspace := range model.Workspaces {
+		b.WriteString(workspace.ID)
+		b.WriteByte('\t')
+		b.WriteString(workspace.Title)
+		b.WriteByte('\n')
+		for _, item := range workspace.Items {
+			b.WriteString(item.ID)
+			b.WriteByte('\t')
+			b.WriteString(string(item.Status))
+			b.WriteByte('\t')
+			b.WriteString(item.Title)
+			b.WriteByte('\t')
+			b.WriteString(item.Description)
+			b.WriteByte('\n')
+		}
+	}
+	for _, item := range model.Items {
+		b.WriteString(item.ID)
+		b.WriteByte('\t')
+		b.WriteString(string(item.Status))
+		b.WriteByte('\t')
+		b.WriteString(item.Title)
+		b.WriteByte('\t')
+		b.WriteString(item.Description)
+		b.WriteByte('\n')
+	}
+	for _, group := range model.Groups {
+		b.WriteString(string(group.Status))
+		b.WriteByte('\n')
+		for _, item := range group.Items {
+			b.WriteString(item.ID)
+			b.WriteByte('\t')
+			b.WriteString(string(item.Status))
+			b.WriteByte('\t')
+			b.WriteString(item.Title)
+			b.WriteByte('\t')
+			b.WriteString(item.Description)
+			b.WriteByte('\n')
+		}
+	}
+	return b.String()
+}
+
+func clearWSTaskView(out io.Writer) {
+	fmt.Fprint(out, "\033[H\033[2J")
 }
 
 func renderWSTaskStatusMarker(status wstask.Status, useColor bool) string {

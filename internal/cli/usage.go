@@ -104,7 +104,18 @@ Subcommands:
                    Print conceptual KRA_ROOT resolved for current execution context
   open [--format human|json]
                    Open KRA_ROOT as a cmux workspace (single target)
+  migrate [--apply] [--format human|json]
+                   Plan or apply safe root/workspace scaffold migrations
   help              Show this help
+`)
+}
+
+func (c *CLI) printRootMigrateUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra root migrate [--apply] [--format human|json]
+
+Plan or apply missing default template and active workspace task Dock scaffold.
+Existing files are never overwritten.
 `)
 }
 
@@ -347,9 +358,10 @@ func (c *CLI) printWSTaskUsage(w io.Writer) {
 Subcommands:
   (no subcommand)   Launch task status picker for one workspace
   list|ls          List structured workspace tasks
+  view             Render terminal-friendly task view
   add              Add one structured task
   status           Set one task status explicitly
-  sync             Sync task declaration into cmux sidebar
+  sync             Deprecated no-op; use task view / cmux Dock
   help             Show this help
 `)
 }
@@ -360,6 +372,14 @@ func (c *CLI) printWSTaskListUsage(w io.Writer) {
   kra ws task ls [--id <workspace-id>] [--current] [--select] [--format human|json]
 
 List structured workspace-local tasks.
+`)
+}
+
+func (c *CLI) printWSTaskViewUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws task view [--id <workspace-id> | --current | --select | --all] [--todo-only] [--include-done] [--watch] [--refresh <duration>] [--no-color]
+
+Render a read-only terminal-friendly view of workspace-local tasks.
 `)
 }
 
@@ -375,7 +395,7 @@ func (c *CLI) printWSTaskStatusUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws task status [--id <workspace-id>] [--current] [--select] <task-id> <todo|doing|blocked|done> [--format human|json]
 
-Set one structured task to the requested status and then sync cmux task pills.
+Set one structured task to the requested status.
 `)
 }
 
@@ -383,7 +403,7 @@ func (c *CLI) printWSTaskSyncUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws task sync [--id <workspace-id>] [--current] [--select | --all] [--format human|json]
 
-Reconcile workspace task declaration into cmux sidebar state.
+Deprecated no-op kept for compatibility. Use kra ws task view or cmux Dock instead.
 `)
 }
 

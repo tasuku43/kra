@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -14,6 +15,100 @@ const (
 	workspaceTemplatesDirName    = "templates"
 	defaultWorkspaceTemplateName = "default"
 )
+
+const defaultWorkspaceTasksContent = `# Workspace Tasks
+
+## Tasks
+`
+
+const defaultWorkspaceCMUXDockBaseCommand = "kra ws task view --current --watch --refresh 2s"
+const defaultRootCMUXDockBaseCommand = "kra ws task view --all --todo-only --watch --refresh 2s"
+
+type cmuxDockConfig struct {
+	Controls []cmuxDockControl `json:"controls"`
+}
+
+type cmuxDockControl struct {
+	ID      string `json:"id"`
+	Title   string `json:"title"`
+	Command string `json:"command"`
+	Cwd     string `json:"cwd"`
+	Height  int    `json:"height"`
+}
+
+func defaultWorkspaceCMUXDockContent() string {
+	return cmuxDockContent(defaultWorkspaceCMUXDockCommand())
+}
+
+func defaultRootCMUXDockContent() string {
+	return cmuxDockContent(defaultRootCMUXDockCommand())
+}
+
+func cmuxDockContent(command string) string {
+	config := cmuxDockConfig{
+		Controls: []cmuxDockControl{{
+			ID:      "kra-tasks",
+			Title:   "Tasks",
+			Command: command,
+			Cwd:     ".",
+			Height:  420,
+		}},
+	}
+	b, err := json.MarshalIndent(config, "", "  ")
+	if err != nil {
+		return ""
+	}
+	return string(b) + "\n"
+}
+
+func defaultWorkspaceCMUXDockCommand() string {
+	return shellAwareDockCommand(defaultWorkspaceCMUXDockBaseCommand)
+}
+
+func defaultRootCMUXDockCommand() string {
+	return shellAwareDockCommand(defaultRootCMUXDockBaseCommand)
+}
+
+func shellAwareDockCommand(baseCommand string) string {
+	if prefix := detectShellInitPrefixForDock(); prefix != "" {
+		return prefix + "; " + baseCommand
+	}
+	return baseCommand
+}
+
+func detectShellInitPrefixForDock() string {
+	home, err := os.UserHomeDir()
+	if err != nil || strings.TrimSpace(home) == "" {
+		return ""
+	}
+	shell := filepath.Base(strings.TrimSpace(os.Getenv("SHELL")))
+	switch shell {
+	case "zsh":
+		if fileExists(filepath.Join(home, ".zshrc")) {
+			return "source ~/.zshrc"
+		}
+	case "bash":
+		for _, rel := range []string{".bashrc", ".bash_profile", ".profile"} {
+			if fileExists(filepath.Join(home, rel)) {
+				return "source ~/" + rel
+			}
+		}
+	case "fish":
+		if fileExists(filepath.Join(home, ".config", "fish", "config.fish")) {
+			return "source ~/.config/fish/config.fish"
+		}
+	case "sh", "ksh":
+		if fileExists(filepath.Join(home, ".profile")) {
+			return ". ~/.profile"
+		}
+	}
+	return ""
+}
+
+func fileExists(path string) bool {
+	info, err := os.Stat(path)
+	return err == nil && !info.IsDir()
+}
 
 type workspaceTemplate struct {
 	Name string

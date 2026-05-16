@@ -21,7 +21,7 @@ kra ws dashboard
 
 Notes:
 
-- `kra ws create` uses the default workspace template unless you pass `--template`; the baseline template starts with `notes/` and `artifacts/`.
+- `kra ws create` uses the default workspace template unless you pass `--template`; the baseline template starts with `notes/`, `artifacts/`, `tasks.md`, and `.cmux/dock.json`.
 - Ticket/provider integrations are designed to be extensible; current implemented support includes Jira (`kra ws create --jira`, `kra ws import jira`) and GitHub import (`kra ws import github issue|review`).
 
 ## Root commands
@@ -29,6 +29,7 @@ Notes:
 - `kra init` - initialize root and context.
 - `kra context ...` - current/list/create/use/rename/rm context operations.
 - `kra root ...` - conceptual KRA_ROOT helpers (resolve/open).
+- `kra root migrate` - plan/apply safe scaffold updates for the current root and active workspaces.
 - `kra repo ...` - add/discover/remove/gc for repo pool registration.
 - `kra repo preset ...` - manage reusable repo sets for `ws add-repo`.
 - `kra template create` - create a workspace template scaffold.
@@ -55,9 +56,10 @@ Notes:
 - `kra ws remove-repo [--id <id> | --current | --select]`
 - `kra ws task [--id <id> | --current | --select]`
 - `kra ws task list [--id <id> | --current | --select]`
+- `kra ws task view [--id <id> | --current | --select | --all] [--todo-only] [--include-done] [--watch] [--refresh <duration>] [--no-color]`
 - `kra ws task add [--id <id> | --current | --select] --title "<text>"`
 - `kra ws task status [--id <id> | --current | --select] <task-id> <todo|doing|blocked|done>`
-- `kra ws task sync [--id <id> | --current | --select | --all]`
+- `kra ws task sync [--id <id> | --current | --select | --all]` (deprecated no-op)
 - `kra ws close [--id <id> | --current | --select | --multi-select]`
 - `kra ws reopen [--id <id> | --current | --select]`
 - `kra ws purge [--id <id> | --current | --select]`
@@ -66,13 +68,17 @@ Notes:
 
 ## Task and doc flows
 
-Use workspace-local tasks when you want a Markdown source of truth that can also project into `cmux` sidebar state.
+Use workspace-local tasks when you want a Markdown source of truth with a cmux Dock view.
 
 ```sh
 kra ws task add --current --title "Draft docs"
 kra ws task list --current
+kra ws task view --current --watch --refresh 2s
+kra ws task view --all --todo-only --watch --refresh 2s
 kra ws task status --current TASK-001 doing
 ```
+
+New default workspaces include a cmux Dock config at `.cmux/dock.json`. cmux reads it from the workspace root and can keep a right-sidebar `Tasks` control visible by running `kra ws task view --current --watch --refresh 2s`. `tasks.md` remains the source of truth, and `kra ws task sync` is deprecated. Existing roots/templates/workspaces are not rewritten by this default template change.
 
 Use `kra ws doc open` when you want GitHub-like Markdown viewing in `cmux` for workspace-local docs:
 
