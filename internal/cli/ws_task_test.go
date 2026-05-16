@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -313,6 +314,156 @@ func TestCLI_WSTaskView_Current_GroupsByStatus(t *testing.T) {
 		strings.Index(got, "TASK-003") > strings.Index(got, "TASK-004") ||
 		strings.Index(got, "TASK-004") > strings.Index(got, "TASK-000") {
 		t.Fatalf("tasks are not in file order: %q", got)
+	}
+}
+
+func TestCLI_WSTaskView_CMUXCurrentResolvesMappedWorkspace(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 From cmux\nstatus: todo\n")
+	seedCMUXWorkspaceMapping(t, env.Root, "WS1", "cmux-1")
+	t.Setenv("CMUX_WORKSPACE_ID", "cmux-1")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--cmux-current", "--no-color"})
+	if code != exitOK {
+		t.Fatalf("ws task view exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "TASKS  WS1") || !strings.Contains(got, "TASK-001  From cmux") {
+		t.Fatalf("stdout missing cmux current task view: %q", got)
+	}
+}
+
+func TestCLI_WSTaskView_CMUXCurrentResolvesRuntimeUUIDToMappedRef(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 From cmux uuid\nstatus: todo\n")
+	seedCMUXWorkspaceMapping(t, env.Root, "WS1", "workspace:1")
+	t.Setenv("CMUX_WORKSPACE_ID", "EA43F9F0-CB52-4C46-A52D-95D7E9884C4C")
+
+	orig := listCMUXWorkspacesForWSTaskTarget
+	listCMUXWorkspacesForWSTaskTarget = func(context.Context) ([]cmuxctl.Workspace, error) {
+		return []cmuxctl.Workspace{{
+			ID:  "EA43F9F0-CB52-4C46-A52D-95D7E9884C4C",
+			Ref: "workspace:1",
+		}}, nil
+	}
+	t.Cleanup(func() { listCMUXWorkspacesForWSTaskTarget = orig })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--cmux-current", "--no-color"})
+	if code != exitOK {
+		t.Fatalf("ws task view exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "TASKS  WS1") || !strings.Contains(got, "TASK-001  From cmux uuid") {
+		t.Fatalf("stdout missing cmux uuid task view: %q", got)
+	}
+}
+
+func TestCLI_WSTaskView_CMUXCurrentFallsBackToWorkspaceCWD(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 From cwd\nstatus: todo\n")
+	t.Setenv("CMUX_WORKSPACE_ID", "EA43F9F0-CB52-4C46-A52D-95D7E9884C4C")
+
+	origList := listCMUXWorkspacesForWSTaskTarget
+	listCMUXWorkspacesForWSTaskTarget = func(context.Context) ([]cmuxctl.Workspace, error) {
+		return nil, fmt.Errorf("cmux unavailable")
+	}
+	t.Cleanup(func() { listCMUXWorkspacesForWSTaskTarget = origList })
+	prevWD, wdErr := os.Getwd()
+	if wdErr != nil {
+		t.Fatalf("get wd: %v", wdErr)
+	}
+	if err := os.Chdir(wsPath); err != nil {
+		t.Fatalf("chdir workspace: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prevWD) })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--cmux-current", "--no-color"})
+	if code != exitOK {
+		t.Fatalf("ws task view exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "TASKS  WS1") || !strings.Contains(got, "TASK-001  From cwd") {
+		t.Fatalf("stdout missing cwd fallback task view: %q", got)
+	}
+}
+
+func TestCLI_WSTaskView_CMUXCurrentFallsBackToAllFromRootCWD(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 From root\nstatus: todo\n")
+	t.Setenv("CMUX_WORKSPACE_ID", "7399E7AC-DD20-445C-8AEA-8E0A7990492C")
+
+	origList := listCMUXWorkspacesForWSTaskTarget
+	listCMUXWorkspacesForWSTaskTarget = func(context.Context) ([]cmuxctl.Workspace, error) {
+		return nil, fmt.Errorf("cmux unavailable")
+	}
+	t.Cleanup(func() { listCMUXWorkspacesForWSTaskTarget = origList })
+	prevWD, wdErr := os.Getwd()
+	if wdErr != nil {
+		t.Fatalf("get wd: %v", wdErr)
+	}
+	if err := os.Chdir(env.Root); err != nil {
+		t.Fatalf("chdir root: %v", err)
+	}
+	t.Cleanup(func() { _ = os.Chdir(prevWD) })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--cmux-current", "--no-color"})
+	if code != exitOK {
+		t.Fatalf("ws task view exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "TASKS  KRA_ROOT") || !strings.Contains(got, "WS1  WS1") || !strings.Contains(got, "TASK-001  From root") {
+		t.Fatalf("stdout missing root all fallback task view: %q", got)
+	}
+}
+
+func TestCLI_WSTaskView_CMUXCurrentRootMappingUsesAll(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 From root mapping\nstatus: todo\n")
+	seedCMUXWorkspaceMapping(t, env.Root, rootCMUXMappingID, "workspace:root")
+	t.Setenv("CMUX_WORKSPACE_ID", "workspace:root")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "view", "--cmux-current", "--no-color"})
+	if code != exitOK {
+		t.Fatalf("ws task view exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	got := out.String()
+	if !strings.Contains(got, "TASKS  KRA_ROOT") || !strings.Contains(got, "TASK-001  From root mapping") {
+		t.Fatalf("stdout missing root mapping task view: %q", got)
+	}
+}
+
+func TestParseWSTaskTUIOptions_CMUXCurrent(t *testing.T) {
+	opts, err := parseWSTaskTUIOptions([]string{"--cmux-current", "--refresh", "2s"})
+	if err != nil {
+		t.Fatalf("parseWSTaskTUIOptions() error: %v", err)
+	}
+	if !opts.target.useCMUXCurrent || opts.target.useCurrent || opts.target.useAll || opts.target.useSelect {
+		t.Fatalf("unexpected target opts: %+v", opts.target)
 	}
 }
 

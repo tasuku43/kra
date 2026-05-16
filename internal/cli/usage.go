@@ -352,7 +352,7 @@ Show operational dashboard for workspaces.
 
 func (c *CLI) printWSTaskUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws task [--id <workspace-id> | --current | --select]
+  kra ws task [--id <workspace-id> | --current | --cmux-current | --select]
   kra ws task <subcommand> [args]
 
 Subcommands:
@@ -377,7 +377,7 @@ List structured workspace-local tasks.
 
 func (c *CLI) printWSTaskTUIUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws task tui [--id <workspace-id> | --current | --select | --all] [--todo-only] [--include-done] [--refresh <duration>] [--no-color]
+  kra ws task tui [--id <workspace-id> | --current | --cmux-current | --select | --all] [--todo-only] [--include-done] [--refresh <duration>] [--no-color]
 
 Open an interactive terminal-friendly task view.
 `)
