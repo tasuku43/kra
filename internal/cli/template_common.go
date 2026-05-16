@@ -32,7 +32,7 @@ type cmuxDockControl struct {
 	ID      string `json:"id"`
 	Title   string `json:"title"`
 	Command string `json:"command"`
-	Cwd     string `json:"cwd"`
+	Cwd     string `json:"cwd,omitempty"`
 	Height  int    `json:"height"`
 }
 

@@ -508,7 +508,7 @@ func (m *wsTaskTUIModel) reload(message string) {
 }
 
 func buildWSTaskTUIModel(root string, target wsTaskTarget, opts wsTaskTUIOptions, service *wstask.Service) (wstask.ViewModel, error) {
-	if opts.target.useAll {
+	if opts.target.useAll || target.scope == wsTaskTargetScopeAll {
 		rows, err := listRowsFromFilesystem(context.Background(), root, "active", false)
 		if err != nil {
 			return wstask.ViewModel{}, err
@@ -705,6 +705,9 @@ func parseWSTaskTUIOptions(args []string) (wsTaskTUIOptions, error) {
 		case arg == "--current":
 			opts.target.useCurrent = true
 			rest = rest[1:]
+		case arg == "--cmux-current":
+			opts.target.useCMUXCurrent = true
+			rest = rest[1:]
 		case arg == "--select":
 			opts.target.useSelect = true
 			rest = rest[1:]
@@ -752,6 +755,12 @@ func parseWSTaskTUIOptions(args []string) (wsTaskTUIOptions, error) {
 			}
 			opts.target.useCurrent = true
 			rest = rest[1:]
+		case strings.HasPrefix(arg, "--cmux-current="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--cmux-current=")) != "" {
+				return wsTaskTUIOptions{}, fmt.Errorf("--cmux-current does not take a value")
+			}
+			opts.target.useCMUXCurrent = true
+			rest = rest[1:]
 		case strings.HasPrefix(arg, "--select="):
 			if strings.TrimSpace(strings.TrimPrefix(arg, "--select=")) != "" {
 				return wsTaskTUIOptions{}, fmt.Errorf("--select does not take a value")
@@ -795,6 +804,9 @@ func parseWSTaskTUIOptions(args []string) (wsTaskTUIOptions, error) {
 		}
 		if opts.target.useCurrent {
 			return wsTaskTUIOptions{}, fmt.Errorf("--current and --all cannot be used together")
+		}
+		if opts.target.useCMUXCurrent {
+			return wsTaskTUIOptions{}, fmt.Errorf("--cmux-current and --all cannot be used together")
 		}
 		if opts.target.useSelect {
 			return wsTaskTUIOptions{}, fmt.Errorf("--select and --all cannot be used together")

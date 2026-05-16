@@ -8,12 +8,15 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sort"
 	"strings"
 	"time"
 
 	appws "github.com/tasuku43/kra/internal/app/ws"
 	"github.com/tasuku43/kra/internal/app/wstask"
+	"github.com/tasuku43/kra/internal/cmuxmap"
+	"github.com/tasuku43/kra/internal/infra/cmuxctl"
 	"github.com/tasuku43/kra/internal/infra/paths"
 )
 
@@ -25,11 +28,16 @@ var promptWSTaskStatusSelection = func(c *CLI, title string, candidates []worksp
 	return c.promptWorkspaceSelectorWithOptionsAndMode("active", "status", title, "status", candidates, true)
 }
 
+var listCMUXWorkspacesForWSTaskTarget = func(ctx context.Context) ([]cmuxctl.Workspace, error) {
+	return cmuxctl.NewClient().ListWorkspaces(ctx)
+}
+
 type wsTaskTargetOptions struct {
-	workspaceID string
-	useCurrent  bool
-	useSelect   bool
-	useAll      bool
+	workspaceID    string
+	useCurrent     bool
+	useCMUXCurrent bool
+	useSelect      bool
+	useAll         bool
 }
 
 type wsTaskTarget struct {
@@ -85,6 +93,7 @@ type wsTaskStatusExecution struct {
 }
 
 const deprecatedWSTaskSyncWarning = "task sync is deprecated; use kra ws task tui or cmux Dock instead"
+const wsTaskTargetScopeAll = "all"
 
 func (c *CLI) runWSTask(args []string) int {
 	if len(args) == 0 {
@@ -214,7 +223,7 @@ func (c *CLI) renderWSTaskViewFrame(out io.Writer, root string, target wsTaskTar
 }
 
 func (c *CLI) buildWSTaskViewModel(root string, target wsTaskTarget, opts wsTaskViewOptions) (wstask.ViewModel, error) {
-	if opts.target.useAll {
+	if opts.target.useAll || target.scope == wsTaskTargetScopeAll {
 		rows, err := listRowsFromFilesystem(context.Background(), root, "active", false)
 		if err != nil {
 			return wstask.ViewModel{}, err
@@ -566,6 +575,9 @@ func parseWSTaskLauncherOptions(args []string) (wsTaskLauncherOptions, error) {
 		case arg == "--current":
 			opts.target.useCurrent = true
 			rest = rest[1:]
+		case arg == "--cmux-current":
+			opts.target.useCMUXCurrent = true
+			rest = rest[1:]
 		case arg == "--select":
 			opts.target.useSelect = true
 			rest = rest[1:]
@@ -616,6 +628,9 @@ func parseWSTaskListOptions(args []string) (wsTaskListOptions, error) {
 			return wsTaskListOptions{}, errHelpRequested
 		case arg == "--current":
 			opts.target.useCurrent = true
+			rest = rest[1:]
+		case arg == "--cmux-current":
+			opts.target.useCMUXCurrent = true
 			rest = rest[1:]
 		case arg == "--select":
 			opts.target.useSelect = true
@@ -682,6 +697,9 @@ func parseWSTaskViewOptions(args []string) (wsTaskViewOptions, error) {
 		case arg == "--current":
 			opts.target.useCurrent = true
 			rest = rest[1:]
+		case arg == "--cmux-current":
+			opts.target.useCMUXCurrent = true
+			rest = rest[1:]
 		case arg == "--select":
 			opts.target.useSelect = true
 			rest = rest[1:]
@@ -732,6 +750,12 @@ func parseWSTaskViewOptions(args []string) (wsTaskViewOptions, error) {
 			}
 			opts.target.useCurrent = true
 			rest = rest[1:]
+		case strings.HasPrefix(arg, "--cmux-current="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--cmux-current=")) != "" {
+				return wsTaskViewOptions{}, fmt.Errorf("--cmux-current does not take a value")
+			}
+			opts.target.useCMUXCurrent = true
+			rest = rest[1:]
 		case strings.HasPrefix(arg, "--select="):
 			if strings.TrimSpace(strings.TrimPrefix(arg, "--select=")) != "" {
 				return wsTaskViewOptions{}, fmt.Errorf("--select does not take a value")
@@ -781,6 +805,9 @@ func parseWSTaskViewOptions(args []string) (wsTaskViewOptions, error) {
 		}
 		if opts.target.useCurrent {
 			return wsTaskViewOptions{}, fmt.Errorf("--current and --all cannot be used together")
+		}
+		if opts.target.useCMUXCurrent {
+			return wsTaskViewOptions{}, fmt.Errorf("--cmux-current and --all cannot be used together")
 		}
 		if opts.target.useSelect {
 			return wsTaskViewOptions{}, fmt.Errorf("--select and --all cannot be used together")
@@ -1056,20 +1083,32 @@ func validateWSTaskTargetOptions(opts wsTaskTargetOptions) error {
 	if opts.workspaceID != "" && opts.useCurrent {
 		return fmt.Errorf("--id and --current cannot be used together")
 	}
+	if opts.workspaceID != "" && opts.useCMUXCurrent {
+		return fmt.Errorf("--id and --cmux-current cannot be used together")
+	}
 	if opts.workspaceID != "" && opts.useSelect {
 		return fmt.Errorf("--id and --select cannot be used together")
 	}
 	if opts.useCurrent && opts.useAll {
 		return fmt.Errorf("--current and --all cannot be used together")
 	}
+	if opts.useCMUXCurrent && opts.useAll {
+		return fmt.Errorf("--cmux-current and --all cannot be used together")
+	}
 	if opts.useCurrent && opts.useSelect {
 		return fmt.Errorf("--current and --select cannot be used together")
+	}
+	if opts.useCMUXCurrent && opts.useCurrent {
+		return fmt.Errorf("--cmux-current and --current cannot be used together")
+	}
+	if opts.useCMUXCurrent && opts.useSelect {
+		return fmt.Errorf("--cmux-current and --select cannot be used together")
 	}
 	if opts.useSelect && opts.useAll {
 		return fmt.Errorf("--select and --all cannot be used together")
 	}
-	if opts.workspaceID == "" && !opts.useCurrent && !opts.useSelect {
-		return fmt.Errorf("one of --id <id>, --current, or --select is required")
+	if opts.workspaceID == "" && !opts.useCurrent && !opts.useCMUXCurrent && !opts.useSelect {
+		return fmt.Errorf("one of --id <id>, --current, --cmux-current, or --select is required")
 	}
 	if opts.workspaceID != "" {
 		if err := validateWorkspaceID(opts.workspaceID); err != nil {
@@ -1104,6 +1143,12 @@ func (c *CLI) resolveWSTaskTarget(
 		}
 		target.workspaceID = resolved.ID
 		target.scope = resolved.Status
+	case opts.useCMUXCurrent:
+		resolved, err := resolveWSTaskTargetFromCMUXCurrent(root)
+		if err != nil {
+			return wsTaskTarget{}, "", "", c.writeWSTaskRuntimeError(format, "ws.task."+action, "", err)
+		}
+		target = resolved
 	case opts.useSelect:
 		selected, err := c.selectWorkspaceByScope(root, selectScope, action)
 		if err != nil {
@@ -1127,6 +1172,84 @@ func (c *CLI) resolveWSTaskTarget(
 		return wsTaskTarget{}, "", "", c.writeWSTaskRuntimeError(format, "ws.task."+action, target.workspaceID, fmt.Errorf("%w: %s", wstask.ErrWorkspaceArchived, target.workspaceID))
 	}
 	return target, root, wd, exitOK
+}
+
+func resolveWSTaskTargetFromCMUXCurrent(root string) (wsTaskTarget, error) {
+	cmuxWorkspaceID := strings.TrimSpace(os.Getenv("CMUX_WORKSPACE_ID"))
+	if cmuxWorkspaceID == "" {
+		return wsTaskTarget{}, fmt.Errorf("ws task --cmux-current requires CMUX_WORKSPACE_ID")
+	}
+	mapping, err := cmuxmap.NewStore(root).Load()
+	if err != nil {
+		return wsTaskTarget{}, fmt.Errorf("load cmux mapping: %w", err)
+	}
+	candidates := map[string]struct{}{cmuxWorkspaceID: {}}
+	for _, workspace := range resolveCMUXWorkspaceHandleAliases(context.Background(), cmuxWorkspaceID) {
+		candidates[workspace] = struct{}{}
+	}
+	for workspaceID, workspaceMapping := range mapping.Workspaces {
+		for _, entry := range workspaceMapping.Entries {
+			if _, ok := candidates[strings.TrimSpace(entry.CMUXWorkspaceID)]; !ok {
+				continue
+			}
+			if workspaceID == rootCMUXMappingID {
+				return wsTaskTarget{scope: wsTaskTargetScopeAll}, nil
+			}
+			scope, ok, err := lookupWorkspaceStatusByID(context.Background(), root, workspaceID)
+			if err != nil {
+				return wsTaskTarget{}, err
+			}
+			if !ok {
+				return wsTaskTarget{}, fmt.Errorf("%w: %s", wstask.ErrWorkspaceNotFound, workspaceID)
+			}
+			return wsTaskTarget{workspaceID: workspaceID, scope: scope}, nil
+		}
+	}
+	if wd, err := os.Getwd(); err == nil {
+		if resolved, ok := detectWorkspaceFromCWD(root, wd); ok {
+			return wsTaskTarget{workspaceID: resolved.ID, scope: resolved.Status}, nil
+		}
+		if samePath(root, wd) {
+			return wsTaskTarget{scope: wsTaskTargetScopeAll}, nil
+		}
+	}
+	return wsTaskTarget{}, fmt.Errorf("no kra workspace mapping found for CMUX_WORKSPACE_ID: %s", cmuxWorkspaceID)
+}
+
+func samePath(a string, b string) bool {
+	a = filepath.Clean(a)
+	b = filepath.Clean(b)
+	resolvedA, errA := filepath.EvalSymlinks(a)
+	resolvedB, errB := filepath.EvalSymlinks(b)
+	if errA == nil && errB == nil {
+		a = filepath.Clean(resolvedA)
+		b = filepath.Clean(resolvedB)
+	}
+	return a == b
+}
+
+func resolveCMUXWorkspaceHandleAliases(ctx context.Context, handle string) []string {
+	handle = strings.TrimSpace(handle)
+	if handle == "" {
+		return nil
+	}
+	workspaces, err := listCMUXWorkspacesForWSTaskTarget(ctx)
+	if err != nil {
+		return nil
+	}
+	out := make([]string, 0, 2)
+	for _, workspace := range workspaces {
+		if strings.TrimSpace(workspace.ID) != handle && strings.TrimSpace(workspace.Ref) != handle {
+			continue
+		}
+		if id := strings.TrimSpace(workspace.ID); id != "" {
+			out = append(out, id)
+		}
+		if ref := strings.TrimSpace(workspace.Ref); ref != "" {
+			out = append(out, ref)
+		}
+	}
+	return out
 }
 
 func (c *CLI) selectWorkspaceByScope(root string, scope string, action string) (wsTaskTarget, error) {

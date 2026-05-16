@@ -24,6 +24,12 @@ func detectWorkspaceFromCWD(root string, cwd string) (workspaceContextSelection,
 	}
 	cleanRoot := filepath.Clean(root)
 	cleanCWD := filepath.Clean(cwd)
+	resolvedRoot, rootErr := filepath.EvalSymlinks(cleanRoot)
+	resolvedCWD, cwdErr := filepath.EvalSymlinks(cleanCWD)
+	if rootErr == nil && cwdErr == nil {
+		cleanRoot = filepath.Clean(resolvedRoot)
+		cleanCWD = filepath.Clean(resolvedCWD)
+	}
 
 	try := func(base string, status string) (workspaceContextSelection, bool) {
 		rel, err := filepath.Rel(base, cleanCWD)

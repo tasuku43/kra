@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"os"
 	"path/filepath"
 	"testing"
 )
@@ -30,5 +31,26 @@ func TestDetectWorkspaceFromCWD(t *testing.T) {
 	_, ok = detectWorkspaceFromCWD(root, outsidePath)
 	if ok {
 		t.Fatalf("outside path unexpectedly detected as workspace")
+	}
+}
+
+func TestDetectWorkspaceFromCWD_ResolvesSymlinkedRootAndCWD(t *testing.T) {
+	realBase := t.TempDir()
+	realRoot := filepath.Join(realBase, "root")
+	if err := os.MkdirAll(filepath.Join(realRoot, "workspaces", "WS-123", "notes"), 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	linkBase := t.TempDir()
+	linkRoot := filepath.Join(linkBase, "root-link")
+	if err := os.Symlink(realRoot, linkRoot); err != nil {
+		t.Fatalf("symlink root: %v", err)
+	}
+
+	got, ok := detectWorkspaceFromCWD(linkRoot, filepath.Join(realRoot, "workspaces", "WS-123", "notes"))
+	if !ok {
+		t.Fatalf("detect active workspace through symlinked root: not found")
+	}
+	if got.ID != "WS-123" || got.Status != "active" {
+		t.Fatalf("active detect = %+v, want id=WS-123 status=active", got)
 	}
 }
