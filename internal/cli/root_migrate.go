@@ -332,7 +332,31 @@ func isManagedKraTasksDockCommand(command string) bool {
 	if trimmed == defaultRootCMUXDockBaseCommand {
 		return true
 	}
+	if trimmed == "kra ws task tui --current" {
+		return true
+	}
+	if trimmed == "kra ws task tui --all --todo-only" {
+		return true
+	}
+	if trimmed == "kra ws task view --current --watch --refresh 2s" {
+		return true
+	}
+	if trimmed == "kra ws task view --all --todo-only --watch --refresh 2s" {
+		return true
+	}
 	if trimmed == "while true; do clear; kra ws task list --current; sleep 2; done" {
+		return true
+	}
+	if strings.HasSuffix(trimmed, "; kra ws task view --current --watch --refresh 2s") {
+		return true
+	}
+	if strings.HasSuffix(trimmed, "; kra ws task view --all --todo-only --watch --refresh 2s") {
+		return true
+	}
+	if strings.HasSuffix(trimmed, "; kra ws task tui --current") {
+		return true
+	}
+	if strings.HasSuffix(trimmed, "; kra ws task tui --all --todo-only") {
 		return true
 	}
 	return strings.HasSuffix(trimmed, "; "+defaultWorkspaceCMUXDockBaseCommand) ||

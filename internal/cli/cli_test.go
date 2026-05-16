@@ -422,7 +422,7 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if statErr != nil {
 		t.Fatalf("root .cmux/dock.json not created: %v", statErr)
 	}
-	assertDockJSONCommandContains(t, rootDockBytes, "kra ws task view --all --todo-only --watch --refresh 2s")
+	assertDockJSONCommandContains(t, rootDockBytes, "kra ws task tui --all --todo-only --refresh 2s")
 	dockPath := filepath.Join(root, "templates", "default", ".cmux", "dock.json")
 	dockBytes, statErr := os.ReadFile(dockPath)
 	if statErr != nil {
@@ -527,7 +527,7 @@ func TestCLI_Init_DoesNotOverwriteExistingDefaultTemplate(t *testing.T) {
 
 func assertDefaultDockJSON(t *testing.T, b []byte) {
 	t.Helper()
-	assertDockJSONCommandContains(t, b, "kra ws task view --current --watch --refresh 2s")
+	assertDockJSONCommandContains(t, b, "kra ws task tui --current --refresh 2s")
 }
 
 func assertDockJSONCommandContains(t *testing.T, b []byte, commandPart string) {
@@ -552,7 +552,7 @@ func assertDockJSONCommandContains(t *testing.T, b []byte, commandPart string) {
 		t.Fatalf("dock.json controls[0].id = %q, want %q", ctrl.ID, "kra-tasks")
 	}
 	if !strings.Contains(ctrl.Command, commandPart) {
-		t.Fatalf("dock.json command missing task view: %q", ctrl.Command)
+		t.Fatalf("dock.json command missing task tui: %q", ctrl.Command)
 	}
 	if ctrl.Cwd != "." {
 		t.Fatalf("dock.json cwd = %q, want %q", ctrl.Cwd, ".")

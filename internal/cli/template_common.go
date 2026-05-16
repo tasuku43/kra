@@ -21,8 +21,8 @@ const defaultWorkspaceTasksContent = `# Workspace Tasks
 ## Tasks
 `
 
-const defaultWorkspaceCMUXDockBaseCommand = "kra ws task view --current --watch --refresh 2s"
-const defaultRootCMUXDockBaseCommand = "kra ws task view --all --todo-only --watch --refresh 2s"
+const defaultWorkspaceCMUXDockBaseCommand = "kra ws task tui --current --refresh 2s"
+const defaultRootCMUXDockBaseCommand = "kra ws task tui --all --todo-only --refresh 2s"
 
 type cmuxDockConfig struct {
 	Controls []cmuxDockControl `json:"controls"`

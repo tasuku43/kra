@@ -180,7 +180,7 @@ func TestCLI_RootMigrate_ApplyWritesDefaultTemplateAndActiveWorkspaces(t *testin
 	if readErr != nil {
 		t.Fatalf("read root dock: %v", readErr)
 	}
-	assertDockJSONCommandContains(t, rootDock, "kra ws task view --all --todo-only --watch --refresh 2s")
+	assertDockJSONCommandContains(t, rootDock, "kra ws task tui --all --todo-only --refresh 2s")
 	if _, statErr := os.Stat(filepath.Join(root, "archive", "OLD1", ".cmux", "dock.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("archived workspace should not be migrated by default, stat err=%v", statErr)
 	}
@@ -247,7 +247,7 @@ func TestCLI_RootMigrate_ApplyUsesDetectedShellInitForManagedDockCommand(t *test
     {
       "id": "kra-tasks",
       "title": "Tasks",
-      "command": "kra ws task view --current --watch --refresh 2s",
+      "command": "kra ws task tui --current --refresh 2s",
       "cwd": ".",
       "height": 420
     }
@@ -276,7 +276,7 @@ func TestCLI_RootMigrate_ApplyUsesDetectedShellInitForManagedDockCommand(t *test
 	if len(dock.Controls) != 1 {
 		t.Fatalf("controls len = %d, want 1", len(dock.Controls))
 	}
-	want := "source ~/.zshrc; kra ws task view --current --watch --refresh 2s"
+	want := "source ~/.zshrc; kra ws task tui --current --refresh 2s"
 	if dock.Controls[0].Command != want {
 		t.Fatalf("dock command = %q, want %q", dock.Controls[0].Command, want)
 	}

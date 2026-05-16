@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/tasuku43/kra/internal/app/wstask"
 	"github.com/tasuku43/kra/internal/cmuxmap"
 	"github.com/tasuku43/kra/internal/infra/appports"
@@ -454,6 +455,88 @@ func TestPrintWSTaskView_NoColor(t *testing.T) {
 	}, time.Date(2026, 5, 16, 18, 42, 10, 0, time.Local), false)
 	if got := out.String(); strings.Contains(got, "\x1b[") {
 		t.Fatalf("no-color renderer emitted ANSI: %q", got)
+	}
+}
+
+func TestWSTaskTUI_ToggleRowUpdatesTasksFile(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
+	editing, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
+	m = editing.(wsTaskTUIModel)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	next, ok := updated.(wsTaskTUIModel)
+	if !ok {
+		t.Fatalf("updated model = %T, want wsTaskTUIModel", updated)
+	}
+	if next.rows[0].Item.Status != wstask.StatusDone {
+		t.Fatalf("task status = %s, want done", next.rows[0].Item.Status)
+	}
+	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	if readErr != nil {
+		t.Fatalf("read tasks.md: %v", readErr)
+	}
+	if !bytes.Contains(content, []byte("status: done")) {
+		t.Fatalf("tasks.md should be updated to done: %q", string(content))
+	}
+}
+
+func TestWSTaskTUI_ReadModeDoesNotUpdateTasksFile(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeySpace})
+	next, ok := updated.(wsTaskTUIModel)
+	if !ok {
+		t.Fatalf("updated model = %T, want wsTaskTUIModel", updated)
+	}
+	if next.rows[0].Item.Status != wstask.StatusTodo {
+		t.Fatalf("task status = %s, want todo", next.rows[0].Item.Status)
+	}
+	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	if readErr != nil {
+		t.Fatalf("read tasks.md: %v", readErr)
+	}
+	if !bytes.Contains(content, []byte("status: todo")) || bytes.Contains(content, []byte("status: done")) {
+		t.Fatalf("tasks.md should remain todo in read mode: %q", string(content))
+	}
+	if !strings.Contains(next.message, "press i") {
+		t.Fatalf("message = %q, want edit hint", next.message)
+	}
+}
+
+func TestWSTaskTUI_MouseClickUpdatesWorkspaceTaskInAllMode(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{}, wsTaskTUIOptions{target: wsTaskTargetOptions{useAll: true}}, false)
+	if len(m.rows) != 1 {
+		t.Fatalf("rows = %+v, want one task row", m.rows)
+	}
+	editing, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
+	m = editing.(wsTaskTUIModel)
+	updated, _ := m.Update(tea.MouseMsg{Type: tea.MouseLeft, X: 4, Y: m.rows[0].Y})
+	next, ok := updated.(wsTaskTUIModel)
+	if !ok {
+		t.Fatalf("updated model = %T, want wsTaskTUIModel", updated)
+	}
+	if next.rows[0].Item.Status != wstask.StatusDone {
+		t.Fatalf("task status = %s, want done", next.rows[0].Item.Status)
+	}
+	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	if readErr != nil {
+		t.Fatalf("read tasks.md: %v", readErr)
+	}
+	if !bytes.Contains(content, []byte("status: done")) {
+		t.Fatalf("tasks.md should be updated to done: %q", string(content))
 	}
 }
 

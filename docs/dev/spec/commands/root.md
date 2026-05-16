@@ -36,14 +36,14 @@ Provide root-level helpers around the conceptual `KRA_ROOT`.
   - do not overwrite existing files
   - do not write under `workspaces/<id>/repos/`
   - do not commit automatically
-  - Dock command generation may prefix the task view command with a detected shell init file so `kra`
+  - Dock command generation may prefix the task tui command with a detected shell init file so `kra`
     is available in cmux Dock execution:
-    - zsh: `source ~/.zshrc; kra ws task view --current --watch --refresh 2s`
+    - zsh: `source ~/.zshrc; kra ws task tui --current --refresh 2s`
     - bash: source the first existing file from `~/.bashrc`, `~/.bash_profile`, `~/.profile`
     - fish: `source ~/.config/fish/config.fish`
   - only managed `kra-tasks` Dock controls are updated; custom commands are left unchanged
-  - root Dock command is `kra ws task view --all --todo-only --watch --refresh 2s`
-  - workspace Dock command is `kra ws task view --current --watch --refresh 2s`
+  - root Dock command is `kra ws task tui --all --todo-only --refresh 2s`
+  - workspace Dock command is `kra ws task tui --current --refresh 2s`
 
 ## Error handling
 

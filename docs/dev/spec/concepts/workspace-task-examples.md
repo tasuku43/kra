@@ -66,7 +66,7 @@ When an AI agent edits `tasks.md` directly:
 - preserve non-target task blocks unless intentionally changing them
 - keep one required `status:` line per structured task
 - write new tasks as new `### TASK-<nnn> <title>` blocks
-- inspect direct edits with `kra ws task view` or the cmux Dock
+- inspect direct edits with `kra ws task tui` or the cmux Dock
 
 ## Invalid examples
 
