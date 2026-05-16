@@ -458,6 +458,83 @@ func TestPrintWSTaskView_NoColor(t *testing.T) {
 	}
 }
 
+func TestWSTaskTUI_RendersProgressSummaryAndBlockedEmphasis(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: done\n\n### TASK-002 Second\nstatus: blocked\n\n### TASK-003 Third\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
+	got := m.View()
+	for _, want := range []string{
+		"Progress  1/3",
+		"33%",
+		"Todo 1",
+		"Doing 0",
+		"Blocked 1",
+		"Done 1",
+		"source: " + filepath.Join(wsPath, "tasks.md"),
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("view missing %q: %q", want, got)
+		}
+	}
+}
+
+func TestWSTaskTUI_AllRendersWorkspaceProgressAndBlockedBadge(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: done\n\n### TASK-002 Second\nstatus: blocked\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{}, wsTaskTUIOptions{target: wsTaskTargetOptions{useAll: true}, includeDone: true}, false)
+	got := m.View()
+	for _, want := range []string{
+		"Progress  1/2",
+		"50%",
+		"WS1  WS1\nProgress  1/2",
+		"Blocked 1",
+	} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("view missing %q: %q", want, got)
+		}
+	}
+}
+
+func TestWSTaskTUI_DoneToggleHidesAndShowsDoneRows(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 Finished\nstatus: done\n\n### TASK-002 Next\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
+	if got := m.View(); !strings.Contains(got, "TASK-001") || !strings.Contains(got, "Progress  1/2") {
+		t.Fatalf("initial view should show done row and full progress: %q", got)
+	}
+	updated, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	m = updated.(wsTaskTUIModel)
+	if got := m.View(); strings.Contains(got, "TASK-001") || !strings.Contains(got, "TASK-002") || !strings.Contains(got, "Progress  1/2") {
+		t.Fatalf("hidden-done view should hide done row but keep full progress: %q", got)
+	}
+	updated, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("h")})
+	m = updated.(wsTaskTUIModel)
+	if got := m.View(); !strings.Contains(got, "TASK-001") || !strings.Contains(got, "done shown") {
+		t.Fatalf("shown-done view should restore done row: %q", got)
+	}
+}
+
+func TestWSTaskTUI_TodoOnlyStartsWithDoneRowsHidden(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 Finished\nstatus: done\n\n### TASK-002 Next\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{todoOnly: true}, false)
+	if got := m.View(); strings.Contains(got, "TASK-001") || !strings.Contains(got, "TASK-002") || !strings.Contains(got, "Progress  1/2") {
+		t.Fatalf("todo-only TUI should hide done rows but keep full progress: %q", got)
+	}
+}
+
 func TestWSTaskTUI_ToggleRowUpdatesTasksFile(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
@@ -526,7 +603,7 @@ func TestWSTaskTUI_MouseWheelScrollsAndClickUsesVisibleRow(t *testing.T) {
 	if m.scroll == 0 {
 		t.Fatalf("scroll = %d, want non-zero after wheel down", m.scroll)
 	}
-	updated, _ := m.Update(tea.MouseMsg{Type: tea.MouseLeft, X: 2, Y: 2})
+	updated, _ := m.Update(tea.MouseMsg{Type: tea.MouseLeft, X: 2, Y: wsTaskTUIContentTopY})
 	next := updated.(wsTaskTUIModel)
 	if next.rows[0].Item.Status != wstask.StatusTodo {
 		t.Fatalf("first visible-unrelated task status = %s, want todo", next.rows[0].Item.Status)
@@ -536,7 +613,36 @@ func TestWSTaskTUI_MouseWheelScrollsAndClickUsesVisibleRow(t *testing.T) {
 		t.Fatalf("read tasks.md: %v", readErr)
 	}
 	if !bytes.Contains(content, []byte("### TASK-004 Fourth\nstatus: done")) {
-		t.Fatalf("expected scrolled click to update TASK-004, got %q", string(content))
+		t.Fatalf("expected scrolled click to update first visible task, got %q", string(content))
+	}
+}
+
+func TestWSTaskTUI_MouseClickUsesRenderedTaskRow(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: todo\n\n### TASK-002 Second\nstatus: todo\n\n### TASK-003 Third\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
+	editing, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
+	m = editing.(wsTaskTUIModel)
+	updated, _ := m.Update(tea.MouseMsg{Type: tea.MouseLeft, X: 2, Y: m.rows[1].Y})
+	next := updated.(wsTaskTUIModel)
+	if next.rows[1].Item.Status != wstask.StatusDone {
+		t.Fatalf("clicked task status = %s, want done", next.rows[1].Item.Status)
+	}
+	if next.rows[2].Item.Status != wstask.StatusTodo {
+		t.Fatalf("next task status = %s, want todo", next.rows[2].Item.Status)
+	}
+	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	if readErr != nil {
+		t.Fatalf("read tasks.md: %v", readErr)
+	}
+	if !bytes.Contains(content, []byte("### TASK-002 Second\nstatus: done")) {
+		t.Fatalf("expected click to update TASK-002, got %q", string(content))
+	}
+	if bytes.Contains(content, []byte("### TASK-003 Third\nstatus: done")) {
+		t.Fatalf("click updated the row below: %q", string(content))
 	}
 }
 
