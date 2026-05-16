@@ -358,10 +358,10 @@ func (c *CLI) printWSTaskUsage(w io.Writer) {
 Subcommands:
   (no subcommand)   Launch task status picker for one workspace
   list|ls          List structured workspace tasks
-  view             Render terminal-friendly task view
+  tui              Open interactive terminal task view
   add              Add one structured task
   status           Set one task status explicitly
-  sync             Deprecated no-op; use task view / cmux Dock
+  sync             Deprecated no-op; use task tui / cmux Dock
   help             Show this help
 `)
 }
@@ -375,12 +375,16 @@ List structured workspace-local tasks.
 `)
 }
 
-func (c *CLI) printWSTaskViewUsage(w io.Writer) {
+func (c *CLI) printWSTaskTUIUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws task view [--id <workspace-id> | --current | --select | --all] [--todo-only] [--include-done] [--watch] [--refresh <duration>] [--no-color]
+  kra ws task tui [--id <workspace-id> | --current | --select | --all] [--todo-only] [--include-done] [--refresh <duration>] [--no-color]
 
-Render a read-only terminal-friendly view of workspace-local tasks.
+Open an interactive terminal-friendly task view.
 `)
+}
+
+func (c *CLI) printWSTaskViewUsage(w io.Writer) {
+	c.printWSTaskTUIUsage(w)
 }
 
 func (c *CLI) printWSTaskAddUsage(w io.Writer) {
@@ -403,7 +407,7 @@ func (c *CLI) printWSTaskSyncUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws task sync [--id <workspace-id>] [--current] [--select | --all] [--format human|json]
 
-Deprecated no-op kept for compatibility. Use kra ws task view or cmux Dock instead.
+Deprecated no-op kept for compatibility. Use kra ws task tui or cmux Dock instead.
 `)
 }
 

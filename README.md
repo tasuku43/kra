@@ -66,7 +66,7 @@ kra ws open --id TASK-1234
 
 When using `cmux`, `kra ws open` creates and opens the corresponding `cmux` workspace if it does not exist, and moves to it if it already exists.
 In single-target open, if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior; with shell integration, it can also sync parent shell `cwd`.
-New roots and default workspaces include `.cmux/dock.json`, which cmux reads to show a right-sidebar `Tasks` Dock control. Workspace Dock runs `kra ws task view --current --watch --refresh 2s`; root Dock runs `kra ws task view --all --todo-only --watch --refresh 2s` for active workspace tasks across the root. `<workspace>/tasks.md` remains the source of truth; `kra ws task sync` is deprecated and no longer updates cmux task pills.
+New roots and default workspaces include `.cmux/dock.json`, which cmux reads to show a right-sidebar `Tasks` Dock control. Workspace Dock runs `kra ws task tui --current --refresh 2s`; root Dock runs `kra ws task tui --all --todo-only --refresh 2s` for active workspace tasks across the root. `<workspace>/tasks.md` remains the source of truth; `kra ws task sync` is deprecated and no longer updates cmux task pills.
 For an existing root and active workspaces, run `kra root migrate --apply` to add missing Dock/task scaffold without overwriting custom files. The generated Dock command may source the detected shell init file, such as `source ~/.zshrc`, before running `kra`.
 
 For day-to-day operations (`repo add`, `ws add-repo`, `ws close`, `ws task`, `ws doc open`), see:
@@ -126,7 +126,7 @@ Details:
 - `docs/user/guides/REPO_WORKTREE.md`
 
 ### 4) Workspace-local task tracking
-Keep a structured `tasks.md` inside each workspace, update statuses with `kra ws task`, and view it continuously through `kra ws task view` and the default cmux Dock control.
+Keep a structured `tasks.md` inside each workspace, update statuses with `kra ws task`, and view it continuously through `kra ws task tui` and the default cmux Dock control.
 
 Example:
 

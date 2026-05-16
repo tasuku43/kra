@@ -84,7 +84,7 @@ type wsTaskStatusExecution struct {
 	Transition wstask.TransitionResult
 }
 
-const deprecatedWSTaskSyncWarning = "task sync is deprecated; use kra ws task view or cmux Dock instead"
+const deprecatedWSTaskSyncWarning = "task sync is deprecated; use kra ws task tui or cmux Dock instead"
 
 func (c *CLI) runWSTask(args []string) int {
 	if len(args) == 0 {
@@ -100,6 +100,8 @@ func (c *CLI) runWSTask(args []string) int {
 		return c.runWSTaskList(args[1:])
 	case "view":
 		return c.runWSTaskView(args[1:])
+	case "tui":
+		return c.runWSTaskTUI(args[1:])
 	case "add":
 		return c.runWSTaskAdd(args[1:])
 	case "status":

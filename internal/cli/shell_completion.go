@@ -77,7 +77,7 @@ var kraCompletionPathSubcommands = map[string][]string{
 	"ws import":        {"all", "github", "jira", "help"},
 	"ws import github": {"issue", "review", "help"},
 	"ws doc":           {"open", "help"},
-	"ws task":          {"list", "ls", "add", "status", "sync", "help"},
+	"ws task":          {"list", "ls", "tui", "add", "status", "sync", "help"},
 }
 
 var kraCompletionCommandFlagOrder = []string{
@@ -137,7 +137,7 @@ var kraCompletionPathFlagOrder = []string{
 	"ws task",
 	"ws task list",
 	"ws task ls",
-	"ws task view",
+	"ws task tui",
 	"ws task add",
 	"ws task status",
 	"ws task sync",
@@ -194,7 +194,7 @@ var kraCompletionPathFlags = map[string][]string{
 	"ws task":                 {"--id", "--current", "--select", "--help", "-h"},
 	"ws task list":            {"--id", "--current", "--select", "--format", "--help", "-h"},
 	"ws task ls":              {"--id", "--current", "--select", "--format", "--help", "-h"},
-	"ws task view":            {"--id", "--current", "--select", "--all", "--todo-only", "--include-done", "--watch", "--refresh", "--no-color", "--help", "-h"},
+	"ws task tui":             {"--id", "--current", "--select", "--all", "--todo-only", "--include-done", "--refresh", "--no-color", "--help", "-h"},
 	"ws task add":             {"--id", "--current", "--select", "--title", "--description", "--format", "--help", "-h"},
 	"ws task status":          {"--id", "--current", "--select", "--format", "--help", "-h"},
 	"ws task sync":            {"--id", "--current", "--select", "--all", "--format", "--help", "-h"},
@@ -223,6 +223,7 @@ var kraCompletionPathFlagValues = map[string]map[string][]string{
 
 var kraCompletionTargetRequiredPaths = []string{
 	"ws open",
+	"ws task tui",
 	"ws task sync",
 	"ws add-repo",
 	"ws remove-repo",

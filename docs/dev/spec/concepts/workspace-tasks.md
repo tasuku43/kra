@@ -65,11 +65,13 @@ Define one workspace-local, AI-editable structured task contract that remains sa
 
 ## View policy
 
-- cmux Dock is the supported persistent task view.
-- `kra ws task view` reads `tasks.md` and renders the current structured task state for terminal or
-  Dock use.
+- cmux Dock is the supported persistent task tui.
+- `kra ws task tui` reads `tasks.md`, renders the current structured task state for terminal or Dock
+  use, and writes status changes back to `tasks.md`.
+- `kra ws task tui` starts in read mode; users must enter write mode before clicks or keys mutate
+  task status.
 - Direct `tasks.md` edits remain valid as long as the contract is preserved; users or AI agents can
-  run `kra ws task view` afterward or rely on Dock watch refresh.
+  run `kra ws task tui` afterward or rely on Dock refresh.
 - `kra ws task sync` is deprecated and no longer updates cmux task pills.
 
 ## Task model

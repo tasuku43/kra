@@ -52,7 +52,7 @@ PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
                   └─ artifacts/
 ```
 
-## Dock task view
+## Dock task tui
 
 KRA_ROOT can also have `.cmux/dock.json`. The root Dock is useful for seeing open tasks across active workspaces:
 
@@ -62,7 +62,7 @@ KRA_ROOT can also have `.cmux/dock.json`. The root Dock is useful for seeing ope
     {
       "id": "kra-tasks",
       "title": "Tasks",
-      "command": "kra ws task view --all --todo-only --watch --refresh 2s",
+      "command": "kra ws task tui --all --todo-only --refresh 2s",
       "cwd": ".",
       "height": 420
     }
@@ -80,7 +80,7 @@ Default `.cmux/dock.json`:
     {
       "id": "kra-tasks",
       "title": "Tasks",
-      "command": "kra ws task view --current --watch --refresh 2s",
+      "command": "kra ws task tui --current --refresh 2s",
       "cwd": ".",
       "height": 420
     }
@@ -91,16 +91,16 @@ Default `.cmux/dock.json`:
 The command runs:
 
 ```sh
-kra ws task view --current --watch --refresh 2s
+kra ws task tui --current --refresh 2s
 ```
 
 When `kra` is made available by shell startup files, generated Dock configs may prefix the command with the detected shell init file. For example, zsh users may see:
 
 ```sh
-source ~/.zshrc; kra ws task view --current --watch --refresh 2s
+source ~/.zshrc; kra ws task tui --current --refresh 2s
 ```
 
-This makes the Dock a constantly visible view of `<workspace>/tasks.md`. The task source of truth remains `<workspace>/tasks.md`; `kra ws task sync` is deprecated and no longer refreshes cmux task pills. The project Dock config may trigger a cmux trust prompt the first time the workspace is opened.
+This makes the Dock a constantly visible view of `<workspace>/tasks.md`. The TUI starts in read mode; press `i` to enter write mode before clicking tasks to update `tasks.md`. The task source of truth remains `<workspace>/tasks.md`; `kra ws task sync` is deprecated and no longer refreshes cmux task pills. The project Dock config may trigger a cmux trust prompt the first time the workspace is opened.
 
 `kra init` does not overwrite an existing `templates/default/`, and template changes are not applied retroactively by init. For an existing root and active workspaces, run:
 

@@ -40,22 +40,22 @@ Allowed statuses:
 kra ws task add --current --title "Draft docs"
 kra ws task add --current --title "Review examples"
 kra ws task list --current
-kra ws task view --current
+kra ws task tui --current --refresh 2s
 kra ws task status --current TASK-001 doing
 ```
 
 `kra ws task` without a subcommand is also available as a human launcher for one active workspace.
 
-New default workspaces include `tasks.md` and `.cmux/dock.json`. The Dock control runs `kra ws task view --current --watch --refresh 2s` from the workspace root so the cmux right sidebar can keep the current task state visible. When needed, the generated command prefixes the detected shell init file such as `source ~/.zshrc`. Existing roots and active workspaces can be updated with `kra root migrate --apply`; existing custom files are not overwritten.
+New default workspaces include `tasks.md` and `.cmux/dock.json`. The Dock control runs `kra ws task tui --current --refresh 2s` from the workspace root so the cmux right sidebar can keep the current task state visible. When needed, the generated command prefixes the detected shell init file such as `source ~/.zshrc`. Existing roots and active workspaces can be updated with `kra root migrate --apply`; existing custom files are not overwritten.
 
 ## Common commands
 
 - `kra ws task list` or `kra ws task ls` lists structured tasks from `tasks.md` and works for active and archived workspaces.
-- `kra ws task view` renders a read-only terminal list in `tasks.md` order; use `--watch --refresh 2s` for a constantly refreshed Dock view.
-- `kra ws task view --all --todo-only` renders active workspace tasks across the root and hides completed tasks; add `--include-done` when you want completed tasks too.
+- `kra ws task tui` opens an interactive terminal list in `tasks.md` order. It starts in read mode; press `i` to enter write mode, then click or press Space/Enter to toggle a task done. Esc returns to read mode.
+- `kra ws task tui --all --todo-only --refresh 2s` renders active workspace tasks across the root and hides completed tasks; add `--include-done` when you want completed tasks too.
 - `kra ws task add --title "<text>"` lazily creates `tasks.md` and `## Tasks` when missing, and new tasks always start as `todo`.
 - `kra ws task status <task-id> <todo|doing|blocked|done>` updates one task status.
-- `kra ws task sync` is a deprecated no-op kept for compatibility; use `kra ws task view` and Dock.
+- `kra ws task sync` is a deprecated no-op kept for compatibility; use `kra ws task tui` and Dock.
 
 ## Reading the list
 
@@ -72,7 +72,7 @@ This keeps backlog and in-progress items visible without requiring `cmux`.
 
 You can edit `tasks.md` directly as long as the structured task contract is preserved.
 
-After direct edits, run `kra ws task view --current` or use the cmux Dock to inspect the rendered state.
+After direct edits, run `kra ws task tui --current --refresh 2s` or use the cmux Dock to inspect the rendered state.
 
 ## Scope and limits
 
