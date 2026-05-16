@@ -45,6 +45,7 @@ type wsTaskTUIModel struct {
 	model   wstask.ViewModel
 	rows    []wsTaskTUIRow
 	cursor  int
+	scroll  int
 	width   int
 	height  int
 	message string
@@ -159,6 +160,14 @@ func (m wsTaskTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		}
 		return m, wsTaskTUITick(m.opts.refresh)
 	case tea.MouseMsg:
+		switch msg.Type {
+		case tea.MouseWheelUp:
+			m.scrollBy(-3)
+			return m, nil
+		case tea.MouseWheelDown:
+			m.scrollBy(3)
+			return m, nil
+		}
 		if msg.Type == tea.MouseLeft || msg.Type == tea.MouseRelease {
 			idx := m.rowIndexAtY(msg.Y)
 			if idx < 0 {
@@ -186,11 +195,29 @@ func (m wsTaskTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			if m.cursor > 0 {
 				m.cursor--
 			}
+			m.ensureCursorVisible()
 			return m, nil
 		case tea.KeyDown:
 			if m.cursor < len(m.rows)-1 {
 				m.cursor++
 			}
+			m.ensureCursorVisible()
+			return m, nil
+		case tea.KeyPgUp:
+			m.scrollBy(-m.viewportHeight())
+			return m, nil
+		case tea.KeyPgDown:
+			m.scrollBy(m.viewportHeight())
+			return m, nil
+		case tea.KeyHome:
+			m.cursor = 0
+			m.scroll = 0
+			return m, nil
+		case tea.KeyEnd:
+			if len(m.rows) > 0 {
+				m.cursor = len(m.rows) - 1
+			}
+			m.scroll = m.maxScroll()
 			return m, nil
 		case tea.KeyEnter, tea.KeySpace:
 			if m.mode != wsTaskTUIModeWrite {
@@ -246,38 +273,52 @@ func (m wsTaskTUIModel) View() string {
 	} else if m.model.Empty {
 		fmt.Fprintf(&b, "%s\n\n", styleMuted("No structured tasks.", m.useColor))
 	} else if len(m.model.Workspaces) > 0 {
+		fullY := 2
 		for _, workspace := range m.model.Workspaces {
+			fullY++
+			var line string
 			if strings.TrimSpace(workspace.Title) == "" {
-				fmt.Fprintf(&b, "%s\n", styleAccent(workspace.ID, m.useColor))
+				line = styleAccent(workspace.ID, m.useColor)
 			} else {
-				fmt.Fprintf(&b, "%s  %s\n", styleAccent(workspace.ID, m.useColor), workspace.Title)
+				line = fmt.Sprintf("%s  %s", styleAccent(workspace.ID, m.useColor), workspace.Title)
 			}
+			m.writeVisibleLine(&b, fullY, line)
 			for _, row := range m.rows {
 				if row.WorkspaceID != workspace.ID {
 					continue
 				}
-				b.WriteString(m.renderRow(row))
-				b.WriteByte('\n')
+				m.writeVisibleLine(&b, row.Y, m.renderRow(row))
+				fullY = row.Y
 			}
-			b.WriteByte('\n')
+			fullY++
+			m.writeVisibleLine(&b, fullY, "")
 		}
 	} else {
 		for _, row := range m.rows {
-			b.WriteString(m.renderRow(row))
-			b.WriteByte('\n')
+			m.writeVisibleLine(&b, row.Y, m.renderRow(row))
 		}
-		b.WriteByte('\n')
 	}
+	b.WriteByte('\n')
 	if strings.TrimSpace(m.message) != "" {
 		fmt.Fprintf(&b, "%s\n", styleMuted(m.message, m.useColor))
 	}
 	fmt.Fprintf(&b, "%s\n", styleMuted("source: "+m.model.Path, m.useColor))
 	if m.mode == wsTaskTUIModeWrite {
-		fmt.Fprintf(&b, "%s\n", styleMuted("write: click/space toggles done  d/t/g/b set status  esc read  q quit", m.useColor))
+		fmt.Fprintf(&b, "%s\n", styleMuted("write: wheel scroll  click/space toggles done  d/t/g/b set status  esc read  q quit", m.useColor))
 	} else {
-		fmt.Fprintf(&b, "%s\n", styleMuted("read: click selects  i write  q quit", m.useColor))
+		fmt.Fprintf(&b, "%s\n", styleMuted("read: wheel scroll  click selects  i write  q quit", m.useColor))
 	}
 	return b.String()
+}
+
+func (m wsTaskTUIModel) writeVisibleLine(b *strings.Builder, fullY int, line string) {
+	start := 2 + m.scroll
+	end := start + m.viewportHeight()
+	if fullY < start || fullY >= end {
+		return
+	}
+	b.WriteString(line)
+	b.WriteByte('\n')
 }
 
 func (m wsTaskTUIModel) renderRow(row wsTaskTUIRow) string {
@@ -307,6 +348,13 @@ func (m *wsTaskTUIModel) reload(message string) {
 	if m.cursor < 0 {
 		m.cursor = 0
 	}
+	if m.scroll > m.maxScroll() {
+		m.scroll = m.maxScroll()
+	}
+	if m.scroll < 0 {
+		m.scroll = 0
+	}
+	m.ensureCursorVisible()
 	m.message = message
 }
 
@@ -386,12 +434,79 @@ func shouldSkipWSTaskTUIItem(item wstask.Item, opts wsTaskTUIOptions) bool {
 }
 
 func (m wsTaskTUIModel) rowIndexAtY(y int) int {
+	fullY := y + m.scroll
 	for i, row := range m.rows {
-		if row.Y == y {
+		if row.Y == fullY {
 			return i
 		}
 	}
 	return -1
+}
+
+func (m wsTaskTUIModel) viewportHeight() int {
+	if m.height <= 0 {
+		return 18
+	}
+	height := m.height - 6
+	if strings.TrimSpace(m.message) != "" {
+		height--
+	}
+	if height < 1 {
+		return 1
+	}
+	return height
+}
+
+func (m wsTaskTUIModel) contentBottomY() int {
+	bottom := 2
+	for _, row := range m.rows {
+		if row.Y > bottom {
+			bottom = row.Y
+		}
+	}
+	if len(m.model.Workspaces) > 0 {
+		bottom += len(m.model.Workspaces) * 2
+	}
+	return bottom
+}
+
+func (m wsTaskTUIModel) maxScroll() int {
+	maxScroll := m.contentBottomY() - 2 - m.viewportHeight() + 1
+	if maxScroll < 0 {
+		return 0
+	}
+	return maxScroll
+}
+
+func (m *wsTaskTUIModel) scrollBy(delta int) {
+	m.scroll += delta
+	if m.scroll < 0 {
+		m.scroll = 0
+	}
+	if maxScroll := m.maxScroll(); m.scroll > maxScroll {
+		m.scroll = maxScroll
+	}
+}
+
+func (m *wsTaskTUIModel) ensureCursorVisible() {
+	if len(m.rows) == 0 || m.cursor < 0 || m.cursor >= len(m.rows) {
+		return
+	}
+	rowY := m.rows[m.cursor].Y
+	top := 2 + m.scroll
+	bottom := top + m.viewportHeight() - 1
+	if rowY < top {
+		m.scroll = rowY - 2
+	}
+	if rowY > bottom {
+		m.scroll = rowY - 2 - m.viewportHeight() + 1
+	}
+	if m.scroll < 0 {
+		m.scroll = 0
+	}
+	if maxScroll := m.maxScroll(); m.scroll > maxScroll {
+		m.scroll = maxScroll
+	}
 }
 
 func (m wsTaskTUIModel) toggleRow(idx int) (tea.Model, tea.Cmd) {

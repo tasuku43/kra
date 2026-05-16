@@ -511,6 +511,35 @@ func TestWSTaskTUI_ReadModeDoesNotUpdateTasksFile(t *testing.T) {
 	}
 }
 
+func TestWSTaskTUI_MouseWheelScrollsAndClickUsesVisibleRow(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: todo\n\n### TASK-002 Second\nstatus: todo\n\n### TASK-003 Third\nstatus: todo\n\n### TASK-004 Fourth\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
+	m.height = 8
+	editing, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
+	m = editing.(wsTaskTUIModel)
+	scrolled, _ := m.Update(tea.MouseMsg{Type: tea.MouseWheelDown})
+	m = scrolled.(wsTaskTUIModel)
+	if m.scroll == 0 {
+		t.Fatalf("scroll = %d, want non-zero after wheel down", m.scroll)
+	}
+	updated, _ := m.Update(tea.MouseMsg{Type: tea.MouseLeft, X: 2, Y: 2})
+	next := updated.(wsTaskTUIModel)
+	if next.rows[0].Item.Status != wstask.StatusTodo {
+		t.Fatalf("first visible-unrelated task status = %s, want todo", next.rows[0].Item.Status)
+	}
+	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	if readErr != nil {
+		t.Fatalf("read tasks.md: %v", readErr)
+	}
+	if !bytes.Contains(content, []byte("### TASK-004 Fourth\nstatus: done")) {
+		t.Fatalf("expected scrolled click to update TASK-004, got %q", string(content))
+	}
+}
+
 func TestWSTaskTUI_MouseClickUpdatesWorkspaceTaskInAllMode(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
