@@ -12,11 +12,14 @@ Requirements:
 Common commands:
 
 ```sh
+task build:dev
 task build
 task test
 task check
 task ci:full
 ```
+
+Use `task build:dev` during local development. It writes `./kradev`, so a repository-local path entry can invoke the in-progress binary without replacing the stable `./kra` build artifact.
 
 ## Workflow
 

@@ -20,6 +20,11 @@ tasks:
     cmds:
       - go build -ldflags "-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}" -o kra ./cmd/kra
 
+  build:dev:
+    desc: Build development kra binary at ./kradev
+    cmds:
+      - go build -ldflags "-X main.version={{.VERSION}} -X main.commit={{.COMMIT}} -X main.date={{.DATE}}" -o kradev ./cmd/kra
+
   build-exp:
     desc: Build experimental kra binary at ./kra
     cmds:
@@ -89,4 +94,4 @@ tasks:
   clean:
     desc: Remove built binary
     cmds:
-      - rm -f kra
+      - rm -f kra kradev

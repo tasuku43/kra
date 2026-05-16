@@ -50,10 +50,8 @@ Provide root-level helpers around the conceptual `KRA_ROOT`.
   - standard global `kra-tasks` control:
     - `id`: `kra-tasks`
     - `title`: `Tasks`
-    - `command`: `zsh -lc 'source ~/.zshrc >/dev/null 2>&1 || true; command kra ws task view --cmux-current --watch --refresh 2s'`
+    - `command`: `kra ws task tui --cmux-current --refresh 2s`
     - `height`: `420`
-  - if the legacy managed command uses `tui`, the global command is normalized to:
-    - `zsh -lc 'source ~/.zshrc >/dev/null 2>&1 || true; command kra ws task tui --cmux-current --refresh 2s'`
   - global Dock uses the `--cmux-current` resolver so the current cmux workspace maps to the corresponding kra workspace
   - managed legacy control detection:
     - `id == "kra-tasks"`

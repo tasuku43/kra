@@ -392,6 +392,9 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if got := out.String(); !strings.Contains(got, "Result:") || !strings.Contains(got, "Initialized: "+root) {
 		t.Fatalf("stdout missing result section: %q", got)
 	}
+	if !strings.Contains(out.String(), "kra ws task dock install") {
+		t.Fatalf("stdout missing cmux Dock next step: %q", out.String())
+	}
 
 	if _, statErr := os.Stat(filepath.Join(root, "workspaces")); statErr != nil {
 		t.Fatalf("workspaces/ not created: %v", statErr)

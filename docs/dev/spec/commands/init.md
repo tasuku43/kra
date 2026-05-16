@@ -95,5 +95,7 @@ Initialize a kra root and filesystem-first runtime metadata.
   - `Result:`
   - `  Initialized: <root>`
   - `  Context selected: <name>`
+  - `  cmux Dock: run \`kra ws task dock install\` to enable the global Tasks Dock`
 - `Result:` heading style follows shared UI token rules (`text.primary` + bold).
 - Success line should use shared success semantics (`status.success`).
+- `init` only prints the cmux Dock integration hint; it does not install or mutate the global cmux Dock config automatically.

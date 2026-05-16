@@ -359,10 +359,28 @@ Subcommands:
   (no subcommand)   Launch task status picker for one workspace
   list|ls          List structured workspace tasks
   tui              Open interactive terminal task view
+  dock             Install cmux Dock integration
   add              Add one structured task
   status           Set one task status explicitly
   sync             Deprecated no-op; use task tui / cmux Dock
   help             Show this help
+`)
+}
+
+func (c *CLI) printWSTaskDockUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws task dock install [--format human|json]
+
+Install global cmux Dock integration for kra tasks.
+`)
+}
+
+func (c *CLI) printWSTaskDockInstallUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws task dock install [--format human|json]
+  kra ws task dock install --global [--format human|json]
+
+Install or update the global cmux Dock kra-tasks control.
 `)
 }
 

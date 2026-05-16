@@ -82,6 +82,10 @@ type wsTaskSyncOptions struct {
 	format string
 }
 
+type wsTaskDockInstallOptions struct {
+	format string
+}
+
 type wsTaskSyncBatchItem struct {
 	WorkspaceID string
 	Sync        wstask.SyncResult
@@ -117,6 +121,8 @@ func (c *CLI) runWSTask(args []string) int {
 		return c.runWSTaskStatus(args[1:])
 	case "sync":
 		return c.runWSTaskSync(args[1:])
+	case "dock":
+		return c.runWSTaskDock(args[1:])
 	default:
 		if strings.HasPrefix(first, "-") {
 			return c.runWSTaskLauncher(args)
@@ -125,6 +131,89 @@ func (c *CLI) runWSTask(args []string) int {
 		c.printWSTaskUsage(c.Err)
 		return exitUsage
 	}
+}
+
+func (c *CLI) runWSTaskDock(args []string) int {
+	if len(args) == 0 {
+		c.printWSTaskDockUsage(c.Err)
+		return exitUsage
+	}
+	switch first := strings.TrimSpace(args[0]); first {
+	case "-h", "--help", "help":
+		c.printWSTaskDockUsage(c.Out)
+		return exitOK
+	case "install":
+		return c.runWSTaskDockInstall(args[1:])
+	default:
+		fmt.Fprintf(c.Err, "unknown command: %q\n", strings.Join(append([]string{"ws", "task", "dock"}, args[0]), " "))
+		c.printWSTaskDockUsage(c.Err)
+		return exitUsage
+	}
+}
+
+func (c *CLI) runWSTaskDockInstall(args []string) int {
+	opts, err := parseWSTaskDockInstallOptions(args)
+	if err != nil {
+		if err == errHelpRequested {
+			c.printWSTaskDockInstallUsage(c.Out)
+			return exitOK
+		}
+		if opts.format == "json" {
+			return c.writeWSTaskJSONError("ws.task.dock.install", "", "invalid_argument", err.Error(), exitUsage)
+		}
+		fmt.Fprintln(c.Err, err)
+		c.printWSTaskDockInstallUsage(c.Err)
+		return exitUsage
+	}
+	path, err := globalCMUXDockPath()
+	if err != nil {
+		if opts.format == "json" {
+			return c.writeWSTaskJSONError("ws.task.dock.install", "", "internal_error", err.Error(), exitError)
+		}
+		fmt.Fprintf(c.Err, "task dock install: %v\n", err)
+		return exitError
+	}
+	command := standardGlobalDockCommand(false)
+	before, err := inspectGlobalDock(path, command)
+	if err != nil {
+		if opts.format == "json" {
+			return c.writeWSTaskJSONError("ws.task.dock.install", "", "internal_error", err.Error(), exitError)
+		}
+		fmt.Fprintf(c.Err, "task dock install: %v\n", err)
+		return exitError
+	}
+	if before.Changed {
+		if err := applyGlobalDockMigration(path, command); err != nil {
+			if opts.format == "json" {
+				return c.writeWSTaskJSONError("ws.task.dock.install", "", "internal_error", err.Error(), exitError)
+			}
+			fmt.Fprintf(c.Err, "task dock install: %v\n", err)
+			return exitError
+		}
+	}
+	if opts.format == "json" {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:     true,
+			Action: "ws.task.dock.install",
+			Result: map[string]any{
+				"global_dock": before,
+			},
+		})
+		return exitOK
+	}
+	useColor := writerSupportsColor(c.Out)
+	action := "unchanged"
+	if before.Created {
+		action = "created"
+	} else if before.Updated {
+		action = "updated"
+	}
+	printResultSection(c.Out, useColor,
+		styleSuccess("cmux Dock installed", useColor),
+		styleMuted(fmt.Sprintf("path: %s", path), useColor),
+		styleMuted(fmt.Sprintf("kra-tasks: %s", action), useColor),
+	)
+	return exitOK
 }
 
 func (c *CLI) runWSTaskView(args []string) int {
@@ -1072,6 +1161,39 @@ func parseWSTaskSyncOptions(args []string) (wsTaskSyncOptions, error) {
 	case "human", "json":
 	default:
 		return wsTaskSyncOptions{}, fmt.Errorf("unsupported --format: %q (supported: human, json)", opts.format)
+	}
+	return opts, nil
+}
+
+func parseWSTaskDockInstallOptions(args []string) (wsTaskDockInstallOptions, error) {
+	opts := wsTaskDockInstallOptions{format: "human"}
+	for i := 0; i < len(args); i++ {
+		arg := strings.TrimSpace(args[i])
+		switch {
+		case arg == "-h" || arg == "--help" || arg == "help":
+			return wsTaskDockInstallOptions{}, errHelpRequested
+		case arg == "--global":
+			// Global Dock is the only supported install target. Keep this as a compatibility alias.
+		case strings.HasPrefix(arg, "--global="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--global=")) != "" {
+				return opts, fmt.Errorf("--global does not take a value")
+			}
+		case arg == "--format":
+			if i+1 >= len(args) {
+				return opts, fmt.Errorf("--format requires a value")
+			}
+			opts.format = strings.TrimSpace(args[i+1])
+			i++
+		case strings.HasPrefix(arg, "--format="):
+			opts.format = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
+		default:
+			return opts, fmt.Errorf("unexpected args for ws task dock install: %q", arg)
+		}
+	}
+	switch opts.format {
+	case "human", "json":
+	default:
+		return opts, fmt.Errorf("unsupported --format: %q (supported: human, json)", opts.format)
 	}
 	return opts, nil
 }

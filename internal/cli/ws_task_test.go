@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -997,6 +998,132 @@ func TestCLI_WSTaskSync_JSON_All_RejectsID(t *testing.T) {
 	resp := decodeJSONResponse(t, out.String())
 	if resp.OK || resp.Error.Code != "invalid_argument" || !strings.Contains(resp.Error.Message, "--id and --all cannot be used together") {
 		t.Fatalf("unexpected response: %+v", resp)
+	}
+}
+
+func TestCLI_WSTaskDockInstall_CreatesGlobalDock(t *testing.T) {
+	setKraHomeForTest(t)
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		t.Fatalf("user home dir: %v", homeErr)
+	}
+	globalPath := filepath.Join(home, ".config", "cmux", "dock.json")
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "dock", "install"})
+	if code != exitOK {
+		t.Fatalf("ws task dock install exit code=%d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	b, readErr := os.ReadFile(globalPath)
+	if readErr != nil {
+		t.Fatalf("read global dock: %v", readErr)
+	}
+	var dock cmuxDockConfig
+	if err := json.Unmarshal(b, &dock); err != nil {
+		t.Fatalf("unmarshal global dock: %v", err)
+	}
+	if len(dock.Controls) != 1 || dock.Controls[0].ID != "kra-tasks" {
+		t.Fatalf("unexpected controls: %+v", dock.Controls)
+	}
+	if !strings.Contains(dock.Controls[0].Command, "kra ws task tui --cmux-current --refresh 2s") {
+		t.Fatalf("unexpected command: %q", dock.Controls[0].Command)
+	}
+}
+
+func TestCLI_WSTaskDockInstall_PreservesExistingControlsAndUpdatesKraTasks(t *testing.T) {
+	setKraHomeForTest(t)
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		t.Fatalf("user home dir: %v", homeErr)
+	}
+	globalPath := filepath.Join(home, ".config", "cmux", "dock.json")
+	if err := os.MkdirAll(filepath.Dir(globalPath), 0o755); err != nil {
+		t.Fatalf("mkdir global dock dir: %v", err)
+	}
+	existing := `{
+  "controls": [
+    {
+      "id": "custom",
+      "title": "Custom",
+      "command": "echo custom",
+      "height": 100
+    },
+    {
+      "id": "kra-tasks",
+      "title": "Old",
+      "command": "old command",
+      "height": 123
+    }
+  ]
+}
+`
+	if err := os.WriteFile(globalPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("write global dock: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "dock", "install", "--global", "--format", "json"})
+	if code != exitOK {
+		t.Fatalf("ws task dock install exit code=%d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+	var resp testJSONResponse
+	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
+		t.Fatalf("json unmarshal error: %v", uerr)
+	}
+	if !resp.OK || resp.Action != "ws.task.dock.install" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	b, readErr := os.ReadFile(globalPath)
+	if readErr != nil {
+		t.Fatalf("read global dock: %v", readErr)
+	}
+	var dock cmuxDockConfig
+	if err := json.Unmarshal(b, &dock); err != nil {
+		t.Fatalf("unmarshal global dock: %v", err)
+	}
+	if len(dock.Controls) != 2 {
+		t.Fatalf("controls len=%d, want 2: %+v", len(dock.Controls), dock.Controls)
+	}
+	if dock.Controls[0].ID != "custom" || dock.Controls[0].Command != "echo custom" {
+		t.Fatalf("custom control not preserved: %+v", dock.Controls[0])
+	}
+	if dock.Controls[1].ID != "kra-tasks" || dock.Controls[1].Title != "Tasks" || dock.Controls[1].Height != 420 {
+		t.Fatalf("kra-tasks not updated: %+v", dock.Controls[1])
+	}
+}
+
+func TestCLI_WSTaskDockInstall_InvalidGlobalDockFailsClosed(t *testing.T) {
+	setKraHomeForTest(t)
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		t.Fatalf("user home dir: %v", homeErr)
+	}
+	globalPath := filepath.Join(home, ".config", "cmux", "dock.json")
+	if err := os.MkdirAll(filepath.Dir(globalPath), 0o755); err != nil {
+		t.Fatalf("mkdir global dock dir: %v", err)
+	}
+	if err := os.WriteFile(globalPath, []byte("{not json\n"), 0o644); err != nil {
+		t.Fatalf("write invalid global dock: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "task", "dock", "install"})
+	if code == exitOK {
+		t.Fatalf("ws task dock install exit code=%d, want failure", code)
+	}
+	got, readErr := os.ReadFile(globalPath)
+	if readErr != nil {
+		t.Fatalf("read global dock: %v", readErr)
+	}
+	if string(got) != "{not json\n" {
+		t.Fatalf("invalid global dock was modified: %q", string(got))
 	}
 }
 
