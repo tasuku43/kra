@@ -3,7 +3,7 @@
 `kra` is a local CLI for ticket-driven development workflows on your filesystem.
 It creates an isolated workspace per task, attaches only the repositories you need as Git worktrees, and closes work safely into `archive/` when done.
 It is useful standalone for workspace lifecycle operations, and becomes more valuable with `cmux` by aligning ticket, `kra` workspace, and `cmux` workspace in a 1:1:1 operating model.
-The default workspace template starts with `notes/`, `artifacts/`, `tasks.md`, and a cmux Dock config at `.cmux/dock.json`; you can extend it with your own files and directories.
+The default workspace template starts with `notes/`, `artifacts/`, `workspace.md`, and a cmux Dock config at `.cmux/dock.json`; you can extend it with your own files and directories.
 `<KRA_ROOT>` stores active/archived task workspaces, while `$KRA_HOME` (default: `~/.kra/`) stores shared state such as config and the repo pool.
 
 > [!TIP]
@@ -24,7 +24,7 @@ PROJ-1234  --->   workspaces/PROJ-1234/ --->  workspace: PROJ-1234
                   │  (no repo attached)
                   ├─ .cmux/
                   │  └─ dock.json
-                  ├─ tasks.md
+                  ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
 
@@ -33,7 +33,7 @@ PROJ-1235  --->   workspaces/PROJ-1235/ --->  workspace: PROJ-1235
                   │  └─ backend/
                   ├─ .cmux/
                   │  └─ dock.json
-                  ├─ tasks.md
+                  ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
 
@@ -44,7 +44,7 @@ PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
                   │  └─ infra/
                   ├─ .cmux/
                   │  └─ dock.json
-                  ├─ tasks.md
+                  ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
 ```
@@ -66,7 +66,7 @@ kra ws open --id TASK-1234
 
 When using `cmux`, `kra ws open` creates and opens the corresponding `cmux` workspace if it does not exist, and moves to it if it already exists.
 In single-target open, if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior; with shell integration, it can also sync parent shell `cwd`.
-New roots and default workspaces include `.cmux/dock.json`, which cmux reads to show a right-sidebar `Tasks` Dock control. Workspace Dock runs `kra ws task tui --current --refresh 2s`; root Dock runs `kra ws task tui --all --todo-only --refresh 2s` for active workspace tasks across the root. `<workspace>/tasks.md` remains the source of truth; `kra ws task sync` is deprecated and no longer updates cmux task pills.
+New roots and default workspaces include `.cmux/dock.json`, which cmux reads to show a right-sidebar `Status` Dock control. Workspace Dock runs `kra ws status --current`; root Dock runs `kra ws status --all --todo-only` for active workspace current states across the root. `<workspace>/workspace.md` remains the source of truth; `kra ws task sync` is deprecated and no longer updates cmux task pills.
 For an existing root and active workspaces, run `kra root migrate --apply` to add missing Dock/task scaffold without overwriting custom files. The generated Dock command may source the detected shell init file, such as `source ~/.zshrc`, before running `kra`.
 
 For day-to-day operations (`repo add`, `ws add-repo`, `ws close`, `ws task`, `ws doc open`), see:
@@ -126,7 +126,7 @@ Details:
 - `docs/user/guides/REPO_WORKTREE.md`
 
 ### 4) Workspace-local task tracking
-Keep a structured `tasks.md` inside each workspace, update statuses with `kra ws task`, and view it continuously through `kra ws task tui` and the default cmux Dock control.
+Keep a structured `workspace.md` inside each workspace, update statuses with `kra ws task`, and view it continuously through `kra ws status` and the default cmux Dock control.
 
 Example:
 

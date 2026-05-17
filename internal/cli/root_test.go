@@ -133,8 +133,8 @@ func TestCLI_RootMigrate_PlanDoesNotWrite(t *testing.T) {
 	for _, path := range []string{
 		filepath.Join(root, ".cmux", "dock.json"),
 		filepath.Join(root, "templates", "default", ".cmux", "dock.json"),
-		filepath.Join(root, "templates", "default", "tasks.md"),
-		filepath.Join(root, "workspaces", "WS1", "tasks.md"),
+		filepath.Join(root, "templates", "default", workspaceDocumentFilename),
+		filepath.Join(root, "workspaces", "WS1", workspaceDocumentFilename),
 	} {
 		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
 			t.Fatalf("plan should not write %s, stat err=%v", path, statErr)
@@ -165,8 +165,8 @@ func TestCLI_RootMigrate_ApplyWritesDefaultTemplateAndActiveWorkspaces(t *testin
 		t.Fatalf("stdout missing apply count: %q", out.String())
 	}
 	for _, path := range []string{
-		filepath.Join(root, "templates", "default", "tasks.md"),
-		filepath.Join(root, "workspaces", "WS1", "tasks.md"),
+		filepath.Join(root, "templates", "default", workspaceDocumentFilename),
+		filepath.Join(root, "workspaces", "WS1", workspaceDocumentFilename),
 	} {
 		if _, statErr := os.Stat(path); statErr != nil {
 			t.Fatalf("expected migrated path %s: %v", path, statErr)
@@ -176,7 +176,7 @@ func TestCLI_RootMigrate_ApplyWritesDefaultTemplateAndActiveWorkspaces(t *testin
 		filepath.Join(root, ".cmux", "dock.json"),
 		filepath.Join(root, "templates", "default", ".cmux", "dock.json"),
 		filepath.Join(root, "workspaces", "WS1", ".cmux", "dock.json"),
-		filepath.Join(root, "archive", "OLD1", "tasks.md"),
+		filepath.Join(root, "archive", "OLD1", workspaceDocumentFilename),
 	} {
 		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
 			t.Fatalf("path should not be migrated %s, stat err=%v", path, statErr)
@@ -196,16 +196,16 @@ func TestCLI_RootMigrate_DoesNotOverwriteExistingFiles(t *testing.T) {
 	if err := os.MkdirAll(ws, 0o755); err != nil {
 		t.Fatalf("mkdir workspace: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "templates", "default", "tasks.md"), []byte("custom template tasks\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(root, "templates", "default", workspaceDocumentFilename), []byte("custom template tasks\n"), 0o644); err != nil {
 		t.Fatalf("write template tasks: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(ws, "tasks.md"), []byte("custom tasks\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ws, workspaceDocumentFilename), []byte("custom tasks\n"), 0o644); err != nil {
 		t.Fatalf("write workspace tasks: %v", err)
 	}
 	if err := os.MkdirAll(filepath.Join(ws, "repos", "repo1"), 0o755); err != nil {
 		t.Fatalf("mkdir repos: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(ws, "repos", "repo1", "tasks.md"), []byte("repo tasks\n"), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(ws, "repos", "repo1", workspaceDocumentFilename), []byte("repo tasks\n"), 0o644); err != nil {
 		t.Fatalf("write repo tasks: %v", err)
 	}
 
@@ -216,21 +216,21 @@ func TestCLI_RootMigrate_DoesNotOverwriteExistingFiles(t *testing.T) {
 	if code != exitOK {
 		t.Fatalf("exit code=%d, want=%d (stderr=%q)", code, exitOK, err.String())
 	}
-	templateTasks, readErr := os.ReadFile(filepath.Join(root, "templates", "default", "tasks.md"))
+	templateTasks, readErr := os.ReadFile(filepath.Join(root, "templates", "default", workspaceDocumentFilename))
 	if readErr != nil {
 		t.Fatalf("read template tasks: %v", readErr)
 	}
 	if string(templateTasks) != "custom template tasks\n" {
 		t.Fatalf("template tasks were overwritten: %q", string(templateTasks))
 	}
-	workspaceTasks, readErr := os.ReadFile(filepath.Join(ws, "tasks.md"))
+	workspaceTasks, readErr := os.ReadFile(filepath.Join(ws, workspaceDocumentFilename))
 	if readErr != nil {
 		t.Fatalf("read workspace tasks: %v", readErr)
 	}
 	if string(workspaceTasks) != "custom tasks\n" {
 		t.Fatalf("workspace tasks were overwritten: %q", string(workspaceTasks))
 	}
-	repoTasks, readErr := os.ReadFile(filepath.Join(ws, "repos", "repo1", "tasks.md"))
+	repoTasks, readErr := os.ReadFile(filepath.Join(ws, "repos", "repo1", workspaceDocumentFilename))
 	if readErr != nil {
 		t.Fatalf("read repo tasks: %v", readErr)
 	}
@@ -256,8 +256,8 @@ func TestCLI_RootMigrate_ApplyMigratesManagedLegacyDockToGlobal(t *testing.T) {
   "controls": [
     {
       "id": "kra-tasks",
-      "title": "Tasks",
-      "command": "kra ws task tui --current --refresh 2s",
+      "title": "Status",
+      "command": "kra ws status --current",
       "cwd": ".",
       "height": 420
     }
@@ -289,7 +289,7 @@ func TestCLI_RootMigrate_ApplyMigratesManagedLegacyDockToGlobal(t *testing.T) {
 	if len(dock.Controls) != 1 {
 		t.Fatalf("controls len = %d, want 1", len(dock.Controls))
 	}
-	want := "kra ws task tui --cmux-current --refresh 2s"
+	want := "kra ws status --cmux-current"
 	if dock.Controls[0].Command != want {
 		t.Fatalf("dock command = %q, want %q", dock.Controls[0].Command, want)
 	}
@@ -316,7 +316,7 @@ func TestCLI_RootMigrate_GlobalDockPreservesExistingControlsAndUpdatesKraTasks(t
     {
       "id": "kra-tasks",
       "title": "Old",
-      "command": "kra ws task view --current --watch --refresh 2s",
+      "command": "kra ws task view --current --watch",
       "height": 360
     }
   ]
@@ -354,9 +354,88 @@ func TestCLI_RootMigrate_GlobalDockPreservesExistingControlsAndUpdatesKraTasks(t
 	if dock.Controls[0].ID != "custom" || dock.Controls[0].Command != "echo custom" {
 		t.Fatalf("custom control not preserved: %+v", dock.Controls)
 	}
-	want := "kra ws task tui --cmux-current --refresh 2s"
+	want := "kra ws status --cmux-current"
 	if dock.Controls[1].ID != "kra-tasks" || dock.Controls[1].Command != want || dock.Controls[1].Height != 420 {
 		t.Fatalf("kra-tasks not updated to standard: %+v", dock.Controls[1])
+	}
+}
+
+func TestCLI_RootMigrate_GlobalDockUpdatesOldKraTasksWithoutLegacyProjectDock(t *testing.T) {
+	prepareCurrentRootForTest(t)
+	home, homeErr := os.UserHomeDir()
+	if homeErr != nil {
+		t.Fatalf("user home dir: %v", homeErr)
+	}
+	globalPath := filepath.Join(home, ".config", "cmux", "dock.json")
+	if err := os.MkdirAll(filepath.Dir(globalPath), 0o755); err != nil {
+		t.Fatalf("mkdir global cmux: %v", err)
+	}
+	existing := `{
+  "controls": [
+    {
+      "id": "kra-tasks",
+      "title": "Tasks",
+      "command": "kra ws task tui --cmux-current --refresh 2s",
+      "height": 420
+    }
+  ]
+}
+`
+	if err := os.WriteFile(globalPath, []byte(existing), 0o644); err != nil {
+		t.Fatalf("write global dock: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"root", "migrate", "--apply"})
+	if code != exitOK {
+		t.Fatalf("exit code=%d, want=%d (stderr=%q)", code, exitOK, err.String())
+	}
+	b, readErr := os.ReadFile(globalPath)
+	if readErr != nil {
+		t.Fatalf("read global dock: %v", readErr)
+	}
+	var dock cmuxDockConfig
+	if err := json.Unmarshal(b, &dock); err != nil {
+		t.Fatalf("unmarshal global dock: %v", err)
+	}
+	if len(dock.Controls) != 1 {
+		t.Fatalf("controls len=%d, want 1: %+v", len(dock.Controls), dock.Controls)
+	}
+	if dock.Controls[0].Title != "Status" || dock.Controls[0].Command != "kra ws status --cmux-current" {
+		t.Fatalf("global kra-tasks not migrated: %+v", dock.Controls[0])
+	}
+}
+
+func TestCLI_RootMigrate_AddsNextSectionToExistingWorkspaceDocument(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	ws := filepath.Join(root, "workspaces", "WS1")
+	if err := os.MkdirAll(ws, 0o755); err != nil {
+		t.Fatalf("mkdir workspace: %v", err)
+	}
+	content := "# Workspace\n\n## Current State\n\nExisting state.\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n"
+	if err := os.WriteFile(filepath.Join(ws, workspaceDocumentFilename), []byte(content), 0o644); err != nil {
+		t.Fatalf("write workspace.md: %v", err)
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"root", "migrate", "--apply"})
+	if code != exitOK {
+		t.Fatalf("exit code=%d, want=%d (stderr=%q)", code, exitOK, err.String())
+	}
+	b, readErr := os.ReadFile(filepath.Join(ws, workspaceDocumentFilename))
+	if readErr != nil {
+		t.Fatalf("read workspace.md: %v", readErr)
+	}
+	got := string(b)
+	if !strings.Contains(got, "## Next\n\nRecord the next concrete step here before handing off or stopping.\n\n## Tasks") {
+		t.Fatalf("workspace.md missing inserted Next before Tasks: %q", got)
+	}
+	if !strings.Contains(got, "This file is the workspace handoff state. Keep it current.") {
+		t.Fatalf("workspace.md missing handoff guide: %q", got)
 	}
 }
 
@@ -375,8 +454,8 @@ func TestCLI_RootMigrate_LeavesMixedAndCustomProjectDockUnchanged(t *testing.T) 
   "controls": [
     {
       "id": "kra-tasks",
-      "title": "Tasks",
-      "command": "kra ws task view --current --watch --refresh 2s",
+      "title": "Status",
+      "command": "kra ws task view --current --watch",
       "height": 420
     },
     {

@@ -139,6 +139,8 @@ func (c *CLI) runWS(args []string) int {
 		return c.runWSDoc(args[1:])
 	case "task":
 		return c.runWSTask(args[1:])
+	case "status":
+		return c.runWSStatus(args[1:])
 	case "log":
 		return c.runWSLog(args[1:])
 	case "insight":

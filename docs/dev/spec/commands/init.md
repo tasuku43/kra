@@ -47,11 +47,11 @@ Initialize a kra root and filesystem-first runtime metadata.
     - `<root>/templates/default/artifacts/`
     - `<root>/templates/default/.cmux/dock.json`
     - `<root>/templates/default/AGENTS.md`
-    - `<root>/templates/default/tasks.md`
+    - `<root>/templates/default/workspace.md`
   - do not overwrite existing `templates/default/` content
   - existing roots with an already-present `templates/default/` are not retroactively updated by init; use `kra root migrate --apply` to add missing default template and active workspace scaffold
 - Ensure `<root>/.cmux/dock.json` exists on first init
-  - Dock command lists active workspace tasks with `kra ws task tui --all --todo-only --refresh 2s`
+  - Dock command lists active workspace current states with `kra ws status --all --todo-only`
   - do not overwrite existing root Dock config
 - Ensure `<root>/.kra/config.yaml` exists on first init
   - create default content:
@@ -69,7 +69,7 @@ Initialize a kra root and filesystem-first runtime metadata.
   - `<root>/.cmux/dock.json` (if created)
   - `<root>/templates/default/AGENTS.md` (if created)
   - `<root>/templates/default/.cmux/dock.json` (if created)
-  - `<root>/templates/default/tasks.md` (if created)
+  - `<root>/templates/default/workspace.md` (if created)
 - Write `.gitignore` such that `workspaces/**/repos/**` is ignored
 - Default `.gitignore` entries managed by `kra init` should also include:
   - `.DS_Store`
@@ -95,7 +95,7 @@ Initialize a kra root and filesystem-first runtime metadata.
   - `Result:`
   - `  Initialized: <root>`
   - `  Context selected: <name>`
-  - `  cmux Dock: run \`kra ws task dock install\` to enable the global Tasks Dock`
+  - `  cmux Dock: run \`kra ws task dock install\` to enable the global Status Dock`
 - `Result:` heading style follows shared UI token rules (`text.primary` + bold).
 - Success line should use shared success semantics (`status.success`).
 - `init` only prints the cmux Dock integration hint; it does not install or mutate the global cmux Dock config automatically.

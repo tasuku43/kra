@@ -7,14 +7,14 @@ status: implemented
 
 ## Purpose
 
-Manage structured workspace-local tasks stored in `tasks.md` without requiring `kra` to be the only
+Manage structured workspace-local tasks stored in `workspace.md` without requiring `kra` to be the only
 editor.
 
 ## Namespace
 
 - `kra ws task`
 - `kra ws task list`
-- `kra ws task tui`
+- `kra ws status`
 - `kra ws task add`
 - `kra ws task status`
 - `kra ws task sync`
@@ -22,8 +22,8 @@ editor.
 ## Source of truth
 
 - Task commands use the workspace task contract defined in:
-  - `docs/dev/spec/concepts/workspace-tasks.md`
-- The canonical structured task document is `<workspace>/tasks.md`.
+  - `docs/dev/spec/concepts/workspace-workspace.md`
+- The canonical structured task document is `<workspace>/workspace.md`.
 - Task commands must work when the file was created or edited outside `kra`, as long as the minimum
   contract is satisfied.
 
@@ -50,21 +50,21 @@ editor.
 
 - Task commands must preserve all content outside the `## Tasks` section.
 - Task commands must mutate only the structured task blocks they own.
-- `list` treats missing `tasks.md` or missing `## Tasks` as zero structured tasks.
-- `tui` treats missing `tasks.md`, missing `## Tasks`, or zero structured tasks as an empty view.
-- `add` must lazily create `tasks.md` when the file is absent.
+- `list` treats missing `workspace.md` or missing `## Tasks` as zero structured tasks.
+- `tui` treats missing `workspace.md`, missing `## Tasks`, or zero structured tasks as an empty view.
+- `add` must lazily create `workspace.md` when the file is absent.
 - `add` must lazily create `## Tasks` when the file exists but the section is absent.
 - Any command that encounters duplicate structured task IDs must fail closed.
 - Any command that encounters an invalid structured task-like block that starts with `### TASK-...`
   must fail closed.
-- `status` and the launcher update `tasks.md` only.
+- `status` and the launcher update `workspace.md` only.
 
-## CMUX task tui
+## CMUX status view
 
-- `tasks.md` remains the single source of truth.
-- `kra ws task tui` is the supported human-facing display for terminals and cmux Dock.
-- cmux Dock configs should run `kra ws task tui --current --refresh 2s` for one
-  workspace or `kra ws task tui --all --todo-only --refresh 2s` from the root.
+- `workspace.md` remains the single source of truth.
+- `kra ws status` is the supported human-facing display for terminals and cmux Dock.
+- cmux Dock configs should run `kra ws status --current` for one
+  workspace or `kra ws status --all --todo-only` from the root.
 - `kra ws task sync` no longer projects cmux task pills. It returns a deprecated/skipped result and
   does not update cmux state.
 

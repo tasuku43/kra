@@ -22,7 +22,7 @@ Set one structured task to an explicit status.
   - `done -> todo`
 - Same-state updates succeed with `changed=false`.
 - Missing task ID fails with `not_found`.
-- After updating `tasks.md`, exit without invoking cmux sync.
+- After updating `workspace.md`, exit without invoking cmux sync.
 
 ## Human output
 

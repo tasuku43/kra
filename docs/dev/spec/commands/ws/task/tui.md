@@ -1,21 +1,22 @@
 ---
-title: "`kra ws task tui`"
+title: "`kra ws status`"
 status: implemented
 ---
 
-# `kra ws task tui [--id <workspace-id>] [--current] [--select] [--all] [--todo-only] [--include-done] [--refresh <duration>] [--no-color]`
+# `kra ws status [--id <workspace-id>] [--current] [--select] [--all] [--todo-only] [--include-done] [--no-color]`
 
 ## Purpose
 
-Render an interactive terminal task view for humans and cmux Dock, and write status changes back to
-`tasks.md`.
+Render an interactive terminal workspace-state/task view for humans and cmux Dock, and write status
+changes back to `workspace.md`.
 
 ## Behavior
 
-- Read `<workspace>/tasks.md` with the shared workspace task parser/model.
-- Render structured tasks as a flat list in `tasks.md` file order.
-- With `--all`, render active workspace tasks across the current KRA_ROOT, grouped by workspace key
-  and title.
+- Read `<workspace>/workspace.md` with the shared workspace task parser/model.
+- Render `## Current State` and `## Next` above task progress for single-workspace views.
+- Render structured tasks as a flat list in `workspace.md` file order.
+- With `--all`, render active workspace current states across the current KRA_ROOT, grouped by
+  workspace key and title, with task progress as supplemental context.
 - With `--todo-only`, hide `done` tasks.
 - With `--include-done`, include `done` tasks even when `--todo-only` is present.
 - Use the same status icons as `kra ws task list`:
@@ -23,7 +24,7 @@ Render an interactive terminal task view for humans and cmux Dock, and write sta
   - `doing`: `●`
   - `blocked`: `▲`
   - `done`: `✔`
-- Show an empty state when `tasks.md` is missing, when `## Tasks` is missing, or when there are no
+- Show an empty state when `workspace.md` is missing, when `## Tasks` is missing, or when there are no
   structured tasks.
 - On invalid task contract, fail closed by showing the error and refusing status updates.
 - TUI starts in `read` mode.
@@ -38,7 +39,7 @@ Render an interactive terminal task view for humans and cmux Dock, and write sta
   - `g`: `doing`
   - `b`: `blocked`
   - `d`: `done`
-- Status changes use the existing workspace task transition rules and update `<workspace>/tasks.md`.
+- Status changes use the existing workspace task transition rules and update `<workspace>/workspace.md`.
 
 ## Targeting
 
@@ -51,18 +52,17 @@ Render an interactive terminal task view for humans and cmux Dock, and write sta
 - `--select` selects active workspaces.
 - `--all` reads active workspaces under the current KRA_ROOT and is intended for root-level Dock.
 
-## Refresh
+## Updates
 
 - TUI stays open until the user quits.
-- TUI refreshes by polling every refresh interval so direct `tasks.md` edits can appear without
-  restarting the Dock.
-- Default refresh interval is `2s`.
-- `--refresh` is parsed as a Go duration, such as `500ms`, `1s`, or `2s`.
-- `--refresh <= 0` is invalid.
+- TUI automatically follows `workspace.md` changes so direct edits can appear without restarting the
+  Dock.
+- `--refresh` is not part of the public status command surface.
+- Legacy `--refresh <duration>` arguments may be accepted as compatibility no-ops.
 - `q` or Ctrl-C exits.
 - Esc returns to `read` mode when in `write` mode; in `read` mode Esc is ignored.
 - File watching libraries are not required.
-- If a render fails, show the error until the next refresh.
+- If a render fails, show the error until the next update.
 
 ## Output
 
@@ -87,7 +87,7 @@ only supported install target.
 The global Dock command is:
 
 ```sh
-kra ws task tui --cmux-current --refresh 2s
+kra ws status --cmux-current
 ```
 
 When an existing global Dock config is present, install preserves existing controls and adds or
@@ -96,13 +96,13 @@ updates the managed `id == "kra-tasks"` control. Invalid global Dock JSON fails 
 The legacy workspace Dock command was:
 
 ```sh
-kra ws task tui --current --refresh 2s
+kra ws status --current
 ```
 
 The legacy root Dock command was:
 
 ```sh
-kra ws task tui --all --todo-only --refresh 2s
+kra ws status --all --todo-only
 ```
 
 `kra root migrate --apply` can migrate managed legacy project-local Dock configs to the global Dock.

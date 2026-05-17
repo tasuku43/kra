@@ -7,12 +7,12 @@ status: implemented
 
 ## Purpose
 
-Provide concrete `tasks.md` examples for humans and AI agents so direct editing remains compatible
+Provide concrete `workspace.md` examples for humans and AI agents so direct editing remains compatible
 with `kra`.
 
 ## Canonical mixed-content example
 
-One `tasks.md` file may contain both freeform notes and structured tasks:
+One `workspace.md` file may contain both freeform notes and structured tasks:
 
 ```md
 # SREP-5000 work memo
@@ -59,14 +59,14 @@ Anything here is freeform again and ignored by `kra` task parsing.
 
 ## AI authoring guidance
 
-When an AI agent edits `tasks.md` directly:
+When an AI agent edits `workspace.md` directly:
 
 - preserve all Markdown outside `## Tasks`
 - preserve stable task IDs
 - preserve non-target task blocks unless intentionally changing them
 - keep one required `status:` line per structured task
 - write new tasks as new `### TASK-<nnn> <title>` blocks
-- inspect direct edits with `kra ws task tui` or the cmux Dock
+- inspect direct edits with `kra ws status` or the cmux Dock
 
 ## Invalid examples
 

@@ -29,7 +29,7 @@ func TestCLI_TemplateCreate_NameFlag_CreatesScaffold(t *testing.T) {
 		filepath.Join("templates", "custom", "artifacts"),
 		filepath.Join("templates", "custom", ".cmux", "dock.json"),
 		filepath.Join("templates", "custom", "AGENTS.md"),
-		filepath.Join("templates", "custom", "tasks.md"),
+		filepath.Join("templates", "custom", workspaceDocumentFilename),
 	} {
 		if _, statErr := os.Stat(filepath.Join(env.Root, rel)); statErr != nil {
 			t.Fatalf("missing scaffold path %q: %v", rel, statErr)

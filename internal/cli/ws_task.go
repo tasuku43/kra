@@ -96,7 +96,7 @@ type wsTaskStatusExecution struct {
 	Transition wstask.TransitionResult
 }
 
-const deprecatedWSTaskSyncWarning = "task sync is deprecated; use kra ws task tui or cmux Dock instead"
+const deprecatedWSTaskSyncWarning = "task sync is deprecated; use kra ws status or cmux Dock instead"
 const wsTaskTargetScopeAll = "all"
 
 func (c *CLI) runWSTask(args []string) int {
@@ -174,7 +174,7 @@ func (c *CLI) runWSTaskDockInstall(args []string) int {
 		return exitError
 	}
 	command := standardGlobalDockCommand(false)
-	before, err := inspectGlobalDock(path, command)
+	before, err := inspectGlobalDock(path, command, true)
 	if err != nil {
 		if opts.format == "json" {
 			return c.writeWSTaskJSONError("ws.task.dock.install", "", "internal_error", err.Error(), exitError)

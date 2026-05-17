@@ -3,12 +3,14 @@ package wstask
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 )
 
 type memoryPort struct {
-	docs      map[string]DocumentSnapshot
-	pathToKey map[string]string
+	docs       map[string]DocumentSnapshot
+	pathToKey  map[string]string
+	beforeSave func()
 }
 
 type memorySyncPort struct {
@@ -56,15 +58,22 @@ func (p *memoryPort) Load(root string, workspaceID string, scope string) (Docume
 	return snapshot, nil
 }
 
-func (p *memoryPort) Save(path string, content string) error {
-	key, ok := p.pathToKey[path]
+func (p *memoryPort) Save(snapshot DocumentSnapshot, content string) error {
+	if p.beforeSave != nil {
+		p.beforeSave()
+		p.beforeSave = nil
+	}
+	key, ok := p.pathToKey[snapshot.Path]
 	if !ok {
 		return errors.New("unknown path")
 	}
-	snapshot := p.docs[key]
-	snapshot.Exists = true
-	snapshot.Content = content
-	p.docs[key] = snapshot
+	current := p.docs[key]
+	if current.Exists != snapshot.Exists || current.Content != snapshot.Content {
+		return newConflict("workspace document changed during update")
+	}
+	current.Exists = true
+	current.Content = content
+	p.docs[key] = current
 	return nil
 }
 
@@ -120,7 +129,7 @@ func (p *memorySyncPort) ClearStatus(_ context.Context, cmuxWorkspaceID string, 
 func TestServiceAdd_CreatesTasksSectionAndPreservesOutsideContent(t *testing.T) {
 	port := newMemoryPort()
 	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/tasks.md",
+		Path:    "/root/workspaces/WS1/workspace.md",
 		Exists:  true,
 		Content: "# Memo\n\nKeep this.\n\n## Notes\n\nstill here\n",
 	})
@@ -135,16 +144,42 @@ func TestServiceAdd_CreatesTasksSectionAndPreservesOutsideContent(t *testing.T) 
 	}
 
 	got := port.docs["active:WS1"].Content
-	want := "# Memo\n\nKeep this.\n\n## Notes\n\nstill here\n\n## Tasks\n\n### TASK-001 First task\nstatus: todo\n\nLine one\n"
+	want := "# Memo\n\nKeep this.\n\n## Notes\n\nstill here\n\n## Current State\n\nThis workspace has not recorded current state yet.\n\n## Next\n\nRecord the next concrete step here before handing off or stopping.\n\n## Tasks\n\n### TASK-001 First task\nstatus: todo\n\nLine one\n"
 	if got != want {
 		t.Fatalf("saved content mismatch\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestServiceStatus_RefusesToOverwriteConcurrentDocumentChange(t *testing.T) {
+	port := newMemoryPort()
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:    "/root/workspaces/WS1/workspace.md",
+		Exists:  true,
+		Content: "## Current State\n\nInitial state.\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n",
+	})
+	port.beforeSave = func() {
+		snapshot := port.docs["active:WS1"]
+		snapshot.Content = "## Current State\n\nEdited elsewhere.\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n"
+		port.docs["active:WS1"] = snapshot
+	}
+
+	_, err := NewService(port).Status("/root", "WS1", "TASK-001", StatusDone)
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("Status() error = %v, want conflict", err)
+	}
+	got := port.docs["active:WS1"].Content
+	if strings.Contains(got, "status: done") {
+		t.Fatalf("concurrent change was overwritten: %q", got)
+	}
+	if !strings.Contains(got, "Edited elsewhere.") {
+		t.Fatalf("concurrent change was not preserved: %q", got)
 	}
 }
 
 func TestServiceList_FailsOnDuplicateTaskIDs(t *testing.T) {
 	port := newMemoryPort()
 	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/tasks.md",
+		Path:    "/root/workspaces/WS1/workspace.md",
 		Exists:  true,
 		Content: "## Tasks\n\n### TASK-001 First\nstatus: todo\n\n### TASK-001 Second\nstatus: doing\n",
 	})
@@ -158,7 +193,7 @@ func TestServiceList_FailsOnDuplicateTaskIDs(t *testing.T) {
 func TestServiceOverview_DegradesOnInvalidContract(t *testing.T) {
 	port := newMemoryPort()
 	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/tasks.md",
+		Path:    "/root/workspaces/WS1/workspace.md",
 		Exists:  true,
 		Content: "## Tasks\n\n### TASK-001 Broken\nno-status-here\n",
 	})
@@ -178,7 +213,7 @@ func TestServiceOverview_DegradesOnInvalidContract(t *testing.T) {
 func TestServiceStart_AllowsBlockedToDoingAndRejectsDone(t *testing.T) {
 	port := newMemoryPort()
 	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/tasks.md",
+		Path:    "/root/workspaces/WS1/workspace.md",
 		Exists:  true,
 		Content: "## Tasks\n\n### TASK-001 Waiting\nstatus: blocked\n\n### TASK-002 Finished\nstatus: done\n",
 	})
@@ -201,7 +236,7 @@ func TestServiceStart_AllowsBlockedToDoingAndRejectsDone(t *testing.T) {
 func TestServiceStatus_AllowsDoneToTodo(t *testing.T) {
 	port := newMemoryPort()
 	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/tasks.md",
+		Path:    "/root/workspaces/WS1/workspace.md",
 		Exists:  true,
 		Content: "## Tasks\n\n### TASK-001 Finished\nstatus: done\n",
 	})
@@ -218,7 +253,7 @@ func TestServiceStatus_AllowsDoneToTodo(t *testing.T) {
 func TestServiceSync_ReconcilesTaskNamespace(t *testing.T) {
 	port := newMemoryPort()
 	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/tasks.md",
+		Path:    "/root/workspaces/WS1/workspace.md",
 		Exists:  true,
 		Content: "## Tasks\n\n### TASK-003 Draft docs\nstatus: todo\n\n### TASK-001 Build parser\nstatus: doing\n\n### TASK-004 Shipped\nstatus: done\n\n### TASK-002 Waiting review\nstatus: blocked\n",
 	})
@@ -261,7 +296,7 @@ func TestServiceSync_ReconcilesTaskNamespace(t *testing.T) {
 func TestServiceSync_ClearsAllTaskNamespaceWhenStructuredTasksAreEmpty(t *testing.T) {
 	port := newMemoryPort()
 	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/tasks.md",
+		Path:    "/root/workspaces/WS1/workspace.md",
 		Exists:  true,
 		Content: "## Tasks\n\n---\n",
 	})
@@ -294,7 +329,7 @@ func TestServiceSync_ClearsAllTaskNamespaceWhenStructuredTasksAreEmpty(t *testin
 func TestServiceSync_FailsClosedOnInvalidTaskLikeBlock(t *testing.T) {
 	port := newMemoryPort()
 	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/tasks.md",
+		Path:    "/root/workspaces/WS1/workspace.md",
 		Exists:  true,
 		Content: "## Tasks\n\n### TASK-001\nstatus: doing\n",
 	})
@@ -319,7 +354,7 @@ func TestServiceSync_FailsClosedOnInvalidTaskLikeBlock(t *testing.T) {
 func TestServiceSync_SkipsWhenNoMappedCMUXWorkspace(t *testing.T) {
 	port := newMemoryPort()
 	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/tasks.md",
+		Path:    "/root/workspaces/WS1/workspace.md",
 		Exists:  false,
 		Content: "",
 	})

@@ -259,6 +259,7 @@ func (c *CLI) printWSUsage(w io.Writer) {
   kra ws purge [--id <id> | --current | --select] [action-args...]
   kra ws doc open [--id <id> | --current | --select] [path]
   kra ws task [--id <id> | --current | --select]
+  kra ws status [--id <id> | --current | --cmux-current | --select | --all]
   kra ws task <subcommand> [args]
   kra ws log [--id <id> | --current] [--] <message>
   kra ws list|ls [--archived] [--tree] [--format human|tsv|json]
@@ -358,11 +359,11 @@ func (c *CLI) printWSTaskUsage(w io.Writer) {
 Subcommands:
   (no subcommand)   Launch task status picker for one workspace
   list|ls          List structured workspace tasks
-  tui              Open interactive terminal task view
+  tui              Compatibility alias for ws status
   dock             Install cmux Dock integration
   add              Add one structured task
   status           Set one task status explicitly
-  sync             Deprecated no-op; use task tui / cmux Dock
+  sync             Deprecated no-op; use ws status / cmux Dock
   help             Show this help
 `)
 }
@@ -395,9 +396,17 @@ List structured workspace-local tasks.
 
 func (c *CLI) printWSTaskTUIUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws task tui [--id <workspace-id> | --current | --cmux-current | --select | --all] [--todo-only] [--include-done] [--refresh <duration>] [--no-color]
+  kra ws task tui [--id <workspace-id> | --current | --cmux-current | --select | --all] [--todo-only] [--include-done] [--no-color]
 
-Open an interactive terminal-friendly task view.
+Compatibility alias for kra ws status.
+`)
+}
+
+func (c *CLI) printWSStatusUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra ws status [--id <workspace-id> | --current | --cmux-current | --select | --all] [--todo-only] [--include-done] [--no-color]
+
+Open an interactive terminal-friendly workspace status view.
 `)
 }
 
@@ -425,7 +434,7 @@ func (c *CLI) printWSTaskSyncUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra ws task sync [--id <workspace-id>] [--current] [--select | --all] [--format human|json]
 
-Deprecated no-op kept for compatibility. Use kra ws task tui or cmux Dock instead.
+Deprecated no-op kept for compatibility. Use kra ws status or cmux Dock instead.
 `)
 }
 

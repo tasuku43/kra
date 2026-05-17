@@ -27,7 +27,7 @@ PROJ-1234  --->   workspaces/PROJ-1234/ --->  workspace: PROJ-1234
                   │  (no repo attached)
                   ├─ .cmux/
                   │  └─ dock.json
-                  ├─ tasks.md
+                  ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
 
@@ -36,7 +36,7 @@ PROJ-1235  --->   workspaces/PROJ-1235/ --->  workspace: PROJ-1235
                   │  └─ backend/
                   ├─ .cmux/
                   │  └─ dock.json
-                  ├─ tasks.md
+                  ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
 
@@ -47,12 +47,12 @@ PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
                   │  └─ infra/
                   ├─ .cmux/
                   │  └─ dock.json
-                  ├─ tasks.md
+                  ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
 ```
 
-## Dock task tui
+## Dock status view
 
 KRA_ROOT can also have `.cmux/dock.json`. The root Dock is useful for seeing open tasks across active workspaces:
 
@@ -61,8 +61,8 @@ KRA_ROOT can also have `.cmux/dock.json`. The root Dock is useful for seeing ope
   "controls": [
     {
       "id": "kra-tasks",
-      "title": "Tasks",
-      "command": "kra ws task tui --all --todo-only --refresh 2s",
+      "title": "Status",
+      "command": "kra ws status --all --todo-only",
       "cwd": ".",
       "height": 420
     }
@@ -70,7 +70,7 @@ KRA_ROOT can also have `.cmux/dock.json`. The root Dock is useful for seeing ope
 }
 ```
 
-New default workspaces include `.cmux/dock.json`. cmux reads this project Dock config from the workspace root and can show a right-sidebar `Tasks` control.
+New default workspaces include `.cmux/dock.json`. cmux reads this project Dock config from the workspace root and can show a right-sidebar `Status` control.
 
 Default `.cmux/dock.json`:
 
@@ -79,8 +79,8 @@ Default `.cmux/dock.json`:
   "controls": [
     {
       "id": "kra-tasks",
-      "title": "Tasks",
-      "command": "kra ws task tui --current --refresh 2s",
+      "title": "Status",
+      "command": "kra ws status --current",
       "cwd": ".",
       "height": 420
     }
@@ -91,16 +91,16 @@ Default `.cmux/dock.json`:
 The command runs:
 
 ```sh
-kra ws task tui --current --refresh 2s
+kra ws status --current
 ```
 
 When `kra` is made available by shell startup files, generated Dock configs may prefix the command with the detected shell init file. For example, zsh users may see:
 
 ```sh
-source ~/.zshrc; kra ws task tui --current --refresh 2s
+source ~/.zshrc; kra ws status --current
 ```
 
-This makes the Dock a constantly visible view of `<workspace>/tasks.md`. The TUI starts in read mode; press `i` to enter write mode before clicking tasks to update `tasks.md`. The task source of truth remains `<workspace>/tasks.md`; `kra ws task sync` is deprecated and no longer refreshes cmux task pills. The project Dock config may trigger a cmux trust prompt the first time the workspace is opened.
+This makes the Dock a constantly visible view of `<workspace>/workspace.md`. The TUI starts in read mode; press `i` to enter write mode before clicking tasks to update `workspace.md`. The current-state and task source of truth remains `<workspace>/workspace.md`; `kra ws task sync` is deprecated and no longer refreshes cmux task pills. The project Dock config may trigger a cmux trust prompt the first time the workspace is opened.
 
 `kra init` does not overwrite an existing `templates/default/`, and template changes are not applied retroactively by init. For an existing root and active workspaces, run:
 
@@ -109,7 +109,7 @@ kra root migrate
 kra root migrate --apply
 ```
 
-The migration adds missing `.cmux/dock.json`, `templates/default/.cmux/dock.json`, `templates/default/tasks.md`, `workspaces/<id>/.cmux/dock.json`, and `workspaces/<id>/tasks.md` without overwriting custom files.
+The migration adds missing `.cmux/dock.json`, `templates/default/.cmux/dock.json`, `templates/default/workspace.md`, `workspaces/<id>/.cmux/dock.json`, and `workspaces/<id>/workspace.md` without overwriting custom files.
 
 ## Open behavior
 

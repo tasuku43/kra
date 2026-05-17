@@ -78,8 +78,8 @@ func TestCLI_TemplateValidate_AllowsCMUXDockAndTasks(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(tmpl, ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
 		t.Fatalf("write dock.json: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpl, "tasks.md"), []byte(defaultWorkspaceTasksContent), 0o644); err != nil {
-		t.Fatalf("write tasks.md: %v", err)
+	if err := os.WriteFile(filepath.Join(tmpl, workspaceDocumentFilename), []byte(defaultWorkspaceDocumentContent), 0o644); err != nil {
+		t.Fatalf("write workspace.md: %v", err)
 	}
 
 	var out bytes.Buffer

@@ -7,30 +7,39 @@ status: implemented
 
 ## Purpose
 
-Define one workspace-local, AI-editable structured task contract that remains safe when
-`tasks.md` is read or updated outside `kra`.
+Define one workspace-local, AI-editable workspace state and task contract that remains safe when
+`workspace.md` is read or updated outside `kra`.
 
 ## Scope
 
 - Applies to active and archived workspace folders.
 - Canonical task document path is:
-  - `workspaces/<id>/tasks.md`
-  - `archive/<id>/tasks.md`
+  - `workspaces/<id>/workspace.md`
+  - `archive/<id>/workspace.md`
 - The file is optional.
-- Absence of `tasks.md` means the workspace has zero structured tasks.
+- Absence of `workspace.md` means the workspace has no recorded current state and zero structured
+  tasks.
 
 ## Design goals
 
-- AI agents and humans may read and write `tasks.md` directly.
+- AI agents and humans may read and write `workspace.md` directly.
 - `kra` is not the sole editor for task data.
 - `kra` defines the minimum contract, parses compliant task blocks, and writes a canonical form.
-- `tasks.md` is the single source of truth for task state.
+- `workspace.md` is the single source of truth for current workspace state and task state.
 - Arbitrary freeform Markdown may coexist with structured tasks in the same file.
 - `kra` must ignore freeform content outside the structured task section.
 
 ## File contract
 
-- `tasks.md` may contain arbitrary Markdown before and after the structured task section.
+- `workspace.md` may contain arbitrary Markdown before and after the structured task section.
+- `kra` interprets the first level-2 heading named `Current State` as a natural-language state
+  summary:
+  - `## Current State`
+- `## Current State` content is freeform Markdown. Agents should keep it short, current, and useful
+  for resuming work quickly.
+- `kra` interprets the first level-2 heading named `Next` as the next concrete action:
+  - `## Next`
+- `## Next` content is freeform Markdown. Agents should update it before handing off or stopping.
 - `kra` interprets only the first level-2 heading named `Tasks`:
   - `## Tasks`
 - The structured task section ends at the next level-2 heading or EOF.
@@ -65,13 +74,15 @@ Define one workspace-local, AI-editable structured task contract that remains sa
 
 ## View policy
 
-- cmux Dock is the supported persistent task tui.
-- `kra ws task tui` reads `tasks.md`, renders the current structured task state for terminal or Dock
-  use, and writes status changes back to `tasks.md`.
-- `kra ws task tui` starts in read mode; users must enter write mode before clicks or keys mutate
+- cmux Dock is the supported persistent status view.
+- `kra ws status` reads `workspace.md`, renders `## Current State` and the current structured task
+  state for terminal or Dock use, and writes status changes back to `workspace.md`.
+- With root/all-workspace views, `kra ws status --all` emphasizes each workspace's
+  `## Current State` and shows task progress as supplemental context instead of listing every task.
+- `kra ws status` starts in read mode; users must enter write mode before clicks or keys mutate
   task status.
-- Direct `tasks.md` edits remain valid as long as the contract is preserved; users or AI agents can
-  run `kra ws task tui` afterward or rely on Dock refresh.
+- Direct `workspace.md` edits remain valid as long as the contract is preserved; users or AI agents can
+  run `kra ws status` afterward or rely on Dock refresh.
 - `kra ws task sync` is deprecated and no longer updates cmux task pills.
 
 ## Task model

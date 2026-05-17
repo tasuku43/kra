@@ -25,16 +25,18 @@ Provide root-level helpers around the conceptual `KRA_ROOT`.
 
 - `kra root migrate [--apply] [--format human|json]`
   - plan by default; mutate only when `--apply` is set
-  - add missing default template task scaffold:
-    - `templates/default/tasks.md`
-  - add the same missing task scaffold to active existing workspaces:
-    - `workspaces/<id>/tasks.md`
+  - add missing default template workspace scaffold:
+    - `templates/default/workspace.md`
+  - add the same missing workspace scaffold to active existing workspaces:
+    - `workspaces/<id>/workspace.md`
+  - when `tasks.md` exists and `workspace.md` is absent, convert `tasks.md` to `workspace.md`
+    and remove the legacy `tasks.md`
   - do not touch archived workspaces
   - do not overwrite existing files
   - do not write under `workspaces/<id>/repos/`
   - do not commit automatically
   - do not create new project-local `.cmux/dock.json` as standard scaffold
-  - task source of truth is `<workspace>/tasks.md`
+  - workspace current state and task source of truth is `<workspace>/workspace.md`
   - detect legacy project-local Dock config at:
     - `<KRA_ROOT>/.cmux/dock.json`
     - `<KRA_ROOT>/templates/default/.cmux/dock.json`
@@ -50,15 +52,15 @@ Provide root-level helpers around the conceptual `KRA_ROOT`.
   - standard global `kra-tasks` control:
     - `id`: `kra-tasks`
     - `title`: `Tasks`
-    - `command`: `kra ws task tui --cmux-current --refresh 2s`
+    - `command`: `kra ws status --cmux-current`
     - `height`: `420`
   - global Dock uses the `--cmux-current` resolver so the current cmux workspace maps to the corresponding kra workspace
   - managed legacy control detection:
     - `id == "kra-tasks"`
     - `command` contains one of:
-      - `kra ws task tui --current`
+      - `kra ws status --current`
       - `kra ws task view --current`
-      - `kra ws task tui --all`
+      - `kra ws status --all`
       - `kra ws task view --all`
     - title `Tasks` or empty is only advisory; id and command are authoritative
     - controls with a different id, such as `kra-tasks2`, are custom and never auto-managed
