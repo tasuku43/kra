@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
@@ -41,13 +42,10 @@ type wsTaskTUITickMsg time.Time
 type wsTaskTUIMode string
 
 const (
-	wsTaskTUIModeRead  wsTaskTUIMode = "read"
-	wsTaskTUIModeWrite wsTaskTUIMode = "write"
-
-	// TASKS header, blank line, two summary lines, and a blank spacer.
-	wsTaskTUIContentTopY = 5
-	// TASKS header, blank line, and one scroll/status spacer.
-	wsTaskTUIRootContentTopY = 3
+	wsTaskTUIModeRead        wsTaskTUIMode = "read"
+	wsTaskTUIModeWrite       wsTaskTUIMode = "write"
+	wsTaskTUIBodyTopY                      = 2
+	wsTaskTUIRootContentTopY               = 3
 )
 
 type wsTaskTUIModel struct {
@@ -171,6 +169,8 @@ func (m wsTaskTUIModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if msg.Height > 0 {
 			m.height = msg.Height
 		}
+		m.rows = buildWSTaskTUIRows(m.model, m.width)
+		m.ensureCursorVisible()
 		return m, nil
 	case wsTaskTUITickMsg:
 		before := renderWSTaskViewModelKey(m.model)
@@ -320,7 +320,7 @@ func (m wsTaskTUIModel) View() string {
 			if len(stateLines) > 0 {
 				for _, stateLine := range stateLines {
 					fullY++
-					m.writeVisibleLine(&b, fullY, styleMuted(stateLine, m.useColor))
+					m.writeVisibleLine(&b, fullY, renderWorkspaceStateLine(stateLine, m.useColor))
 				}
 			} else {
 				fullY++
@@ -330,9 +330,18 @@ func (m wsTaskTUIModel) View() string {
 			m.writeVisibleLine(&b, fullY, "")
 		}
 	} else {
-		m.writeCurrentState(&b)
-		fmt.Fprintf(&b, "%s\n", m.renderSummary(summarizeWSTaskItems(m.full.Items)))
-		m.writeScrollHint(&b)
+		fullY := wsTaskTUIBodyTopY - 1
+		m.writeCurrentState(&b, &fullY)
+		for _, summaryLine := range strings.Split(m.renderSummary(summarizeWSTaskItems(m.full.Items)), "\n") {
+			fullY++
+			m.writeVisibleLine(&b, fullY, summaryLine)
+		}
+		fullY++
+		if m.maxScroll() == 0 {
+			m.writeVisibleLine(&b, fullY, "")
+		} else {
+			m.writeVisibleLine(&b, fullY, styleMuted(fmt.Sprintf("scroll %d/%d", m.scroll, m.maxScroll()), m.useColor))
+		}
 		for _, row := range m.rows {
 			m.writeVisibleLine(&b, row.Y, m.renderRow(row))
 		}
@@ -350,39 +359,45 @@ func (m wsTaskTUIModel) View() string {
 	return b.String()
 }
 
-func (m wsTaskTUIModel) writeCurrentState(b *strings.Builder) {
+func (m wsTaskTUIModel) writeCurrentState(b *strings.Builder, fullY *int) {
 	state := strings.TrimSpace(m.model.CurrentState)
 	next := strings.TrimSpace(m.model.Next)
 	if state == "" && next == "" {
 		return
 	}
 	if state != "" {
-		fmt.Fprintf(b, "%s\n", styleBold("Current State", m.useColor))
+		(*fullY)++
+		m.writeVisibleLine(b, *fullY, styleBold("Current State", m.useColor))
 		for _, line := range workspaceStateDisplayLines(state, m.width) {
-			fmt.Fprintf(b, "%s\n", styleMuted(line, m.useColor))
+			(*fullY)++
+			m.writeVisibleLine(b, *fullY, renderWorkspaceStateLine(line, m.useColor))
 		}
 	}
 	if next != "" {
 		if state != "" {
-			b.WriteByte('\n')
+			(*fullY)++
+			m.writeVisibleLine(b, *fullY, "")
 		}
-		fmt.Fprintf(b, "%s\n", styleBold("Next", m.useColor))
+		(*fullY)++
+		m.writeVisibleLine(b, *fullY, styleBold("Next", m.useColor))
 		for _, line := range workspaceStateDisplayLines(next, m.width) {
-			fmt.Fprintf(b, "%s\n", styleMuted(line, m.useColor))
+			(*fullY)++
+			m.writeVisibleLine(b, *fullY, renderWorkspaceStateLine(line, m.useColor))
 		}
 	}
-	b.WriteByte('\n')
+	(*fullY)++
+	m.writeVisibleLine(b, *fullY, "")
 }
 
 func workspaceStateDisplayLines(state string, width int) []string {
 	lines := strings.Split(strings.TrimSpace(state), "\n")
 	out := make([]string, 0, len(lines))
 	limit := width
-	if limit <= 0 || limit > 100 {
+	if limit <= 0 {
 		limit = 100
 	}
 	for _, line := range lines {
-		trimmed := strings.TrimSpace(line)
+		trimmed := strings.TrimRight(line, " \t")
 		if trimmed == "" {
 			if len(out) == 0 || out[len(out)-1] == "" {
 				continue
@@ -390,15 +405,101 @@ func workspaceStateDisplayLines(state string, width int) []string {
 			out = append(out, "")
 			continue
 		}
-		if len(trimmed) > limit {
-			trimmed = trimmed[:limit]
-		}
-		out = append(out, trimmed)
-		if len(out) >= 6 {
-			break
-		}
+		out = append(out, wrapDisplayLine(trimmed, limit)...)
 	}
 	return out
+}
+
+func wrapDisplayLine(line string, maxCols int) []string {
+	if maxCols <= 0 || displayWidth(line) <= maxCols {
+		return []string{line}
+	}
+	var out []string
+	var b strings.Builder
+	width := 0
+	for _, r := range line {
+		rw := runeDisplayWidth(r)
+		if width > 0 && width+rw > maxCols {
+			out = append(out, b.String())
+			b.Reset()
+			width = 0
+		}
+		b.WriteRune(r)
+		width += rw
+	}
+	if b.Len() > 0 {
+		out = append(out, b.String())
+	}
+	if len(out) == 0 {
+		return []string{line}
+	}
+	return out
+}
+
+func renderWorkspaceStateLine(line string, useColor bool) string {
+	trimmed := strings.TrimSpace(line)
+	if trimmed == "" {
+		return ""
+	}
+	leading := line[:len(line)-len(strings.TrimLeft(line, " \t"))]
+	body := strings.TrimLeft(line, " \t")
+	if strings.HasPrefix(body, "- ") {
+		return leading + styleMuted("•", useColor) + " " + renderInlineWorkspaceMarkdown(strings.TrimSpace(strings.TrimPrefix(body, "- ")), useColor)
+	}
+	return leading + renderInlineWorkspaceMarkdown(body, useColor)
+}
+
+func renderInlineWorkspaceMarkdown(text string, useColor bool) string {
+	var b strings.Builder
+	for i := 0; i < len(text); {
+		switch {
+		case strings.HasPrefix(text[i:], "**"):
+			end := strings.Index(text[i+2:], "**")
+			if end >= 0 {
+				inner := text[i+2 : i+2+end]
+				b.WriteString(styleWorkspaceBodyBold(inner, useColor))
+				i += 2 + end + 2
+				continue
+			}
+		case text[i] == '`':
+			end := strings.IndexByte(text[i+1:], '`')
+			if end >= 0 {
+				inner := text[i+1 : i+1+end]
+				b.WriteString(styleAccent(inner, useColor))
+				i += 1 + end + 1
+				continue
+			}
+		}
+		next := nextWorkspaceMarkdownMarker(text[i:])
+		if next == 0 {
+			_, size := utf8.DecodeRuneInString(text[i:])
+			next = size
+		}
+		b.WriteString(styleBody(text[i:i+next], useColor))
+		i += next
+	}
+	return b.String()
+}
+
+func nextWorkspaceMarkdownMarker(text string) int {
+	next := len(text)
+	if idx := strings.Index(text, "**"); idx >= 0 && idx < next {
+		next = idx
+	}
+	if idx := strings.IndexByte(text, '`'); idx >= 0 && idx < next {
+		next = idx
+	}
+	if next == len(text) {
+		return next
+	}
+	return next
+}
+
+func styleWorkspaceBodyBold(text string, useColor bool) string {
+	if !useColor {
+		return text
+	}
+	return ansiBold + ansiBody + text + ansiReset
 }
 
 func joinWorkspaceState(currentState string, next string) string {
@@ -528,7 +629,7 @@ func (m wsTaskTUIModel) renderRow(row wsTaskTUIRow) string {
 	if m.mode == wsTaskTUIModeWrite && m.cursor >= 0 && m.cursor < len(m.rows) && m.rows[m.cursor].WorkspaceID == row.WorkspaceID && m.rows[m.cursor].TaskID == row.TaskID {
 		marker = ">"
 	}
-	return fmt.Sprintf("%s %s %s  %s", styleAccent(marker, m.useColor), renderWSTaskStatusMarker(row.Item.Status, m.useColor), styleAccent(row.Item.ID, m.useColor), row.Item.Title)
+	return fmt.Sprintf("%s%s %s %s  %s", uiIndent, styleAccent(marker, m.useColor), renderWSTaskStatusMarker(row.Item.Status, m.useColor), styleAccent(row.Item.ID, m.useColor), styleBody(row.Item.Title, m.useColor))
 }
 
 func (m *wsTaskTUIModel) reload(message string) {
@@ -562,7 +663,7 @@ func (m *wsTaskTUIModel) reload(message string) {
 	m.err = nil
 	m.model = model
 	m.full = fullModel
-	m.rows = buildWSTaskTUIRows(model)
+	m.rows = buildWSTaskTUIRows(model, m.width)
 	if m.cursor >= len(m.rows) {
 		m.cursor = len(m.rows) - 1
 	}
@@ -618,9 +719,9 @@ func buildWSTaskTUIModel(root string, target wsTaskTarget, opts wsTaskTUIOptions
 	return result, nil
 }
 
-func buildWSTaskTUIRows(model wstask.ViewModel) []wsTaskTUIRow {
+func buildWSTaskTUIRows(model wstask.ViewModel, width int) []wsTaskTUIRow {
 	rows := make([]wsTaskTUIRow, 0, len(model.Items))
-	y := contentTopYForWSTaskTUIModel(model)
+	y := taskRowsTopYForWSTaskTUIModel(model, width)
 	if len(model.Workspaces) > 0 {
 		return rows
 	}
@@ -664,10 +765,14 @@ func contentTopYForWSTaskTUIModel(model wstask.ViewModel) int {
 	if len(model.Workspaces) > 0 {
 		return wsTaskTUIRootContentTopY
 	}
-	return 2 + currentStateRenderedLineCount(model) + 2 + 1
+	return wsTaskTUIBodyTopY
 }
 
-func currentStateRenderedLineCount(model wstask.ViewModel) int {
+func taskRowsTopYForWSTaskTUIModel(model wstask.ViewModel, width int) int {
+	return wsTaskTUIBodyTopY + currentStateRenderedLineCount(model, width) + 2 + 1
+}
+
+func currentStateRenderedLineCount(model wstask.ViewModel, width int) int {
 	state := strings.TrimSpace(model.CurrentState)
 	next := strings.TrimSpace(model.Next)
 	if state == "" && next == "" {
@@ -676,14 +781,14 @@ func currentStateRenderedLineCount(model wstask.ViewModel) int {
 	count := 0
 	if state != "" {
 		count++ // Current State heading.
-		count += len(workspaceStateDisplayLines(state, 100))
+		count += len(workspaceStateDisplayLines(state, width))
 	}
 	if next != "" {
 		if state != "" {
 			count++ // Blank line between Current State and Next.
 		}
 		count++ // Next heading.
-		count += len(workspaceStateDisplayLines(next, 100))
+		count += len(workspaceStateDisplayLines(next, width))
 	}
 	count++ // Blank line after the state block.
 	return count
@@ -719,6 +824,10 @@ func (m wsTaskTUIModel) contentBottomY() int {
 			bottom = y
 		}
 		return bottom
+	}
+	taskRowsTop := taskRowsTopYForWSTaskTUIModel(m.model, m.width)
+	if taskRowsTop > bottom {
+		bottom = taskRowsTop
 	}
 	for _, row := range m.rows {
 		if row.Y > bottom {

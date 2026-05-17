@@ -738,7 +738,7 @@ func TestWSTaskTUI_MouseWheelScrollsAndClickUsesVisibleRow(t *testing.T) {
 	if m.scroll == 0 {
 		t.Fatalf("scroll = %d, want non-zero after wheel down", m.scroll)
 	}
-	updated, _ := m.Update(tea.MouseMsg{Type: tea.MouseLeft, X: 2, Y: wsTaskTUIContentTopY})
+	updated, _ := m.Update(tea.MouseMsg{Type: tea.MouseLeft, X: 2, Y: m.rows[3].Y - m.scroll})
 	next := updated.(wsTaskTUIModel)
 	if next.rows[0].Item.Status != wstask.StatusTodo {
 		t.Fatalf("first visible-unrelated task status = %s, want todo", next.rows[0].Item.Status)
@@ -807,6 +807,78 @@ func TestWSTaskTUI_MouseClickUsesRenderedTaskRowWithCurrentStateAndNext(t *testi
 	}
 	if bytes.Contains(content, []byte("### TASK-003 Third\nstatus: done")) {
 		t.Fatalf("click updated the row below: %q", string(content))
+	}
+}
+
+func TestWSTaskTUI_CurrentStateWrapsWithoutTruncation(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	longState := "日本語の長いカレントステートを画面幅に合わせて折り返し、途中で消さずに最後まで表示する"
+	writeWorkspaceTasksFile(t, wsPath, "## Current State\n\n"+longState+"\n\n## Next\n\n次の具体的な作業も折り返して表示する\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
+	m.width = 24
+	m.rows = buildWSTaskTUIRows(m.model, m.width)
+	view := m.View()
+	for _, want := range []string{"日本語の長い", "後まで表示する", "次の具体的な作業"} {
+		if !strings.Contains(view, want) {
+			t.Fatalf("view missing %q after wrapping: %q", want, view)
+		}
+	}
+	for _, line := range strings.Split(view, "\n") {
+		if strings.Contains(line, "日本語") && displayWidth(line) > m.width {
+			t.Fatalf("wrapped current state line width = %d, want <= %d: %q", displayWidth(line), m.width, line)
+		}
+	}
+	if m.rows[0].Y <= wsTaskTUIBodyTopY {
+		t.Fatalf("task row Y = %d, want below wrapped current state", m.rows[0].Y)
+	}
+}
+
+func TestWSTaskTUI_CurrentStateScrolls(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Current State\n\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
+	m.height = 8
+	view := m.View()
+	if !strings.Contains(view, "line 1") {
+		t.Fatalf("initial view missing first current-state line: %q", view)
+	}
+	scrolled, _ := m.Update(tea.MouseMsg{Type: tea.MouseWheelDown})
+	next := scrolled.(wsTaskTUIModel)
+	if next.scroll == 0 {
+		t.Fatalf("scroll = %d, want non-zero for long current state", next.scroll)
+	}
+	view = next.View()
+	if strings.Contains(view, "line 1") {
+		t.Fatalf("scrolled view should move past first current-state line: %q", view)
+	}
+}
+
+func TestWSTaskTUI_CurrentStateRendersLightMarkdown(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Current State\n\n- **Done** `code` path\n  - nested item\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, true)
+	view := m.View()
+	if !strings.Contains(view, "•") {
+		t.Fatalf("view missing bullet marker: %q", view)
+	}
+	if !strings.Contains(view, ansiBold+ansiBody+"Done") {
+		t.Fatalf("view missing bold markdown: %q", view)
+	}
+	if !strings.Contains(view, ansiAccent+"code") {
+		t.Fatalf("view missing inline code accent: %q", view)
+	}
+	plain := stripANSISequences(view)
+	if !strings.Contains(plain, uiIndent+"  ○ TASK-001") {
+		t.Fatalf("view missing indented task row: %q", view)
 	}
 }
 

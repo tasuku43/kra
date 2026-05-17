@@ -21,6 +21,7 @@ const (
 	ansiBlue    = "\x1b[34m"
 	ansiCyan    = "\x1b[36m"
 	ansiMuted   = "\x1b[90m"
+	ansiBody    = "\x1b[38;5;250m"
 	// 256-color accents for subdued git reference styling.
 	ansiGitRefLocalMuted  = "\x1b[2;38;5;65m"
 	ansiGitRefRemoteMuted = "\x1b[38;5;67m"
@@ -38,6 +39,7 @@ type styleToken string
 
 const (
 	tokenTextPrimary styleToken = "text.primary"
+	tokenTextBody    styleToken = "text.body"
 	tokenTextMuted   styleToken = "text.muted"
 	tokenAccent      styleToken = "accent"
 
@@ -61,6 +63,8 @@ func tokenANSI(token styleToken) string {
 	switch token {
 	case tokenTextPrimary:
 		return ""
+	case tokenTextBody:
+		return ansiBody
 	case tokenTextMuted:
 		return ansiMuted
 	case tokenAccent:
@@ -144,6 +148,10 @@ func styleTokenizeKeepBG(text string, token styleToken, useColor bool) string {
 
 func styleMuted(text string, useColor bool) string {
 	return styleTokenize(text, tokenTextMuted, useColor)
+}
+
+func styleBody(text string, useColor bool) string {
+	return styleTokenize(text, tokenTextBody, useColor)
 }
 
 func styleMutedKeepBG(text string, useColor bool) string {
