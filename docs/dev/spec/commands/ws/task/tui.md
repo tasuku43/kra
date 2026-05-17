@@ -75,20 +75,35 @@ Render an interactive terminal task view for humans and cmux Dock, and write sta
 
 ## cmux Dock
 
-The default Dock command is:
+Install the global cmux Dock integration explicitly with:
+
+```sh
+kra ws task dock install
+```
+
+`kra ws task dock install --global` is accepted as a compatibility alias because global Dock is the
+only supported install target.
+
+The global Dock command is:
+
+```sh
+kra ws task tui --cmux-current --refresh 2s
+```
+
+When an existing global Dock config is present, install preserves existing controls and adds or
+updates the managed `id == "kra-tasks"` control. Invalid global Dock JSON fails closed.
+
+The legacy workspace Dock command was:
 
 ```sh
 kra ws task tui --current --refresh 2s
 ```
 
-cmux reads project Dock configuration from `<workspace>/.cmux/dock.json`. Dock is the persistent view
-over `<workspace>/tasks.md`; `kra ws task sync` is deprecated and no longer projects cmux task pills.
-
-The root Dock command is:
+The legacy root Dock command was:
 
 ```sh
 kra ws task tui --all --todo-only --refresh 2s
 ```
 
-Root Dock reads active workspaces only by default, and omits completed tasks unless `--include-done`
-is used.
+`kra root migrate --apply` can migrate managed legacy project-local Dock configs to the global Dock.
+`kra ws task sync` is deprecated and no longer projects cmux task pills.

@@ -435,11 +435,8 @@ func globalCMUXDockPath() (string, error) {
 	return filepath.Join(home, ".config", "cmux", "dock.json"), nil
 }
 
-func standardGlobalDockCommand(useTUI bool) string {
-	if useTUI {
-		return "zsh -lc 'source ~/.zshrc >/dev/null 2>&1 || true; command kra ws task tui --cmux-current --refresh 2s'"
-	}
-	return "zsh -lc 'source ~/.zshrc >/dev/null 2>&1 || true; command kra ws task view --cmux-current --watch --refresh 2s'"
+func standardGlobalDockCommand(_ bool) string {
+	return "kra ws task tui --cmux-current --refresh 2s"
 }
 
 func inspectGlobalDock(path string, desiredCommand string) (rootMigrateGlobalDockResult, error) {

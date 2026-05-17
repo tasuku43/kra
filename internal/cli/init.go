@@ -160,6 +160,7 @@ func (c *CLI) runInit(args []string) int {
 	resultLines := []string{
 		styleSuccess(fmt.Sprintf("Initialized: %s", result.Root), useColorOut),
 		styleSuccess(fmt.Sprintf("Context selected: %s", contextName), useColorOut),
+		styleMuted("cmux Dock: run `kra ws task dock install` to enable the global Tasks Dock", useColorOut),
 	}
 	printResultSection(c.Out, useColorOut, resultLines...)
 	c.debugf("init completed root=%s", result.Root)

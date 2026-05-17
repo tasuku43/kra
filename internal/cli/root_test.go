@@ -289,7 +289,7 @@ func TestCLI_RootMigrate_ApplyMigratesManagedLegacyDockToGlobal(t *testing.T) {
 	if len(dock.Controls) != 1 {
 		t.Fatalf("controls len = %d, want 1", len(dock.Controls))
 	}
-	want := "zsh -lc 'source ~/.zshrc >/dev/null 2>&1 || true; command kra ws task tui --cmux-current --refresh 2s'"
+	want := "kra ws task tui --cmux-current --refresh 2s"
 	if dock.Controls[0].Command != want {
 		t.Fatalf("dock command = %q, want %q", dock.Controls[0].Command, want)
 	}
@@ -354,7 +354,7 @@ func TestCLI_RootMigrate_GlobalDockPreservesExistingControlsAndUpdatesKraTasks(t
 	if dock.Controls[0].ID != "custom" || dock.Controls[0].Command != "echo custom" {
 		t.Fatalf("custom control not preserved: %+v", dock.Controls)
 	}
-	want := "zsh -lc 'source ~/.zshrc >/dev/null 2>&1 || true; command kra ws task tui --cmux-current --refresh 2s'"
+	want := "kra ws task tui --cmux-current --refresh 2s"
 	if dock.Controls[1].ID != "kra-tasks" || dock.Controls[1].Command != want || dock.Controls[1].Height != 420 {
 		t.Fatalf("kra-tasks not updated to standard: %+v", dock.Controls[1])
 	}
