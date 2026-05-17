@@ -39,9 +39,9 @@ Generated default templates include:
 - `artifacts/`
 - `.cmux/dock.json`
 - `AGENTS.md`
-- `tasks.md`
+- `workspace.md`
 
-`.cmux/` is template-managed cmux project configuration. `tasks.md` remains the workspace task source of truth at `<workspace>/tasks.md`.
+`.cmux/` is template-managed cmux project configuration. `workspace.md` remains the workspace current-state and task source of truth at `<workspace>/workspace.md`.
 
 ## Entry constraints
 

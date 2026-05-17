@@ -21,7 +21,7 @@ kra ws dashboard
 
 Notes:
 
-- `kra ws create` uses the default workspace template unless you pass `--template`; the baseline template starts with `notes/`, `artifacts/`, `tasks.md`, and `.cmux/dock.json`.
+- `kra ws create` uses the default workspace template unless you pass `--template`; the baseline template starts with `notes/`, `artifacts/`, `workspace.md`, and `.cmux/dock.json`.
 - Ticket/provider integrations are designed to be extensible; current implemented support includes Jira (`kra ws create --jira`, `kra ws import jira`) and GitHub import (`kra ws import github issue|review`).
 
 ## Root commands
@@ -56,7 +56,7 @@ Notes:
 - `kra ws remove-repo [--id <id> | --current | --select]`
 - `kra ws task [--id <id> | --current | --select]`
 - `kra ws task list [--id <id> | --current | --select]`
-- `kra ws task tui [--id <id> | --current | --select | --all] [--todo-only] [--include-done] [--refresh <duration>] [--no-color]`
+- `kra ws status [--id <id> | --current | --select | --all] [--todo-only] [--include-done] [--no-color]`
 - `kra ws task add [--id <id> | --current | --select] --title "<text>"`
 - `kra ws task status [--id <id> | --current | --select] <task-id> <todo|doing|blocked|done>`
 - `kra ws task sync [--id <id> | --current | --select | --all]` (deprecated no-op)
@@ -73,19 +73,19 @@ Use workspace-local tasks when you want a Markdown source of truth with a cmux D
 ```sh
 kra ws task add --current --title "Draft docs"
 kra ws task list --current
-kra ws task tui --current --refresh 2s
-kra ws task tui --all --todo-only --refresh 2s
+kra ws status --current
+kra ws status --all --todo-only
 kra ws task status --current TASK-001 doing
 ```
 
-New default workspaces include a cmux Dock config at `.cmux/dock.json`. cmux reads it from the workspace root and can keep a right-sidebar `Tasks` control visible by running `kra ws task tui --current --refresh 2s`. `tasks.md` remains the source of truth, and `kra ws task sync` is deprecated. Existing roots/templates/workspaces are not rewritten by this default template change.
+New default workspaces include a cmux Dock config at `.cmux/dock.json`. cmux reads it from the workspace root and can keep a right-sidebar `Status` control visible by running `kra ws status --current`. `workspace.md` remains the source of truth, and `kra ws task sync` is deprecated. Existing roots/templates/workspaces are not rewritten by this default template change.
 
 Use `kra ws doc open` when you want GitHub-like Markdown viewing in `cmux` for workspace-local docs:
 
 ```sh
 kra ws doc open --current
 kra ws doc open --current notes/
-kra ws doc open --current tasks.md --no-focus
+kra ws doc open --current workspace.md --no-focus
 ```
 
 ## Jira import quickstart

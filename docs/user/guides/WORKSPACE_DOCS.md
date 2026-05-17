@@ -22,7 +22,7 @@ This is meant for workspace notes, plans, and other task-local Markdown, not rep
 ```sh
 kra ws doc open --current
 kra ws doc open --current notes/
-kra ws doc open --current tasks.md --no-focus
+kra ws doc open --current workspace.md --no-focus
 ```
 
 Typical results:
@@ -37,7 +37,7 @@ Accepted targets:
 
 - workspace root Markdown files
 - Markdown under workspace-local folders such as `notes/`
-- `tasks.md`
+- `workspace.md`
 
 Rejected targets:
 
@@ -71,7 +71,7 @@ This command requires `cmux` Markdown viewer support.
 ```sh
 kra ws doc open --id TASK-1234 notes/README.md
 kra ws doc open --current worklog/insights/
-kra ws doc open --current --surface <surface-ref> tasks.md
+kra ws doc open --current --surface <surface-ref> workspace.md
 ```
 
 Use `--surface` only when you need to override the staging surface selection. In normal use, the default routing is preferred.

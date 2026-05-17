@@ -425,19 +425,19 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if statErr != nil {
 		t.Fatalf("root .cmux/dock.json not created: %v", statErr)
 	}
-	assertDockJSONCommandContains(t, rootDockBytes, "kra ws task tui --all --todo-only --refresh 2s")
+	assertDockJSONCommandContains(t, rootDockBytes, "kra ws status --all --todo-only")
 	dockPath := filepath.Join(root, "templates", "default", ".cmux", "dock.json")
 	dockBytes, statErr := os.ReadFile(dockPath)
 	if statErr != nil {
 		t.Fatalf("default template .cmux/dock.json not created: %v", statErr)
 	}
 	assertDefaultDockJSON(t, dockBytes)
-	tasksBytes, statErr := os.ReadFile(filepath.Join(root, "templates", "default", "tasks.md"))
+	tasksBytes, statErr := os.ReadFile(filepath.Join(root, "templates", "default", workspaceDocumentFilename))
 	if statErr != nil {
-		t.Fatalf("default template tasks.md not created: %v", statErr)
+		t.Fatalf("default template workspace.md not created: %v", statErr)
 	}
-	if string(tasksBytes) != defaultWorkspaceTasksContent {
-		t.Fatalf("default template tasks.md content mismatch: %q", string(tasksBytes))
+	if string(tasksBytes) != defaultWorkspaceDocumentContent {
+		t.Fatalf("default template workspace.md content mismatch: %q", string(tasksBytes))
 	}
 	rootConfigPath := filepath.Join(root, ".kra", "config.yaml")
 	rootConfigBytes, statErr := os.ReadFile(rootConfigPath)
@@ -472,7 +472,8 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 		"AGENTS.md":                         true,
 		"templates/default/.cmux/dock.json": true,
 		"templates/default/AGENTS.md":       true,
-		"templates/default/tasks.md":        true,
+		"templates/default/CLAUDE.md":       true,
+		"templates/default/workspace.md":    true,
 	}
 	if len(tracked) != len(wantTracked) {
 		t.Fatalf("tracked file count = %d, want %d (files=%q)", len(tracked), len(wantTracked), strings.Join(tracked, ", "))
@@ -501,8 +502,8 @@ func TestCLI_Init_DoesNotOverwriteExistingDefaultTemplate(t *testing.T) {
 	if err := os.MkdirAll(existingDefault, 0o755); err != nil {
 		t.Fatalf("mkdir existing default template: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(existingDefault, "tasks.md"), []byte("existing tasks\n"), 0o644); err != nil {
-		t.Fatalf("write existing tasks.md: %v", err)
+	if err := os.WriteFile(filepath.Join(existingDefault, workspaceDocumentFilename), []byte("existing tasks\n"), 0o644); err != nil {
+		t.Fatalf("write existing workspace.md: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(existingDefault, "custom.txt"), []byte("keep\n"), 0o644); err != nil {
 		t.Fatalf("write custom template file: %v", err)
@@ -516,12 +517,12 @@ func TestCLI_Init_DoesNotOverwriteExistingDefaultTemplate(t *testing.T) {
 		t.Fatalf("exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
 
-	got, readErr := os.ReadFile(filepath.Join(existingDefault, "tasks.md"))
+	got, readErr := os.ReadFile(filepath.Join(existingDefault, workspaceDocumentFilename))
 	if readErr != nil {
-		t.Fatalf("read existing tasks.md: %v", readErr)
+		t.Fatalf("read existing workspace.md: %v", readErr)
 	}
 	if string(got) != "existing tasks\n" {
-		t.Fatalf("existing tasks.md was overwritten: %q", string(got))
+		t.Fatalf("existing workspace.md was overwritten: %q", string(got))
 	}
 	if _, statErr := os.Stat(filepath.Join(existingDefault, ".cmux", "dock.json")); !os.IsNotExist(statErr) {
 		t.Fatalf("init should not add dock.json to existing default template, stat err=%v", statErr)
@@ -530,7 +531,7 @@ func TestCLI_Init_DoesNotOverwriteExistingDefaultTemplate(t *testing.T) {
 
 func assertDefaultDockJSON(t *testing.T, b []byte) {
 	t.Helper()
-	assertDockJSONCommandContains(t, b, "kra ws task tui --current --refresh 2s")
+	assertDockJSONCommandContains(t, b, "kra ws status --current")
 }
 
 func assertDockJSONCommandContains(t *testing.T, b []byte, commandPart string) {
@@ -743,8 +744,8 @@ func seedDefaultTemplate(t *testing.T, root string) {
 	if err := os.WriteFile(filepath.Join(root, "templates", "default", ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
 		t.Fatalf("write default template .cmux/dock.json: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(root, "templates", "default", "tasks.md"), []byte(defaultWorkspaceTasksContent), 0o644); err != nil {
-		t.Fatalf("write default template tasks.md: %v", err)
+	if err := os.WriteFile(filepath.Join(root, "templates", "default", workspaceDocumentFilename), []byte(defaultWorkspaceDocumentContent), 0o644); err != nil {
+		t.Fatalf("write default template workspace.md: %v", err)
 	}
 }
 
@@ -807,12 +808,12 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 		t.Fatalf(".cmux/dock.json not created: %v", statErr)
 	}
 	assertDefaultDockJSON(t, dockBytes)
-	tasksBytes, statErr := os.ReadFile(filepath.Join(wsDir, "tasks.md"))
+	tasksBytes, statErr := os.ReadFile(filepath.Join(wsDir, workspaceDocumentFilename))
 	if statErr != nil {
-		t.Fatalf("tasks.md not created: %v", statErr)
+		t.Fatalf("workspace.md not created: %v", statErr)
 	}
-	if string(tasksBytes) != defaultWorkspaceTasksContent {
-		t.Fatalf("tasks.md mismatch: %q", string(tasksBytes))
+	if string(tasksBytes) != defaultWorkspaceDocumentContent {
+		t.Fatalf("workspace.md mismatch: %q", string(tasksBytes))
 	}
 	metaBytes, statErr := os.ReadFile(filepath.Join(wsDir, workspaceMetaFilename))
 	if statErr != nil {

@@ -22,7 +22,7 @@ Validate workspace templates under the current root before `ws create`.
 - Validation rules:
   - template name must follow workspace ID rules
   - reserved top-level paths are forbidden (`repos/`, `.git/`, `.kra.meta.json`)
-  - `.cmux/` and `tasks.md` are allowed template content
+  - `.cmux/`, `workspace.md`, and agent instruction files are allowed template content
   - symlinks are forbidden
   - unsupported special file types are forbidden
 - Collect and print all violations (not fail-fast on first violation).

@@ -16,13 +16,29 @@ const (
 	defaultWorkspaceTemplateName = "default"
 )
 
-const defaultWorkspaceTasksContent = `# Workspace Tasks
+const workspaceDocumentFilename = "workspace.md"
+
+const defaultWorkspaceDocumentContent = `# Workspace
+
+This file is the workspace handoff state. Keep it current.
+
+- Update ` + "`## Current State`" + ` when the situation changes.
+- Update ` + "`## Next`" + ` before stopping or handing off.
+- Keep ` + "`## Tasks`" + ` statuses in sync with actual progress.
+
+## Current State
+
+This workspace has not recorded current state yet.
+
+## Next
+
+Record the next concrete step here before handing off or stopping.
 
 ## Tasks
 `
 
-const defaultWorkspaceCMUXDockBaseCommand = "kra ws task tui --current --refresh 2s"
-const defaultRootCMUXDockBaseCommand = "kra ws task tui --all --todo-only --refresh 2s"
+const defaultWorkspaceCMUXDockBaseCommand = "kra ws status --current"
+const defaultRootCMUXDockBaseCommand = "kra ws status --all --todo-only"
 
 type cmuxDockConfig struct {
 	Controls []cmuxDockControl `json:"controls"`
@@ -48,7 +64,7 @@ func cmuxDockContent(command string) string {
 	config := cmuxDockConfig{
 		Controls: []cmuxDockControl{{
 			ID:      "kra-tasks",
-			Title:   "Tasks",
+			Title:   "Status",
 			Command: command,
 			Cwd:     ".",
 			Height:  420,

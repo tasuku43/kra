@@ -104,8 +104,8 @@ func TestCLI_WSCreate_CopiesDockAndTasksFromTemplate(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(custom, ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
 		t.Fatalf("write custom dock.json: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(custom, "tasks.md"), []byte(defaultWorkspaceTasksContent), 0o644); err != nil {
-		t.Fatalf("write custom tasks.md: %v", err)
+	if err := os.WriteFile(filepath.Join(custom, workspaceDocumentFilename), []byte(defaultWorkspaceDocumentContent), 0o644); err != nil {
+		t.Fatalf("write custom workspace.md: %v", err)
 	}
 
 	var out bytes.Buffer
@@ -123,12 +123,12 @@ func TestCLI_WSCreate_CopiesDockAndTasksFromTemplate(t *testing.T) {
 		t.Fatalf("read workspace dock.json: %v", readErr)
 	}
 	assertDefaultDockJSON(t, dockBytes)
-	tasksBytes, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	tasksBytes, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
 	if readErr != nil {
-		t.Fatalf("read workspace tasks.md: %v", readErr)
+		t.Fatalf("read workspace workspace.md: %v", readErr)
 	}
-	if string(tasksBytes) != defaultWorkspaceTasksContent {
-		t.Fatalf("tasks.md mismatch: %q", string(tasksBytes))
+	if string(tasksBytes) != defaultWorkspaceDocumentContent {
+		t.Fatalf("workspace.md mismatch: %q", string(tasksBytes))
 	}
 	if _, err := os.Stat(filepath.Join(wsPath, "repos", ".cmux", "dock.json")); !os.IsNotExist(err) {
 		t.Fatalf("dock.json should not be created under repos/, stat err=%v", err)

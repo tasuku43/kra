@@ -210,11 +210,14 @@ func createWorkspaceTemplateScaffold(root string, name string) (string, error) {
 	if err := os.WriteFile(filepath.Join(templatePath, rootAgentsFilename), []byte(defaultWorkspaceTemplateAgentsContent()), 0o644); err != nil {
 		return "", fmt.Errorf("write template AGENTS.md: %w", err)
 	}
+	if err := os.WriteFile(filepath.Join(templatePath, rootClaudeFilename), []byte(defaultWorkspaceTemplateAgentsContent()), 0o644); err != nil {
+		return "", fmt.Errorf("write template CLAUDE.md: %w", err)
+	}
 	if err := os.WriteFile(filepath.Join(templatePath, ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
 		return "", fmt.Errorf("write template .cmux/dock.json: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(templatePath, "tasks.md"), []byte(defaultWorkspaceTasksContent), 0o644); err != nil {
-		return "", fmt.Errorf("write template tasks.md: %w", err)
+	if err := os.WriteFile(filepath.Join(templatePath, workspaceDocumentFilename), []byte(defaultWorkspaceDocumentContent), 0o644); err != nil {
+		return "", fmt.Errorf("write template workspace.md: %w", err)
 	}
 	return templatePath, nil
 }

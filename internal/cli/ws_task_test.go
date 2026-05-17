@@ -140,8 +140,8 @@ func TestCLI_WSTaskAdd_JSON_CreatesTaskDocumentAndPreservesOutsideContent(t *tes
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	if err := os.WriteFile(filepath.Join(wsPath, "tasks.md"), []byte("# Notes\n\noutside\n"), 0o644); err != nil {
-		t.Fatalf("write tasks.md: %v", err)
+	if err := os.WriteFile(filepath.Join(wsPath, workspaceDocumentFilename), []byte("# Notes\n\noutside\n"), 0o644); err != nil {
+		t.Fatalf("write workspace.md: %v", err)
 	}
 
 	var out bytes.Buffer
@@ -156,13 +156,13 @@ func TestCLI_WSTaskAdd_JSON_CreatesTaskDocumentAndPreservesOutsideContent(t *tes
 		t.Fatalf("unexpected response: %+v", resp)
 	}
 
-	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	content, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
 	if readErr != nil {
-		t.Fatalf("read tasks.md: %v", readErr)
+		t.Fatalf("read workspace.md: %v", readErr)
 	}
 	got := string(content)
-	if !bytes.Contains(content, []byte("# Notes\n\noutside\n\n## Tasks\n\n### TASK-001 First task\nstatus: todo\n\nLine one\n")) {
-		t.Fatalf("tasks.md missing canonical task block: %q", got)
+	if !bytes.Contains(content, []byte("# Notes\n\noutside\n\n## Current State\n\nThis workspace has not recorded current state yet.\n\n## Next\n\nRecord the next concrete step here before handing off or stopping.\n\n## Tasks\n\n### TASK-001 First task\nstatus: todo\n\nLine one\n")) {
+		t.Fatalf("workspace.md missing canonical task block: %q", got)
 	}
 }
 
@@ -200,12 +200,12 @@ func TestCLI_WSTaskStatus_JSON_AllowsDoneToTodoWithoutSync(t *testing.T) {
 		t.Fatalf("result.sync should be absent after sync deprecation: %+v", resp.Result)
 	}
 
-	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	content, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
 	if readErr != nil {
-		t.Fatalf("read tasks.md: %v", readErr)
+		t.Fatalf("read workspace.md: %v", readErr)
 	}
 	if !bytes.Contains(content, []byte("status: todo")) {
-		t.Fatalf("tasks.md should be updated to todo: %q", string(content))
+		t.Fatalf("workspace.md should be updated to todo: %q", string(content))
 	}
 	if len(syncClient.setCalls) != 0 || len(syncClient.clearCalls) != 0 {
 		t.Fatalf("cmux sync calls = set:%+v clear:%+v, want none", syncClient.setCalls, syncClient.clearCalls)
@@ -304,7 +304,7 @@ func TestCLI_WSTaskView_Current_GroupsByStatus(t *testing.T) {
 		"  ▲ TASK-004  API仕様の確認待ち",
 		"  ✔ TASK-000  POCする",
 		"updated:",
-		"source: " + filepath.Join(realWSPath, "tasks.md"),
+		"source: " + filepath.Join(realWSPath, workspaceDocumentFilename),
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("stdout missing %q: %q", want, got)
@@ -481,7 +481,7 @@ func TestCLI_WSTaskView_EmptyWhenTasksFileMissing(t *testing.T) {
 		t.Fatalf("ws task view exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
 	}
 	got := out.String()
-	if !strings.Contains(got, "No structured tasks.") || !strings.Contains(got, "source: "+filepath.Join(wsPath, "tasks.md")) {
+	if !strings.Contains(got, "No structured tasks.") || !strings.Contains(got, "source: "+filepath.Join(wsPath, workspaceDocumentFilename)) {
 		t.Fatalf("stdout missing empty state: %q", got)
 	}
 }
@@ -519,23 +519,6 @@ func TestCLI_WSTaskView_InvalidContractFailsClosed(t *testing.T) {
 	}
 	if got := out.String(); !strings.Contains(got, "error:") || !strings.Contains(got, "duplicate task id") {
 		t.Fatalf("stdout missing fail-closed error: %q", got)
-	}
-}
-
-func TestCLI_WSTaskView_InvalidRefreshReturnsUsage(t *testing.T) {
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-	seedWorkspaceMeta(t, env.Root, "active", "WS1")
-
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-	code := c.Run([]string{"ws", "task", "view", "--id", "WS1", "--refresh", "0s"})
-	if code != exitUsage {
-		t.Fatalf("ws task view exit code = %d, want %d", code, exitUsage)
-	}
-	if !strings.Contains(err.String(), "--refresh must be greater than 0") {
-		t.Fatalf("stderr missing refresh validation: %q", err.String())
 	}
 }
 
@@ -598,7 +581,7 @@ func TestPrintWSTaskView_NoColor(t *testing.T) {
 	var out bytes.Buffer
 	printWSTaskView(&out, wstask.ViewModel{
 		WorkspaceID: "WS1",
-		Path:        "/root/workspaces/WS1/tasks.md",
+		Path:        "/root/workspaces/WS1/workspace.md",
 		Groups: []wstask.ViewGroup{{
 			Status: wstask.StatusDoing,
 			Title:  "Doing",
@@ -625,7 +608,7 @@ func TestWSTaskTUI_RendersProgressSummaryAndBlockedEmphasis(t *testing.T) {
 		"Doing 0",
 		"Blocked 1",
 		"Done 1",
-		"source: " + filepath.Join(wsPath, "tasks.md"),
+		"source: " + filepath.Join(wsPath, workspaceDocumentFilename),
 	} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("view missing %q: %q", want, got)
@@ -704,12 +687,12 @@ func TestWSTaskTUI_ToggleRowUpdatesTasksFile(t *testing.T) {
 	if next.rows[0].Item.Status != wstask.StatusDone {
 		t.Fatalf("task status = %s, want done", next.rows[0].Item.Status)
 	}
-	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	content, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
 	if readErr != nil {
-		t.Fatalf("read tasks.md: %v", readErr)
+		t.Fatalf("read workspace.md: %v", readErr)
 	}
 	if !bytes.Contains(content, []byte("status: done")) {
-		t.Fatalf("tasks.md should be updated to done: %q", string(content))
+		t.Fatalf("workspace.md should be updated to done: %q", string(content))
 	}
 }
 
@@ -728,12 +711,12 @@ func TestWSTaskTUI_ReadModeDoesNotUpdateTasksFile(t *testing.T) {
 	if next.rows[0].Item.Status != wstask.StatusTodo {
 		t.Fatalf("task status = %s, want todo", next.rows[0].Item.Status)
 	}
-	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	content, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
 	if readErr != nil {
-		t.Fatalf("read tasks.md: %v", readErr)
+		t.Fatalf("read workspace.md: %v", readErr)
 	}
 	if !bytes.Contains(content, []byte("status: todo")) || bytes.Contains(content, []byte("status: done")) {
-		t.Fatalf("tasks.md should remain todo in read mode: %q", string(content))
+		t.Fatalf("workspace.md should remain todo in read mode: %q", string(content))
 	}
 	if !strings.Contains(next.message, "press i") {
 		t.Fatalf("message = %q, want edit hint", next.message)
@@ -760,9 +743,9 @@ func TestWSTaskTUI_MouseWheelScrollsAndClickUsesVisibleRow(t *testing.T) {
 	if next.rows[0].Item.Status != wstask.StatusTodo {
 		t.Fatalf("first visible-unrelated task status = %s, want todo", next.rows[0].Item.Status)
 	}
-	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	content, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
 	if readErr != nil {
-		t.Fatalf("read tasks.md: %v", readErr)
+		t.Fatalf("read workspace.md: %v", readErr)
 	}
 	if !bytes.Contains(content, []byte("### TASK-004 Fourth\nstatus: done")) {
 		t.Fatalf("expected scrolled click to update first visible task, got %q", string(content))
@@ -786,9 +769,9 @@ func TestWSTaskTUI_MouseClickUsesRenderedTaskRow(t *testing.T) {
 	if next.rows[2].Item.Status != wstask.StatusTodo {
 		t.Fatalf("next task status = %s, want todo", next.rows[2].Item.Status)
 	}
-	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	content, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
 	if readErr != nil {
-		t.Fatalf("read tasks.md: %v", readErr)
+		t.Fatalf("read workspace.md: %v", readErr)
 	}
 	if !bytes.Contains(content, []byte("### TASK-002 Second\nstatus: done")) {
 		t.Fatalf("expected click to update TASK-002, got %q", string(content))
@@ -798,32 +781,29 @@ func TestWSTaskTUI_MouseClickUsesRenderedTaskRow(t *testing.T) {
 	}
 }
 
-func TestWSTaskTUI_MouseClickUpdatesWorkspaceTaskInAllMode(t *testing.T) {
+func TestWSTaskTUI_AllModeRendersCurrentStateWithoutTaskRows(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+	writeWorkspaceTasksFile(t, wsPath, "## Current State\n\nWorking on the current-state Dock view.\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n")
 
 	m := newWSTaskTUIModel(env.Root, wsTaskTarget{}, wsTaskTUIOptions{target: wsTaskTargetOptions{useAll: true}}, false)
-	if len(m.rows) != 1 {
-		t.Fatalf("rows = %+v, want one task row", m.rows)
+	if len(m.rows) != 0 {
+		t.Fatalf("rows = %+v, want no task rows in all mode", m.rows)
 	}
-	editing, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
-	m = editing.(wsTaskTUIModel)
-	updated, _ := m.Update(tea.MouseMsg{Type: tea.MouseLeft, X: 4, Y: m.rows[0].Y})
-	next, ok := updated.(wsTaskTUIModel)
-	if !ok {
-		t.Fatalf("updated model = %T, want wsTaskTUIModel", updated)
+	view := m.View()
+	if !strings.Contains(view, "Working on the current-state Dock view.") {
+		t.Fatalf("view missing current state: %q", view)
 	}
-	if next.rows[0].Item.Status != wstask.StatusDone {
-		t.Fatalf("task status = %s, want done", next.rows[0].Item.Status)
+	if strings.Contains(view, "TASK-001") {
+		t.Fatalf("all mode should not render task rows: %q", view)
 	}
-	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	content, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
 	if readErr != nil {
-		t.Fatalf("read tasks.md: %v", readErr)
+		t.Fatalf("read workspace.md: %v", readErr)
 	}
-	if !bytes.Contains(content, []byte("status: done")) {
-		t.Fatalf("tasks.md should be updated to done: %q", string(content))
+	if !bytes.Contains(content, []byte("status: todo")) {
+		t.Fatalf("workspace.md should not be updated: %q", string(content))
 	}
 }
 
@@ -1027,7 +1007,7 @@ func TestCLI_WSTaskDockInstall_CreatesGlobalDock(t *testing.T) {
 	if len(dock.Controls) != 1 || dock.Controls[0].ID != "kra-tasks" {
 		t.Fatalf("unexpected controls: %+v", dock.Controls)
 	}
-	if !strings.Contains(dock.Controls[0].Command, "kra ws task tui --cmux-current --refresh 2s") {
+	if !strings.Contains(dock.Controls[0].Command, "kra ws status --cmux-current") {
 		t.Fatalf("unexpected command: %q", dock.Controls[0].Command)
 	}
 }
@@ -1092,7 +1072,7 @@ func TestCLI_WSTaskDockInstall_PreservesExistingControlsAndUpdatesKraTasks(t *te
 	if dock.Controls[0].ID != "custom" || dock.Controls[0].Command != "echo custom" {
 		t.Fatalf("custom control not preserved: %+v", dock.Controls[0])
 	}
-	if dock.Controls[1].ID != "kra-tasks" || dock.Controls[1].Title != "Tasks" || dock.Controls[1].Height != 420 {
+	if dock.Controls[1].ID != "kra-tasks" || dock.Controls[1].Title != "Status" || dock.Controls[1].Height != 420 {
 		t.Fatalf("kra-tasks not updated: %+v", dock.Controls[1])
 	}
 }
@@ -1160,12 +1140,12 @@ func TestCLI_WSTaskLauncher_UpdatesSelectedTaskWithoutSync(t *testing.T) {
 		t.Fatalf("stdout = %q, want task updated result", out.String())
 	}
 
-	content, readErr := os.ReadFile(filepath.Join(wsPath, "tasks.md"))
+	content, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
 	if readErr != nil {
-		t.Fatalf("read tasks.md: %v", readErr)
+		t.Fatalf("read workspace.md: %v", readErr)
 	}
 	if !bytes.Contains(content, []byte("### TASK-002 Second\nstatus: done")) {
-		t.Fatalf("tasks.md should be updated to done: %q", string(content))
+		t.Fatalf("workspace.md should be updated to done: %q", string(content))
 	}
 	if len(syncClient.setCalls) != 0 || len(syncClient.clearCalls) != 0 {
 		t.Fatalf("cmux sync calls = set:%+v clear:%+v, want none", syncClient.setCalls, syncClient.clearCalls)
@@ -1234,7 +1214,7 @@ func TestCLI_WSDashboard_JSON_IncludesTaskSummaryAndDetail(t *testing.T) {
 
 func writeWorkspaceTasksFile(t *testing.T, workspacePath string, content string) {
 	t.Helper()
-	if err := os.WriteFile(filepath.Join(workspacePath, "tasks.md"), []byte(content), 0o644); err != nil {
-		t.Fatalf("write tasks.md: %v", err)
+	if err := os.WriteFile(filepath.Join(workspacePath, workspaceDocumentFilename), []byte(content), 0o644); err != nil {
+		t.Fatalf("write workspace.md: %v", err)
 	}
 }

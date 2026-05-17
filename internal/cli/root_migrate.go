@@ -151,7 +151,11 @@ func planRootMigration(root string) (rootMigrationPlan, error) {
 	actions := make([]rootMigrateAction, 0)
 
 	addWorkspaceSeedActions := func(base string, label string) error {
-		actions = appendMissingFileAction(actions, filepath.Join(base, "tasks.md"), fmt.Sprintf("add workspace task source to %s", label), defaultWorkspaceTasksContent)
+		next, err := appendWorkspaceDocumentMigrationAction(actions, base, label)
+		if err != nil {
+			return err
+		}
+		actions = next
 		return nil
 	}
 
@@ -224,10 +228,274 @@ func ensureDefaultWorkspaceTemplateForRootMigrate(root string) error {
 	if err := os.WriteFile(filepath.Join(defaultPath, rootAgentsFilename), []byte(defaultWorkspaceTemplateAgentsContent()), 0o644); err != nil {
 		return fmt.Errorf("write default template AGENTS.md: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(defaultPath, "tasks.md"), []byte(defaultWorkspaceTasksContent), 0o644); err != nil {
-		return fmt.Errorf("write default template tasks.md: %w", err)
+	if err := os.WriteFile(filepath.Join(defaultPath, rootClaudeFilename), []byte(defaultWorkspaceTemplateAgentsContent()), 0o644); err != nil {
+		return fmt.Errorf("write default template CLAUDE.md: %w", err)
+	}
+	if err := os.WriteFile(filepath.Join(defaultPath, workspaceDocumentFilename), []byte(defaultWorkspaceDocumentContent), 0o644); err != nil {
+		return fmt.Errorf("write default template workspace.md: %w", err)
 	}
 	return nil
+}
+
+func appendWorkspaceDocumentMigrationAction(actions []rootMigrateAction, base string, label string) ([]rootMigrateAction, error) {
+	workspacePath := filepath.Join(base, workspaceDocumentFilename)
+	legacyPath := filepath.Join(base, "tasks.md")
+	info, err := os.Stat(workspacePath)
+	if err == nil {
+		if info.IsDir() {
+			return append(actions, rootMigrateAction{
+				Path:        workspacePath,
+				Description: "invalid existing directory",
+				apply: func() error {
+					return fmt.Errorf("path is a directory")
+				},
+			}), nil
+		}
+		needsNext, err := workspaceDocumentNeedsNextSection(workspacePath)
+		if err != nil {
+			return append(actions, rootMigrateAction{
+				Path:        workspacePath,
+				Description: "read failed",
+				apply: func() error {
+					return err
+				},
+			}), nil
+		}
+		if needsNext {
+			actions = append(actions, rootMigrateAction{
+				Path:        workspacePath,
+				Description: fmt.Sprintf("add Next section to workspace.md for %s", label),
+				apply: func() error {
+					return addNextSectionToWorkspaceDocument(workspacePath)
+				},
+			})
+		}
+		needsGuide, err := workspaceDocumentNeedsHandoffGuide(workspacePath)
+		if err != nil {
+			return append(actions, rootMigrateAction{
+				Path:        workspacePath,
+				Description: "read failed",
+				apply: func() error {
+					return err
+				},
+			}), nil
+		}
+		if needsGuide {
+			actions = append(actions, rootMigrateAction{
+				Path:        workspacePath,
+				Description: fmt.Sprintf("add handoff guide to workspace.md for %s", label),
+				apply: func() error {
+					return addHandoffGuideToWorkspaceDocument(workspacePath)
+				},
+			})
+		}
+		return actions, nil
+	}
+	if err != nil && !os.IsNotExist(err) {
+		return append(actions, rootMigrateAction{
+			Path:        workspacePath,
+			Description: "stat failed",
+			apply: func() error {
+				return err
+			},
+		}), nil
+	}
+	legacyInfo, legacyErr := os.Stat(legacyPath)
+	switch {
+	case legacyErr == nil && legacyInfo.IsDir():
+		return append(actions, rootMigrateAction{
+			Path:        legacyPath,
+			Description: "invalid existing directory",
+			apply: func() error {
+				return fmt.Errorf("path is a directory")
+			},
+		}), nil
+	case legacyErr == nil:
+		actions = append(actions, rootMigrateAction{
+			Path:        workspacePath,
+			Description: fmt.Sprintf("convert legacy tasks.md to workspace.md for %s", label),
+			apply: func() error {
+				b, err := os.ReadFile(legacyPath)
+				if err != nil {
+					return err
+				}
+				if err := os.WriteFile(workspacePath, []byte(convertLegacyTasksToWorkspaceDocument(string(b))), 0o644); err != nil {
+					return err
+				}
+				return os.Remove(legacyPath)
+			},
+		})
+		return actions, nil
+	case legacyErr != nil && !os.IsNotExist(legacyErr):
+		return append(actions, rootMigrateAction{
+			Path:        legacyPath,
+			Description: "stat failed",
+			apply: func() error {
+				return legacyErr
+			},
+		}), nil
+	default:
+		return appendMissingFileAction(actions, workspacePath, fmt.Sprintf("add workspace state source to %s", label), defaultWorkspaceDocumentContent), nil
+	}
+}
+
+func workspaceDocumentNeedsNextSection(path string) (bool, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	lines := splitNormalizedLinesForRootMigrate(string(b))
+	looksLikeWorkspaceDocument := false
+	for _, line := range lines {
+		switch strings.TrimSpace(line) {
+		case "## Next":
+			return false, nil
+		case "## Current State", "## Tasks":
+			looksLikeWorkspaceDocument = true
+		}
+	}
+	return looksLikeWorkspaceDocument, nil
+}
+
+func workspaceDocumentNeedsHandoffGuide(path string) (bool, error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return false, err
+	}
+	content := string(b)
+	if strings.Contains(content, "This file is the workspace handoff state. Keep it current.") {
+		return false, nil
+	}
+	lines := splitNormalizedLinesForRootMigrate(content)
+	for _, line := range lines {
+		switch strings.TrimSpace(line) {
+		case "## Current State", "## Tasks":
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+func addHandoffGuideToWorkspaceDocument(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	lines := splitNormalizedLinesForRootMigrate(string(b))
+	guide := []string{
+		"This file is the workspace handoff state. Keep it current.",
+		"",
+		"- Update `## Current State` when the situation changes.",
+		"- Update `## Next` before stopping or handing off.",
+		"- Keep `## Tasks` statuses in sync with actual progress.",
+		"",
+	}
+	out := make([]string, 0, len(lines)+len(guide)+2)
+	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "# Workspace" {
+		out = append(out, lines[0], "")
+		out = append(out, guide...)
+		out = append(out, lines[1:]...)
+	} else {
+		out = append(out, "# Workspace", "")
+		out = append(out, guide...)
+		out = append(out, lines...)
+	}
+	rendered := strings.Join(out, "\n")
+	if !strings.HasSuffix(rendered, "\n") {
+		rendered += "\n"
+	}
+	return os.WriteFile(path, []byte(rendered), 0o644)
+}
+
+func addNextSectionToWorkspaceDocument(path string) error {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		return err
+	}
+	content := string(b)
+	lines := splitNormalizedLinesForRootMigrate(content)
+	insert := []string{
+		"## Next",
+		"",
+		"Record the next concrete step here before handing off or stopping.",
+		"",
+	}
+	taskStart := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "## Tasks" {
+			taskStart = i
+			break
+		}
+	}
+	out := make([]string, 0, len(lines)+len(insert)+2)
+	if taskStart >= 0 {
+		out = append(out, lines[:taskStart]...)
+		if len(out) > 0 && strings.TrimSpace(out[len(out)-1]) != "" {
+			out = append(out, "")
+		}
+		out = append(out, insert...)
+		out = append(out, lines[taskStart:]...)
+	} else {
+		out = append(out, lines...)
+		if len(out) > 0 && strings.TrimSpace(out[len(out)-1]) != "" {
+			out = append(out, "")
+		}
+		out = append(out, insert...)
+	}
+	rendered := strings.Join(out, "\n")
+	if !strings.HasSuffix(rendered, "\n") {
+		rendered += "\n"
+	}
+	return os.WriteFile(path, []byte(rendered), 0o644)
+}
+
+func convertLegacyTasksToWorkspaceDocument(content string) string {
+	trimmed := strings.TrimSpace(content)
+	if trimmed == "" {
+		return defaultWorkspaceDocumentContent
+	}
+	lines := splitNormalizedLinesForRootMigrate(content)
+	if len(lines) > 0 && strings.TrimSpace(lines[0]) == "# Workspace" {
+		out := strings.Join(lines, "\n")
+		if !strings.HasSuffix(out, "\n") {
+			out += "\n"
+		}
+		return out
+	}
+	outLines := []string{
+		"# Workspace",
+		"",
+		"This file is the workspace handoff state. Keep it current.",
+		"",
+		"- Update `## Current State` when the situation changes.",
+		"- Update `## Next` before stopping or handing off.",
+		"- Keep `## Tasks` statuses in sync with actual progress.",
+		"",
+		"## Current State",
+		"",
+		"This workspace was migrated from tasks.md. Update this section with the current work state.",
+		"",
+		"## Next",
+		"",
+		"Record the next concrete step here before handing off or stopping.",
+		"",
+	}
+	outLines = append(outLines, lines...)
+	out := strings.Join(outLines, "\n")
+	if !strings.HasSuffix(out, "\n") {
+		out += "\n"
+	}
+	return out
+}
+
+func splitNormalizedLinesForRootMigrate(content string) []string {
+	normalized := strings.ReplaceAll(content, "\r\n", "\n")
+	normalized = strings.ReplaceAll(normalized, "\r", "\n")
+	normalized = strings.TrimSuffix(normalized, "\n")
+	if normalized == "" {
+		return nil
+	}
+	return strings.Split(normalized, "\n")
 }
 
 func appendMissingFileAction(actions []rootMigrateAction, path string, description string, content string) []rootMigrateAction {
@@ -274,6 +542,8 @@ func isManagedKraTasksDockCommand(command string) bool {
 		"kra ws task view --current",
 		"kra ws task tui --all",
 		"kra ws task view --all",
+		"kra ws status --current",
+		"kra ws status --all",
 	} {
 		if strings.Contains(trimmed, marker) {
 			return true
@@ -347,15 +617,13 @@ func appendLegacyDockMigrationPlan(root string, plan *rootMigrationPlan) error {
 		plan.LegacyProjectDocks = append(plan.LegacyProjectDocks, result)
 	}
 
-	plan.InstallGlobalDock = hasManagedLegacyDock(plan.LegacyProjectDocks)
 	plan.GlobalDockCommand = standardGlobalDockCommand(legacyUsesTUI)
-	if plan.InstallGlobalDock {
-		state, err := inspectGlobalDock(globalPath, plan.GlobalDockCommand)
-		if err != nil {
-			return err
-		}
-		plan.GlobalDock = state
+	state, err := inspectGlobalDock(globalPath, plan.GlobalDockCommand, hasManagedLegacyDock(plan.LegacyProjectDocks))
+	if err != nil {
+		return err
 	}
+	plan.GlobalDock = state
+	plan.InstallGlobalDock = state.Changed
 	if plan.GlobalDock.Path == "" {
 		plan.GlobalDock.Path = globalPath
 	}
@@ -391,7 +659,7 @@ func inspectLegacyProjectDock(result rootMigrateLegacyDockResult) (rootMigrateLe
 	for _, control := range config.Controls {
 		if control.ID == "kra-tasks" && isManagedKraTasksDockCommand(control.Command) {
 			managed++
-			if strings.Contains(control.Command, "kra ws task tui ") {
+			if strings.Contains(control.Command, "kra ws task tui ") || strings.Contains(control.Command, "kra ws status ") {
 				usesTUI = true
 			}
 			continue
@@ -436,15 +704,19 @@ func globalCMUXDockPath() (string, error) {
 }
 
 func standardGlobalDockCommand(_ bool) string {
-	return "kra ws task tui --cmux-current --refresh 2s"
+	return "kra ws status --cmux-current"
 }
 
-func inspectGlobalDock(path string, desiredCommand string) (rootMigrateGlobalDockResult, error) {
+func inspectGlobalDock(path string, desiredCommand string, createIfMissing bool) (rootMigrateGlobalDockResult, error) {
 	result := rootMigrateGlobalDockResult{Path: path}
 	info, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		result.Changed = true
-		result.Created = true
+		if createIfMissing {
+			result.Changed = true
+			result.Created = true
+		} else {
+			result.Skipped = true
+		}
 		return result, nil
 	}
 	if err != nil {
@@ -461,7 +733,7 @@ func inspectGlobalDock(path string, desiredCommand string) (rootMigrateGlobalDoc
 	if err := json.Unmarshal(b, &config); err != nil {
 		return result, fmt.Errorf("invalid global Dock JSON %s: %w", path, err)
 	}
-	updated := upsertGlobalKraTasksControl(&config, desiredCommand)
+	updated := upsertGlobalKraTasksControl(&config, desiredCommand, false)
 	if updated {
 		result.Changed = true
 		result.Updated = true
@@ -480,7 +752,7 @@ func applyGlobalDockMigration(path string, desiredCommand string) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	upsertGlobalKraTasksControl(&config, desiredCommand)
+	upsertGlobalKraTasksControl(&config, desiredCommand, true)
 	b, err := json.MarshalIndent(config, "", "  ")
 	if err != nil {
 		return err
@@ -491,10 +763,10 @@ func applyGlobalDockMigration(path string, desiredCommand string) error {
 	return os.WriteFile(path, append(b, '\n'), 0o644)
 }
 
-func upsertGlobalKraTasksControl(config *cmuxDockConfig, desiredCommand string) bool {
+func upsertGlobalKraTasksControl(config *cmuxDockConfig, desiredCommand string, createIfMissing bool) bool {
 	desired := cmuxDockControl{
 		ID:      "kra-tasks",
-		Title:   "Tasks",
+		Title:   "Status",
 		Command: desiredCommand,
 		Height:  420,
 	}
@@ -507,6 +779,9 @@ func upsertGlobalKraTasksControl(config *cmuxDockConfig, desiredCommand string) 
 		}
 		config.Controls[i] = desired
 		return true
+	}
+	if !createIfMissing {
+		return false
 	}
 	config.Controls = append(config.Controls, desired)
 	return true

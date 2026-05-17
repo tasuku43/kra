@@ -7,7 +7,7 @@ status: implemented
 
 ## Purpose
 
-Deprecated compatibility command. Task display is handled by `kra ws task tui` and cmux Dock, not
+Deprecated compatibility command. Task display is handled by `kra ws status` and cmux Dock, not
 by cmux sidebar task pills.
 
 ## Behavior
@@ -15,7 +15,7 @@ by cmux sidebar task pills.
 - Resolve target workspace using the shared `ws` targeting contract.
 - `--all` resolves all active workspaces non-interactively.
 - Command is valid only for active workspaces.
-- The command does not read or mutate `tasks.md`.
+- The command does not read or mutate `workspace.md`.
 - The command does not list, set, or clear cmux status entries.
 - Return success with `state=skipped` and a deprecation warning.
 - In `--all` mode, return one skipped result per active workspace.
@@ -23,7 +23,7 @@ by cmux sidebar task pills.
 ## Human output
 
 - Render one result summary line:
-  - `task sync skipped: task sync is deprecated; use kra ws task tui or cmux Dock instead`
+  - `task sync skipped: task sync is deprecated; use kra ws status or cmux Dock instead`
 - Also include the target workspace ID in the result section.
 - In `--all` mode, render an aggregate summary plus per-workspace sync lines.
 

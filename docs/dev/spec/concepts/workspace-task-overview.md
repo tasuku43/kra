@@ -15,7 +15,7 @@ replacing the existing activity-oriented workspace progress model.
 - lifecycle status from workspace metadata (`active` / `archived`)
 - existing workspace activity/work progress from `.kra.meta.json.workspace.work_state`
   (`todo` / `in-progress`)
-- structured `task_state` derived from `tasks.md`
+- structured `task_state` derived from `workspace.md`
 
 ## Primary vs supplemental model
 

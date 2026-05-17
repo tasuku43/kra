@@ -10,15 +10,15 @@ Alias:
 
 ## Purpose
 
-List structured tasks for one workspace from `tasks.md`.
+List structured tasks for one workspace from `workspace.md`.
 
 ## Behavior
 
 - Resolve target workspace using the shared `ws` targeting contract.
 - Accept both active and archived workspaces.
-- Read structured tasks from `<workspace>/tasks.md` using the workspace task contract.
-- When `tasks.md` is absent, return success with zero tasks.
-- When `tasks.md` exists but `## Tasks` is absent, return success with zero tasks.
+- Read structured tasks from `<workspace>/workspace.md` using the workspace task contract.
+- When `workspace.md` is absent, return success with zero tasks.
+- When `workspace.md` exists but `## Tasks` is absent, return success with zero tasks.
 - Non-task Markdown outside the structured task contract is ignored.
 - Duplicate structured task IDs are a contract conflict and fail the command.
 - A task-like block that starts with `### TASK-...` but violates the task contract is a contract
@@ -28,7 +28,7 @@ List structured tasks for one workspace from `tasks.md`.
 
 - Render one `Tasks:` section.
 - Render task rows directly under `Tasks:` as one flat list.
-- Preserve file order from `tasks.md`.
+- Preserve file order from `workspace.md`.
 - Row shape:
   - `<icon> TASK-001: short title`
 - Status icon mapping:

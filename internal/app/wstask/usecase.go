@@ -79,18 +79,22 @@ type ViewGroup struct {
 }
 
 type ViewModel struct {
-	WorkspaceID string
-	Path        string
-	Items       []Item
-	Workspaces  []ViewWorkspace
-	Groups      []ViewGroup
-	Empty       bool
+	WorkspaceID  string
+	Path         string
+	CurrentState string
+	Next         string
+	Items        []Item
+	Workspaces   []ViewWorkspace
+	Groups       []ViewGroup
+	Empty        bool
 }
 
 type ViewWorkspace struct {
-	ID    string
-	Title string
-	Items []Item
+	ID           string
+	Title        string
+	CurrentState string
+	Next         string
+	Items        []Item
 }
 
 type AddResult struct {
@@ -141,7 +145,7 @@ type DocumentSnapshot struct {
 
 type Port interface {
 	Load(root string, workspaceID string, scope string) (DocumentSnapshot, error)
-	Save(path string, content string) error
+	Save(snapshot DocumentSnapshot, content string) error
 }
 
 type SyncPort interface {
@@ -213,15 +217,17 @@ func (s *Service) List(root string, workspaceID string, scope string) (ListResul
 }
 
 func (s *Service) View(root string, workspaceID string, scope string) (ViewModel, error) {
-	result, err := s.List(root, workspaceID, scope)
+	doc, snapshot, err := s.loadDocument(root, workspaceID, scope)
 	if err != nil {
 		return ViewModel{}, err
 	}
-	overview := result.Overview
+	overview := buildOverview(doc.items(), "")
 	return ViewModel{
-		WorkspaceID: workspaceID,
-		Path:        result.Path,
-		Items:       append([]Item{}, overview.Items...),
+		WorkspaceID:  workspaceID,
+		Path:         snapshot.Path,
+		CurrentState: doc.currentState(),
+		Next:         doc.next(),
+		Items:        append([]Item{}, overview.Items...),
 		Groups: []ViewGroup{
 			{Status: StatusDoing, Title: "Doing", Items: overview.ItemsByStatus(StatusDoing)},
 			{Status: StatusBlocked, Title: "Blocked", Items: overview.ItemsByStatus(StatusBlocked)},
@@ -249,7 +255,7 @@ func (s *Service) Add(root string, workspaceID string, title string, description
 	}
 	doc.ensureTasksSection()
 	doc.appendTask(item)
-	if err := s.port.Save(snapshot.Path, doc.render()); err != nil {
+	if err := s.port.Save(snapshot, doc.render()); err != nil {
 		return AddResult{}, err
 	}
 	return AddResult{Path: snapshot.Path, Task: item}, nil
@@ -378,7 +384,7 @@ func (s *Service) transition(root string, workspaceID string, taskID string, nex
 		return TransitionResult{}, err
 	}
 	if changed {
-		if err := s.port.Save(snapshot.Path, doc.render()); err != nil {
+		if err := s.port.Save(snapshot, doc.render()); err != nil {
 			return TransitionResult{}, err
 		}
 	}
@@ -507,12 +513,16 @@ func buildOverview(items []Item, warning string) Overview {
 }
 
 type parsedDocument struct {
-	path            string
-	exists          bool
-	before          []string
-	segments        []sectionSegment
-	after           []string
-	hasTasksSection bool
+	path              string
+	exists            bool
+	before            []string
+	currentStateLines []string
+	hasCurrentState   bool
+	nextLines         []string
+	hasNext           bool
+	segments          []sectionSegment
+	after             []string
+	hasTasksSection   bool
 }
 
 type sectionSegment struct {
@@ -527,6 +537,16 @@ func parseDocument(snapshot DocumentSnapshot) (*parsedDocument, error) {
 		path:   snapshot.Path,
 		exists: snapshot.Exists,
 	}
+	currentStateStart := -1
+	nextStart := -1
+	for i, line := range lines {
+		if strings.TrimSpace(line) == "## Current State" {
+			currentStateStart = i
+		}
+		if strings.TrimSpace(line) == "## Next" {
+			nextStart = i
+		}
+	}
 	sectionStart := -1
 	for i, line := range lines {
 		if strings.TrimSpace(line) == "## Tasks" {
@@ -536,7 +556,35 @@ func parseDocument(snapshot DocumentSnapshot) (*parsedDocument, error) {
 	}
 	if sectionStart < 0 {
 		doc.before = cloneLines(lines)
+		if currentStateStart >= 0 {
+			currentStateEnd := len(lines)
+			for i := currentStateStart + 1; i < len(lines); i++ {
+				if isLevel2Heading(lines[i]) {
+					currentStateEnd = i
+					break
+				}
+			}
+			doc.before = cloneLines(lines[:currentStateStart])
+			doc.currentStateLines = trimBlankLines(lines[currentStateStart+1 : currentStateEnd])
+			doc.after = cloneLines(lines[currentStateEnd:])
+			doc.hasCurrentState = true
+		}
+		if nextStart >= 0 {
+			doc.consumeNext(lines, nextStart, len(lines))
+		}
 		return doc, nil
+	}
+	doc.before = cloneLines(lines[:sectionStart])
+	if currentStateStart >= 0 && currentStateStart < sectionStart {
+		currentStateEnd := sectionEndInRange(lines, currentStateStart, sectionStart)
+		doc.currentStateLines = trimBlankLines(lines[currentStateStart+1 : currentStateEnd])
+		doc.hasCurrentState = true
+	}
+	if nextStart >= 0 && nextStart < sectionStart {
+		doc.consumeNext(lines, nextStart, sectionStart)
+	}
+	for _, r := range managedSectionRangesBeforeTasks(lines, sectionStart, currentStateStart, nextStart) {
+		doc.before = append(doc.before[:r.start], doc.before[r.end:]...)
 	}
 	sectionEnd := len(lines)
 	for i := sectionStart + 1; i < len(lines); i++ {
@@ -549,7 +597,6 @@ func parseDocument(snapshot DocumentSnapshot) (*parsedDocument, error) {
 	if err != nil {
 		return nil, err
 	}
-	doc.before = cloneLines(lines[:sectionStart])
 	doc.segments = segments
 	doc.after = cloneLines(lines[sectionEnd:])
 	doc.hasTasksSection = true
@@ -605,6 +652,36 @@ func parseSectionBody(lines []string) ([]sectionSegment, error) {
 	return segments, nil
 }
 
+type lineRange struct {
+	start int
+	end   int
+}
+
+func managedSectionRangesBeforeTasks(lines []string, limit int, starts ...int) []lineRange {
+	ranges := make([]lineRange, 0, len(starts))
+	for _, start := range starts {
+		if start < 0 || start >= limit {
+			continue
+		}
+		ranges = append(ranges, lineRange{start: start, end: sectionEndInRange(lines, start, limit)})
+	}
+	sort.Slice(ranges, func(i, j int) bool {
+		return ranges[i].start > ranges[j].start
+	})
+	return ranges
+}
+
+func sectionEndInRange(lines []string, start int, limit int) int {
+	end := limit
+	for i := start + 1; i < limit; i++ {
+		if isLevel2Heading(lines[i]) {
+			end = i
+			break
+		}
+	}
+	return end
+}
+
 func parseTaskBlock(lines []string) (Item, error) {
 	if len(lines) == 0 {
 		return Item{}, newConflict("empty task block")
@@ -636,6 +713,38 @@ func parseTaskBlock(lines []string) (Item, error) {
 	}, nil
 }
 
+func trimBlankLines(lines []string) []string {
+	start := 0
+	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
+		start++
+	}
+	end := len(lines)
+	for end > start && strings.TrimSpace(lines[end-1]) == "" {
+		end--
+	}
+	return cloneLines(lines[start:end])
+}
+
+func (d *parsedDocument) currentState() string {
+	return strings.TrimSpace(strings.Join(d.currentStateLines, "\n"))
+}
+
+func (d *parsedDocument) next() string {
+	return strings.TrimSpace(strings.Join(d.nextLines, "\n"))
+}
+
+func (d *parsedDocument) consumeNext(lines []string, nextStart int, limit int) {
+	nextEnd := limit
+	for i := nextStart + 1; i < limit; i++ {
+		if isLevel2Heading(lines[i]) {
+			nextEnd = i
+			break
+		}
+	}
+	d.nextLines = trimBlankLines(lines[nextStart+1 : nextEnd])
+	d.hasNext = true
+}
+
 func (d *parsedDocument) ensureTasksSection() {
 	if d.hasTasksSection {
 		return
@@ -643,6 +752,17 @@ func (d *parsedDocument) ensureTasksSection() {
 	d.hasTasksSection = true
 	d.segments = nil
 	d.after = nil
+	if !d.hasCurrentState {
+		d.hasCurrentState = true
+		d.currentStateLines = []string{"This workspace has not recorded current state yet."}
+	}
+	if !d.hasNext {
+		d.hasNext = true
+		d.nextLines = []string{"Record the next concrete step here before handing off or stopping."}
+	}
+	if len(d.before) == 0 {
+		d.before = []string{"# Workspace"}
+	}
 	if len(d.before) > 0 && strings.TrimSpace(d.before[len(d.before)-1]) != "" {
 		d.before = append(d.before, "")
 	}
@@ -686,7 +806,30 @@ func (d *parsedDocument) items() []Item {
 func (d *parsedDocument) render() string {
 	lines := make([]string, 0, len(d.before)+len(d.after)+8)
 	lines = append(lines, d.before...)
+	if d.hasCurrentState {
+		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
+			lines = append(lines, "")
+		}
+		lines = append(lines, "## Current State", "")
+		lines = append(lines, d.currentStateLines...)
+		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
+			lines = append(lines, "")
+		}
+	}
+	if d.hasNext {
+		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
+			lines = append(lines, "")
+		}
+		lines = append(lines, "## Next", "")
+		lines = append(lines, d.nextLines...)
+		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
+			lines = append(lines, "")
+		}
+	}
 	if d.hasTasksSection {
+		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
+			lines = append(lines, "")
+		}
 		lines = append(lines, "## Tasks")
 		body := renderSectionSegments(d.segments)
 		if len(body) > 0 && strings.TrimSpace(body[0]) != "" {

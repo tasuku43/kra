@@ -16,6 +16,7 @@ import (
 
 const (
 	rootAgentsFilename = "AGENTS.md"
+	rootClaudeFilename = "CLAUDE.md"
 	gitignoreFilename  = ".gitignore"
 )
 
@@ -160,7 +161,7 @@ func (c *CLI) runInit(args []string) int {
 	resultLines := []string{
 		styleSuccess(fmt.Sprintf("Initialized: %s", result.Root), useColorOut),
 		styleSuccess(fmt.Sprintf("Context selected: %s", contextName), useColorOut),
-		styleMuted("cmux Dock: run `kra ws task dock install` to enable the global Tasks Dock", useColorOut),
+		styleMuted("cmux Dock: run `kra ws task dock install` to enable the global Status Dock", useColorOut),
 	}
 	printResultSection(c.Out, useColorOut, resultLines...)
 	c.debugf("init completed root=%s", result.Root)
@@ -632,11 +633,14 @@ func ensureDefaultWorkspaceTemplate(root string) error {
 	if err := os.WriteFile(filepath.Join(defaultPath, rootAgentsFilename), []byte(defaultWorkspaceTemplateAgentsContent()), 0o644); err != nil {
 		return fmt.Errorf("write default template AGENTS.md: %w", err)
 	}
+	if err := os.WriteFile(filepath.Join(defaultPath, rootClaudeFilename), []byte(defaultWorkspaceTemplateAgentsContent()), 0o644); err != nil {
+		return fmt.Errorf("write default template CLAUDE.md: %w", err)
+	}
 	if err := os.WriteFile(filepath.Join(defaultPath, ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
 		return fmt.Errorf("write default template .cmux/dock.json: %w", err)
 	}
-	if err := os.WriteFile(filepath.Join(defaultPath, "tasks.md"), []byte(defaultWorkspaceTasksContent), 0o644); err != nil {
-		return fmt.Errorf("write default template tasks.md: %w", err)
+	if err := os.WriteFile(filepath.Join(defaultPath, workspaceDocumentFilename), []byte(defaultWorkspaceDocumentContent), 0o644); err != nil {
+		return fmt.Errorf("write default template workspace.md: %w", err)
 	}
 	return nil
 }
@@ -645,8 +649,9 @@ func defaultWorkspaceTemplateTrackedFiles() []string {
 	base := filepath.Join(workspaceTemplatesDirName, defaultWorkspaceTemplateName)
 	return []string{
 		filepath.Join(base, rootAgentsFilename),
+		filepath.Join(base, rootClaudeFilename),
 		filepath.Join(base, ".cmux", "dock.json"),
-		filepath.Join(base, "tasks.md"),
+		filepath.Join(base, workspaceDocumentFilename),
 	}
 }
 
@@ -658,10 +663,30 @@ func defaultWorkspaceTemplateAgentsContent() string {
 - notes/: investigation notes, decisions, TODOs, links
 - artifacts/: files and evidence (screenshots, logs, dumps, PoCs)
 - repos/: git worktrees (NOT Git-tracked; added via kra ws add-repo)
+- workspace.md: single source of truth for current state and tasks
 
 Notes vs artifacts:
 - notes/: write what you learned and decided
 - artifacts/: store evidence files you may need later
+
+## Workspace state
+
+workspace.md is the single source of truth for this workspace handoff state.
+
+At the start of work:
+- Read workspace.md first.
+- Use ## Current State, ## Next, and ## Tasks to understand the current situation.
+
+While working:
+- Update ## Current State whenever the situation changes materially.
+- Update ## Next whenever the next concrete action changes.
+- Keep task status under ## Tasks in sync with actual progress.
+- Do not overwrite unrelated edits in workspace.md; merge your changes with the latest file content.
+
+Before stopping or handing off:
+- Leave ## Current State with the current state of the work.
+- Leave ## Next with the next concrete action.
+- Mark completed tasks as done, current work as doing, and blocked work as blocked.
 
 ## Closing
 

@@ -73,14 +73,18 @@ type wsTaskTUIModel struct {
 }
 
 func (c *CLI) runWSTaskTUI(args []string) int {
+	return c.runWSStatus(args)
+}
+
+func (c *CLI) runWSStatus(args []string) int {
 	opts, err := parseWSTaskTUIOptions(args)
 	if err != nil {
 		if err == errHelpRequested {
-			c.printWSTaskTUIUsage(c.Out)
+			c.printWSStatusUsage(c.Out)
 			return exitOK
 		}
 		fmt.Fprintf(c.Err, "%v\n", err)
-		c.printWSTaskTUIUsage(c.Err)
+		c.printWSStatusUsage(c.Err)
 		return exitUsage
 	}
 
@@ -109,7 +113,7 @@ func (c *CLI) runWSTaskTUI(args []string) int {
 	useColor := writerSupportsColor(c.Out) && !opts.noColor
 	err = runWSTaskTUI(inFile, c.Out, root, target, opts, useColor)
 	if err != nil {
-		fmt.Fprintf(c.Err, "task tui: %v\n", err)
+		fmt.Fprintf(c.Err, "ws status: %v\n", err)
 		return exitError
 	}
 	return exitOK
@@ -312,17 +316,21 @@ func (m wsTaskTUIModel) View() string {
 				fullY++
 				m.writeVisibleLine(&b, fullY, summaryLine)
 			}
-			for _, row := range m.rows {
-				if row.WorkspaceID != workspace.ID {
-					continue
+			stateLines := workspaceStateDisplayLines(joinWorkspaceState(workspace.CurrentState, workspace.Next), m.width)
+			if len(stateLines) > 0 {
+				for _, stateLine := range stateLines {
+					fullY++
+					m.writeVisibleLine(&b, fullY, styleMuted(stateLine, m.useColor))
 				}
-				m.writeVisibleLine(&b, row.Y, m.renderRow(row))
-				fullY = row.Y
+			} else {
+				fullY++
+				m.writeVisibleLine(&b, fullY, styleMuted("No current state recorded.", m.useColor))
 			}
 			fullY++
 			m.writeVisibleLine(&b, fullY, "")
 		}
 	} else {
+		m.writeCurrentState(&b)
 		fmt.Fprintf(&b, "%s\n", m.renderSummary(summarizeWSTaskItems(m.full.Items)))
 		m.writeScrollHint(&b)
 		for _, row := range m.rows {
@@ -340,6 +348,70 @@ func (m wsTaskTUIModel) View() string {
 		fmt.Fprintf(&b, "%s\n", styleMuted("read: wheel scroll  click selects  h show/hide done  i write  q quit", m.useColor))
 	}
 	return b.String()
+}
+
+func (m wsTaskTUIModel) writeCurrentState(b *strings.Builder) {
+	state := strings.TrimSpace(m.model.CurrentState)
+	next := strings.TrimSpace(m.model.Next)
+	if state == "" && next == "" {
+		return
+	}
+	if state != "" {
+		fmt.Fprintf(b, "%s\n", styleBold("Current State", m.useColor))
+		for _, line := range workspaceStateDisplayLines(state, m.width) {
+			fmt.Fprintf(b, "%s\n", styleMuted(line, m.useColor))
+		}
+	}
+	if next != "" {
+		if state != "" {
+			b.WriteByte('\n')
+		}
+		fmt.Fprintf(b, "%s\n", styleBold("Next", m.useColor))
+		for _, line := range workspaceStateDisplayLines(next, m.width) {
+			fmt.Fprintf(b, "%s\n", styleMuted(line, m.useColor))
+		}
+	}
+	b.WriteByte('\n')
+}
+
+func workspaceStateDisplayLines(state string, width int) []string {
+	lines := strings.Split(strings.TrimSpace(state), "\n")
+	out := make([]string, 0, len(lines))
+	limit := width
+	if limit <= 0 || limit > 100 {
+		limit = 100
+	}
+	for _, line := range lines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			if len(out) == 0 || out[len(out)-1] == "" {
+				continue
+			}
+			out = append(out, "")
+			continue
+		}
+		if len(trimmed) > limit {
+			trimmed = trimmed[:limit]
+		}
+		out = append(out, trimmed)
+		if len(out) >= 6 {
+			break
+		}
+	}
+	return out
+}
+
+func joinWorkspaceState(currentState string, next string) string {
+	currentState = strings.TrimSpace(currentState)
+	next = strings.TrimSpace(next)
+	switch {
+	case currentState == "":
+		return next
+	case next == "":
+		return currentState
+	default:
+		return currentState + "\nNext: " + next
+	}
 }
 
 func (m wsTaskTUIModel) writeScrollHint(b *strings.Builder) {
@@ -522,7 +594,7 @@ func buildWSTaskTUIModel(root string, target wsTaskTarget, opts wsTaskTUIOptions
 			if err != nil {
 				return wstask.ViewModel{}, fmt.Errorf("%s: %w", row.ID, err)
 			}
-			workspace := wstask.ViewWorkspace{ID: row.ID, Title: row.Title}
+			workspace := wstask.ViewWorkspace{ID: row.ID, Title: row.Title, CurrentState: result.CurrentState, Next: result.Next}
 			for _, item := range result.Items {
 				if shouldSkipWSTaskTUIItem(item, opts) {
 					continue
@@ -550,14 +622,6 @@ func buildWSTaskTUIRows(model wstask.ViewModel) []wsTaskTUIRow {
 	rows := make([]wsTaskTUIRow, 0, len(model.Items))
 	y := contentTopYForWSTaskTUIModel(model)
 	if len(model.Workspaces) > 0 {
-		for _, workspace := range model.Workspaces {
-			y += 3
-			for _, item := range workspace.Items {
-				rows = append(rows, wsTaskTUIRow{WorkspaceID: workspace.ID, TaskID: item.ID, Item: item, Y: y})
-				y++
-			}
-			y++
-		}
 		return rows
 	}
 	for _, item := range model.Items {
@@ -600,7 +664,11 @@ func contentTopYForWSTaskTUIModel(model wstask.ViewModel) int {
 	if len(model.Workspaces) > 0 {
 		return wsTaskTUIRootContentTopY
 	}
-	return wsTaskTUIContentTopY
+	stateLines := workspaceStateDisplayLines(joinWorkspaceState(model.CurrentState, model.Next), 100)
+	if len(stateLines) == 0 {
+		return wsTaskTUIContentTopY
+	}
+	return wsTaskTUIContentTopY + len(stateLines) + 2
 }
 
 func (m wsTaskTUIModel) viewportHeight() int {
@@ -619,13 +687,25 @@ func (m wsTaskTUIModel) viewportHeight() int {
 
 func (m wsTaskTUIModel) contentBottomY() int {
 	bottom := m.contentTopY()
+	if len(m.model.Workspaces) > 0 {
+		y := wsTaskTUIRootContentTopY - 1
+		for _, workspace := range m.model.Workspaces {
+			y += 4
+			stateLines := workspaceStateDisplayLines(joinWorkspaceState(workspace.CurrentState, workspace.Next), m.width)
+			if len(stateLines) == 0 {
+				stateLines = []string{"No current state recorded."}
+			}
+			y += len(stateLines) + 1
+		}
+		if y > bottom {
+			bottom = y
+		}
+		return bottom
+	}
 	for _, row := range m.rows {
 		if row.Y > bottom {
 			bottom = row.Y
 		}
-	}
-	if len(m.model.Workspaces) > 0 {
-		bottom++
 	}
 	return bottom
 }
@@ -727,11 +807,6 @@ func parseWSTaskTUIOptions(args []string) (wsTaskTUIOptions, error) {
 			if len(rest) < 2 {
 				return wsTaskTUIOptions{}, fmt.Errorf("--refresh requires a value")
 			}
-			refresh, err := parseWSTaskViewRefresh(rest[1])
-			if err != nil {
-				return wsTaskTUIOptions{}, err
-			}
-			opts.refresh = refresh
 			rest = rest[2:]
 		case arg == "--id":
 			if len(rest) < 2 {
@@ -743,11 +818,6 @@ func parseWSTaskTUIOptions(args []string) (wsTaskTUIOptions, error) {
 			opts.target.workspaceID = strings.TrimSpace(strings.TrimPrefix(arg, "--id="))
 			rest = rest[1:]
 		case strings.HasPrefix(arg, "--refresh="):
-			refresh, err := parseWSTaskViewRefresh(strings.TrimPrefix(arg, "--refresh="))
-			if err != nil {
-				return wsTaskTUIOptions{}, err
-			}
-			opts.refresh = refresh
 			rest = rest[1:]
 		case strings.HasPrefix(arg, "--current="):
 			if strings.TrimSpace(strings.TrimPrefix(arg, "--current=")) != "" {
