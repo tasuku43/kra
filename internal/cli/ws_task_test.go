@@ -781,6 +781,35 @@ func TestWSTaskTUI_MouseClickUsesRenderedTaskRow(t *testing.T) {
 	}
 }
 
+func TestWSTaskTUI_MouseClickUsesRenderedTaskRowWithCurrentStateAndNext(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
+	writeWorkspaceTasksFile(t, wsPath, "## Current State\n\nInvestigating click hit testing.\n\n## Next\n\nPatch the rendered row calculation.\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n\n### TASK-002 Second\nstatus: todo\n\n### TASK-003 Third\nstatus: todo\n")
+
+	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
+	editing, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
+	m = editing.(wsTaskTUIModel)
+	updated, _ := m.Update(tea.MouseMsg{Type: tea.MouseLeft, X: 2, Y: m.rows[1].Y})
+	next := updated.(wsTaskTUIModel)
+	if next.rows[1].Item.Status != wstask.StatusDone {
+		t.Fatalf("clicked task status = %s, want done", next.rows[1].Item.Status)
+	}
+	if next.rows[2].Item.Status != wstask.StatusTodo {
+		t.Fatalf("next task status = %s, want todo", next.rows[2].Item.Status)
+	}
+	content, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
+	if readErr != nil {
+		t.Fatalf("read workspace.md: %v", readErr)
+	}
+	if !bytes.Contains(content, []byte("### TASK-002 Second\nstatus: done")) {
+		t.Fatalf("expected click to update TASK-002, got %q", string(content))
+	}
+	if bytes.Contains(content, []byte("### TASK-003 Third\nstatus: done")) {
+		t.Fatalf("click updated the row below: %q", string(content))
+	}
+}
+
 func TestWSTaskTUI_AllModeRendersCurrentStateWithoutTaskRows(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)

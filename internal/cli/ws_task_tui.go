@@ -664,11 +664,29 @@ func contentTopYForWSTaskTUIModel(model wstask.ViewModel) int {
 	if len(model.Workspaces) > 0 {
 		return wsTaskTUIRootContentTopY
 	}
-	stateLines := workspaceStateDisplayLines(joinWorkspaceState(model.CurrentState, model.Next), 100)
-	if len(stateLines) == 0 {
-		return wsTaskTUIContentTopY
+	return 2 + currentStateRenderedLineCount(model) + 2 + 1
+}
+
+func currentStateRenderedLineCount(model wstask.ViewModel) int {
+	state := strings.TrimSpace(model.CurrentState)
+	next := strings.TrimSpace(model.Next)
+	if state == "" && next == "" {
+		return 0
 	}
-	return wsTaskTUIContentTopY + len(stateLines) + 2
+	count := 0
+	if state != "" {
+		count++ // Current State heading.
+		count += len(workspaceStateDisplayLines(state, 100))
+	}
+	if next != "" {
+		if state != "" {
+			count++ // Blank line between Current State and Next.
+		}
+		count++ // Next heading.
+		count += len(workspaceStateDisplayLines(next, 100))
+	}
+	count++ // Blank line after the state block.
+	return count
 }
 
 func (m wsTaskTUIModel) viewportHeight() int {
