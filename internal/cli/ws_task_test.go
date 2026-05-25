@@ -877,7 +877,7 @@ func TestWSTaskTUI_CurrentStateRendersLightMarkdown(t *testing.T) {
 		t.Fatalf("view missing inline code accent: %q", view)
 	}
 	plain := stripANSISequences(view)
-	if !strings.Contains(plain, uiIndent+"  ○ TASK-001") {
+	if !strings.Contains(plain, uiIndent+"  ● TASK-001") {
 		t.Fatalf("view missing indented task row: %q", view)
 	}
 }
