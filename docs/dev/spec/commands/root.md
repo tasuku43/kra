@@ -36,7 +36,7 @@ Provide root-level helpers around the conceptual `KRA_ROOT`.
   - do not write under `workspaces/<id>/repos/`
   - do not commit automatically
   - do not create new project-local `.cmux/dock.json` as standard scaffold
-  - workspace current state and task source of truth is `<workspace>/workspace.md`
+  - workspace task and handoff source of truth is `<workspace>/workspace.md`
   - detect legacy project-local Dock config at:
     - `<KRA_ROOT>/.cmux/dock.json`
     - `<KRA_ROOT>/templates/default/.cmux/dock.json`

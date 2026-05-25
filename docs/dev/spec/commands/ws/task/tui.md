@@ -13,10 +13,14 @@ changes back to `workspace.md`.
 ## Behavior
 
 - Read `<workspace>/workspace.md` with the shared workspace task parser/model.
-- Render `## Current State` and `## Next` above task progress for single-workspace views.
+- Render task-derived `Current Task` and `Next Task` above task progress for single-workspace views.
+  - `Current Task` uses the first `doing` task in file order.
+  - `Next Task` uses the first `todo` task after the current `doing` task, wrapping to the first `todo`
+    task when needed.
+  - Both display task `description`, falling back to task title when `description` is empty.
 - Render structured tasks as a flat list in `workspace.md` file order.
-- With `--all`, render active workspace current states across the current KRA_ROOT, grouped by
-  workspace key and title, with task progress as supplemental context.
+- With `--all`, render active workspace task-derived `Current Task` / `Next Task` across the current
+  KRA_ROOT, grouped by workspace key and title, with task progress as supplemental context.
 - With `--todo-only`, hide `done` tasks.
 - With `--include-done`, include `done` tasks even when `--todo-only` is present.
 - Use the same status icons as `kra ws task list`:

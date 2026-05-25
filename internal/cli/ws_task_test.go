@@ -161,7 +161,7 @@ func TestCLI_WSTaskAdd_JSON_CreatesTaskDocumentAndPreservesOutsideContent(t *tes
 		t.Fatalf("read workspace.md: %v", readErr)
 	}
 	got := string(content)
-	if !bytes.Contains(content, []byte("# Notes\n\noutside\n\n## Current State\n\nThis workspace has not recorded current state yet.\n\n## Next\n\nRecord the next concrete step here before handing off or stopping.\n\n## Tasks\n\n### TASK-001 First task\nstatus: todo\n\nLine one\n")) {
+	if !bytes.Contains(content, []byte("# Notes\n\noutside\n\n## Tasks\n\n### TASK-001 First task\nstatus: todo\n\nLine one\n")) {
 		t.Fatalf("workspace.md missing canonical task block: %q", got)
 	}
 }
@@ -785,7 +785,7 @@ func TestWSTaskTUI_MouseClickUsesRenderedTaskRowWithCurrentStateAndNext(t *testi
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	writeWorkspaceTasksFile(t, wsPath, "## Current State\n\nInvestigating click hit testing.\n\n## Next\n\nPatch the rendered row calculation.\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n\n### TASK-002 Second\nstatus: todo\n\n### TASK-003 Third\nstatus: todo\n")
+	writeWorkspaceTasksFile(t, wsPath, "## Current State\n\nLegacy state ignored.\n\n## Next\n\nLegacy next ignored.\n\n## Tasks\n\n### TASK-001 First\nstatus: doing\n\nInvestigating click hit testing.\n\n### TASK-002 Second\nstatus: todo\n\nPatch the rendered row calculation.\n\n### TASK-003 Third\nstatus: todo\n")
 
 	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
 	editing, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("i")})
@@ -815,7 +815,7 @@ func TestWSTaskTUI_CurrentStateWrapsWithoutTruncation(t *testing.T) {
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
 	longState := "日本語の長いカレントステートを画面幅に合わせて折り返し、途中で消さずに最後まで表示する"
-	writeWorkspaceTasksFile(t, wsPath, "## Current State\n\n"+longState+"\n\n## Next\n\n次の具体的な作業も折り返して表示する\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: doing\n\n"+longState+"\n\n### TASK-002 Next\nstatus: todo\n\n次の具体的な作業も折り返して表示する\n")
 
 	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
 	m.width = 24
@@ -840,7 +840,7 @@ func TestWSTaskTUI_CurrentStateScrolls(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	writeWorkspaceTasksFile(t, wsPath, "## Current State\n\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: doing\n\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\n\n### TASK-002 Next\nstatus: todo\n")
 
 	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, false)
 	m.height = 8
@@ -863,7 +863,7 @@ func TestWSTaskTUI_CurrentStateRendersLightMarkdown(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	writeWorkspaceTasksFile(t, wsPath, "## Current State\n\n- **Done** `code` path\n  - nested item\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: doing\n\n- **Done** `code` path\n  - nested item\n\n### TASK-002 Next\nstatus: todo\n")
 
 	m := newWSTaskTUIModel(env.Root, wsTaskTarget{workspaceID: "WS1", scope: "active"}, wsTaskTUIOptions{}, true)
 	view := m.View()
@@ -886,7 +886,7 @@ func TestWSTaskTUI_AllModeRendersCurrentStateWithoutTaskRows(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	writeWorkspaceTasksFile(t, wsPath, "## Current State\n\nWorking on the current-state Dock view.\n\n## Tasks\n\n### TASK-001 First\nstatus: todo\n")
+	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: doing\n\nWorking on the current-state Dock view.\n\n### TASK-002 Next\nstatus: todo\n")
 
 	m := newWSTaskTUIModel(env.Root, wsTaskTarget{}, wsTaskTUIOptions{target: wsTaskTargetOptions{useAll: true}}, false)
 	if len(m.rows) != 0 {

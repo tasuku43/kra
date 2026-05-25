@@ -51,7 +51,7 @@ Initialize a kra root and filesystem-first runtime metadata.
   - do not overwrite existing `templates/default/` content
   - existing roots with an already-present `templates/default/` are not retroactively updated by init; use `kra root migrate --apply` to add missing default template and active workspace scaffold
 - Ensure `<root>/.cmux/dock.json` exists on first init
-  - Dock command lists active workspace current states with `kra ws status --all --todo-only`
+  - Dock command lists active workspace task-derived Current Task / Next Task with `kra ws status --all --todo-only`
   - do not overwrite existing root Dock config
 - Ensure `<root>/.kra/config.yaml` exists on first init
   - create default content:

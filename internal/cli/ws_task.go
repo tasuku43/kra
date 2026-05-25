@@ -328,8 +328,10 @@ func (c *CLI) buildWSTaskViewModel(root string, target wsTaskTarget, opts wsTask
 				return wstask.ViewModel{}, fmt.Errorf("%s: %w", row.ID, err)
 			}
 			workspace := wstask.ViewWorkspace{
-				ID:    row.ID,
-				Title: row.Title,
+				ID:           row.ID,
+				Title:        row.Title,
+				CurrentState: result.CurrentState,
+				Next:         result.Next,
 			}
 			for _, item := range result.Items {
 				if shouldSkipWSTaskViewItem(item, opts) {

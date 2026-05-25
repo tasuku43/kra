@@ -408,7 +408,7 @@ func TestCLI_RootMigrate_GlobalDockUpdatesOldKraTasksWithoutLegacyProjectDock(t 
 	}
 }
 
-func TestCLI_RootMigrate_AddsNextSectionToExistingWorkspaceDocument(t *testing.T) {
+func TestCLI_RootMigrate_AddsTaskHandoffGuideToExistingWorkspaceDocument(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	ws := filepath.Join(root, "workspaces", "WS1")
 	if err := os.MkdirAll(ws, 0o755); err != nil {
@@ -431,11 +431,11 @@ func TestCLI_RootMigrate_AddsNextSectionToExistingWorkspaceDocument(t *testing.T
 		t.Fatalf("read workspace.md: %v", readErr)
 	}
 	got := string(b)
-	if !strings.Contains(got, "## Next\n\nRecord the next concrete step here before handing off or stopping.\n\n## Tasks") {
-		t.Fatalf("workspace.md missing inserted Next before Tasks: %q", got)
-	}
 	if !strings.Contains(got, "This file is the workspace handoff state. Keep it current.") {
 		t.Fatalf("workspace.md missing handoff guide: %q", got)
+	}
+	if strings.Contains(got, "## Next") {
+		t.Fatalf("workspace.md should not add dedicated Next section: %q", got)
 	}
 }
 

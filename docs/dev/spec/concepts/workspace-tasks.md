@@ -32,14 +32,13 @@ Define one workspace-local, AI-editable workspace state and task contract that r
 ## File contract
 
 - `workspace.md` may contain arbitrary Markdown before and after the structured task section.
-- `kra` interprets the first level-2 heading named `Current State` as a natural-language state
-  summary:
-  - `## Current State`
-- `## Current State` content is freeform Markdown. Agents should keep it short, current, and useful
-  for resuming work quickly.
-- `kra` interprets the first level-2 heading named `Next` as the next concrete action:
-  - `## Next`
-- `## Next` content is freeform Markdown. Agents should update it before handing off or stopping.
+- `kra` does not require or interpret dedicated `## Current State` or `## Next` sections.
+- `kra ws status` derives `Current Task` and `Next Task` from structured tasks:
+  - `Current Task` is the first `doing` task in file order.
+  - `Next Task` is the first `todo` task after the current `doing` task, wrapping to the first `todo`
+    task when needed.
+  - Each value displays the task `description`; when `description` is empty, it displays the task
+    title.
 - `kra` interprets only the first level-2 heading named `Tasks`:
   - `## Tasks`
 - The structured task section ends at the next level-2 heading or EOF.
@@ -75,10 +74,10 @@ Define one workspace-local, AI-editable workspace state and task contract that r
 ## View policy
 
 - cmux Dock is the supported persistent status view.
-- `kra ws status` reads `workspace.md`, renders `## Current State` and the current structured task
-  state for terminal or Dock use, and writes status changes back to `workspace.md`.
-- With root/all-workspace views, `kra ws status --all` emphasizes each workspace's
-  `## Current State` and shows task progress as supplemental context instead of listing every task.
+- `kra ws status` reads `workspace.md`, renders task-derived `Current Task` / `Next Task` and the current
+  structured task state for terminal or Dock use, and writes status changes back to `workspace.md`.
+- With root/all-workspace views, `kra ws status --all` emphasizes each workspace's task-derived
+  `Current Task` / `Next Task` and shows task progress as supplemental context instead of listing every task.
 - `kra ws status` starts in read mode; users must enter write mode before clicks or keys mutate
   task status.
 - Direct `workspace.md` edits remain valid as long as the contract is preserved; users or AI agents can

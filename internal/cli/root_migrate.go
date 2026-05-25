@@ -251,25 +251,6 @@ func appendWorkspaceDocumentMigrationAction(actions []rootMigrateAction, base st
 				},
 			}), nil
 		}
-		needsNext, err := workspaceDocumentNeedsNextSection(workspacePath)
-		if err != nil {
-			return append(actions, rootMigrateAction{
-				Path:        workspacePath,
-				Description: "read failed",
-				apply: func() error {
-					return err
-				},
-			}), nil
-		}
-		if needsNext {
-			actions = append(actions, rootMigrateAction{
-				Path:        workspacePath,
-				Description: fmt.Sprintf("add Next section to workspace.md for %s", label),
-				apply: func() error {
-					return addNextSectionToWorkspaceDocument(workspacePath)
-				},
-			})
-		}
 		needsGuide, err := workspaceDocumentNeedsHandoffGuide(workspacePath)
 		if err != nil {
 			return append(actions, rootMigrateAction{
@@ -339,24 +320,6 @@ func appendWorkspaceDocumentMigrationAction(actions []rootMigrateAction, base st
 	}
 }
 
-func workspaceDocumentNeedsNextSection(path string) (bool, error) {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return false, err
-	}
-	lines := splitNormalizedLinesForRootMigrate(string(b))
-	looksLikeWorkspaceDocument := false
-	for _, line := range lines {
-		switch strings.TrimSpace(line) {
-		case "## Next":
-			return false, nil
-		case "## Current State", "## Tasks":
-			looksLikeWorkspaceDocument = true
-		}
-	}
-	return looksLikeWorkspaceDocument, nil
-}
-
 func workspaceDocumentNeedsHandoffGuide(path string) (bool, error) {
 	b, err := os.ReadFile(path)
 	if err != nil {
@@ -385,9 +348,9 @@ func addHandoffGuideToWorkspaceDocument(path string) error {
 	guide := []string{
 		"This file is the workspace handoff state. Keep it current.",
 		"",
-		"- Update `## Current State` when the situation changes.",
-		"- Update `## Next` before stopping or handing off.",
 		"- Keep `## Tasks` statuses in sync with actual progress.",
+		"- Mark current work as `doing` and the next task as `todo`.",
+		"- Put resumable task detail in each task description.",
 		"",
 	}
 	out := make([]string, 0, len(lines)+len(guide)+2)
@@ -399,48 +362,6 @@ func addHandoffGuideToWorkspaceDocument(path string) error {
 		out = append(out, "# Workspace", "")
 		out = append(out, guide...)
 		out = append(out, lines...)
-	}
-	rendered := strings.Join(out, "\n")
-	if !strings.HasSuffix(rendered, "\n") {
-		rendered += "\n"
-	}
-	return os.WriteFile(path, []byte(rendered), 0o644)
-}
-
-func addNextSectionToWorkspaceDocument(path string) error {
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return err
-	}
-	content := string(b)
-	lines := splitNormalizedLinesForRootMigrate(content)
-	insert := []string{
-		"## Next",
-		"",
-		"Record the next concrete step here before handing off or stopping.",
-		"",
-	}
-	taskStart := -1
-	for i, line := range lines {
-		if strings.TrimSpace(line) == "## Tasks" {
-			taskStart = i
-			break
-		}
-	}
-	out := make([]string, 0, len(lines)+len(insert)+2)
-	if taskStart >= 0 {
-		out = append(out, lines[:taskStart]...)
-		if len(out) > 0 && strings.TrimSpace(out[len(out)-1]) != "" {
-			out = append(out, "")
-		}
-		out = append(out, insert...)
-		out = append(out, lines[taskStart:]...)
-	} else {
-		out = append(out, lines...)
-		if len(out) > 0 && strings.TrimSpace(out[len(out)-1]) != "" {
-			out = append(out, "")
-		}
-		out = append(out, insert...)
 	}
 	rendered := strings.Join(out, "\n")
 	if !strings.HasSuffix(rendered, "\n") {
@@ -467,17 +388,9 @@ func convertLegacyTasksToWorkspaceDocument(content string) string {
 		"",
 		"This file is the workspace handoff state. Keep it current.",
 		"",
-		"- Update `## Current State` when the situation changes.",
-		"- Update `## Next` before stopping or handing off.",
 		"- Keep `## Tasks` statuses in sync with actual progress.",
-		"",
-		"## Current State",
-		"",
-		"This workspace was migrated from tasks.md. Update this section with the current work state.",
-		"",
-		"## Next",
-		"",
-		"Record the next concrete step here before handing off or stopping.",
+		"- Mark current work as `doing` and the next task as `todo`.",
+		"- Put resumable task detail in each task description.",
 		"",
 	}
 	outLines = append(outLines, lines...)

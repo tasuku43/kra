@@ -22,17 +22,9 @@ const defaultWorkspaceDocumentContent = `# Workspace
 
 This file is the workspace handoff state. Keep it current.
 
-- Update ` + "`## Current State`" + ` when the situation changes.
-- Update ` + "`## Next`" + ` before stopping or handing off.
 - Keep ` + "`## Tasks`" + ` statuses in sync with actual progress.
-
-## Current State
-
-This workspace has not recorded current state yet.
-
-## Next
-
-Record the next concrete step here before handing off or stopping.
+- Mark current work as ` + "`doing`" + ` and the next task as ` + "`todo`" + `.
+- Put resumable task detail in each task description.
 
 ## Tasks
 `

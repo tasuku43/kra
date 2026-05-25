@@ -144,9 +144,75 @@ func TestServiceAdd_CreatesTasksSectionAndPreservesOutsideContent(t *testing.T) 
 	}
 
 	got := port.docs["active:WS1"].Content
-	want := "# Memo\n\nKeep this.\n\n## Notes\n\nstill here\n\n## Current State\n\nThis workspace has not recorded current state yet.\n\n## Next\n\nRecord the next concrete step here before handing off or stopping.\n\n## Tasks\n\n### TASK-001 First task\nstatus: todo\n\nLine one\n"
+	want := "# Memo\n\nKeep this.\n\n## Notes\n\nstill here\n\n## Tasks\n\n### TASK-001 First task\nstatus: todo\n\nLine one\n"
 	if got != want {
 		t.Fatalf("saved content mismatch\nwant:\n%s\ngot:\n%s", want, got)
+	}
+}
+
+func TestServiceView_DerivesCurrentAndNextFromTaskDescriptions(t *testing.T) {
+	port := newMemoryPort()
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:   "/root/workspaces/WS1/workspace.md",
+		Exists: true,
+		Content: "## Current State\n\nLegacy state ignored.\n\n## Next\n\nLegacy next ignored.\n\n## Tasks\n\n" +
+			"### TASK-001 Done\nstatus: done\n\n" +
+			"### TASK-002 Current title\nstatus: doing\n\nCurrent description line one.\nCurrent description line two.\n\n" +
+			"### TASK-003 Next title\nstatus: todo\n\nNext description.\n",
+	})
+
+	result, err := NewService(port).View("/root", "WS1", "active")
+	if err != nil {
+		t.Fatalf("View() error = %v", err)
+	}
+	if result.CurrentState != "Current description line one.\nCurrent description line two." {
+		t.Fatalf("CurrentState = %q", result.CurrentState)
+	}
+	if result.Next != "Next description." {
+		t.Fatalf("Next = %q", result.Next)
+	}
+}
+
+func TestServiceView_DerivedCurrentAndNextFallBackToTitles(t *testing.T) {
+	port := newMemoryPort()
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:    "/root/workspaces/WS1/workspace.md",
+		Exists:  true,
+		Content: "## Tasks\n\n### TASK-001 Current title\nstatus: doing\n\n### TASK-002 Next title\nstatus: todo\n",
+	})
+
+	result, err := NewService(port).View("/root", "WS1", "active")
+	if err != nil {
+		t.Fatalf("View() error = %v", err)
+	}
+	if result.CurrentState != "Current title" {
+		t.Fatalf("CurrentState = %q", result.CurrentState)
+	}
+	if result.Next != "Next title" {
+		t.Fatalf("Next = %q", result.Next)
+	}
+}
+
+func TestServiceStatus_RemovesLegacyCurrentAndNextSectionsOnWrite(t *testing.T) {
+	port := newMemoryPort()
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:   "/root/workspaces/WS1/workspace.md",
+		Exists: true,
+		Content: "# Workspace\n\n## Notes\n\nKeep me.\n\n## Current State\n\nLegacy state.\n\n## Next\n\nLegacy next.\n\n## Tasks\n\n" +
+			"### TASK-001 Current title\nstatus: doing\n\nCurrent detail.\n\n" +
+			"### TASK-002 Next title\nstatus: todo\n\nNext detail.\n",
+	})
+
+	_, err := NewService(port).Status("/root", "WS1", "TASK-002", StatusDone)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	got := port.docs["active:WS1"].Content
+	if strings.Contains(got, "## Current State") || strings.Contains(got, "## Next") {
+		t.Fatalf("legacy state sections should be removed: %q", got)
+	}
+	if !strings.Contains(got, "## Notes\n\nKeep me.") {
+		t.Fatalf("freeform content outside managed sections should be preserved: %q", got)
 	}
 }
 

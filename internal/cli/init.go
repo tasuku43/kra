@@ -663,7 +663,7 @@ func defaultWorkspaceTemplateAgentsContent() string {
 - notes/: investigation notes, decisions, TODOs, links
 - artifacts/: files and evidence (screenshots, logs, dumps, PoCs)
 - repos/: git worktrees (NOT Git-tracked; added via kra ws add-repo)
-- workspace.md: single source of truth for current state and tasks
+- workspace.md: single source of truth for tasks and handoff state
 
 Notes vs artifacts:
 - notes/: write what you learned and decided
@@ -675,18 +675,17 @@ workspace.md is the single source of truth for this workspace handoff state.
 
 At the start of work:
 - Read workspace.md first.
-- Use ## Current State, ## Next, and ## Tasks to understand the current situation.
+- Use ## Tasks to understand the current, next, blocked, and completed work.
 
 While working:
-- Update ## Current State whenever the situation changes materially.
-- Update ## Next whenever the next concrete action changes.
 - Keep task status under ## Tasks in sync with actual progress.
+- Mark current work as doing and the next task as todo.
+- Keep task descriptions useful for resuming work.
 - Do not overwrite unrelated edits in workspace.md; merge your changes with the latest file content.
 
 Before stopping or handing off:
-- Leave ## Current State with the current state of the work.
-- Leave ## Next with the next concrete action.
 - Mark completed tasks as done, current work as doing, and blocked work as blocked.
+- Leave the current and next task descriptions clear enough to resume.
 
 ## Closing
 

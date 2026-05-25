@@ -324,7 +324,7 @@ func (m wsTaskTUIModel) View() string {
 				}
 			} else {
 				fullY++
-				m.writeVisibleLine(&b, fullY, styleMuted("No current state recorded.", m.useColor))
+				m.writeVisibleLine(&b, fullY, styleMuted("No current task recorded.", m.useColor))
 			}
 			fullY++
 			m.writeVisibleLine(&b, fullY, "")
@@ -367,7 +367,7 @@ func (m wsTaskTUIModel) writeCurrentState(b *strings.Builder, fullY *int) {
 	}
 	if state != "" {
 		(*fullY)++
-		m.writeVisibleLine(b, *fullY, styleBold("Current State", m.useColor))
+		m.writeVisibleLine(b, *fullY, styleBold("Current Task", m.useColor))
 		for _, line := range workspaceStateDisplayLines(state, m.width) {
 			(*fullY)++
 			m.writeVisibleLine(b, *fullY, renderWorkspaceStateLine(line, m.useColor))
@@ -379,7 +379,7 @@ func (m wsTaskTUIModel) writeCurrentState(b *strings.Builder, fullY *int) {
 			m.writeVisibleLine(b, *fullY, "")
 		}
 		(*fullY)++
-		m.writeVisibleLine(b, *fullY, styleBold("Next", m.useColor))
+		m.writeVisibleLine(b, *fullY, styleBold("Next Task", m.useColor))
 		for _, line := range workspaceStateDisplayLines(next, m.width) {
 			(*fullY)++
 			m.writeVisibleLine(b, *fullY, renderWorkspaceStateLine(line, m.useColor))
@@ -511,7 +511,7 @@ func joinWorkspaceState(currentState string, next string) string {
 	case next == "":
 		return currentState
 	default:
-		return currentState + "\nNext: " + next
+		return currentState + "\nNext Task: " + next
 	}
 }
 
@@ -780,14 +780,14 @@ func currentStateRenderedLineCount(model wstask.ViewModel, width int) int {
 	}
 	count := 0
 	if state != "" {
-		count++ // Current State heading.
+		count++ // Current Task heading.
 		count += len(workspaceStateDisplayLines(state, width))
 	}
 	if next != "" {
 		if state != "" {
-			count++ // Blank line between Current State and Next.
+			count++ // Blank line between Current Task and Next Task.
 		}
-		count++ // Next heading.
+		count++ // Next Task heading.
 		count += len(workspaceStateDisplayLines(next, width))
 	}
 	count++ // Blank line after the state block.
@@ -816,7 +816,7 @@ func (m wsTaskTUIModel) contentBottomY() int {
 			y += 4
 			stateLines := workspaceStateDisplayLines(joinWorkspaceState(workspace.CurrentState, workspace.Next), m.width)
 			if len(stateLines) == 0 {
-				stateLines = []string{"No current state recorded."}
+				stateLines = []string{"No current task recorded."}
 			}
 			y += len(stateLines) + 1
 		}

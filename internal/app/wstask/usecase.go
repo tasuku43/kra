@@ -225,8 +225,8 @@ func (s *Service) View(root string, workspaceID string, scope string) (ViewModel
 	return ViewModel{
 		WorkspaceID:  workspaceID,
 		Path:         snapshot.Path,
-		CurrentState: doc.currentState(),
-		Next:         doc.next(),
+		CurrentState: currentTaskText(overview.Items),
+		Next:         nextTaskText(overview.Items),
 		Items:        append([]Item{}, overview.Items...),
 		Groups: []ViewGroup{
 			{Status: StatusDoing, Title: "Doing", Items: overview.ItemsByStatus(StatusDoing)},
@@ -572,6 +572,11 @@ func parseDocument(snapshot DocumentSnapshot) (*parsedDocument, error) {
 		if nextStart >= 0 {
 			doc.consumeNext(lines, nextStart, len(lines))
 		}
+		doc.before = cloneLines(lines)
+		for _, r := range managedSectionRangesBeforeTasks(lines, len(lines), currentStateStart, nextStart) {
+			doc.before = append(doc.before[:r.start], doc.before[r.end:]...)
+		}
+		doc.after = nil
 		return doc, nil
 	}
 	doc.before = cloneLines(lines[:sectionStart])
@@ -733,6 +738,42 @@ func (d *parsedDocument) next() string {
 	return strings.TrimSpace(strings.Join(d.nextLines, "\n"))
 }
 
+func currentTaskText(items []Item) string {
+	for _, item := range items {
+		if item.Status == StatusDoing {
+			return taskDisplayText(item)
+		}
+	}
+	return ""
+}
+
+func nextTaskText(items []Item) string {
+	start := 0
+	for i, item := range items {
+		if item.Status == StatusDoing {
+			start = i + 1
+		}
+	}
+	for i := start; i < len(items); i++ {
+		if items[i].Status == StatusTodo {
+			return taskDisplayText(items[i])
+		}
+	}
+	for i := 0; i < start && i < len(items); i++ {
+		if items[i].Status == StatusTodo {
+			return taskDisplayText(items[i])
+		}
+	}
+	return ""
+}
+
+func taskDisplayText(item Item) string {
+	if description := normalizeDescription(item.Description); description != "" {
+		return description
+	}
+	return strings.TrimSpace(item.Title)
+}
+
 func (d *parsedDocument) consumeNext(lines []string, nextStart int, limit int) {
 	nextEnd := limit
 	for i := nextStart + 1; i < limit; i++ {
@@ -752,14 +793,6 @@ func (d *parsedDocument) ensureTasksSection() {
 	d.hasTasksSection = true
 	d.segments = nil
 	d.after = nil
-	if !d.hasCurrentState {
-		d.hasCurrentState = true
-		d.currentStateLines = []string{"This workspace has not recorded current state yet."}
-	}
-	if !d.hasNext {
-		d.hasNext = true
-		d.nextLines = []string{"Record the next concrete step here before handing off or stopping."}
-	}
 	if len(d.before) == 0 {
 		d.before = []string{"# Workspace"}
 	}
@@ -806,26 +839,6 @@ func (d *parsedDocument) items() []Item {
 func (d *parsedDocument) render() string {
 	lines := make([]string, 0, len(d.before)+len(d.after)+8)
 	lines = append(lines, d.before...)
-	if d.hasCurrentState {
-		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
-			lines = append(lines, "")
-		}
-		lines = append(lines, "## Current State", "")
-		lines = append(lines, d.currentStateLines...)
-		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
-			lines = append(lines, "")
-		}
-	}
-	if d.hasNext {
-		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
-			lines = append(lines, "")
-		}
-		lines = append(lines, "## Next", "")
-		lines = append(lines, d.nextLines...)
-		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
-			lines = append(lines, "")
-		}
-	}
 	if d.hasTasksSection {
 		if len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) != "" {
 			lines = append(lines, "")
