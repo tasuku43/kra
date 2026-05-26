@@ -192,7 +192,7 @@ var kraCompletionPathFlags = map[string][]string{
 	"ws import github":        {"--help", "-h"},
 	"ws import github issue":  {"--org", "--repo", "--state", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
 	"ws import github review": {"--org", "--repo", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
-	"ws import jira":          {"--sprint", "--space", "--project", "--jql", "--limit", "--apply", "--no-prompt", "--format", "--help", "-h"},
+	"ws import jira":          {"--sprint", "--space", "--project", "--jql", "--limit", "--apply", "--with-open", "--command", "--no-prompt", "--format", "--help", "-h"},
 	"ws doc":                  {"--help", "-h"},
 	"ws doc open":             {"--id", "--current", "--select", "--surface", "--no-focus", "--format", "--help", "-h"},
 	"ws task":                 {"--id", "--current", "--cmux-current", "--select", "--help", "-h"},

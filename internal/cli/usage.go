@@ -532,9 +532,9 @@ Rules:
 
 func (c *CLI) printWSImportJiraUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws import jira --sprint [<id|name>] --space <key> [--limit <n>] [--apply] [--no-prompt] [--format human|json]
-  kra ws import jira --sprint [<id|name>] --project <key> [--limit <n>] [--apply] [--no-prompt] [--format human|json]
-  kra ws import jira --jql "<expr>" [--limit <n>] [--apply] [--no-prompt] [--format human|json]
+  kra ws import jira --sprint [<id|name>] --space <key> [--limit <n>] [--apply] [--with-open] [--command <cmd>] [--no-prompt] [--format human|json]
+  kra ws import jira --sprint [<id|name>] --project <key> [--limit <n>] [--apply] [--with-open] [--command <cmd>] [--no-prompt] [--format human|json]
+  kra ws import jira --jql "<expr>" [--limit <n>] [--apply] [--with-open] [--command <cmd>] [--no-prompt] [--format human|json]
 
 Plan-first bulk workspace creation from Jira.
 
@@ -545,6 +545,8 @@ Rules:
   --space and --project cannot be combined.
   --board is not supported (use --space/--project with --sprint).
   --limit default is 30 (range: 1..200).
+  --with-open opens created workspaces after apply.
+  --command requires --with-open and is forwarded to ws open.
 `)
 }
 

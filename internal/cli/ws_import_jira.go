@@ -40,6 +40,8 @@ type wsImportJiraOpts struct {
 	sprintSelect string
 	limit        int
 	apply        bool
+	withOpen     bool
+	openCommand  string
 	noPrompt     bool
 	outputFormat string
 }
@@ -194,6 +196,9 @@ func (c *CLI) runWSImportJira(args []string) int {
 	if err != nil {
 		return writeUsageError(err.Error())
 	}
+	if opts.withOpen && outputJSON {
+		return writeUsageError("--with-open is not supported with --format json")
+	}
 
 	plan, createInputs, err := c.prepareWSImportJiraPlan(context.Background(), root, cfg, opts)
 	if err != nil {
@@ -241,7 +246,32 @@ func (c *CLI) runWSImportJira(args []string) int {
 		}
 	}
 	if shouldApply {
-		c.applyWSImportJiraPlan(root, &plan, createInputs)
+		createdWorkspaceIDs := c.applyWSImportJiraPlan(root, &plan, createInputs)
+		if !outputJSON {
+			c.printWSImportJiraResultHuman(plan)
+		}
+		if plan.Summary.Failed > 0 {
+			if outputJSON {
+				return writeJSONResult(false, plan, shouldApply, "conflict", "import completed with failures")
+			}
+			return exitError
+		}
+		if opts.withOpen && len(createdWorkspaceIDs) > 0 {
+			openArgs := []string{"--multi-select"}
+			if opts.openCommand != "" {
+				openArgs = append(openArgs, "--command", opts.openCommand)
+			}
+			for _, id := range createdWorkspaceIDs {
+				openArgs = append(openArgs, "--workspace", id)
+			}
+			if code := c.runWSOpenRuntime(openArgs); code != exitOK {
+				return code
+			}
+		}
+		if outputJSON {
+			return writeJSONResult(true, plan, shouldApply, "", "")
+		}
+		return exitOK
 	}
 
 	if outputJSON {
@@ -249,14 +279,6 @@ func (c *CLI) runWSImportJira(args []string) int {
 			return writeJSONResult(false, plan, shouldApply, "conflict", "import completed with failures")
 		}
 		return writeJSONResult(true, plan, shouldApply, "", "")
-	}
-
-	if shouldApply {
-		c.printWSImportJiraResultHuman(plan)
-		if plan.Summary.Failed > 0 {
-			return exitError
-		}
-		return exitOK
 	}
 
 	if !interactivePromptFlow {
@@ -314,8 +336,9 @@ func (c *CLI) prepareWSImportJiraPlan(ctx context.Context, root string, cfg conf
 	return plan, createInputs, nil
 }
 
-func (c *CLI) applyWSImportJiraPlan(root string, plan *wsImportJiraPlan, createInputs []wsimport.WorkspaceInput) {
+func (c *CLI) applyWSImportJiraPlan(root string, plan *wsImportJiraPlan, createInputs []wsimport.WorkspaceInput) []string {
 	createdCount := 0
+	createdWorkspaceIDs := make([]string, 0, len(createInputs))
 	for _, in := range createInputs {
 		if _, err := c.createWorkspaceAtRoot(root, in.ID, in.Title, in.SourceURL, defaultWorkspaceTemplateName); err != nil {
 			markWSImportJiraCreateItemAsFailed(plan, in, classifyWSImportJiraCreateFailureReason(err), err.Error())
@@ -323,8 +346,10 @@ func (c *CLI) applyWSImportJiraPlan(root string, plan *wsImportJiraPlan, createI
 			continue
 		}
 		createdCount++
+		createdWorkspaceIDs = append(createdWorkspaceIDs, in.ID)
 	}
 	plan.Summary.ToCreate = createdCount
+	return createdWorkspaceIDs
 }
 
 func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
@@ -386,6 +411,15 @@ func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
 		case "--apply":
 			opts.apply = true
 			rest = rest[1:]
+		case "--with-open":
+			opts.withOpen = true
+			rest = rest[1:]
+		case "--command":
+			if len(rest) < 2 {
+				return wsImportJiraOpts{}, fmt.Errorf("--command requires a value")
+			}
+			opts.openCommand = strings.TrimSpace(rest[1])
+			rest = rest[2:]
 		case "--no-prompt":
 			opts.noPrompt = true
 			rest = rest[1:]
@@ -401,6 +435,11 @@ func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
 		default:
 			if strings.HasPrefix(rest[0], "--format=") {
 				opts.outputFormat = strings.TrimSpace(strings.TrimPrefix(rest[0], "--format="))
+				rest = rest[1:]
+				continue
+			}
+			if strings.HasPrefix(rest[0], "--command=") {
+				opts.openCommand = strings.TrimSpace(strings.TrimPrefix(rest[0], "--command="))
 				rest = rest[1:]
 				continue
 			}
@@ -422,6 +461,9 @@ func (c *CLI) parseWSImportJiraOpts(args []string) (wsImportJiraOpts, error) {
 	}
 	if opts.limit < wsImportJiraMinLimit || opts.limit > wsImportJiraMaxLimit {
 		return wsImportJiraOpts{}, fmt.Errorf("--limit must be in range %d..%d", wsImportJiraMinLimit, wsImportJiraMaxLimit)
+	}
+	if opts.openCommand != "" && !opts.withOpen {
+		return wsImportJiraOpts{}, fmt.Errorf("--command requires --with-open")
 	}
 	switch opts.outputFormat {
 	case "human", "json":

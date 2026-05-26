@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/tasuku43/kra/internal/app/wsimport"
+	"github.com/tasuku43/kra/internal/infra/cmuxctl"
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
@@ -1027,6 +1028,74 @@ func TestCLI_WS_Import_Jira_NoPromptApply_CreatesWorkspace(t *testing.T) {
 	}
 	if err.Len() != 0 {
 		t.Fatalf("stderr not empty: %q", err.String())
+	}
+}
+
+func TestCLI_WS_Import_Jira_WithOpen_OpensCreatedWorkspaceAndForwardsCommand(t *testing.T) {
+	env := testutil.NewEnv(t)
+	env.EnsureRootLayout(t)
+
+	prevFactory := newWSImportJiraPort
+	newWSImportJiraPort = func(baseURL string) wsimport.JiraIssueListPort {
+		return stubJiraImportPort{
+			issuesByJQL: []wsimport.JiraIssue{
+				{Key: "PROJ-702", Summary: "Open after import", TicketURL: "https://jira.example.com/browse/PROJ-702"},
+			},
+		}
+	}
+	t.Cleanup(func() {
+		newWSImportJiraPort = prevFactory
+	})
+
+	fake := &fakeCMUXOpenClient{
+		capabilities: cmuxctl.Capabilities{
+			Methods: map[string]struct{}{
+				"workspace.create": {},
+				"workspace.rename": {},
+				"workspace.status": {},
+				"notify":           {},
+				"pane.list":        {},
+				"text.send":        {},
+			},
+		},
+		createID: "CMUX-PROJ-702",
+	}
+	prevClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient { return fake }
+	t.Cleanup(func() { newCMUXOpenClient = prevClient })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "import", "jira", "--jql", "assignee=currentUser()", "--no-prompt", "--apply", "--with-open", "--command", "make test"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stdout=%q stderr=%q)", code, exitOK, out.String(), err.String())
+	}
+	if _, statErr := os.Stat(filepath.Join(env.Root, "workspaces", "PROJ-702")); statErr != nil {
+		t.Fatalf("workspace was not created: %v", statErr)
+	}
+	if len(fake.createCmds) != 1 || !strings.Contains(fake.createCmds[0], filepath.Join(env.Root, "workspaces", "PROJ-702")) {
+		t.Fatalf("cmux create commands = %+v, want workspace cd", fake.createCmds)
+	}
+	if fake.sentWorkspace != "CMUX-PROJ-702" || fake.sentText != "make test\n" {
+		t.Fatalf("sent command workspace=%q text=%q", fake.sentWorkspace, fake.sentText)
+	}
+	if !strings.Contains(out.String(), "Result:") || !strings.Contains(out.String(), "Opened 1 / 1") {
+		t.Fatalf("stdout missing import/open results: %q", out.String())
+	}
+}
+
+func TestCLI_WS_Import_Jira_CommandRequiresWithOpen(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"ws", "import", "jira", "--jql", "assignee=currentUser()", "--command", "make test"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+	if !strings.Contains(err.String(), "--command requires --with-open") {
+		t.Fatalf("stderr missing --command validation: %q", err.String())
 	}
 }
 

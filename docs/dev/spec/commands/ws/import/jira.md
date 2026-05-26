@@ -12,10 +12,10 @@ This command is for workspace creation (0..N), not for actions on existing works
 
 ## Command forms
 
-- `kra ws import jira [--sprint [<id|name>] [--space <key>|--project <key>] | --jql [<expr>]] [--limit <n>] [--apply] [--no-prompt] [--format human|json]`
-- `kra ws import jira --sprint [<id|name>] --space <key> [--limit <n>] [--apply] [--no-prompt] [--format human|json]`
-- `kra ws import jira --sprint [<id|name>] --project <key> [--limit <n>] [--apply] [--no-prompt] [--format human|json]`
-- `kra ws import jira --jql "<expr>" [--limit <n>] [--apply] [--no-prompt] [--format human|json]`
+- `kra ws import jira [--sprint [<id|name>] [--space <key>|--project <key>] | --jql [<expr>]] [--limit <n>] [--apply] [--with-open] [--command <cmd>] [--no-prompt] [--format human|json]`
+- `kra ws import jira --sprint [<id|name>] --space <key> [--limit <n>] [--apply] [--with-open] [--command <cmd>] [--no-prompt] [--format human|json]`
+- `kra ws import jira --sprint [<id|name>] --project <key> [--limit <n>] [--apply] [--with-open] [--command <cmd>] [--no-prompt] [--format human|json]`
+- `kra ws import jira --jql "<expr>" [--limit <n>] [--apply] [--with-open] [--command <cmd>] [--no-prompt] [--format human|json]`
 
 ## Input rules
 
@@ -35,6 +35,9 @@ This command is for workspace creation (0..N), not for actions on existing works
 - `--board` is not supported.
 - Legacy `--json` is supported as an alias for `--format json`.
 - `--limit` default is `30` and valid range is `1..200`.
+- `--with-open` opens successfully imported workspaces immediately after apply.
+- `--command <cmd>` is accepted only with `--with-open` and is forwarded to `kra ws open --command <cmd>`.
+- `--with-open` is supported only with human output. `--format json` fails with a usage error.
 - Jira base URL resolution order:
   1. `KRA_JIRA_BASE_URL` (if set)
   2. `<current-root>/.kra/config.yaml` -> `integration.jira.base_url`
@@ -94,6 +97,12 @@ This command is for workspace creation (0..N), not for actions on existing works
   - continue creating other items even when some items fail.
 - After apply (human output):
   - print `Result:` with summary counts and completion message.
+- When `--with-open` is set:
+  - open only workspaces that were created successfully in the current apply.
+  - skipped and failed items are not opened.
+  - if no workspace was created, skip open and keep import result behavior unchanged.
+  - if any open fails, the command fails after printing the import result.
+  - if `--command <cmd>` is set, pass it to open so the imported workspace receives the command after cmux startup.
 
 ## Conflict policy
 
