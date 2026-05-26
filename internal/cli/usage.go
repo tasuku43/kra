@@ -251,7 +251,7 @@ func (c *CLI) printWSUsage(w io.Writer) {
 	b.WriteString(`Usage:
   kra ws [--id <id> | --current | --select | --multi-select]
   kra ws create [--no-prompt] [--template <name>] [--format human|json] <id>
-  kra ws open [--id <id> | --current | --select | --multi-select | --all] [--concurrency <n>] [--format human|json]
+  kra ws open [--id <id> | --current | --select | --multi-select | --all] [--command <cmd>] [--concurrency <n>] [--format human|json]
   kra ws add-repo [--id <id> | --current | --select] [action-args...]
   kra ws remove-repo [--id <id> | --current | --select] [action-args...]
   kra ws close [--id <id> | --current | --select | --multi-select] [action-args...]
@@ -283,9 +283,10 @@ Run:
 
 func (c *CLI) printWSOpenUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
-  kra ws open [--id <id> | --current | --select | --multi-select | --all] [--concurrency <n>] [--format human|json]
+  kra ws open [--id <id> | --current | --select | --multi-select | --all] [--command <cmd>] [--concurrency <n>] [--format human|json]
 
 Open workspace runtime flow.
+When --command is provided, kra runs it after cd'ing into the workspace. New cmux workspaces start with the command; existing cmux workspaces receive it on their selected surface.
 `)
 }
 

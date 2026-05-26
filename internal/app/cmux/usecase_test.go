@@ -36,6 +36,9 @@ type fakeClient struct {
 	statusIcon      string
 	statusColor     string
 	notify          cmuxctl.NotifyOptions
+	sentWorkspace   string
+	sentSurface     string
+	sentText        string
 	calls           []string
 }
 
@@ -75,6 +78,14 @@ func (f *fakeClient) SetStatus(_ context.Context, workspace string, label string
 func (f *fakeClient) Notify(_ context.Context, opts cmuxctl.NotifyOptions) error {
 	f.calls = append(f.calls, "notify:"+opts.Workspace)
 	f.notify = opts
+	return nil
+}
+
+func (f *fakeClient) SendText(_ context.Context, workspace string, surface string, text string) error {
+	f.calls = append(f.calls, "send:"+workspace)
+	f.sentWorkspace = workspace
+	f.sentSurface = surface
+	f.sentText = text
 	return nil
 }
 

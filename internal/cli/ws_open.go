@@ -130,7 +130,7 @@ func (c *CLI) runWSOpen(args []string) int {
 
 func flagNeedsValue(arg string) bool {
 	switch arg {
-	case "--format", "--workspace", "--concurrency":
+	case "--format", "--workspace", "--concurrency", "--command":
 		return true
 	default:
 		return false

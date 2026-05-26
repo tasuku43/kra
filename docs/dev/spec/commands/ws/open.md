@@ -3,7 +3,7 @@ title: "`kra ws open`"
 status: implemented
 ---
 
-# `kra ws open [--id <id> | --current | --select | --multi-select | --all] [--concurrency <n>] [--format human|json]`
+# `kra ws open [--id <id> | --current | --select | --multi-select | --all] [--command <cmd>] [--concurrency <n>] [--format human|json]`
 
 ## Purpose
 
@@ -20,6 +20,8 @@ Open cmux workspace(s) from workspace action entrypoint and notify the user from
 - batch options:
   - `--multi-select`
   - `--concurrency <n>`
+- command option:
+  - `--command <cmd>`: send `<cmd>` to the cmux workspace terminal after the workspace has started in `<workspace-path>`
 
 ## Behavior
 
@@ -33,6 +35,11 @@ Open cmux workspace(s) from workspace action entrypoint and notify the user from
 - `--all` accepts `--concurrency` for compatibility, but always uses effective concurrency `1`.
 - `--multi-select` かつ `--concurrency` 未指定時は、自動並列度（`min(targets, max(2, GOMAXPROCS))`）で goroutine 実行する。
 - JSON mode remains non-interactive.
+- `--command <cmd>` behavior:
+  - for newly created cmux workspaces, create the workspace with startup command `cd <workspace-path>`, then send `<cmd>\n` to the selected surface
+  - for reused cmux workspaces, send `<cmd>\n` to the selected surface
+  - command send failures are command failures (`cmux_send_command_failed`) rather than best-effort warnings
+  - in fallback directory-open mode, `--command` is not executed
 - On successful open, advance each succeeded target's `.kra.meta.json.workspace.work_state` to
   `in-progress`.
   - transition is monotonic (`todo -> in-progress`)

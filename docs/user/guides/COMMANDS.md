@@ -15,7 +15,7 @@ kra init
 kra ws create TASK-1234
 kra repo add git@github.com:org/backend.git
 kra ws add-repo --id TASK-1234
-kra ws open --id TASK-1234
+kra ws open --id TASK-1234 --command "claude"
 # follow the cmux notification to jump into the workspace
 kra ws dashboard
 ```
@@ -51,7 +51,7 @@ Notes:
 - `kra ws import github review [--org <name> | --repo <owner/name>]`
 - `kra ws list --format human|tsv|json`
 - `kra ws dashboard --format human|json`
-- `kra ws open [--id <id> | --current | --select | --multi-select | --all] [--concurrency <n>]`
+- `kra ws open [--id <id> | --current | --select | --multi-select | --all] [--command <cmd>] [--concurrency <n>]`
 - `kra ws doc open [--id <id> | --current | --select] [path] [--surface <id|ref|index>] [--no-focus]`
 - `kra ws add-repo [--id <id> | --current | --select] [--preset <name>]`
 - `kra ws remove-repo [--id <id> | --current | --select]`
@@ -132,7 +132,7 @@ Many workspace actions share a common target model:
 
 Typical examples:
 
-- `kra ws open [--id <id> | --current | --select | --multi-select]`
+- `kra ws open [--id <id> | --current | --select | --multi-select] [--command <cmd>]`
 - `kra ws close [--id <id> | --current | --select | --multi-select]`
 - `kra ws add-repo [--id <id> | --current | --select]`
 - `kra ws remove-repo [--id <id> | --current | --select]`
@@ -148,7 +148,7 @@ Notes:
 - Positional workspace id arguments are intentionally not supported for these actions.
 - For non-interactive automation, prefer explicit `--id`.
 
-`kra ws open` creates or reuses the mapped cmux workspace and sends a cmux notification from that target. It does not automatically focus the target workspace; use the cmux notification action when you want to jump there.
+`kra ws open` creates or reuses the mapped cmux workspace and sends a cmux notification from that target. It does not automatically focus the target workspace; use the cmux notification action when you want to jump there. With `--command "<cmd>"`, kra sends `<cmd>` to the target terminal after the workspace has opened in the workspace directory. Existing cmux workspaces receive the command on their selected surface.
 
 ## Global flags
 

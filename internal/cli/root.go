@@ -186,7 +186,7 @@ func (c *CLI) runRootOpen(args []string) int {
 		return wsOpenClientAdapter{inner: newCMUXOpenClient()}
 	}, newCMUXMapStore)
 	svc.Debugf = c.debugf
-	openResult, code, msg := svc.Open(context.Background(), root, []appcmux.OpenTarget{target}, 1, false)
+	openResult, code, msg := svc.Open(context.Background(), root, []appcmux.OpenTarget{target}, 1, false, "")
 	if code != "" {
 		if code == "cmux_capability_missing" {
 			return c.writeRootOpenCDFallback(outputFormat, root, msg)

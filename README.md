@@ -61,10 +61,10 @@ PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
 ```sh
 kra init
 kra ws create TASK-1234
-kra ws open --id TASK-1234
+kra ws open --id TASK-1234 --command "claude"
 ```
 
-When using `cmux`, `kra ws open` creates or reuses the corresponding `cmux` workspace and sends a cmux notification from that workspace. Use the notification action in cmux to jump to the workspace; `kra ws open` does not automatically steal focus.
+When using `cmux`, `kra ws open` creates or reuses the corresponding `cmux` workspace and sends a cmux notification from that workspace. Use the notification action in cmux to jump to the workspace; `kra ws open` does not automatically steal focus. Pass `--command "<cmd>"` to send a startup command to the workspace terminal after it has opened in the workspace directory.
 In single-target open, if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior; with shell integration, it can also sync parent shell `cwd`.
 New roots and default workspaces include `.cmux/dock.json`, which cmux reads to show a right-sidebar `Status` Dock control. Workspace Dock runs `kra ws status --current`; root Dock runs `kra ws status --all --todo-only` for active workspace task-derived Current Task / Next Task across the root. `<workspace>/workspace.md` remains the source of truth; `kra ws task sync` is deprecated and no longer updates cmux task pills.
 For an existing root and active workspaces, run `kra root migrate --apply` to add missing Dock/task scaffold without overwriting custom files. The generated Dock command may source the detected shell init file, such as `source ~/.zshrc`, before running `kra`.

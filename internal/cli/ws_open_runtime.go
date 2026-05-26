@@ -23,6 +23,7 @@ type cmuxOpenClient interface {
 	SelectWorkspace(ctx context.Context, workspace string) error
 	SetStatus(ctx context.Context, workspace string, label string, text string, icon string, color string) error
 	Notify(ctx context.Context, opts cmuxctl.NotifyOptions) error
+	SendText(ctx context.Context, workspace string, surface string, text string) error
 	ListPanes(ctx context.Context, workspace string) ([]cmuxctl.Pane, error)
 	ListWorkspaces(ctx context.Context) ([]cmuxctl.Workspace, error)
 	Identify(ctx context.Context, workspace string, surface string) (map[string]any, error)
@@ -37,6 +38,7 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 	all := false
 	concurrency := 1
 	concurrencyExplicit := false
+	openCommand := ""
 	targetIDs := make([]string, 0, 4)
 	for len(args) > 0 && strings.HasPrefix(args[0], "-") {
 		switch args[0] {
@@ -73,6 +75,14 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 			concurrency = n
 			concurrencyExplicit = true
 			args = args[2:]
+		case "--command":
+			if len(args) < 2 {
+				fmt.Fprintln(c.Err, "--command requires a value")
+				c.printWSOpenUsage(c.Err)
+				return exitUsage
+			}
+			openCommand = strings.TrimSpace(args[1])
+			args = args[2:]
 		case "--workspace":
 			if len(args) < 2 {
 				fmt.Fprintln(c.Err, "--workspace requires a value")
@@ -101,6 +111,11 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 				}
 				concurrency = n
 				concurrencyExplicit = true
+				args = args[1:]
+				continue
+			}
+			if strings.HasPrefix(args[0], "--command=") {
+				openCommand = strings.TrimSpace(strings.TrimPrefix(args[0], "--command="))
 				args = args[1:]
 				continue
 			}
@@ -161,7 +176,7 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 	if err := c.ensureDebugLog(root, "ws-open"); err != nil {
 		return c.writeWSOpenError(outputFormat, "internal_error", workspaceHint, fmt.Sprintf("enable debug logging: %v", err), exitError)
 	}
-	c.debugf("run ws open targets=%v multi=%t all=%t concurrency=%d format=%s", targetIDs, multi, all, concurrency, outputFormat)
+	c.debugf("run ws open targets=%v multi=%t all=%t concurrency=%d format=%s command_set=%t", targetIDs, multi, all, concurrency, outputFormat, openCommand != "")
 
 	if len(targetIDs) == 0 {
 		if outputFormat == "json" {
@@ -214,7 +229,7 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 		return wsOpenClientAdapter{inner: newCMUXOpenClient()}
 	}, newCMUXMapStore)
 	svc.Debugf = c.debugf
-	openResult, code, msg := svc.Open(context.Background(), root, targets, concurrency, multi)
+	openResult, code, msg := svc.Open(context.Background(), root, targets, concurrency, multi, openCommand)
 	if code != "" {
 		if code == "cmux_capability_missing" {
 			return c.writeWSOpenCDFallback(root, outputFormat, workspaceHint, targets, multi, msg)
@@ -230,6 +245,8 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 			Ordinal:         r.Ordinal,
 			Title:           r.Title,
 			ReusedExisting:  r.ReusedExisting,
+			Command:         r.Command,
+			CommandExecuted: r.CommandExecuted,
 		})
 	}
 	if err := markWSOpenResultsInProgress(root, results, time.Now().Unix()); err != nil {
@@ -303,6 +320,8 @@ type wsOpenResult struct {
 	Ordinal         int
 	Title           string
 	ReusedExisting  bool
+	Command         string
+	CommandExecuted bool
 }
 
 type wsOpenFailure struct {
@@ -345,6 +364,8 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 					"title":              result.Title,
 					"cwd_synced":         true,
 					"reused_existing":    result.ReusedExisting,
+					"command":            result.Command,
+					"command_executed":   result.CommandExecuted,
 				},
 			})
 			return exitOK
@@ -359,6 +380,8 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 				"title":              result.Title,
 				"cwd_synced":         true,
 				"reused_existing":    result.ReusedExisting,
+				"command":            result.Command,
+				"command_executed":   result.CommandExecuted,
 			})
 		}
 		failureItems := make([]map[string]any, 0, len(failures))
@@ -403,6 +426,9 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 			fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("title", useColor), result.Title),
 			fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("cwd", useColor), result.WorkspacePath),
 		}
+		if strings.TrimSpace(result.Command) != "" {
+			body = append(body, fmt.Sprintf("%s%s %s: %t", uiIndent, styleMuted("•", useColor), styleMuted("command_executed", useColor), result.CommandExecuted))
+		}
 		printSection(c.Out, renderResultTitle(useColor), body, sectionRenderOptions{
 			blankAfterHeading: false,
 			trailingBlank:     true,
@@ -419,6 +445,9 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 		body = append(body, fmt.Sprintf("%s%s %s", uiIndent+uiIndent, styleMuted("mode:", useColor), map[bool]string{true: "reused", false: "created"}[result.ReusedExisting]))
 		body = append(body, fmt.Sprintf("%s%s %s", uiIndent+uiIndent, styleMuted("title:", useColor), result.Title))
 		body = append(body, fmt.Sprintf("%s%s %s", uiIndent+uiIndent, styleMuted("cwd:", useColor), result.WorkspacePath))
+		if strings.TrimSpace(result.Command) != "" {
+			body = append(body, fmt.Sprintf("%s%s %t", uiIndent+uiIndent, styleMuted("command_executed:", useColor), result.CommandExecuted))
+		}
 	}
 	if len(failures) > 0 {
 		body = append(body, fmt.Sprintf("%s%s %d", uiIndent, styleWarn("failed:", useColor), len(failures)))
@@ -563,6 +592,10 @@ func (a wsOpenClientAdapter) SetStatus(ctx context.Context, workspace string, la
 
 func (a wsOpenClientAdapter) Notify(ctx context.Context, opts cmuxctl.NotifyOptions) error {
 	return a.inner.Notify(ctx, opts)
+}
+
+func (a wsOpenClientAdapter) SendText(ctx context.Context, workspace string, surface string, text string) error {
+	return a.inner.SendText(ctx, workspace, surface, text)
 }
 
 func (a wsOpenClientAdapter) ListPanes(ctx context.Context, workspace string) ([]cmuxctl.Pane, error) {

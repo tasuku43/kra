@@ -21,6 +21,7 @@ type Client interface {
 	SelectWorkspace(ctx context.Context, workspace string) error
 	SetStatus(ctx context.Context, workspace string, label string, text string, icon string, color string) error
 	Notify(ctx context.Context, opts cmuxctl.NotifyOptions) error
+	SendText(ctx context.Context, workspace string, surface string, text string) error
 	ListPanes(ctx context.Context, workspace string) ([]cmuxctl.Pane, error)
 	ListWorkspaces(ctx context.Context) ([]cmuxctl.Workspace, error)
 	Identify(ctx context.Context, workspace string, surface string) (map[string]any, error)
@@ -65,6 +66,8 @@ type OpenResultItem struct {
 	Ordinal         int
 	Title           string
 	ReusedExisting  bool
+	Command         string
+	CommandExecuted bool
 }
 
 type OpenFailure struct {
@@ -81,9 +84,10 @@ type OpenResult struct {
 type openOptions struct {
 	SelectWorkspace bool
 	NotifyOpened    bool
+	Command         string
 }
 
-func (s *Service) Open(ctx context.Context, root string, targets []OpenTarget, concurrency int, multi bool) (OpenResult, string, string) {
+func (s *Service) Open(ctx context.Context, root string, targets []OpenTarget, concurrency int, multi bool, command string) (OpenResult, string, string) {
 	if s.NewClient == nil || s.NewStore == nil {
 		return OpenResult{}, "internal_error", "cmux service is not initialized"
 	}
@@ -109,9 +113,9 @@ func (s *Service) Open(ctx context.Context, root string, targets []OpenTarget, c
 		Failures: make([]OpenFailure, 0),
 	}
 	if multi && concurrency > 1 {
-		result = s.openConcurrent(ctx, targets, concurrency, &mapping)
+		result = s.openConcurrent(ctx, targets, concurrency, &mapping, command)
 	} else {
-		result = s.openSequential(ctx, client, targets, &mapping)
+		result = s.openSequential(ctx, client, targets, &mapping, command)
 	}
 	if len(result.Results) > 0 {
 		if err := store.Save(mapping); err != nil {
@@ -121,14 +125,14 @@ func (s *Service) Open(ctx context.Context, root string, targets []OpenTarget, c
 	return result, "", ""
 }
 
-func (s *Service) openSequential(ctx context.Context, client Client, targets []OpenTarget, mapping *cmuxmap.File) OpenResult {
+func (s *Service) openSequential(ctx context.Context, client Client, targets []OpenTarget, mapping *cmuxmap.File, command string) OpenResult {
 	res := OpenResult{
 		Results:  make([]OpenResultItem, 0, len(targets)),
 		Failures: make([]OpenFailure, 0),
 	}
 	var mapMu sync.Mutex
 	for _, target := range targets {
-		item, code, msg := s.openOne(ctx, client, target, mapping, &mapMu, openOptions{NotifyOpened: true})
+		item, code, msg := s.openOne(ctx, client, target, mapping, &mapMu, openOptions{NotifyOpened: true, Command: command})
 		if code != "" {
 			res.Failures = append(res.Failures, OpenFailure{WorkspaceID: target.WorkspaceID, Code: code, Message: msg})
 			return res
@@ -138,7 +142,7 @@ func (s *Service) openSequential(ctx context.Context, client Client, targets []O
 	return res
 }
 
-func (s *Service) openConcurrent(ctx context.Context, targets []OpenTarget, concurrency int, mapping *cmuxmap.File) OpenResult {
+func (s *Service) openConcurrent(ctx context.Context, targets []OpenTarget, concurrency int, mapping *cmuxmap.File, command string) OpenResult {
 	type task struct {
 		index  int
 		target OpenTarget
@@ -162,7 +166,7 @@ func (s *Service) openConcurrent(ctx context.Context, targets []OpenTarget, conc
 			defer wg.Done()
 			client := s.NewClient()
 			for job := range jobs {
-				item, code, msg := s.openOne(ctx, client, job.target, mapping, &mapMu, openOptions{NotifyOpened: true})
+				item, code, msg := s.openOne(ctx, client, job.target, mapping, &mapMu, openOptions{NotifyOpened: true, Command: command})
 				if code != "" {
 					out <- outItem{
 						index: job.index,
@@ -282,6 +286,10 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 				}
 			} else {
 				item := s.reuseExistingWorkspace(target, existing, mapping, mapMu)
+				if code, msg := s.runOpenCommandInExisting(ctx, client, item, opts.Command); code != "" {
+					return OpenResultItem{}, code, msg
+				}
+				item = withOpenCommandResult(item, opts.Command)
 				if opts.NotifyOpened {
 					s.notifyWorkspaceOpened(ctx, client, item)
 				}
@@ -303,7 +311,7 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 		}
 	}
 
-	cmuxWorkspaceID, err := client.CreateWorkspaceWithCommand(ctx, fmt.Sprintf("cd %s", shellQuoteCDPath(target.WorkspacePath)))
+	cmuxWorkspaceID, err := client.CreateWorkspaceWithCommand(ctx, workspaceCDCommand(target.WorkspacePath))
 	if err != nil {
 		return OpenResultItem{}, "cmux_create_failed", fmt.Sprintf("create cmux workspace: %v", err)
 	}
@@ -346,6 +354,11 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 		Ordinal:         ordinal,
 		Title:           cmuxTitle,
 		ReusedExisting:  false,
+		Command:         strings.TrimSpace(opts.Command),
+		CommandExecuted: strings.TrimSpace(opts.Command) != "",
+	}
+	if code, msg := s.runOpenCommand(ctx, client, item, opts.Command); code != "" {
+		return OpenResultItem{}, code, msg
 	}
 	if opts.NotifyOpened {
 		s.notifyWorkspaceOpened(ctx, client, item)
@@ -406,10 +419,41 @@ func (s *Service) tryRelinkWorkspaceByTitle(ctx context.Context, client Client, 
 		return &item, "", ""
 	}
 	item := s.reuseExistingWorkspace(target, entry, mapping, mapMu)
+	if code, msg := s.runOpenCommandInExisting(ctx, client, item, opts.Command); code != "" {
+		return nil, code, msg
+	}
+	item = withOpenCommandResult(item, opts.Command)
 	if opts.NotifyOpened {
 		s.notifyWorkspaceOpened(ctx, client, item)
 	}
 	return &item, "", ""
+}
+
+func withOpenCommandResult(item OpenResultItem, command string) OpenResultItem {
+	command = strings.TrimSpace(command)
+	item.Command = command
+	item.CommandExecuted = command != ""
+	return item
+}
+
+func (s *Service) runOpenCommandInExisting(ctx context.Context, client Client, item OpenResultItem, command string) (string, string) {
+	return s.runOpenCommand(ctx, client, item, command)
+}
+
+func (s *Service) runOpenCommand(ctx context.Context, client Client, item OpenResultItem, command string) (string, string) {
+	command = strings.TrimSpace(command)
+	if command == "" {
+		return "", ""
+	}
+	surface, code, msg := s.selectedSurfaceIDForWorkspace(ctx, client, item, "command")
+	if code != "" {
+		return code, msg
+	}
+	if err := client.SendText(ctx, item.CMUXWorkspaceID, surface, command+"\n"); err != nil {
+		return "cmux_send_command_failed", fmt.Sprintf("send open command: %v", err)
+	}
+	s.debugf("cmux open command sent workspace=%s cmux=%s surface=%s command=%q", item.WorkspaceID, item.CMUXWorkspaceID, surface, command)
+	return "", ""
 }
 
 func (s *Service) notifyWorkspaceOpened(ctx context.Context, client Client, item OpenResultItem) {
@@ -419,26 +463,7 @@ func (s *Service) notifyWorkspaceOpened(ctx context.Context, client Client, item
 	if body == "" {
 		body = strings.TrimSpace(item.WorkspacePath)
 	}
-	surface := ""
-	for attempt := 0; attempt < 4; attempt++ {
-		if attempt > 0 {
-			select {
-			case <-ctx.Done():
-				return
-			case <-time.After(75 * time.Millisecond):
-			}
-		}
-		panes, err := client.ListPanes(ctx, item.CMUXWorkspaceID)
-		if err != nil {
-			s.debugf("cmux open notify list panes failed workspace=%s cmux=%s attempt=%d err=%v", item.WorkspaceID, item.CMUXWorkspaceID, attempt+1, err)
-			break
-		}
-		surface = selectedSurfaceID(panes)
-		s.debugf("cmux open notify list panes workspace=%s cmux=%s attempt=%d surface=%s", item.WorkspaceID, item.CMUXWorkspaceID, attempt+1, surface)
-		if surface != "" {
-			break
-		}
-	}
+	surface, _, _ := s.selectedSurfaceIDForWorkspace(ctx, client, item, "notify")
 	s.debugf("cmux open notify before-select workspace=%s cmux=%s surface=%s title=%q subtitle=%q", item.WorkspaceID, item.CMUXWorkspaceID, surface, title, subtitle)
 	if err := client.Notify(ctx, cmuxctl.NotifyOptions{
 		Title:     title,
@@ -451,6 +476,29 @@ func (s *Service) notifyWorkspaceOpened(ctx context.Context, client Client, item
 		return
 	}
 	s.debugf("cmux open notify ok workspace=%s cmux=%s surface=%s", item.WorkspaceID, item.CMUXWorkspaceID, surface)
+}
+
+func (s *Service) selectedSurfaceIDForWorkspace(ctx context.Context, client Client, item OpenResultItem, purpose string) (string, string, string) {
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return "", "context_canceled", ctx.Err().Error()
+			case <-time.After(75 * time.Millisecond):
+			}
+		}
+		panes, err := client.ListPanes(ctx, item.CMUXWorkspaceID)
+		if err != nil {
+			s.debugf("cmux open %s list panes failed workspace=%s cmux=%s attempt=%d err=%v", purpose, item.WorkspaceID, item.CMUXWorkspaceID, attempt+1, err)
+			return "", "cmux_list_panes_failed", fmt.Sprintf("list panes for open %s: %v", purpose, err)
+		}
+		surface := selectedSurfaceID(panes)
+		s.debugf("cmux open %s list panes workspace=%s cmux=%s attempt=%d surface=%s", purpose, item.WorkspaceID, item.CMUXWorkspaceID, attempt+1, surface)
+		if surface != "" {
+			return surface, "", ""
+		}
+	}
+	return "", "cmux_surface_not_found", fmt.Sprintf("selected surface not found for open %s", purpose)
 }
 
 func selectedSurfaceID(panes []cmuxctl.Pane) string {
@@ -468,6 +516,10 @@ func selectedSurfaceID(panes []cmuxctl.Pane) string {
 		}
 	}
 	return ""
+}
+
+func workspaceCDCommand(workspacePath string) string {
+	return fmt.Sprintf("cd %s", shellQuoteCDPath(workspacePath))
 }
 
 func (s *Service) debugf(format string, args ...any) {

@@ -119,6 +119,9 @@ The migration adds missing `.cmux/dock.json`, `templates/default/.cmux/dock.json
 - reuses existing mapping when the mapped `cmux` workspace is reachable
 - sends a cmux notification from the target workspace
 - does not automatically focus the target workspace; use the cmux notification action to jump to it
+- accepts `--command "<cmd>"` to send a startup command to the target terminal
+  - newly created cmux workspaces start in the workspace directory, then receive `<cmd>`
+  - reused cmux workspaces receive `<cmd>` on their selected surface
 
 In single-target open (`--id` or `--current`), if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior. With shell integration enabled, this can synchronize parent shell `cwd`.
 
@@ -136,7 +139,7 @@ In single-target open (`--id` or `--current`), if `cmux` capabilities are unavai
 kra ws create TASK-1234
 kra repo add git@github.com:org/backend.git
 kra ws add-repo --id TASK-1234
-kra ws open --id TASK-1234
+kra ws open --id TASK-1234 --command "claude"
 # click/follow the cmux notification to jump to the workspace
 # run your agent in this task workspace
 kra ws close --id TASK-1234
