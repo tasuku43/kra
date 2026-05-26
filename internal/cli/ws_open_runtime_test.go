@@ -36,6 +36,8 @@ type fakeCMUXOpenClient struct {
 	statusText      string
 	statusIcon      string
 	statusColor     string
+	notify          cmuxctl.NotifyOptions
+	calls           []string
 	identifyErr     map[string]error
 	listWorkspaces  []cmuxctl.Workspace
 	listErr         error
@@ -68,6 +70,7 @@ func (f *fakeCMUXOpenClient) RenameWorkspace(_ context.Context, workspace string
 }
 
 func (f *fakeCMUXOpenClient) SelectWorkspace(_ context.Context, workspace string) error {
+	f.calls = append(f.calls, "select:"+workspace)
 	f.selectWorkspace = workspace
 	if f.selectErrBy != nil {
 		if err, ok := f.selectErrBy[workspace]; ok {
@@ -86,13 +89,33 @@ func (f *fakeCMUXOpenClient) SetStatus(_ context.Context, workspace string, labe
 	return f.setStatusErr
 }
 
+func (f *fakeCMUXOpenClient) Notify(_ context.Context, opts cmuxctl.NotifyOptions) error {
+	f.calls = append(f.calls, "notify:"+opts.Workspace)
+	f.notify = opts
+	return nil
+}
+
+func (f *fakeCMUXOpenClient) ListPanes(_ context.Context, workspace string) ([]cmuxctl.Pane, error) {
+	return []cmuxctl.Pane{{
+		ID:                "pane-" + workspace,
+		Ref:               "pane:" + workspace,
+		Focused:           true,
+		SelectedSurfaceID: "surface-id-" + workspace,
+	}}, nil
+}
+
 func (f *fakeCMUXOpenClient) Identify(_ context.Context, workspace string, _ string) (map[string]any, error) {
 	if f.identifyErr != nil {
 		if err, ok := f.identifyErr[workspace]; ok {
 			return nil, err
 		}
 	}
-	return map[string]any{"workspace_id": workspace}, nil
+	return map[string]any{
+		"workspace_id": workspace,
+		"focused": map[string]any{
+			"surface_ref": "surface:" + workspace,
+		},
+	}, nil
 }
 
 func (f *fakeCMUXOpenClient) ListWorkspaces(context.Context) ([]cmuxctl.Workspace, error) {
@@ -174,11 +197,17 @@ func TestCLI_CMUX_Open_JSON_Success_PersistsMapping(t *testing.T) {
 	if !strings.Contains(fake.renameTitle, "WS1 | hello world") {
 		t.Fatalf("rename title = %q, want to contain %q", fake.renameTitle, "WS1 | hello world")
 	}
-	if fake.selectWorkspace != "CMUX-WS-1" {
-		t.Fatalf("select workspace = %q, want %q", fake.selectWorkspace, "CMUX-WS-1")
+	if fake.selectWorkspace != "" {
+		t.Fatalf("select should be skipped for ws open, got %q", fake.selectWorkspace)
 	}
 	if fake.statusWorkspace != "CMUX-WS-1" || fake.statusLabel != "kra" || fake.statusText != "kra:workspace" || fake.statusIcon != "tag" || fake.statusColor != cmuxstyle.WorkspaceLabelColor {
 		t.Fatalf("status args = workspace=%q label=%q text=%q icon=%q color=%q", fake.statusWorkspace, fake.statusLabel, fake.statusText, fake.statusIcon, fake.statusColor)
+	}
+	if fake.notify.Workspace != "CMUX-WS-1" || fake.notify.Surface != "surface-id-CMUX-WS-1" || fake.notify.Title != "kra workspace opened" || fake.notify.Subtitle != "WS1" {
+		t.Fatalf("notify args = %+v", fake.notify)
+	}
+	if strings.Join(fake.calls, ",") != "notify:CMUX-WS-1" {
+		t.Fatalf("call order = %v, want notify only", fake.calls)
 	}
 	if len(fake.createCmds) != 1 || !strings.Contains(fake.createCmds[0], "cd ") || !strings.Contains(fake.createCmds[0], wsPath) {
 		t.Fatalf("create command = %+v, want single cd command for workspace path", fake.createCmds)
@@ -470,6 +499,61 @@ func TestCLI_CMUX_Open_JSON_All_Success(t *testing.T) {
 	assertWorkspaceWorkState(t, wsPath2, workspaceWorkStateInProgress)
 }
 
+func TestCLI_CMUX_Open_JSON_All_IgnoresConcurrencyAndRunsSequentially(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	wsPath1 := filepath.Join(root, "workspaces", "WS1")
+	wsPath2 := filepath.Join(root, "workspaces", "WS2")
+	if err := os.MkdirAll(wsPath1, 0o755); err != nil {
+		t.Fatalf("mkdir workspace1: %v", err)
+	}
+	if err := os.MkdirAll(wsPath2, 0o755); err != nil {
+		t.Fatalf("mkdir workspace2: %v", err)
+	}
+	now := time.Now().Unix()
+	if err := writeWorkspaceMetaFile(wsPath1, newWorkspaceMetaFileForCreate("WS1", "alpha", "", now)); err != nil {
+		t.Fatalf("write workspace1 meta: %v", err)
+	}
+	if err := writeWorkspaceMetaFile(wsPath2, newWorkspaceMetaFileForCreate("WS2", "beta", "", now)); err != nil {
+		t.Fatalf("write workspace2 meta: %v", err)
+	}
+
+	fake := &fakeCMUXOpenClient{
+		capabilities: cmuxctl.Capabilities{
+			Methods: map[string]struct{}{
+				"workspace.create": {},
+				"workspace.rename": {},
+				"workspace.select": {},
+			},
+		},
+		createIDs: []string{"CMUX-WS-1", "CMUX-WS-2"},
+	}
+	clientCount := 0
+	prevClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient {
+		clientCount++
+		return fake
+	}
+	t.Cleanup(func() { newCMUXOpenClient = prevClient })
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	code := c.Run([]string{"ws", "open", "--format", "json", "--all", "--concurrency", "4"})
+	if code != exitOK {
+		t.Fatalf("exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, err.String(), out.String())
+	}
+	if clientCount != 1 {
+		t.Fatalf("cmux client count = %d, want 1 for sequential --all open", clientCount)
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "ws.open" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+	if got := resp.Result["count"]; got != float64(2) {
+		t.Fatalf("result.count = %v, want 2", got)
+	}
+}
+
 func TestCLI_CMUX_Open_JSON_All_RejectsExplicitTargets(t *testing.T) {
 	prepareCurrentRootForTest(t)
 	var out bytes.Buffer
@@ -725,11 +809,17 @@ func TestCLI_WS_Open_JSON_ReusesExistingMapping_AsSwitchFallback(t *testing.T) {
 	if len(fake.createCmds) != 0 {
 		t.Fatalf("create should not be called when mapping exists: %+v", fake.createCmds)
 	}
-	if fake.selectWorkspace != "CMUX-EXISTING" {
-		t.Fatalf("selected workspace = %q, want %q", fake.selectWorkspace, "CMUX-EXISTING")
+	if fake.selectWorkspace != "" {
+		t.Fatalf("select should be skipped for ws open, got %q", fake.selectWorkspace)
 	}
 	if fake.statusWorkspace != "" {
 		t.Fatalf("status should not be called when mapping exists: workspace=%q", fake.statusWorkspace)
+	}
+	if fake.notify.Workspace != "CMUX-EXISTING" || fake.notify.Surface != "surface-id-CMUX-EXISTING" || fake.notify.Subtitle != "WS1" {
+		t.Fatalf("notify args = %+v", fake.notify)
+	}
+	if strings.Join(fake.calls, ",") != "notify:CMUX-EXISTING" {
+		t.Fatalf("call order = %v, want notify only", fake.calls)
 	}
 
 	var resp struct {
@@ -789,8 +879,8 @@ func TestCLI_WS_Open_JSON_RecreatesWhenMappedWorkspaceBecomesNotFoundOnSelect(t 
 			},
 		},
 		createID: "CMUX-NEW",
-		selectErrBy: map[string]error{
-			"CMUX-EXISTING": errors.New("cmux select-workspace: Error: not_found: Workspace not found"),
+		identifyErr: map[string]error{
+			"CMUX-EXISTING": errors.New("cmux identify: Error: not_found: Workspace not found"),
 		},
 	}
 	prevClient := newCMUXOpenClient
@@ -807,8 +897,8 @@ func TestCLI_WS_Open_JSON_RecreatesWhenMappedWorkspaceBecomesNotFoundOnSelect(t 
 	if len(fake.createCmds) != 1 {
 		t.Fatalf("create should be called once to recreate stale mapping: %+v", fake.createCmds)
 	}
-	if fake.selectWorkspace != "CMUX-NEW" {
-		t.Fatalf("selected workspace = %q, want %q", fake.selectWorkspace, "CMUX-NEW")
+	if fake.selectWorkspace != "" {
+		t.Fatalf("select should be skipped for ws open, got %q", fake.selectWorkspace)
 	}
 
 	var resp struct {
@@ -888,8 +978,8 @@ func TestCLI_WS_Open_JSON_RelinksByTitleWhenMappedWorkspaceIDIsStale(t *testing.
 	if len(fake.createCmds) != 0 {
 		t.Fatalf("create should not be called when title relink succeeds: %+v", fake.createCmds)
 	}
-	if fake.selectWorkspace != "CMUX-RELINKED" {
-		t.Fatalf("selected workspace = %q, want %q", fake.selectWorkspace, "CMUX-RELINKED")
+	if fake.selectWorkspace != "" {
+		t.Fatalf("select should be skipped for ws open, got %q", fake.selectWorkspace)
 	}
 
 	var resp struct {

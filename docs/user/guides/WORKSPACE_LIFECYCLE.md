@@ -38,6 +38,7 @@ stateDiagram-v2
 kra ws create TASK-1234
 kra ws add-repo --id TASK-1234
 kra ws open --id TASK-1234
+# follow the cmux notification to jump into the workspace
 # ...work...
 kra ws close --id TASK-1234
 ```

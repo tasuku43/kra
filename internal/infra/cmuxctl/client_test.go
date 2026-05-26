@@ -319,6 +319,26 @@ func TestClientSendText_BuildsCommandArgs(t *testing.T) {
 	}
 }
 
+func TestClientNotify_BuildsCommandArgs(t *testing.T) {
+	f := &fakeRunner{stdout: []byte("OK\n")}
+	c := &Client{Runner: f}
+
+	err := c.Notify(context.Background(), NotifyOptions{
+		Title:     "Workspace opened",
+		Subtitle:  "WS1",
+		Body:      "WS1 | alpha",
+		Workspace: "ws-1",
+		Surface:   "surface:1",
+	})
+	if err != nil {
+		t.Fatalf("Notify() error: %v", err)
+	}
+	wantArgs := []string{"notify", "--title", "Workspace opened", "--subtitle", "WS1", "--body", "WS1 | alpha", "--workspace", "ws-1", "--surface", "surface:1"}
+	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
+		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
+	}
+}
+
 func TestClientCommandError_UsesStderr(t *testing.T) {
 	f := &fakeRunner{
 		stderr: []byte("boom"),
@@ -335,14 +355,14 @@ func TestClientCommandError_UsesStderr(t *testing.T) {
 }
 
 func TestClientListPanes_JSONMode(t *testing.T) {
-	f := &fakeRunner{stdout: []byte(`{"panes":[{"id":"pane-1","ref":"pane:1","index":0,"focused":true}]}`)}
+	f := &fakeRunner{stdout: []byte(`{"panes":[{"id":"pane-1","ref":"pane:1","index":0,"focused":true,"selected_surface_id":"sf-1","selected_surface_ref":"surface:1"}]}`)}
 	c := &Client{Runner: f}
 
 	got, err := c.ListPanes(context.Background(), "ws-1")
 	if err != nil {
 		t.Fatalf("ListPanes() error: %v", err)
 	}
-	if len(got) != 1 || got[0].ID != "pane-1" || got[0].Ref != "pane:1" || !got[0].Focused {
+	if len(got) != 1 || got[0].ID != "pane-1" || got[0].Ref != "pane:1" || !got[0].Focused || got[0].SelectedSurfaceID != "sf-1" || got[0].SelectedSurfaceRef != "surface:1" {
 		t.Fatalf("unexpected panes: %+v", got)
 	}
 	wantArgs := []string{"--json", "--id-format", "both", "list-panes", "--workspace", "ws-1"}

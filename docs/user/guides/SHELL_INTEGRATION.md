@@ -9,7 +9,7 @@ This guide explains how to enable shell integration for `kra`.
 
 ## Why this is needed
 
-Some commands (for example `kra ws open`) may request parent-shell side effects such as `cd`.
+Some commands may request parent-shell side effects such as `cd`. This is mainly used by workspace lifecycle fallback paths, for example `kra ws close` after archiving the current workspace or `kra ws open` when cmux is unavailable and kra falls back to directory navigation.
 Without shell integration, `kra` still runs commands, but it cannot mutate your parent shell cwd.
 
 ## Enable integration

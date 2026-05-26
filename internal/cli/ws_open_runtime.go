@@ -22,6 +22,8 @@ type cmuxOpenClient interface {
 	RenameWorkspace(ctx context.Context, workspace string, title string) error
 	SelectWorkspace(ctx context.Context, workspace string) error
 	SetStatus(ctx context.Context, workspace string, label string, text string, icon string, color string) error
+	Notify(ctx context.Context, opts cmuxctl.NotifyOptions) error
+	ListPanes(ctx context.Context, workspace string) ([]cmuxctl.Pane, error)
 	ListWorkspaces(ctx context.Context) ([]cmuxctl.Workspace, error)
 	Identify(ctx context.Context, workspace string, surface string) (map[string]any, error)
 }
@@ -156,6 +158,10 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 	if err != nil {
 		return c.writeWSOpenError(outputFormat, "internal_error", workspaceHint, fmt.Sprintf("resolve KRA_ROOT: %v", err), exitError)
 	}
+	if err := c.ensureDebugLog(root, "ws-open"); err != nil {
+		return c.writeWSOpenError(outputFormat, "internal_error", workspaceHint, fmt.Sprintf("enable debug logging: %v", err), exitError)
+	}
+	c.debugf("run ws open targets=%v multi=%t all=%t concurrency=%d format=%s", targetIDs, multi, all, concurrency, outputFormat)
 
 	if len(targetIDs) == 0 {
 		if outputFormat == "json" {
@@ -180,7 +186,9 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 			targetIDs = selectedIDs
 		}
 	}
-	if multi && !concurrencyExplicit {
+	if all {
+		concurrency = 1
+	} else if multi && !concurrencyExplicit {
 		concurrency = defaultWSOpenConcurrency(len(targetIDs))
 	}
 
@@ -205,6 +213,7 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 	svc := appcmux.NewService(func() appcmux.Client {
 		return wsOpenClientAdapter{inner: newCMUXOpenClient()}
 	}, newCMUXMapStore)
+	svc.Debugf = c.debugf
 	openResult, code, msg := svc.Open(context.Background(), root, targets, concurrency, multi)
 	if code != "" {
 		if code == "cmux_capability_missing" {
@@ -388,7 +397,7 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 		useColor := writerSupportsColor(c.Out)
 		body := []string{
 			fmt.Sprintf("%s%s", uiIndent, styleSuccess("Opened 1 / 1", useColor)),
-			fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("mode", useColor), map[bool]string{true: "switched", false: "created"}[result.ReusedExisting]),
+			fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("mode", useColor), map[bool]string{true: "reused", false: "created"}[result.ReusedExisting]),
 			fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleAccent("kra", useColor), result.WorkspaceID),
 			fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleAccent("runtime", useColor), result.CMUXWorkspaceID),
 			fmt.Sprintf("%s%s %s: %s", uiIndent, styleMuted("•", useColor), styleMuted("title", useColor), result.Title),
@@ -407,7 +416,7 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 	sort.Slice(results, func(i, j int) bool { return results[i].WorkspaceID < results[j].WorkspaceID })
 	for _, result := range results {
 		body = append(body, fmt.Sprintf("%s%s %s => %s", uiIndent, styleSuccess("✔", useColor), result.WorkspaceID, result.CMUXWorkspaceID))
-		body = append(body, fmt.Sprintf("%s%s %s", uiIndent+uiIndent, styleMuted("mode:", useColor), map[bool]string{true: "switched", false: "created"}[result.ReusedExisting]))
+		body = append(body, fmt.Sprintf("%s%s %s", uiIndent+uiIndent, styleMuted("mode:", useColor), map[bool]string{true: "reused", false: "created"}[result.ReusedExisting]))
 		body = append(body, fmt.Sprintf("%s%s %s", uiIndent+uiIndent, styleMuted("title:", useColor), result.Title))
 		body = append(body, fmt.Sprintf("%s%s %s", uiIndent+uiIndent, styleMuted("cwd:", useColor), result.WorkspacePath))
 	}
@@ -550,6 +559,14 @@ func (a wsOpenClientAdapter) SelectWorkspace(ctx context.Context, workspace stri
 
 func (a wsOpenClientAdapter) SetStatus(ctx context.Context, workspace string, label string, text string, icon string, color string) error {
 	return a.inner.SetStatus(ctx, workspace, label, text, icon, color)
+}
+
+func (a wsOpenClientAdapter) Notify(ctx context.Context, opts cmuxctl.NotifyOptions) error {
+	return a.inner.Notify(ctx, opts)
+}
+
+func (a wsOpenClientAdapter) ListPanes(ctx context.Context, workspace string) ([]cmuxctl.Pane, error) {
+	return a.inner.ListPanes(ctx, workspace)
 }
 
 func (a wsOpenClientAdapter) ListWorkspaces(ctx context.Context) ([]cmuxctl.Workspace, error) {

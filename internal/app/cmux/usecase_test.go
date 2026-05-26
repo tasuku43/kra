@@ -35,6 +35,8 @@ type fakeClient struct {
 	statusText      string
 	statusIcon      string
 	statusColor     string
+	notify          cmuxctl.NotifyOptions
+	calls           []string
 }
 
 func (f *fakeClient) Capabilities(context.Context) (cmuxctl.Capabilities, error) {
@@ -56,6 +58,7 @@ func (f *fakeClient) RenameWorkspace(_ context.Context, workspace string, title 
 }
 
 func (f *fakeClient) SelectWorkspace(_ context.Context, workspace string) error {
+	f.calls = append(f.calls, "select:"+workspace)
 	f.selectWorkspace = workspace
 	return f.selectErr
 }
@@ -67,6 +70,21 @@ func (f *fakeClient) SetStatus(_ context.Context, workspace string, label string
 	f.statusIcon = icon
 	f.statusColor = color
 	return f.setStatusErr
+}
+
+func (f *fakeClient) Notify(_ context.Context, opts cmuxctl.NotifyOptions) error {
+	f.calls = append(f.calls, "notify:"+opts.Workspace)
+	f.notify = opts
+	return nil
+}
+
+func (f *fakeClient) ListPanes(_ context.Context, workspace string) ([]cmuxctl.Pane, error) {
+	return []cmuxctl.Pane{{
+		ID:                "pane-" + workspace,
+		Ref:               "pane:" + workspace,
+		Focused:           true,
+		SelectedSurfaceID: "surface-id-" + workspace,
+	}}, nil
 }
 
 func (f *fakeClient) ListWorkspaces(context.Context) ([]cmuxctl.Workspace, error) {
@@ -84,7 +102,12 @@ func (f *fakeClient) Identify(_ context.Context, workspace string, _ string) (ma
 			return payload, nil
 		}
 	}
-	return map[string]any{"workspace_id": workspace}, nil
+	return map[string]any{
+		"workspace_id": workspace,
+		"focused": map[string]any{
+			"surface_ref": "surface:" + workspace,
+		},
+	}, nil
 }
 
 func TestShellQuoteCDPath_UsesHomeVariableWhenUnderHome(t *testing.T) {
@@ -134,6 +157,9 @@ func TestEnsureWorkspace_NoSelect_CreatesAndPersistsMapping(t *testing.T) {
 	}
 	if fake.statusWorkspace != "CMUX-ROOT-1" || fake.statusLabel != "kra" || fake.statusText != "kra:root" || fake.statusIcon != "tag" || fake.statusColor != cmuxstyle.WorkspaceLabelColor {
 		t.Fatalf("status args = workspace=%q label=%q text=%q icon=%q color=%q", fake.statusWorkspace, fake.statusLabel, fake.statusText, fake.statusIcon, fake.statusColor)
+	}
+	if fake.notify.Workspace != "" {
+		t.Fatalf("notify should be skipped without select: %+v", fake.notify)
 	}
 
 	mapping, err := cmuxmap.NewStore(root).Load()
@@ -194,6 +220,9 @@ func TestEnsureWorkspace_NoSelect_ReusesExistingMappingWithoutSelecting(t *testi
 	if len(fake.createCmds) != 0 {
 		t.Fatalf("create should not run: %+v", fake.createCmds)
 	}
+	if fake.notify.Workspace != "" {
+		t.Fatalf("notify should be skipped without select: %+v", fake.notify)
+	}
 }
 
 func TestEnsureWorkspace_Select_RecreatesWhenIdentifyDoesNotResolveRequestedWorkspace(t *testing.T) {
@@ -253,6 +282,12 @@ func TestEnsureWorkspace_Select_RecreatesWhenIdentifyDoesNotResolveRequestedWork
 	}
 	if fake.selectWorkspace != "workspace:22" {
 		t.Fatalf("select workspace = %q, want %q", fake.selectWorkspace, "workspace:22")
+	}
+	if fake.notify.Workspace != "" {
+		t.Fatalf("notify should be skipped for EnsureWorkspace select path: %+v", fake.notify)
+	}
+	if strings.Join(fake.calls, ",") != "select:workspace:22" {
+		t.Fatalf("call order = %v, want select only", fake.calls)
 	}
 
 	mapping, err := cmuxmap.NewStore(root).Load()

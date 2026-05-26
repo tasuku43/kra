@@ -115,8 +115,10 @@ The migration adds missing `.cmux/dock.json`, `templates/default/.cmux/dock.json
 
 `kra ws open --id <id>`:
 
-- selects or creates the mapped `cmux` workspace when mapping is missing
+- creates the mapped `cmux` workspace when mapping is missing
 - reuses existing mapping when the mapped `cmux` workspace is reachable
+- sends a cmux notification from the target workspace
+- does not automatically focus the target workspace; use the cmux notification action to jump to it
 
 In single-target open (`--id` or `--current`), if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior. With shell integration enabled, this can synchronize parent shell `cwd`.
 
@@ -135,6 +137,7 @@ kra ws create TASK-1234
 kra repo add git@github.com:org/backend.git
 kra ws add-repo --id TASK-1234
 kra ws open --id TASK-1234
+# click/follow the cmux notification to jump to the workspace
 # run your agent in this task workspace
 kra ws close --id TASK-1234
 ```

@@ -64,7 +64,7 @@ kra ws create TASK-1234
 kra ws open --id TASK-1234
 ```
 
-When using `cmux`, `kra ws open` creates and opens the corresponding `cmux` workspace if it does not exist, and moves to it if it already exists.
+When using `cmux`, `kra ws open` creates or reuses the corresponding `cmux` workspace and sends a cmux notification from that workspace. Use the notification action in cmux to jump to the workspace; `kra ws open` does not automatically steal focus.
 In single-target open, if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior; with shell integration, it can also sync parent shell `cwd`.
 New roots and default workspaces include `.cmux/dock.json`, which cmux reads to show a right-sidebar `Status` Dock control. Workspace Dock runs `kra ws status --current`; root Dock runs `kra ws status --all --todo-only` for active workspace task-derived Current Task / Next Task across the root. `<workspace>/workspace.md` remains the source of truth; `kra ws task sync` is deprecated and no longer updates cmux task pills.
 For an existing root and active workspaces, run `kra root migrate --apply` to add missing Dock/task scaffold without overwriting custom files. The generated Dock command may source the detected shell init file, such as `source ~/.zshrc`, before running `kra`.
@@ -79,7 +79,7 @@ For day-to-day operations (`repo add`, `ws add-repo`, `ws close`, `ws task`, `ws
 
 ## Shell Integration (Recommended)
 
-If you use `kra ws open` / `kra ws close` as your primary workspace navigation flow, enable shell integration to sync your parent shell `cwd`.
+If you use `kra ws close` or the directory fallback path of `kra ws open`, enable shell integration to sync your parent shell `cwd`.
 
 This prevents staying in a deleted directory after closing a workspace from inside that workspace path.
 
@@ -101,7 +101,7 @@ kra ws close --id TASK-1234
 Guide: `docs/user/guides/WORKSPACE_LIFECYCLE.md`
 
 ### 2) cmux integration
-When using `cmux`, `kra ws open` creates and opens the corresponding `cmux` workspace if it does not exist, and moves to it if it already exists. `kra ws close` closes mapped `cmux` workspace(s) on a best-effort basis after archive operations.
+When using `cmux`, `kra ws open` creates or reuses the corresponding `cmux` workspace and sends a cmux notification from it. Follow the notification action to jump to the workspace. `kra ws close` closes mapped `cmux` workspace(s) on a best-effort basis after archive operations.
 Conceptual mapping is shown in "Filesystem Model (At a Glance)".
 
 Example:

@@ -20,6 +20,8 @@ type Client interface {
 	RenameWorkspace(ctx context.Context, workspace string, title string) error
 	SelectWorkspace(ctx context.Context, workspace string) error
 	SetStatus(ctx context.Context, workspace string, label string, text string, icon string, color string) error
+	Notify(ctx context.Context, opts cmuxctl.NotifyOptions) error
+	ListPanes(ctx context.Context, workspace string) ([]cmuxctl.Pane, error)
 	ListWorkspaces(ctx context.Context) ([]cmuxctl.Workspace, error)
 	Identify(ctx context.Context, workspace string, surface string) (map[string]any, error)
 }
@@ -38,6 +40,7 @@ type Service struct {
 	NewClient NewClientFunc
 	NewStore  NewStoreFunc
 	Now       func() time.Time
+	Debugf    func(string, ...any)
 }
 
 func NewService(newClient NewClientFunc, newStore NewStoreFunc) *Service {
@@ -77,6 +80,7 @@ type OpenResult struct {
 
 type openOptions struct {
 	SelectWorkspace bool
+	NotifyOpened    bool
 }
 
 func (s *Service) Open(ctx context.Context, root string, targets []OpenTarget, concurrency int, multi bool) (OpenResult, string, string) {
@@ -88,7 +92,7 @@ func (s *Service) Open(ctx context.Context, root string, targets []OpenTarget, c
 	if err != nil {
 		return OpenResult{}, "cmux_capability_missing", fmt.Sprintf("read cmux capabilities: %v", err)
 	}
-	for _, method := range []string{"workspace.create", "workspace.rename", "workspace.select"} {
+	for _, method := range []string{"workspace.create", "workspace.rename"} {
 		if _, ok := caps.Methods[method]; !ok {
 			return OpenResult{}, "cmux_capability_missing", fmt.Sprintf("cmux capability missing: %s", method)
 		}
@@ -124,7 +128,7 @@ func (s *Service) openSequential(ctx context.Context, client Client, targets []O
 	}
 	var mapMu sync.Mutex
 	for _, target := range targets {
-		item, code, msg := s.openOne(ctx, client, target, mapping, &mapMu, openOptions{SelectWorkspace: true})
+		item, code, msg := s.openOne(ctx, client, target, mapping, &mapMu, openOptions{NotifyOpened: true})
 		if code != "" {
 			res.Failures = append(res.Failures, OpenFailure{WorkspaceID: target.WorkspaceID, Code: code, Message: msg})
 			return res
@@ -158,7 +162,7 @@ func (s *Service) openConcurrent(ctx context.Context, targets []OpenTarget, conc
 			defer wg.Done()
 			client := s.NewClient()
 			for job := range jobs {
-				item, code, msg := s.openOne(ctx, client, job.target, mapping, &mapMu, openOptions{SelectWorkspace: true})
+				item, code, msg := s.openOne(ctx, client, job.target, mapping, &mapMu, openOptions{NotifyOpened: true})
 				if code != "" {
 					out <- outItem{
 						index: job.index,
@@ -254,6 +258,8 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 		}
 		if ierr == nil {
 			if opts.SelectWorkspace {
+				item := s.reuseExistingWorkspace(target, existing, mapping, mapMu)
+				selected := false
 				if err := client.SelectWorkspace(ctx, existing.CMUXWorkspaceID); err != nil {
 					if IsNotFoundError(err) {
 						relinked, code, msg := s.tryRelinkWorkspaceByTitle(ctx, client, target, existing, mapping, mapMu, opts)
@@ -269,10 +275,17 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 						return OpenResultItem{}, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
 					}
 				} else {
-					return s.reuseExistingWorkspace(target, existing, mapping, mapMu), "", ""
+					selected = true
+				}
+				if selected {
+					return item, "", ""
 				}
 			} else {
-				return s.reuseExistingWorkspace(target, existing, mapping, mapMu), "", ""
+				item := s.reuseExistingWorkspace(target, existing, mapping, mapMu)
+				if opts.NotifyOpened {
+					s.notifyWorkspaceOpened(ctx, client, item)
+				}
+				return item, "", ""
 			}
 		} else {
 			if !IsNotFoundError(ierr) {
@@ -307,11 +320,6 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 	if err := client.RenameWorkspace(ctx, cmuxWorkspaceID, cmuxTitle); err != nil {
 		return OpenResultItem{}, "cmux_rename_failed", fmt.Sprintf("rename cmux workspace: %v", err)
 	}
-	if opts.SelectWorkspace {
-		if err := client.SelectWorkspace(ctx, cmuxWorkspaceID); err != nil {
-			return OpenResultItem{}, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
-		}
-	}
 	statusText := defaultWorkspaceStatusText
 	if strings.TrimSpace(target.StatusText) != "" {
 		statusText = strings.TrimSpace(target.StatusText)
@@ -331,14 +339,23 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 	}}
 	mapping.Workspaces[target.WorkspaceID] = ws
 	mapMu.Unlock()
-	return OpenResultItem{
+	item := OpenResultItem{
 		WorkspaceID:     target.WorkspaceID,
 		WorkspacePath:   target.WorkspacePath,
 		CMUXWorkspaceID: cmuxWorkspaceID,
 		Ordinal:         ordinal,
 		Title:           cmuxTitle,
 		ReusedExisting:  false,
-	}, "", ""
+	}
+	if opts.NotifyOpened {
+		s.notifyWorkspaceOpened(ctx, client, item)
+	}
+	if opts.SelectWorkspace {
+		if err := client.SelectWorkspace(ctx, cmuxWorkspaceID); err != nil {
+			return OpenResultItem{}, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
+		}
+	}
+	return item, "", ""
 }
 
 func (s *Service) reuseExistingWorkspace(target OpenTarget, existing cmuxmap.Entry, mapping *cmuxmap.File, mapMu *sync.Mutex) OpenResultItem {
@@ -379,15 +396,103 @@ func (s *Service) tryRelinkWorkspaceByTitle(ctx context.Context, client Client, 
 		entry.TitleSnapshot = expectedTitle
 	}
 	if opts.SelectWorkspace {
+		item := s.reuseExistingWorkspace(target, entry, mapping, mapMu)
 		if err := client.SelectWorkspace(ctx, entry.CMUXWorkspaceID); err != nil {
 			if IsNotFoundError(err) {
 				return nil, "", ""
 			}
 			return nil, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
 		}
+		return &item, "", ""
 	}
 	item := s.reuseExistingWorkspace(target, entry, mapping, mapMu)
+	if opts.NotifyOpened {
+		s.notifyWorkspaceOpened(ctx, client, item)
+	}
 	return &item, "", ""
+}
+
+func (s *Service) notifyWorkspaceOpened(ctx context.Context, client Client, item OpenResultItem) {
+	title := "kra workspace opened"
+	subtitle := strings.TrimSpace(item.WorkspaceID)
+	body := strings.TrimSpace(item.Title)
+	if body == "" {
+		body = strings.TrimSpace(item.WorkspacePath)
+	}
+	surface := ""
+	for attempt := 0; attempt < 4; attempt++ {
+		if attempt > 0 {
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(75 * time.Millisecond):
+			}
+		}
+		panes, err := client.ListPanes(ctx, item.CMUXWorkspaceID)
+		if err != nil {
+			s.debugf("cmux open notify list panes failed workspace=%s cmux=%s attempt=%d err=%v", item.WorkspaceID, item.CMUXWorkspaceID, attempt+1, err)
+			break
+		}
+		surface = selectedSurfaceID(panes)
+		s.debugf("cmux open notify list panes workspace=%s cmux=%s attempt=%d surface=%s", item.WorkspaceID, item.CMUXWorkspaceID, attempt+1, surface)
+		if surface != "" {
+			break
+		}
+	}
+	s.debugf("cmux open notify before-select workspace=%s cmux=%s surface=%s title=%q subtitle=%q", item.WorkspaceID, item.CMUXWorkspaceID, surface, title, subtitle)
+	if err := client.Notify(ctx, cmuxctl.NotifyOptions{
+		Title:     title,
+		Subtitle:  subtitle,
+		Body:      body,
+		Workspace: item.CMUXWorkspaceID,
+		Surface:   surface,
+	}); err != nil {
+		s.debugf("cmux open notify failed workspace=%s cmux=%s surface=%s err=%v", item.WorkspaceID, item.CMUXWorkspaceID, surface, err)
+		return
+	}
+	s.debugf("cmux open notify ok workspace=%s cmux=%s surface=%s", item.WorkspaceID, item.CMUXWorkspaceID, surface)
+}
+
+func selectedSurfaceID(panes []cmuxctl.Pane) string {
+	for _, pane := range panes {
+		if !pane.Focused {
+			continue
+		}
+		if id := strings.TrimSpace(pane.SelectedSurfaceID); id != "" {
+			return id
+		}
+	}
+	for _, pane := range panes {
+		if id := strings.TrimSpace(pane.SelectedSurfaceID); id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+func (s *Service) debugf(format string, args ...any) {
+	if s.Debugf == nil {
+		return
+	}
+	s.Debugf(format, args...)
+}
+
+func identifyFocusedSurfaceHandle(payload map[string]any) string {
+	focused := nestedAnyMap(payload, "focused")
+	if focused == nil {
+		return ""
+	}
+	for _, key := range []string{"surface_ref", "surface_id"} {
+		raw, ok := focused[key]
+		if !ok {
+			continue
+		}
+		value, _ := raw.(string)
+		if trimmed := strings.TrimSpace(value); trimmed != "" {
+			return trimmed
+		}
+	}
+	return ""
 }
 
 func findWorkspaceByExactTitle(workspaces []cmuxctl.Workspace, title string) (cmuxctl.Workspace, bool) {

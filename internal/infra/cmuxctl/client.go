@@ -42,10 +42,12 @@ type Workspace struct {
 }
 
 type Pane struct {
-	ID      string
-	Ref     string
-	Index   int
-	Focused bool
+	ID                 string
+	Ref                string
+	Index              int
+	Focused            bool
+	SelectedSurfaceID  string
+	SelectedSurfaceRef string
 }
 
 type Surface struct {
@@ -91,6 +93,14 @@ type Notification struct {
 	Subtitle    string
 	Body        string
 	CreatedAt   int64
+}
+
+type NotifyOptions struct {
+	Title     string
+	Subtitle  string
+	Body      string
+	Workspace string
+	Surface   string
 }
 
 type StatusEntry struct {
@@ -390,6 +400,31 @@ func (c *Client) SendText(ctx context.Context, workspace string, surface string,
 	return nil
 }
 
+func (c *Client) Notify(ctx context.Context, opts NotifyOptions) error {
+	title := strings.TrimSpace(opts.Title)
+	if title == "" {
+		return fmt.Errorf("title is required")
+	}
+	args := []string{"notify", "--title", title}
+	if subtitle := strings.TrimSpace(opts.Subtitle); subtitle != "" {
+		args = append(args, "--subtitle", subtitle)
+	}
+	if body := strings.TrimSpace(opts.Body); body != "" {
+		args = append(args, "--body", body)
+	}
+	if workspace := strings.TrimSpace(opts.Workspace); workspace != "" {
+		args = append(args, "--workspace", workspace)
+	}
+	if surface := strings.TrimSpace(opts.Surface); surface != "" {
+		args = append(args, "--surface", surface)
+	}
+	_, stderr, err := c.run(ctx, false, false, args...)
+	if err != nil {
+		return commandError("notify", stderr, err)
+	}
+	return nil
+}
+
 func (c *Client) ListPanes(ctx context.Context, workspace string) ([]Pane, error) {
 	workspace = strings.TrimSpace(workspace)
 	if workspace == "" {
@@ -397,10 +432,12 @@ func (c *Client) ListPanes(ctx context.Context, workspace string) ([]Pane, error
 	}
 	var payload struct {
 		Panes []struct {
-			ID      string `json:"id"`
-			Ref     string `json:"ref"`
-			Index   int    `json:"index"`
-			Focused bool   `json:"focused"`
+			ID                 string `json:"id"`
+			Ref                string `json:"ref"`
+			Index              int    `json:"index"`
+			Focused            bool   `json:"focused"`
+			SelectedSurfaceID  string `json:"selected_surface_id"`
+			SelectedSurfaceRef string `json:"selected_surface_ref"`
 		} `json:"panes"`
 	}
 	if err := c.runJSON(ctx, &payload, "list-panes", "--workspace", workspace); err != nil {
@@ -409,10 +446,12 @@ func (c *Client) ListPanes(ctx context.Context, workspace string) ([]Pane, error
 	out := make([]Pane, 0, len(payload.Panes))
 	for _, row := range payload.Panes {
 		out = append(out, Pane{
-			ID:      strings.TrimSpace(row.ID),
-			Ref:     strings.TrimSpace(row.Ref),
-			Index:   row.Index,
-			Focused: row.Focused,
+			ID:                 strings.TrimSpace(row.ID),
+			Ref:                strings.TrimSpace(row.Ref),
+			Index:              row.Index,
+			Focused:            row.Focused,
+			SelectedSurfaceID:  strings.TrimSpace(row.SelectedSurfaceID),
+			SelectedSurfaceRef: strings.TrimSpace(row.SelectedSurfaceRef),
 		})
 	}
 	return out, nil

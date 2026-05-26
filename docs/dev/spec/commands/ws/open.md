@@ -7,7 +7,7 @@ status: implemented
 
 ## Purpose
 
-Open cmux workspace(s) from workspace action entrypoint.
+Open cmux workspace(s) from workspace action entrypoint and notify the user from the opened target.
 
 ## Inputs
 
@@ -28,9 +28,9 @@ Open cmux workspace(s) from workspace action entrypoint.
 - `--current` resolves workspace from current path under `workspaces/<id>/...`.
 - `--select` opens workspace selector and resolves target workspace(s) interactively.
 - `--multi-select` enables multi-target open flow.
-- `--all` resolves all active workspaces non-interactively and runs the same multi-target open flow.
+- `--all` resolves all active workspaces non-interactively and opens them sequentially.
 - `--concurrency` is valid only with `--multi-select`.
-- `--all` uses the same multi-target runtime path, so `--concurrency` is also valid with `--all`.
+- `--all` accepts `--concurrency` for compatibility, but always uses effective concurrency `1`.
 - `--multi-select` かつ `--concurrency` 未指定時は、自動並列度（`min(targets, max(2, GOMAXPROCS))`）で goroutine 実行する。
 - JSON mode remains non-interactive.
 - On successful open, advance each succeeded target's `.kra.meta.json.workspace.work_state` to
@@ -39,9 +39,12 @@ Open cmux workspace(s) from workspace action entrypoint.
   - already `in-progress` workspaces remain unchanged
   - failed targets must not be advanced
 - 1:1 policy (`kra workspace` : `cmux workspace`):
-  - when no mapping exists, create and select a new cmux workspace
+  - when no mapping exists, create a new cmux workspace
   - newly created cmux workspace is labeled with `kra` / `managed by kra` (`icon=tag`, `color=#4F46E5`)
-  - when mapping already exists and runtime workspace is reachable, create is skipped and operation falls back to switch
+  - after a cmux workspace is created/reused, raise a best-effort `cmux notify` notification from that opened
+    workspace (`--workspace <cmux-workspace-id> --surface <selected-surface-id>`)
+  - `ws open` must not select/focus the cmux workspace; users follow the cmux notification action to jump to it
+  - when mapping already exists and runtime workspace is reachable, create is skipped and the existing workspace is reused
   - when saved mapping is stale but exactly one runtime workspace matches the expected `kra` title
     (`FormatWorkspaceTitle(<workspace-id>, <workspace-title>, <existing-ordinal>)`), update mapping to that runtime workspace and reuse it instead of creating a new one
   - if title match is missing or ambiguous, stale mapping falls back to new workspace creation

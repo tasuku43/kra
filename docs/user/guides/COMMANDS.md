@@ -16,6 +16,7 @@ kra ws create TASK-1234
 kra repo add git@github.com:org/backend.git
 kra ws add-repo --id TASK-1234
 kra ws open --id TASK-1234
+# follow the cmux notification to jump into the workspace
 kra ws dashboard
 ```
 
@@ -146,6 +147,8 @@ Notes:
 - `--multi-select` support is action-dependent; current support includes `open`, `close`, `lock`, `unlock`, `reopen`, `purge`.
 - Positional workspace id arguments are intentionally not supported for these actions.
 - For non-interactive automation, prefer explicit `--id`.
+
+`kra ws open` creates or reuses the mapped cmux workspace and sends a cmux notification from that target. It does not automatically focus the target workspace; use the cmux notification action when you want to jump there.
 
 ## Global flags
 
