@@ -44,8 +44,12 @@ Define one workspace-local, AI-editable workspace state and task contract that r
 - The structured task section ends at the next level-2 heading or EOF.
 - Inside `## Tasks`, one structured task begins with one level-3 heading:
   - `### TASK-<nnn> <title>`
-- `<nnn>` is a zero-padded decimal identifier.
-- `id` is derived from `TASK-<nnn>` and is stable once created.
+- `<nnn>` is a zero-padded decimal identifier. Hand-edited task IDs may extend the numeric base
+  with an alphanumeric suffix or hyphen-delimited alphanumeric segments, for example `TASK-001a`
+  or `TASK-001-1`.
+- `kra ws task add` writes the canonical numeric form (`TASK-<nnn>`) and chooses the next ID from
+  existing canonical numeric IDs.
+- `id` is derived from the task heading ID and is stable once created.
 - `title` is derived from the remainder of the heading text and must be non-empty.
 - Each structured task block must contain one required field line:
   - `status: <todo|doing|blocked|done>`

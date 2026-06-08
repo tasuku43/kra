@@ -150,6 +150,68 @@ func TestServiceAdd_CreatesTasksSectionAndPreservesOutsideContent(t *testing.T) 
 	}
 }
 
+func TestServiceList_AllowsExtendedTaskIDs(t *testing.T) {
+	port := newMemoryPort()
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:   "/root/workspaces/WS1/workspace.md",
+		Exists: true,
+		Content: "## Tasks\n\n" +
+			"### TASK-001a Follow-up\nstatus: todo\n\n" +
+			"### TASK-001-1 Split work\nstatus: doing\n",
+	})
+
+	result, err := NewService(port).List("/root", "WS1", "active")
+	if err != nil {
+		t.Fatalf("List() error = %v", err)
+	}
+	if len(result.Overview.Items) != 2 {
+		t.Fatalf("items = %+v, want 2 items", result.Overview.Items)
+	}
+	if result.Overview.Items[0].ID != "TASK-001a" || result.Overview.Items[1].ID != "TASK-001-1" {
+		t.Fatalf("task IDs = %+v, want extended IDs", result.Overview.Items)
+	}
+}
+
+func TestServiceStatus_AllowsExtendedTaskID(t *testing.T) {
+	port := newMemoryPort()
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:    "/root/workspaces/WS1/workspace.md",
+		Exists:  true,
+		Content: "## Tasks\n\n### TASK-001-1 Split work\nstatus: todo\n",
+	})
+
+	result, err := NewService(port).Status("/root", "WS1", "TASK-001-1", StatusDone)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	if result.Task.ID != "TASK-001-1" || result.Task.Status != StatusDone {
+		t.Fatalf("task = %+v, want extended ID done", result.Task)
+	}
+	if !strings.Contains(port.docs["active:WS1"].Content, "### TASK-001-1 Split work\nstatus: done") {
+		t.Fatalf("saved content did not update extended task ID: %q", port.docs["active:WS1"].Content)
+	}
+}
+
+func TestServiceAdd_IgnoresExtendedTaskIDsWhenChoosingNextNumericID(t *testing.T) {
+	port := newMemoryPort()
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:   "/root/workspaces/WS1/workspace.md",
+		Exists: true,
+		Content: "## Tasks\n\n" +
+			"### TASK-001a Follow-up\nstatus: todo\n\n" +
+			"### TASK-001-1 Split work\nstatus: todo\n\n" +
+			"### TASK-009 Existing numeric\nstatus: done\n",
+	})
+
+	result, err := NewService(port).Add("/root", "WS1", "Next numeric", "")
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	if result.Task.ID != "TASK-010" {
+		t.Fatalf("task id = %q, want TASK-010", result.Task.ID)
+	}
+}
+
 func TestServiceView_DerivesCurrentAndNextFromTaskDescriptions(t *testing.T) {
 	port := newMemoryPort()
 	port.set("active", "WS1", DocumentSnapshot{

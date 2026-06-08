@@ -168,9 +168,9 @@ var (
 )
 
 var (
-	taskHeadingPattern = regexp.MustCompile(`^### (TASK-(\d+))\s+(.+?)\s*$`)
-	taskStatusPattern  = regexp.MustCompile(`^status:\s*(todo|doing|blocked|done)\s*$`)
-	taskIDPattern      = regexp.MustCompile(`^TASK-(\d+)$`)
+	taskHeadingPattern   = regexp.MustCompile(`^### (TASK-\d+[A-Za-z0-9]*(?:-[A-Za-z0-9]+)*)\s+(.+?)\s*$`)
+	taskStatusPattern    = regexp.MustCompile(`^status:\s*(todo|doing|blocked|done)\s*$`)
+	numericTaskIDPattern = regexp.MustCompile(`^TASK-(\d+)$`)
 )
 
 func NewService(port Port, syncPorts ...SyncPort) *Service {
@@ -692,10 +692,10 @@ func parseTaskBlock(lines []string) (Item, error) {
 		return Item{}, newConflict("empty task block")
 	}
 	matches := taskHeadingPattern.FindStringSubmatch(strings.TrimSpace(lines[0]))
-	if len(matches) != 4 {
+	if len(matches) != 3 {
 		return Item{}, newConflict("invalid task heading: %s", strings.TrimSpace(lines[0]))
 	}
-	title := strings.TrimSpace(matches[3])
+	title := strings.TrimSpace(matches[2])
 	if title == "" {
 		return Item{}, newConflict("invalid task heading: %s", strings.TrimSpace(lines[0]))
 	}
@@ -895,7 +895,7 @@ func nextTaskID(items []Item) string {
 	maxValue := 0
 	width := 3
 	for _, item := range items {
-		matches := taskIDPattern.FindStringSubmatch(item.ID)
+		matches := numericTaskIDPattern.FindStringSubmatch(item.ID)
 		if len(matches) != 2 {
 			continue
 		}
