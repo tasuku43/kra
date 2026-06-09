@@ -40,6 +40,7 @@ Unknown routes return `404`.
 - Workspace links navigate to `/workspaces/<workspace-id>/`.
 - Sidebar workspace links display the workspace id with the workspace title below it in muted text.
 - Sidebar workspace links include a compact task progress bar.
+- The page includes a light/dark theme toggle and persists the user's choice in browser local storage.
 - Archived workspaces are not shown in the MVP.
 - Board columns use a fixed visual height that fits roughly five task cards; overflow tasks remain available via vertical scrolling within the column.
 - Each swimlane header displays a task progress bar derived from `done / total` task counts.

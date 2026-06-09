@@ -33,7 +33,7 @@ func TestServeHandler_WorkspacesPageRendersActiveWorkspaceKanban(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body=%q)", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"All Workspaces", "PROJ-2314", "Serve dashboard spec", `data-live-page="overview"`, `data-live-sidebar`, `data-live-board`, `refreshServeData`, `<span class="workspace-link-title">Serve dashboard spec</span>`, `class="progress-mini"`, `1 / 3 done`, `style="width: 33%"`, "Todo", "Doing", "Done", "Build board", "Review layout"} {
+	for _, want := range []string{"All Workspaces", "PROJ-2314", "Serve dashboard spec", `data-live-page="overview" data-theme="light"`, `data-theme-toggle`, `data-theme-label`, `kraServeTheme`, `data-live-sidebar`, `data-live-board`, `refreshServeData`, `<span class="workspace-link-title">Serve dashboard spec</span>`, `class="progress-mini"`, `1 / 3 done`, `style="width: 33%"`, "Todo", "Doing", "Done", "Build board", "Review layout"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body missing %q:\n%s", want, body)
 		}
@@ -74,7 +74,8 @@ func TestServeHandler_WorkspaceDetailRendersBoardReadmeReposAndPR(t *testing.T) 
 	body := rec.Body.String()
 	for _, want := range []string{
 		"PROJ-2314: Serve dashboard spec",
-		`data-live-page="detail" data-workspace-id="PROJ-2314"`,
+		`data-live-page="detail" data-workspace-id="PROJ-2314" data-theme="light"`,
+		`data-theme-toggle`,
 		`data-live-detail-header`,
 		`data-live-detail-board`,
 		`data-live-detail-title`,
@@ -216,6 +217,9 @@ func TestServeStyles_FixesBoardColumnHeightAndScrollsOverflow(t *testing.T) {
 		".workspace-link-title{color:var(--muted)",
 		".progress-track{height:10px",
 		".progress-mini{width:100%",
+		"body[data-theme=dark]",
+		".theme-toggle{min-height:36px",
+		"body[data-theme=dark] .theme-toggle-knob{transform:translateX(14px)}",
 		"body:has(.tab-panel:target) .tab-panel.default:not(:target){display:none}",
 	} {
 		if !strings.Contains(serveStyles, want) {
