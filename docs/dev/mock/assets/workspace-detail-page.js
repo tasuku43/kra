@@ -10,11 +10,21 @@ function detailRiskDot(ws) {
 }
 
 function renderDetailNav() {
-  nav.innerHTML = Object.values(KRA_WORKSPACES).map((ws) => `
+  nav.innerHTML = Object.values(KRA_WORKSPACES).map((ws) => {
+    const progress = taskProgress(ws);
+    return `
     <a class="workspace-link ${ws.id === currentWorkspaceID ? "active" : ""}" href="../${ws.id}/">
-      <span class="${detailRiskDot(ws)}"></span>${ws.id}
+      <span class="${detailRiskDot(ws)}"></span>
+      <span class="workspace-link-text">
+        <span class="workspace-link-id">${ws.id}</span>
+        <span class="workspace-link-title">${ws.title}</span>
+        <span class="progress-mini" aria-label="task progress">
+          <span class="progress-mini-fill" style="width: ${progress.percent}%"></span>
+        </span>
+      </span>
     </a>
-  `).join("");
+  `;
+  }).join("");
 }
 
 function renderReadme(ws) {
@@ -80,33 +90,43 @@ function renderWorkspaceBoard(ws) {
 
 function activateTab(name) {
   document.querySelectorAll(".tab").forEach((tab) => {
-    tab.classList.toggle("active", tab.dataset.tab === name);
+    tab.classList.toggle("active", tab.getAttribute("href") === `#${name}`);
   });
   document.querySelectorAll(".tab-panel").forEach((panel) => {
-    panel.classList.toggle("active", panel.id === `${name}Panel`);
+    panel.classList.toggle("active", panel.id === name);
   });
 }
 
 function renderDetail(ws) {
+  const progress = taskProgress(ws);
   detail.innerHTML = `
     <div class="detail-header">
       <div>
-        <div class="detail-title">${ws.id}</div>
+        <strong class="workspace-id">${ws.id}</strong>
         <p class="workspace-title">${ws.title}</p>
       </div>
-      <span class="badge ${ws.riskClass}">${ws.risk}</span>
+      <div class="progress" aria-label="task progress">
+        <div class="progress-meta">
+          <span>Progress</span>
+          <span>${progress.done} / ${progress.total} done</span>
+        </div>
+        <div class="progress-track">
+          <div class="progress-fill" style="width: ${progress.percent}%"></div>
+        </div>
+      </div>
     </div>
     ${renderWorkspaceBoard(ws)}
     <div class="tabs">
-      <button class="tab active" type="button" data-tab="readme">README</button>
-      <button class="tab" type="button" data-tab="repositories">Repositories</button>
+      <a class="tab active" href="#readme">README</a>
+      <a class="tab" href="#repositories">Repositories</a>
     </div>
-    <div class="tab-panel active" id="readmePanel">${renderReadme(ws)}</div>
-    <div class="tab-panel" id="repositoriesPanel">${renderRepos(ws)}</div>
+    <div class="tab-panel active default" id="readme">${renderReadme(ws)}</div>
+    <div class="tab-panel" id="repositories">${renderRepos(ws)}</div>
   `;
   detail.querySelectorAll(".tab").forEach((tab) => {
-    tab.addEventListener("click", () => activateTab(tab.dataset.tab));
+    tab.addEventListener("click", () => activateTab(tab.getAttribute("href").slice(1)));
   });
+  activateTab(window.location.hash === "#repositories" ? "repositories" : "readme");
 }
 
 renderDetailNav();

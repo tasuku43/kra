@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>kra serve design mocks</title>
+  <link rel="stylesheet" href="assets/kra-serve-design-mocks.css">
+</head>
+<body data-design="atlas" data-theme="light">
+  <div class="mock-shell">
+    <header class="mock-header">
+      <div>
+        <p class="mock-kicker">kra serve</p>
+        <h1 class="mock-title">Design Mocks</h1>
+      </div>
+      <div class="mock-controls" aria-label="design controls">
+        <div class="segmented" aria-label="design variants">
+          <button type="button" class="segment active" data-design-option="atlas">Atlas</button>
+          <button type="button" class="segment" data-design-option="console">Console</button>
+          <button type="button" class="segment" data-design-option="glass">Glass</button>
+        </div>
+        <button type="button" class="theme-toggle" id="themeToggle" aria-pressed="false">
+          <span class="theme-toggle-track"><span class="theme-toggle-knob"></span></span>
+          <span id="themeLabel">Light</span>
+        </button>
+      </div>
+    </header>
+
+    <div class="mock-frame">
+      <div class="app">
+        <aside class="sidebar">
+          <div class="brand">
+            <div class="brand-mark">kra</div>
+            <div>
+              <strong>Workspace Boards</strong>
+              <span class="small">open workspaces only</span>
+            </div>
+          </div>
+
+          <a class="side-label-link" href="./workspaces/">Open workspaces</a>
+          <nav id="workspaceNav"></nav>
+        </aside>
+
+        <main>
+          <header class="topbar">
+            <div>
+              <h1>All Workspaces</h1>
+              <p class="meta">/mock/kra-root ・ read-only ・ generated from workspace.md</p>
+            </div>
+            <a class="btn" href="./workspaces/">Refresh</a>
+          </header>
+
+          <section class="board" id="kanbanBoard" aria-label="workspace kanban"></section>
+        </main>
+      </div>
+    </div>
+  </div>
+
+  <script src="assets/kra-serve-mock.js"></script>
+  <script src="assets/kra-serve-design-mocks.js"></script>
+</body>
+</html>

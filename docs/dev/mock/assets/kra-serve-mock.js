@@ -135,3 +135,10 @@ const KRA_STATUS_LABELS = {
 function workspaceHref(id, fromRoot) {
   return fromRoot ? `${id}/` : `/workspaces/${id}/`;
 }
+
+function taskProgress(ws) {
+  const done = (ws.tasks.done || []).length;
+  const total = Object.values(ws.tasks).reduce((sum, tasks) => sum + tasks.length, 0);
+  const percent = total === 0 ? 0 : Math.floor((done * 100) / total);
+  return { done, total, percent };
+}

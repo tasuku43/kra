@@ -46,11 +46,21 @@
     }
 
     function renderNav() {
-      nav.innerHTML = Object.values(KRA_WORKSPACES).map((ws) => `
+      nav.innerHTML = Object.values(KRA_WORKSPACES).map((ws) => {
+        const progress = taskProgress(ws);
+        return `
         <a class="workspace-link" href="${workspaceHref(ws.id, true)}">
-          <span class="${riskDot(ws)}"></span>${ws.id}
+          <span class="${riskDot(ws)}"></span>
+          <span class="workspace-link-text">
+            <span class="workspace-link-id">${ws.id}</span>
+            <span class="workspace-link-title">${ws.title}</span>
+            <span class="progress-mini" aria-label="task progress">
+              <span class="progress-mini-fill" style="width: ${progress.percent}%"></span>
+            </span>
+          </span>
         </a>
-      `).join("");
+      `;
+      }).join("");
     }
 
     function renderTaskCards(ws, status) {
@@ -68,17 +78,23 @@
 
     function renderSwimlane(ws) {
       const statuses = ["todo", "doing", "blocked", "done"];
+      const progress = taskProgress(ws);
       return `
         <article class="swimlane">
           <header class="swimlane-head">
-            <div class="swimlane-title">
-              <span class="${riskDot(ws)}"></span>
-              <div>
-                <a class="workspace-id" href="${workspaceHref(ws.id, true)}">${ws.id}</a>
-                <p class="workspace-title">${ws.title}</p>
+            <div>
+              <a class="workspace-id" href="${workspaceHref(ws.id, true)}">${ws.id}</a>
+              <p class="workspace-title">${ws.title}</p>
+            </div>
+            <div class="progress" aria-label="task progress">
+              <div class="progress-meta">
+                <span>Progress</span>
+                <span>${progress.done} / ${progress.total} done</span>
+              </div>
+              <div class="progress-track">
+                <div class="progress-fill" style="width: ${progress.percent}%"></div>
               </div>
             </div>
-            <span class="badge ${ws.riskClass}">${ws.risk}</span>
           </header>
           <div class="status-grid">
             ${statuses.map((status) => `

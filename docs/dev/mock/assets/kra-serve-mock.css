@@ -116,9 +116,9 @@ button {
 
 .workspace-link {
   width: 100%;
-  min-height: 42px;
+  min-height: 52px;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   padding: 9px 10px;
   border-radius: 8px;
@@ -135,6 +135,7 @@ button {
 .dot {
   width: 9px;
   height: 9px;
+  margin-top: 5px;
   border-radius: 50%;
   background: var(--ok);
   flex: 0 0 auto;
@@ -142,6 +143,41 @@ button {
 
 .dot.warn { background: var(--warn); }
 .dot.danger { background: var(--danger); }
+
+.workspace-link-text {
+  min-width: 0;
+  display: grid;
+  gap: 2px;
+  flex: 1;
+}
+
+.workspace-link-id {
+  font-weight: 900;
+}
+
+.workspace-link-title {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.progress-mini {
+  width: 100%;
+  height: 5px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: #dbe6f2;
+  overflow: hidden;
+}
+
+.progress-mini-fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0ea5a3, var(--accent));
+}
 
 main {
   min-width: 0;
@@ -241,6 +277,38 @@ h3 {
   margin-top: 3px;
   color: var(--muted);
   line-height: 1.4;
+}
+
+.progress {
+  min-width: 220px;
+  display: grid;
+  gap: 7px;
+}
+
+.progress-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+}
+
+.progress-track {
+  height: 10px;
+  border: 1px solid #c9d8ea;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #eef4fb, #e4ecf6);
+  overflow: hidden;
+  box-shadow: inset 0 1px 2px rgba(20, 31, 54, 0.08);
+}
+
+.progress-fill {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, #0ea5a3, var(--accent));
+  box-shadow: 0 0 16px rgba(14, 165, 163, 0.24);
 }
 
 .status-grid {
