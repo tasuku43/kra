@@ -58,7 +58,8 @@ func TestServeHandler_WorkspaceDetailRendersBoardReadmeReposAndPR(t *testing.T) 
 		}}
 	})
 	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 Build board\nstatus: doing\n")
-	if err := os.WriteFile(filepath.Join(wsPath, "README.md"), []byte("# Serve dashboard\n\nRead-only boards.\n"), 0o644); err != nil {
+	readme := "# Serve dashboard\n\nRead-only **boards**.\n\n```mermaid\ngraph TD\n  A[Serve] --> B[Readme]\n```\n\n<script>alert('nope')</script>\n"
+	if err := os.WriteFile(filepath.Join(wsPath, "README.md"), []byte(readme), 0o644); err != nil {
 		t.Fatalf("write README.md: %v", err)
 	}
 
@@ -73,16 +74,21 @@ func TestServeHandler_WorkspaceDetailRendersBoardReadmeReposAndPR(t *testing.T) 
 	for _, want := range []string{
 		"PROJ-2314: Serve dashboard spec",
 		"Build board",
-		"# Serve dashboard",
+		"<h1 id=\"serve-dashboard\">Serve dashboard</h1>",
+		"<strong>boards</strong>",
+		"language-mermaid",
+		"mermaid.initialize",
 		"Repositories",
 		"kra",
 		"feature/PROJ-2314/serve-dashboard",
-		"https://github.com/tasuku43/kra/pull/128",
-		"#128",
+		`<a href="https://github.com/tasuku43/kra/pull/128" target="_blank" rel="noreferrer">Serve dashboard spec</a>`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body missing %q:\n%s", want, body)
 		}
+	}
+	if strings.Contains(body, "<script>alert('nope')</script>") {
+		t.Fatalf("README raw HTML should be escaped:\n%s", body)
 	}
 }
 
@@ -108,6 +114,25 @@ func TestServeHandler_RedirectsAndNotFound(t *testing.T) {
 		}
 		if tc.location != "" && rec.Header().Get("Location") != tc.location {
 			t.Fatalf("%s Location = %q, want %q", tc.path, rec.Header().Get("Location"), tc.location)
+		}
+	}
+}
+
+func TestServeStyles_FixesBoardColumnHeightAndScrollsOverflow(t *testing.T) {
+	for _, want := range []string{
+		"--board-column-height:360px",
+		".status-column{height:var(--board-column-height)",
+		"overflow-y:auto",
+		"overscroll-behavior:contain",
+		".readme{width:100%;max-width:none",
+		".readme blockquote",
+		".readme table",
+		".mermaid{",
+		"grid-template-columns:minmax(120px,2fr) minmax(120px,2fr) minmax(220px,6fr)",
+		".repo-row a{overflow-wrap:anywhere}",
+	} {
+		if !strings.Contains(serveStyles, want) {
+			t.Fatalf("serveStyles missing %q:\n%s", want, serveStyles)
 		}
 	}
 }

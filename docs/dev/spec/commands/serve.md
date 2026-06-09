@@ -37,6 +37,7 @@ Unknown routes return `404`.
 - Task cards are derived from the workspace task contract in `workspace.md`.
 - Workspace links navigate to `/workspaces/<workspace-id>/`.
 - Archived workspaces are not shown in the MVP.
+- Board columns use a fixed visual height that fits roughly five task cards; overflow tasks remain available via vertical scrolling within the column.
 
 ## Workspace Detail
 
@@ -47,18 +48,24 @@ Unknown routes return `404`.
 - tabbed read-only sections:
   - `README`
   - `Repositories`
+- Board columns use the same fixed-height, vertically scrollable layout as the root board.
 
 The `README` tab displays workspace-local Markdown text:
 
 - prefer `<workspace>/README.md`
 - fall back to `<workspace>/workspace.md`
 - show an empty state when neither exists
+- render Markdown as read-only HTML with GitHub-flavored Markdown support for common authoring features such as tables, strikethrough, task lists, fenced code blocks, and heading anchors
+- escape raw HTML from README content by default
+- render fenced `mermaid` code blocks as Mermaid diagrams in the browser when the Mermaid CDN is reachable
+- use the full available detail panel width for the Markdown view
 
 The `Repositories` tab displays one row per managed worktree/repo binding:
 
 - repository alias/name
 - current branch
-- pull request link when it can be inferred from workspace source metadata
+- pull request link when it can be inferred from workspace source metadata; the link text is the stored workspace title, which is the PR title for GitHub PR imports, falling back to `#<number>` when the title is empty
+- the repository, branch, and pull request columns use a `2:2:6` width ratio
 
 ## Pull Request Link Inference
 
@@ -83,4 +90,3 @@ The MVP does not call remote providers.
 - Archived workspace browsing
 - Authentication or network exposure beyond the chosen local address
 - Remote provider API aggregation
-- Markdown-to-HTML fidelity beyond safe read-only display
