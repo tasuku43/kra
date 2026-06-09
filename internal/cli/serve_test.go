@@ -135,10 +135,14 @@ func TestServeStyles_FixesBoardColumnHeightAndScrollsOverflow(t *testing.T) {
 		".workspace-link-title{color:var(--muted)",
 		".progress-track{height:10px",
 		".progress-mini{width:100%",
+		"body:has(.tab-panel:target) .tab-panel.default:not(:target){display:none}",
 	} {
 		if !strings.Contains(serveStyles, want) {
 			t.Fatalf("serveStyles missing %q:\n%s", want, serveStyles)
 		}
+	}
+	if strings.Contains(serveStyles, "body:has(.tab-panel:target) .tab-panel.default{display:none}") {
+		t.Fatalf("README target panel should not be hidden by the default-panel rule:\n%s", serveStyles)
 	}
 }
 
