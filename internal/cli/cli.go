@@ -83,6 +83,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runTemplate(args[1:])
 	case "shell":
 		return c.runShell(args[1:])
+	case "serve":
+		return c.runServe(args[1:])
 	case "agent":
 		return c.runAgent(args[1:])
 	case "ws":

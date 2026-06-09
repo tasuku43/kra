@@ -15,6 +15,7 @@ func (c *CLI) printRootUsage(w io.Writer) {
 		"  repo              Repository pool commands",
 		"  template          Workspace template commands",
 		"  shell             Shell integration commands",
+		"  serve             Serve read-only workspace boards",
 		"  ws                Workspace commands",
 		"  doctor            Diagnose KRA_ROOT health",
 	}
@@ -28,6 +29,21 @@ func (c *CLI) printRootUsage(w io.Writer) {
 		"Usage:\n  kra [global-flags] <command> [args]\n  kra --version\n\nCommands:\n%s\n\nGlobal flags:\n  --debug            Enable debug logging to <KRA_ROOT>/.kra/logs/\n  --version          Print version and exit\n  --help, -h         Show this help\n\nRun:\n  kra <command> --help\n  kra help <command-path> --mode agent\n",
 		strings.Join(commands, "\n"),
 	)
+}
+
+func (c *CLI) printServeUsage(w io.Writer) {
+	fmt.Fprint(w, `Usage:
+  kra serve [--addr <host:port>]
+
+Serve a local read-only web UI for open workspace boards.
+
+Routes:
+  /workspaces/       All Workspaces board
+  /workspaces/<id>/  Workspace detail
+
+Options:
+  --addr             Listen address (default: 127.0.0.1:8765)
+`)
 }
 
 func (c *CLI) printHelpUsage(w io.Writer) {

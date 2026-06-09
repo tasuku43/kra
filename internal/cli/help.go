@@ -100,6 +100,27 @@ var helpDocs = []helpDoc{
 		},
 	},
 	{
+		Path: []string{"serve"},
+		PrintHuman: func(c *CLI, w io.Writer) {
+			c.printServeUsage(w)
+		},
+		Agent: helpSpec{
+			Command: "kra serve",
+			Summary: "Serve a local read-only web UI for open workspace boards.",
+			Automation: helpAutomationSpec{
+				NonInteractive:        true,
+				JSONSupported:         false,
+				Unsafe:                false,
+				Idempotent:            true,
+				RecommendedInvocation: "kra serve --addr 127.0.0.1:8765",
+			},
+			Examples: []helpExample{
+				{Title: "Serve on the default local address", Command: "kra serve"},
+				{Title: "Serve on a custom local address", Command: "kra serve --addr 127.0.0.1:9876"},
+			},
+		},
+	},
+	{
 		Path: []string{"ws", "create"},
 		PrintHuman: func(c *CLI, w io.Writer) {
 			c.printWSCreateUsage(w)

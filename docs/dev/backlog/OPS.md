@@ -163,3 +163,11 @@ status: planned
     - `docs/dev/spec/concepts/state-store.md`
   - Depends: CONFIG-006, OPS-016
   - Serial: yes
+
+- [x] OPS-018: `kra serve` read-only workspace boards
+  - What: add a local read-only web UI with `/workspaces/` and `/workspaces/<id>/` pages for open
+    workspace task boards, README, repositories, branches, and inferred PR links.
+  - Specs:
+    - `docs/dev/spec/commands/serve.md`
+  - Depends: OPS-008
+  - Serial: yes

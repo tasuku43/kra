@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>kra serve /workspaces/ mock</title>
+  <link rel="stylesheet" href="../assets/kra-serve-mock.css">
+</head>
+<body>
+  <div class="app">
+    <aside class="sidebar">
+      <div class="brand">
+        <div class="brand-mark">kra</div>
+        <div>
+          <strong>Workspace Boards</strong>
+          <span class="small">open workspaces only</span>
+        </div>
+      </div>
+
+      <a class="side-label-link" href="./">Open workspaces</a>
+      <nav id="workspaceNav"></nav>
+    </aside>
+
+    <main>
+      <header class="topbar">
+        <div>
+          <h1>All Workspaces</h1>
+          <p class="meta">read-only ・ generated from workspace.md</p>
+        </div>
+        <a class="btn" href="./">Refresh</a>
+      </header>
+
+      <section class="board" id="kanbanBoard" aria-label="workspace kanban"></section>
+    </main>
+  </div>
+
+  <script src="../assets/kra-serve-mock.js"></script>
+  <script>
+    const nav = document.getElementById("workspaceNav");
+    const board = document.getElementById("kanbanBoard");
+
+    function riskDot(ws) {
+      if (ws.riskClass === "danger") return "dot danger";
+      if (ws.riskClass === "warn") return "dot warn";
+      return "dot";
+    }
+
+    function renderNav() {
+      nav.innerHTML = Object.values(KRA_WORKSPACES).map((ws) => `
+        <a class="workspace-link" href="${workspaceHref(ws.id, true)}">
+          <span class="${riskDot(ws)}"></span>${ws.id}
+        </a>
+      `).join("");
+    }
+
+    function renderTaskCards(ws, status) {
+      const tasks = ws.tasks[status] || [];
+      if (tasks.length === 0) {
+        return `<span class="small">No cards</span>`;
+      }
+      return tasks.map(([id, title]) => `
+        <a class="task-card" href="${workspaceHref(ws.id, true)}">
+          ${title}
+          <span class="small">${id}</span>
+        </a>
+      `).join("");
+    }
+
+    function renderSwimlane(ws) {
+      const statuses = ["todo", "doing", "blocked", "done"];
+      return `
+        <article class="swimlane">
+          <header class="swimlane-head">
+            <div class="swimlane-title">
+              <span class="${riskDot(ws)}"></span>
+              <div>
+                <a class="workspace-id" href="${workspaceHref(ws.id, true)}">${ws.id}</a>
+                <p class="workspace-title">${ws.title}</p>
+              </div>
+            </div>
+            <span class="badge ${ws.riskClass}">${ws.risk}</span>
+          </header>
+          <div class="status-grid">
+            ${statuses.map((status) => `
+              <section class="status-column">
+                <div class="column-title">
+                  <span>${KRA_STATUS_LABELS[status]}</span>
+                  <span>${(ws.tasks[status] || []).length}</span>
+                </div>
+                ${renderTaskCards(ws, status)}
+              </section>
+            `).join("")}
+          </div>
+        </article>
+      `;
+    }
+
+    renderNav();
+    board.innerHTML = Object.values(KRA_WORKSPACES).map(renderSwimlane).join("");
+  </script>
+</body>
+</html>

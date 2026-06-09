@@ -30,6 +30,7 @@ type wsListRow struct {
 	UpdatedAt int64
 	RepoCount int
 	Title     string
+	SourceURL string
 	WorkState workspaceWorkState
 	Repos     []statestore.WorkspaceRepo
 	Tasks     wstask.Overview
@@ -327,6 +328,7 @@ func listRowsFromFilesystemObservedResult(ctx context.Context, root string, scop
 			UpdatedAt: updatedAt,
 			RepoCount: repoCount,
 			Title:     title,
+			SourceURL: strings.TrimSpace(meta.Workspace.SourceURL),
 			WorkState: workState,
 			Repos:     repos,
 		})
@@ -439,6 +441,7 @@ func listWorkspaceReposFromFilesystem(ctx context.Context, root string, scope st
 		restore := restoreByAlias[alias]
 		repos = append(repos, statestore.WorkspaceRepo{
 			RepoUID: strings.TrimSpace(restore.RepoUID),
+			RepoKey: strings.TrimSpace(restore.RepoKey),
 			Alias:   alias,
 			Branch:  firstNonEmpty(branch, strings.TrimSpace(restore.Branch)),
 			BaseRef: strings.TrimSpace(restore.BaseRef),
@@ -451,6 +454,7 @@ func listWorkspaceReposFromFilesystem(ctx context.Context, root string, scope st
 		}
 		repos = append(repos, statestore.WorkspaceRepo{
 			RepoUID: strings.TrimSpace(restore.RepoUID),
+			RepoKey: strings.TrimSpace(restore.RepoKey),
 			Alias:   alias,
 			Branch:  strings.TrimSpace(restore.Branch),
 			BaseRef: strings.TrimSpace(restore.BaseRef),
