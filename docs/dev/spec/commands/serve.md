@@ -36,6 +36,7 @@ Unknown routes return `404`.
   - `Done`
 - Task cards are derived from the workspace task contract in `workspace.md`.
 - Workspace links navigate to `/workspaces/<workspace-id>/`.
+- Sidebar workspace links display the workspace id with the workspace title below it in muted text.
 - Archived workspaces are not shown in the MVP.
 - Board columns use a fixed visual height that fits roughly five task cards; overflow tasks remain available via vertical scrolling within the column.
 
