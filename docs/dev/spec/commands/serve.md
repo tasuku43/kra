@@ -21,6 +21,8 @@ Serve a local read-only web UI for understanding open workspaces at a glance.
 - `/workspaces/` renders the root workspace board.
 - `/workspaces/<workspace-id>/` renders one workspace detail page.
 - `/workspaces/<workspace-id>` redirects to the trailing-slash route.
+- `/api/workspaces` returns read-only JSON for open workspace boards.
+- `/api/workspaces/<workspace-id>` returns read-only JSON for one open workspace board.
 
 Unknown routes return `404`.
 
@@ -41,6 +43,7 @@ Unknown routes return `404`.
 - Archived workspaces are not shown in the MVP.
 - Board columns use a fixed visual height that fits roughly five task cards; overflow tasks remain available via vertical scrolling within the column.
 - Each swimlane header displays a task progress bar derived from `done / total` task counts.
+- The browser polls the read-only JSON API and updates the sidebar, progress bars, and board cards without a full page reload.
 
 ## Workspace Detail
 
@@ -53,6 +56,7 @@ Unknown routes return `404`.
   - `Repositories`
 - Board columns use the same fixed-height, vertically scrollable layout as the root board.
 - The workspace board header displays the same task progress summary as the root board swimlane.
+- The workspace board and sidebar progress update from the read-only JSON API without a full page reload.
 
 The `README` tab displays workspace-local Markdown text:
 

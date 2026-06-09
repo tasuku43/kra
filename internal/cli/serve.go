@@ -3,6 +3,7 @@ package cli
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"html/template"
@@ -52,6 +53,24 @@ type servePageData struct {
 	Workspace  serveWorkspace
 	Workspaces []serveWorkspace
 	Readme     serveReadme
+}
+
+type serveAPIResponse struct {
+	Workspaces []serveAPIWorkspace `json:"workspaces"`
+}
+
+type serveAPIWorkspace struct {
+	ID       string                    `json:"id"`
+	Title    string                    `json:"title"`
+	Href     string                    `json:"href"`
+	Progress serveProgress             `json:"progress"`
+	Tasks    map[string][]serveAPITask `json:"tasks"`
+	Counts   map[string]int            `json:"counts"`
+}
+
+type serveAPITask struct {
+	ID    string `json:"id"`
+	Title string `json:"title"`
 }
 
 func (c *CLI) runServe(args []string) int {
@@ -137,6 +156,12 @@ func serveHTTP(root string, w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/workspaces/":
 		renderServeWorkspaces(w, r, root)
 		return
+	case r.URL.Path == "/api/workspaces" || r.URL.Path == "/api/workspaces/":
+		renderServeWorkspacesAPI(w, root)
+		return
+	case strings.HasPrefix(r.URL.Path, "/api/workspaces/"):
+		renderServeWorkspaceAPI(w, root, strings.TrimPrefix(r.URL.Path, "/api/workspaces/"))
+		return
 	case strings.HasPrefix(r.URL.Path, "/workspaces/"):
 		renderServeWorkspaceDetailRoute(w, r, root)
 		return
@@ -166,6 +191,40 @@ func renderServeWorkspaceDetailRoute(w http.ResponseWriter, r *http.Request, roo
 		return
 	}
 	renderServeWorkspaceDetail(w, r, root, id)
+}
+
+func renderServeWorkspacesAPI(w http.ResponseWriter, root string) {
+	workspaces, err := loadServeWorkspaces(root)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeServeJSON(w, serveAPIResponse{Workspaces: serveAPIWorkspaces(workspaces)})
+}
+
+func renderServeWorkspaceAPI(w http.ResponseWriter, root string, workspacePath string) {
+	workspacePath = strings.TrimSuffix(workspacePath, "/")
+	if strings.TrimSpace(workspacePath) == "" || strings.Contains(workspacePath, "/") {
+		http.NotFound(w, nil)
+		return
+	}
+	id, err := url.PathUnescape(workspacePath)
+	if err != nil || validateWorkspaceID(id) != nil {
+		http.NotFound(w, nil)
+		return
+	}
+	workspaces, err := loadServeWorkspaces(root)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for _, ws := range workspaces {
+		if ws.ID == id {
+			writeServeJSON(w, serveAPIResponse{Workspaces: serveAPIWorkspaces([]serveWorkspace{ws})})
+			return
+		}
+	}
+	http.Error(w, "workspace not found", http.StatusNotFound)
 }
 
 func renderServeWorkspaces(w http.ResponseWriter, _ *http.Request, root string) {
@@ -206,6 +265,42 @@ func renderServeWorkspaceDetail(w http.ResponseWriter, _ *http.Request, root str
 		Workspaces: workspaces,
 		Readme:     readme,
 	})
+}
+
+func writeServeJSON(w http.ResponseWriter, data serveAPIResponse) {
+	w.Header().Set("Content-Type", "application/json; charset=utf-8")
+	enc := json.NewEncoder(w)
+	enc.SetEscapeHTML(true)
+	_ = enc.Encode(data)
+}
+
+func serveAPIWorkspaces(workspaces []serveWorkspace) []serveAPIWorkspace {
+	out := make([]serveAPIWorkspace, 0, len(workspaces))
+	for _, ws := range workspaces {
+		tasks := make(map[string][]serveAPITask, len(serveStatusIDs()))
+		counts := make(map[string]int, len(serveStatusIDs()))
+		for _, status := range serveStatusIDs() {
+			items := ws.Tasks.ItemsByStatus(wstask.Status(status))
+			counts[status] = len(items)
+			apiItems := make([]serveAPITask, 0, len(items))
+			for _, item := range items {
+				apiItems = append(apiItems, serveAPITask{
+					ID:    item.ID,
+					Title: item.Title,
+				})
+			}
+			tasks[status] = apiItems
+		}
+		out = append(out, serveAPIWorkspace{
+			ID:       ws.ID,
+			Title:    ws.Title,
+			Href:     serveWorkspaceHref(ws.ID),
+			Progress: serveTaskProgress(ws.Tasks),
+			Tasks:    tasks,
+			Counts:   counts,
+		})
+	}
+	return out
 }
 
 func loadServeWorkspaces(root string) ([]serveWorkspace, error) {
@@ -322,12 +417,7 @@ func writeServeHTML(w http.ResponseWriter, tmpl string, data servePageData) {
 	t := template.Must(template.New("serve").Funcs(template.FuncMap{
 		"workspaceHref": serveWorkspaceHref,
 		"listStatuses": func() []string {
-			return []string{
-				string(wstask.StatusTodo),
-				string(wstask.StatusDoing),
-				string(wstask.StatusBlocked),
-				string(wstask.StatusDone),
-			}
+			return serveStatusIDs()
 		},
 		"itemsByStatus": func(overview wstask.Overview, status string) []wstask.Item {
 			return overview.ItemsByStatus(wstask.Status(status))
@@ -360,10 +450,19 @@ func serveWorkspaceHref(id string) string {
 	return "/workspaces/" + url.PathEscape(id) + "/"
 }
 
+func serveStatusIDs() []string {
+	return []string{
+		string(wstask.StatusTodo),
+		string(wstask.StatusDoing),
+		string(wstask.StatusBlocked),
+		string(wstask.StatusDone),
+	}
+}
+
 type serveProgress struct {
-	Done    int
-	Total   int
-	Percent int
+	Done    int `json:"done"`
+	Total   int `json:"total"`
+	Percent int `json:"percent"`
 }
 
 func serveTaskProgress(overview wstask.Overview) serveProgress {
@@ -408,6 +507,132 @@ const serveStyles = `
 :root{color-scheme:light;--bg:#f6f8fb;--panel:#fff;--panel-soft:#f1f5f9;--ink:#172033;--muted:#687386;--line:#d8e0ea;--accent:#2563eb;--accent-soft:#dbeafe;--warn:#b66b00;--warn-soft:#fff2d6;--danger:#c2413d;--danger-soft:#fee2e2;--shadow:0 14px 34px rgba(20,31,54,.12);--board-column-height:360px;--readme-code:#0f172a;--readme-quote:#f0f9ff;--readme-quote-line:#0ea5a3;--readme-table:#f8fbff}*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#edf4ff 0,rgba(237,244,255,0) 300px),var(--bg);color:var(--ink);font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;font-size:14px;letter-spacing:0}a{color:var(--accent);text-decoration:none;font-weight:800}a:hover{text-decoration:underline}.app{min-height:100vh;display:grid;grid-template-columns:260px minmax(0,1fr)}.sidebar{height:100vh;position:sticky;top:0;padding:22px 18px;border-right:1px solid var(--line);background:rgba(255,255,255,.86);backdrop-filter:blur(18px)}.brand{display:flex;align-items:center;gap:11px;margin-bottom:24px}.brand-mark{width:38px;height:38px;display:grid;place-items:center;border:1px solid #bdd2f7;border-radius:8px;background:#eff6ff;color:var(--accent);font-weight:900}.brand strong{display:block;font-size:16px}.meta,.small,.side-label-link{color:var(--muted);font-size:12px}.side-label-link{display:block;margin:18px 8px 8px;font-weight:900;text-transform:uppercase}.workspace-link{width:100%;min-height:52px;display:flex;align-items:flex-start;gap:10px;padding:9px 10px;border-radius:8px;color:var(--ink)}.workspace-link.active,.workspace-link:hover{background:var(--accent-soft);color:#1447a6;text-decoration:none}.workspace-link-text{min-width:0;display:grid;gap:2px}.workspace-link-id{font-weight:900}.workspace-link-title{color:var(--muted);font-size:12px;font-weight:600;line-height:1.35;overflow-wrap:anywhere}.progress-mini{width:100%;height:5px;margin-top:4px;border-radius:999px;background:#dbe6f2;overflow:hidden}.progress-mini-fill{display:block;height:100%;border-radius:999px;background:linear-gradient(90deg,#0ea5a3,#2563eb)}.dot{width:9px;height:9px;border-radius:50%;background:#16835f;flex:0 0 auto}main{min-width:0;padding:24px 28px 42px}.topbar{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:18px}h1,h2,h3,p{margin:0}h1{font-size:28px;line-height:1.15;letter-spacing:0}.btn{min-height:36px;display:inline-flex;align-items:center;padding:0 12px;border:1px solid var(--accent);border-radius:8px;background:var(--accent);color:#fff;cursor:pointer;font-weight:800}.btn:hover{text-decoration:none}.board{display:grid;gap:14px}.swimlane,.detail{border:1px solid var(--line);border-radius:8px;background:rgba(255,255,255,.94);box-shadow:0 1px 1px rgba(20,31,54,.04);overflow:hidden}.detail{border-color:#bcd3ff;box-shadow:var(--shadow)}.swimlane-head,.detail-header{display:flex;justify-content:space-between;align-items:flex-start;gap:14px;padding:14px 16px;border-bottom:1px solid var(--line);background:#fff}.workspace-id{display:block;color:var(--ink);font-size:17px;font-weight:900}.workspace-title{margin-top:3px;color:var(--muted);line-height:1.4}.progress{min-width:220px;display:grid;gap:7px}.progress-meta{display:flex;justify-content:space-between;gap:10px;color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase}.progress-track{height:10px;border:1px solid #c9d8ea;border-radius:999px;background:linear-gradient(180deg,#eef4fb,#e4ecf6);overflow:hidden;box-shadow:inset 0 1px 2px rgba(20,31,54,.08)}.progress-fill{height:100%;border-radius:999px;background:linear-gradient(90deg,#0ea5a3,#2563eb);box-shadow:0 0 16px rgba(14,165,163,.24);transition:width .2s ease}.status-grid{display:grid;grid-template-columns:repeat(4,minmax(190px,1fr));gap:10px;padding:12px;overflow-x:auto}.detail-board{padding:14px 18px 4px}.detail-board .status-grid{padding:0}.status-column{height:var(--board-column-height);border:1px solid var(--line);border-radius:8px;background:var(--panel-soft);padding:10px;overflow-y:auto;overscroll-behavior:contain}.column-title{display:flex;justify-content:space-between;gap:8px;margin-bottom:9px;color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase}.task-card{display:block;margin-bottom:8px;padding:10px;border:1px solid #d9e1ec;border-radius:8px;background:#fff;color:var(--ink);line-height:1.4;font-weight:700}.task-card .small{display:block;margin-top:5px;font-weight:500}.tabs{display:flex;gap:8px;padding:12px 18px 0}.tab{min-height:36px;padding:0 12px;display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:8px 8px 0 0;background:#fff;color:var(--muted);font-weight:900}.tab.active{color:#1447a6;border-color:#8ab4ff;background:#eff6ff}.tab-panel{display:none;padding:18px}.tab-panel:target{display:block}.tab-panel.default{display:block}body:has(.tab-panel:target) .tab-panel.default:not(:target){display:none}.readme{width:100%;max-width:none;border:1px solid var(--line);border-radius:8px;background:#fff;padding:22px;line-height:1.7;overflow-wrap:anywhere}.readme>*:first-child{margin-top:0}.readme>*:last-child{margin-bottom:0}.readme h1,.readme h2,.readme h3{margin:1.45em 0 .55em;color:#10213d;line-height:1.24}.readme h1{padding-bottom:.35em;border-bottom:1px solid var(--line);font-size:30px}.readme h2{padding-bottom:.28em;border-bottom:1px solid #e6edf6;font-size:23px}.readme h3{font-size:18px}.readme p,.readme ul,.readme ol,.readme blockquote,.readme table,.readme pre{margin:0 0 1em}.readme ul,.readme ol{padding-left:1.45em}.readme li+li{margin-top:.25em}.readme code{border:1px solid #dce5f0;border-radius:6px;background:#edf6f3;color:#164e42;padding:.12em .34em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:.92em}.readme pre{overflow:auto;border-radius:8px;background:var(--readme-code);color:#e5eefc;padding:16px}.readme pre code{border:0;background:transparent;color:inherit;padding:0}.readme blockquote{border-left:5px solid var(--readme-quote-line);border-radius:0 8px 8px 0;background:var(--readme-quote);color:#31546b;padding:12px 14px}.readme table{width:100%;border-collapse:collapse;display:block;overflow:auto}.readme th,.readme td{border:1px solid #d8e0ea;padding:8px 10px}.readme th{background:var(--readme-table);font-weight:900}.readme tr:nth-child(2n) td{background:#fbfdff}.readme hr{height:1px;border:0;background:var(--line);margin:24px 0}.readme img{max-width:100%;border-radius:8px}.readme input[type=checkbox]{margin-right:.45em}.mermaid{margin:0 0 1em;padding:16px;border:1px solid #cfe7e3;border-radius:8px;background:linear-gradient(180deg,#f5fffd,#ffffff);overflow:auto}.empty{color:var(--muted)}.repo-table{display:grid;gap:8px}.repo-row{display:grid;grid-template-columns:minmax(120px,2fr) minmax(120px,2fr) minmax(220px,6fr);gap:12px;align-items:center;min-height:58px;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:#fff}.repo-row a{overflow-wrap:anywhere}.repo-row.header{min-height:36px;background:transparent;border-color:transparent;color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase}@media(max-width:1100px){.app{grid-template-columns:1fr}.sidebar{position:static;height:auto;border-right:0;border-bottom:1px solid var(--line)}.status-grid{grid-template-columns:repeat(4,minmax(220px,1fr))}}@media(max-width:720px){main{padding:18px 14px 32px}.topbar,.detail-header,.swimlane-head{flex-direction:column;align-items:stretch}.progress{min-width:0}.readme{padding:16px}.readme h1{font-size:24px}.repo-row{grid-template-columns:1fr}}
 `
 
+const serveLiveScript = `<script>
+(function(){
+  var statuses=[
+    {id:'todo',title:'Todo'},
+    {id:'doing',title:'Doing'},
+    {id:'blocked',title:'Blocked'},
+    {id:'done',title:'Done'}
+  ];
+  function clampPercent(value){value=Number(value)||0;return Math.max(0,Math.min(100,value));}
+  function node(tag,className,text){
+    var el=document.createElement(tag);
+    if(className){el.className=className;}
+    if(text!==undefined){el.textContent=text;}
+    return el;
+  }
+  function progressView(progress,mini){
+    progress=progress||{done:0,total:0,percent:0};
+    var outer=node('span',mini?'progress-mini':'progress');
+    outer.setAttribute('aria-label','task progress');
+    if(!mini){
+      var meta=node('div','progress-meta');
+      meta.append(node('span','', 'Progress'),node('span','', String(progress.done||0)+' / '+String(progress.total||0)+' done'));
+      outer.append(meta);
+    }
+    var track=node('span',mini?'':'progress-track');
+    if(mini){track=outer;}else{outer.append(track);}
+    var fill=node('span',mini?'progress-mini-fill':'progress-fill');
+    fill.style.width=String(clampPercent(progress.percent))+'%';
+    track.append(fill);
+    return outer;
+  }
+  function taskCard(task,href){
+    var card=node(href?'a':'div','task-card');
+    if(href){card.href=href;}
+    card.append(document.createTextNode(task.title||task.id||'Untitled task'));
+    card.append(node('span','small',task.id||''));
+    return card;
+  }
+  function statusColumn(workspace,status,href){
+    var section=node('section','status-column');
+    var items=(workspace.tasks&&workspace.tasks[status.id])||[];
+    var head=node('div','column-title');
+    head.append(node('span','',status.title),node('span','',String(items.length)));
+    section.append(head);
+    if(items.length===0){
+      section.append(node('span','small','No cards'));
+      return section;
+    }
+    items.forEach(function(item){section.append(taskCard(item,href));});
+    return section;
+  }
+  function statusGrid(workspace,href){
+    var grid=node('div','status-grid');
+    statuses.forEach(function(status){grid.append(statusColumn(workspace,status,href));});
+    return grid;
+  }
+  function sidebarLink(workspace,selectedID){
+    var link=node('a','workspace-link'+(workspace.id===selectedID?' active':''));
+    link.href=workspace.href||('/workspaces/'+encodeURIComponent(workspace.id)+'/');
+    link.append(node('span','dot'));
+    var text=node('span','workspace-link-text');
+    text.append(node('span','workspace-link-id',workspace.id));
+    text.append(node('span','workspace-link-title',workspace.title||workspace.id));
+    text.append(progressView(workspace.progress,true));
+    link.append(text);
+    return link;
+  }
+  function renderSidebar(workspaces,selectedID){
+    var sidebar=document.querySelector('[data-live-sidebar]');
+    if(!sidebar){return;}
+    sidebar.replaceChildren.apply(sidebar,workspaces.map(function(workspace){return sidebarLink(workspace,selectedID);}));
+  }
+  function swimlane(workspace){
+    var article=node('article','swimlane');
+    var head=node('header','swimlane-head');
+    var titleWrap=node('div');
+    var idLink=node('a','workspace-id',workspace.id);
+    idLink.href=workspace.href||('/workspaces/'+encodeURIComponent(workspace.id)+'/');
+    titleWrap.append(idLink,node('p','workspace-title',workspace.title||workspace.id));
+    head.append(titleWrap,progressView(workspace.progress,false));
+    article.append(head,statusGrid(workspace,workspace.href));
+    return article;
+  }
+  function renderOverview(workspaces){
+    var board=document.querySelector('[data-live-board]');
+    if(!board){return;}
+    if(workspaces.length===0){
+      board.replaceChildren(node('p','empty','No open workspaces.'));
+      return;
+    }
+    board.replaceChildren.apply(board,workspaces.map(swimlane));
+  }
+  function renderDetail(workspace){
+    if(!workspace){return;}
+    var title=document.querySelector('[data-live-detail-title]');
+    if(title){title.textContent=workspace.id+': '+(workspace.title||workspace.id);}
+    var header=document.querySelector('[data-live-detail-header]');
+    if(header){
+      var titleWrap=node('div');
+      titleWrap.append(node('strong','workspace-id',workspace.id),node('p','workspace-title',workspace.title||workspace.id));
+      header.replaceChildren(titleWrap,progressView(workspace.progress,false));
+    }
+    var board=document.querySelector('[data-live-detail-board]');
+    if(board){board.replaceChildren(statusGrid(workspace,''));}
+  }
+  async function refreshServeData(){
+    try{
+      var res=await fetch('/api/workspaces?ts='+Date.now(),{cache:'no-store'});
+      if(!res.ok){return;}
+      var data=await res.json();
+      var workspaces=Array.isArray(data.workspaces)?data.workspaces:[];
+      var selectedID=document.body.getAttribute('data-workspace-id')||'';
+      renderSidebar(workspaces,selectedID);
+      if(document.body.getAttribute('data-live-page')==='overview'){
+        renderOverview(workspaces);
+      }else if(selectedID){
+        renderDetail(workspaces.find(function(workspace){return workspace.id===selectedID;}));
+      }
+    }catch(e){}
+  }
+  window.refreshServeData=refreshServeData;
+  setInterval(refreshServeData,3000);
+  document.addEventListener('visibilitychange',function(){if(!document.hidden){refreshServeData();}});
+})();
+</script>`
+
 const serveOverviewTemplate = `<!doctype html>
 <html lang="ja">
 <head>
@@ -416,20 +641,21 @@ const serveOverviewTemplate = `<!doctype html>
   <title>kra serve - All Workspaces</title>
   <style>` + serveStyles + `</style>
 </head>
-<body>
+<body data-live-page="overview">
 <div class="app">
   <aside class="sidebar">
     <div class="brand"><div class="brand-mark">kra</div><div><strong>Workspace Boards</strong><span class="small">open workspaces only</span></div></div>
     <a class="side-label-link" href="/workspaces/">Open workspaces</a>
-    <nav>{{range .Workspaces}}{{$progress := progress .Tasks}}<a class="workspace-link" href="{{workspaceHref .ID}}"><span class="dot"></span><span class="workspace-link-text"><span class="workspace-link-id">{{.ID}}</span><span class="workspace-link-title">{{.Title}}</span><span class="progress-mini" aria-label="task progress"><span class="progress-mini-fill" style="width: {{$progress.Percent}}%"></span></span></span></a>{{end}}</nav>
+    <nav data-live-sidebar>{{range .Workspaces}}{{$progress := progress .Tasks}}<a class="workspace-link" href="{{workspaceHref .ID}}"><span class="dot"></span><span class="workspace-link-text"><span class="workspace-link-id">{{.ID}}</span><span class="workspace-link-title">{{.Title}}</span><span class="progress-mini" aria-label="task progress"><span class="progress-mini-fill" style="width: {{$progress.Percent}}%"></span></span></span></a>{{end}}</nav>
   </aside>
   <main>
     <header class="topbar"><div><h1>All Workspaces</h1><p class="meta">{{.Root}} ・ read-only ・ generated from workspace.md</p></div><a class="btn" href="/workspaces/">Refresh</a></header>
-    <section class="board" aria-label="workspace kanban">
+    <section class="board" aria-label="workspace kanban" data-live-board>
       {{range .Workspaces}}{{template "workspaceBoard" .}}{{else}}<p class="empty">No open workspaces.</p>{{end}}
     </section>
   </main>
 </div>
+` + serveLiveScript + `
 </body>
 </html>
 {{define "workspaceBoard"}}
@@ -457,18 +683,18 @@ const serveDetailTemplate = `<!doctype html>
   <title>kra serve - {{.Workspace.ID}}</title>
   <style>` + serveStyles + `</style>
 </head>
-<body>
+<body data-live-page="detail" data-workspace-id="{{.Workspace.ID}}">
 <div class="app">
   <aside class="sidebar">
     <div class="brand"><div class="brand-mark">kra</div><div><strong>Workspace Boards</strong><span class="small">open workspaces only</span></div></div>
     <a class="side-label-link" href="/workspaces/">Open workspaces</a>
-    <nav>{{range .Workspaces}}{{$progress := progress .Tasks}}<a class="workspace-link {{if eq .ID $.Workspace.ID}}active{{end}}" href="{{workspaceHref .ID}}"><span class="dot"></span><span class="workspace-link-text"><span class="workspace-link-id">{{.ID}}</span><span class="workspace-link-title">{{.Title}}</span><span class="progress-mini" aria-label="task progress"><span class="progress-mini-fill" style="width: {{$progress.Percent}}%"></span></span></span></a>{{end}}</nav>
+    <nav data-live-sidebar data-selected-workspace="{{.Workspace.ID}}">{{range .Workspaces}}{{$progress := progress .Tasks}}<a class="workspace-link {{if eq .ID $.Workspace.ID}}active{{end}}" href="{{workspaceHref .ID}}"><span class="dot"></span><span class="workspace-link-text"><span class="workspace-link-id">{{.ID}}</span><span class="workspace-link-title">{{.Title}}</span><span class="progress-mini" aria-label="task progress"><span class="progress-mini-fill" style="width: {{$progress.Percent}}%"></span></span></span></a>{{end}}</nav>
   </aside>
   <main>
-    <header class="topbar"><div><h1>{{.Workspace.ID}}: {{.Workspace.Title}}</h1><p class="meta">read-only workspace board with README and repositories</p></div><a class="btn" href="/workspaces/">All Workspaces</a></header>
+    <header class="topbar"><div><h1 data-live-detail-title>{{.Workspace.ID}}: {{.Workspace.Title}}</h1><p class="meta">read-only workspace board with README and repositories</p></div><a class="btn" href="/workspaces/">All Workspaces</a></header>
     <section class="detail">
-      <div class="detail-header"><div><strong class="workspace-id">{{.Workspace.ID}}</strong><p class="workspace-title">{{.Workspace.Title}}</p></div>{{$progress := progress .Workspace.Tasks}}<div class="progress" aria-label="task progress"><div class="progress-meta"><span>Progress</span><span>{{$progress.Done}} / {{$progress.Total}} done</span></div><div class="progress-track"><div class="progress-fill" style="width: {{$progress.Percent}}%"></div></div></div></div>
-      <section class="detail-board" aria-label="workspace board"><div class="status-grid">{{range $status := listStatuses}}{{template "detailStatusColumn" dict "Workspace" $.Workspace "Status" $status}}{{end}}</div></section>
+      <div class="detail-header" data-live-detail-header><div><strong class="workspace-id">{{.Workspace.ID}}</strong><p class="workspace-title">{{.Workspace.Title}}</p></div>{{$progress := progress .Workspace.Tasks}}<div class="progress" aria-label="task progress"><div class="progress-meta"><span>Progress</span><span>{{$progress.Done}} / {{$progress.Total}} done</span></div><div class="progress-track"><div class="progress-fill" style="width: {{$progress.Percent}}%"></div></div></div></div>
+      <section class="detail-board" aria-label="workspace board" data-live-detail-board><div class="status-grid">{{range $status := listStatuses}}{{template "detailStatusColumn" dict "Workspace" $.Workspace "Status" $status}}{{end}}</div></section>
       <div class="tabs"><a class="tab active" href="#readme">README</a><a class="tab" href="#repositories">Repositories</a></div>
       <div class="tab-panel default" id="readme">{{if .Readme.Exists}}<article class="readme">{{.Readme.HTML}}</article>{{else}}<div class="readme empty">README.md or workspace.md was not found.</div>{{end}}</div>
       <div class="tab-panel" id="repositories">
@@ -480,6 +706,7 @@ const serveDetailTemplate = `<!doctype html>
     </section>
   </main>
 </div>
+` + serveLiveScript + `
 <script>
 function updateTabs(){var hash=window.location.hash||'#readme';document.querySelectorAll('.tab').forEach(function(tab){tab.classList.toggle('active',tab.getAttribute('href')===hash);});}
 window.addEventListener('hashchange',updateTabs);updateTabs();
