@@ -32,7 +32,7 @@ func TestServeHandler_WorkspacesPageRendersActiveWorkspaceKanban(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body=%q)", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"All Workspaces", "PROJ-2314", "Serve dashboard spec", `<span class="workspace-link-title">Serve dashboard spec</span>`, "Todo", "Doing", "Done", "Build board", "Review layout"} {
+	for _, want := range []string{"All Workspaces", "PROJ-2314", "Serve dashboard spec", `<span class="workspace-link-title">Serve dashboard spec</span>`, `class="progress-mini"`, `1 / 3 done`, `style="width: 33%"`, "Todo", "Doing", "Done", "Build board", "Review layout"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body missing %q:\n%s", want, body)
 		}
@@ -74,6 +74,8 @@ func TestServeHandler_WorkspaceDetailRendersBoardReadmeReposAndPR(t *testing.T) 
 	for _, want := range []string{
 		"PROJ-2314: Serve dashboard spec",
 		"Build board",
+		`0 / 1 done`,
+		`style="width: 0%"`,
 		"<h1 id=\"serve-dashboard\">Serve dashboard</h1>",
 		"<strong>boards</strong>",
 		"language-mermaid",
@@ -131,6 +133,8 @@ func TestServeStyles_FixesBoardColumnHeightAndScrollsOverflow(t *testing.T) {
 		"grid-template-columns:minmax(120px,2fr) minmax(120px,2fr) minmax(220px,6fr)",
 		".repo-row a{overflow-wrap:anywhere}",
 		".workspace-link-title{color:var(--muted)",
+		".progress-track{height:10px",
+		".progress-mini{width:100%",
 	} {
 		if !strings.Contains(serveStyles, want) {
 			t.Fatalf("serveStyles missing %q:\n%s", want, serveStyles)

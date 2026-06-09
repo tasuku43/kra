@@ -37,8 +37,10 @@ Unknown routes return `404`.
 - Task cards are derived from the workspace task contract in `workspace.md`.
 - Workspace links navigate to `/workspaces/<workspace-id>/`.
 - Sidebar workspace links display the workspace id with the workspace title below it in muted text.
+- Sidebar workspace links include a compact task progress bar.
 - Archived workspaces are not shown in the MVP.
 - Board columns use a fixed visual height that fits roughly five task cards; overflow tasks remain available via vertical scrolling within the column.
+- Each swimlane header displays a task progress bar derived from `done / total` task counts.
 
 ## Workspace Detail
 
@@ -50,6 +52,7 @@ Unknown routes return `404`.
   - `README`
   - `Repositories`
 - Board columns use the same fixed-height, vertically scrollable layout as the root board.
+- The workspace board header displays the same task progress summary as the root board swimlane.
 
 The `README` tab displays workspace-local Markdown text:
 
