@@ -80,23 +80,31 @@
       const statuses = ["todo", "doing", "blocked", "done"];
       const progress = taskProgress(ws);
       return `
-        <article class="swimlane">
+        <article class="swimlane" data-workspace-id="${ws.id}">
           <header class="swimlane-head">
-            <div>
-              <a class="workspace-id" href="${workspaceHref(ws.id, true)}">${ws.id}</a>
-              <p class="workspace-title">${ws.title}</p>
-            </div>
-            <div class="progress" aria-label="task progress">
-              <div class="progress-meta">
-                <span>Progress</span>
-                <span>${progress.done} / ${progress.total} done</span>
+            <div class="swimlane-summary">
+              <button class="collapse-btn" type="button" aria-expanded="true" aria-controls="board-${ws.id}">
+                <span class="collapse-icon" aria-hidden="true"></span>
+              </button>
+              <div>
+                <a class="workspace-id" href="${workspaceHref(ws.id, true)}">${ws.id}</a>
+                <p class="workspace-title">${ws.title}</p>
               </div>
-              <div class="progress-track">
-                <div class="progress-fill" style="width: ${progress.percent}%"></div>
+            </div>
+            <div class="swimlane-meta">
+              <span class="collapsed-summary">${progress.done} / ${progress.total} done</span>
+              <div class="progress" aria-label="task progress">
+                <div class="progress-meta">
+                  <span>Progress</span>
+                  <span>${progress.done} / ${progress.total} done</span>
+                </div>
+                <div class="progress-track">
+                  <div class="progress-fill" style="width: ${progress.percent}%"></div>
+                </div>
               </div>
             </div>
           </header>
-          <div class="status-grid">
+          <div class="status-grid" id="board-${ws.id}">
             ${statuses.map((status) => `
               <section class="status-column">
                 <div class="column-title">
@@ -113,6 +121,14 @@
 
     renderNav();
     board.innerHTML = Object.values(KRA_WORKSPACES).map(renderSwimlane).join("");
+
+    board.querySelectorAll(".collapse-btn").forEach((button) => {
+      const swimlane = button.closest(".swimlane");
+      button.addEventListener("click", () => {
+        const collapsed = swimlane.classList.toggle("collapsed");
+        button.setAttribute("aria-expanded", String(!collapsed));
+      });
+    });
   </script>
 </body>
 </html>

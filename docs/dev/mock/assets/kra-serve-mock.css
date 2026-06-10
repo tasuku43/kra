@@ -262,6 +262,75 @@ h3 {
   min-width: 0;
 }
 
+.swimlane-summary {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.collapse-btn {
+  width: 32px;
+  height: 32px;
+  flex: 0 0 32px;
+  display: grid;
+  place-items: center;
+  border: 1px solid #c9d8ea;
+  border-radius: 8px;
+  background: #ffffff;
+  color: var(--accent);
+  cursor: pointer;
+}
+
+.collapse-btn:hover {
+  border-color: #8ab4ff;
+  background: #eff6ff;
+}
+
+.collapse-icon {
+  width: 8px;
+  height: 8px;
+  border-right: 2px solid currentColor;
+  border-bottom: 2px solid currentColor;
+  transform: rotate(45deg) translateY(-2px);
+  transition: transform 140ms ease;
+}
+
+.swimlane.collapsed .collapse-icon {
+  transform: rotate(-45deg) translateX(-1px);
+}
+
+.swimlane-meta {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.collapsed-summary {
+  display: none;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.swimlane.collapsed .status-grid {
+  display: none;
+}
+
+.swimlane.collapsed .swimlane-head {
+  border-bottom: 0;
+}
+
+.swimlane.collapsed .progress {
+  display: none;
+}
+
+.swimlane.collapsed .collapsed-summary {
+  display: inline-flex;
+}
+
 .workspace-id {
   display: block;
   color: var(--ink);
@@ -320,11 +389,52 @@ h3 {
 }
 
 .detail-board {
-  padding: 14px 18px 4px;
+  padding: 14px 18px 12px;
+  border-bottom: 1px solid rgba(216, 224, 234, 0.78);
+  background: rgba(248, 251, 255, 0.62);
+}
+
+.detail-board-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 12px;
+}
+
+.detail-board-title {
+  min-width: 0;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.detail-board-summary {
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 900;
+  text-transform: uppercase;
+  white-space: nowrap;
 }
 
 .detail-board .status-grid {
   padding: 0;
+}
+
+.detail-board.collapsed {
+  padding-bottom: 14px;
+}
+
+.detail-board.collapsed .detail-board-head {
+  margin-bottom: 0;
+}
+
+.detail-board.collapsed .collapse-icon {
+  transform: rotate(-45deg) translateX(-1px);
+}
+
+.detail-board.collapsed .status-grid {
+  display: none;
 }
 
 .status-column {
@@ -424,7 +534,8 @@ h3 {
 .tabs {
   display: flex;
   gap: 8px;
-  padding: 12px 18px 0;
+  padding: 14px 18px 0;
+  background: #ffffff;
 }
 
 .tab {
@@ -524,9 +635,18 @@ h3 {
 
   .topbar,
   .detail-header,
-  .swimlane-head {
+  .swimlane-head,
+  .detail-board-head {
     flex-direction: column;
     align-items: stretch;
+  }
+
+  .swimlane-meta {
+    align-items: stretch;
+  }
+
+  .swimlane.collapsed .swimlane-meta {
+    align-items: flex-start;
   }
 
   .repo-row {

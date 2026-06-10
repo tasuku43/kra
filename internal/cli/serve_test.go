@@ -63,6 +63,18 @@ func TestServeHandler_WorkspaceDetailRendersBoardReadmeReposAndPR(t *testing.T) 
 	if err := os.WriteFile(filepath.Join(wsPath, "README.md"), []byte(readme), 0o644); err != nil {
 		t.Fatalf("write README.md: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(wsPath, "docs", "dev", "mock"), 0o755); err != nil {
+		t.Fatalf("mkdir html dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(wsPath, "docs", "dev", "mock", "preview.html"), []byte("<!doctype html><main><h1>Mock Preview</h1></main>"), 0o644); err != nil {
+		t.Fatalf("write preview.html: %v", err)
+	}
+	if err := os.MkdirAll(filepath.Join(wsPath, "scripts"), 0o755); err != nil {
+		t.Fatalf("mkdir scripts dir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(wsPath, "scripts", "check.sh"), []byte("#!/usr/bin/env bash\nset -euo pipefail\nif true; then\n  exit 0\nfi\n"), 0o644); err != nil {
+		t.Fatalf("write check.sh: %v", err)
+	}
 
 	req := httptest.NewRequest(http.MethodGet, "/workspaces/PROJ-2314/", nil)
 	rec := httptest.NewRecorder()
@@ -77,16 +89,33 @@ func TestServeHandler_WorkspaceDetailRendersBoardReadmeReposAndPR(t *testing.T) 
 		`data-live-page="detail" data-workspace-id="PROJ-2314" data-theme="light"`,
 		`data-theme-toggle`,
 		`data-live-detail-header`,
-		`data-live-detail-board`,
+		`aria-label="workspace file tree"`,
+		`data-open-view="workspace.md"`,
+		`data-open-view="repos/"`,
+		`data-open-view="README.md"`,
+		`data-toggle-dir="docs"`,
+		`data-file-tab="workspace.md"`,
+		`data-file-panel="workspace.md" data-kind="workspace"`,
+		`data-live-workspace-board`,
+		`Board from workspace.md`,
 		`data-live-detail-title`,
 		"Build board",
 		`0 / 1 done`,
-		`style="width: 0%"`,
+		`Open files and workspace views as tabs.`,
+		`data-file-panel="README.md" data-kind="markdown"`,
+		`class="rendered-markdown"`,
 		"<h1 id=\"serve-dashboard\">Serve dashboard</h1>",
 		"<strong>boards</strong>",
 		"language-mermaid",
 		"mermaid.initialize",
-		"Repositories",
+		`data-file-panel="docs/dev/mock/preview.html" data-kind="html"`,
+		`class="html-render"`,
+		"Mock Preview",
+		`data-file-panel="scripts/check.sh" data-kind="source"`,
+		`language-shell`,
+		`<span class="code-keyword">if</span> true; <span class="code-keyword">then</span>`,
+		`data-file-panel="repos/" data-kind="repos"`,
+		"repository context opened from repos/",
 		"kra",
 		"feature/PROJ-2314/serve-dashboard",
 		`<a href="https://github.com/tasuku43/kra/pull/128" target="_blank" rel="noreferrer">Serve dashboard spec</a>`,
@@ -203,6 +232,7 @@ func TestServeHandler_RedirectsAndNotFound(t *testing.T) {
 }
 
 func TestServeStyles_FixesBoardColumnHeightAndScrollsOverflow(t *testing.T) {
+	styles := serveStyles + serveSmartViewStyles
 	for _, want := range []string{
 		"--board-column-height:360px",
 		".status-column{height:var(--board-column-height)",
@@ -221,13 +251,19 @@ func TestServeStyles_FixesBoardColumnHeightAndScrollsOverflow(t *testing.T) {
 		".theme-toggle{min-height:36px",
 		"body[data-theme=dark] .theme-toggle-knob{transform:translateX(14px)}",
 		"body:has(.tab-panel:target) .tab-panel.default:not(:target){display:none}",
+		"body[data-live-page=detail] .app{grid-template-columns:300px minmax(0,1fr)}",
+		".file-tree{min-width:0",
+		".file-tabs{display:flex",
+		".workspace-board-view,.repo-overview{padding:18px}",
+		".html-render{width:100%",
+		".code-keyword{color:#93c5fd",
 	} {
-		if !strings.Contains(serveStyles, want) {
-			t.Fatalf("serveStyles missing %q:\n%s", want, serveStyles)
+		if !strings.Contains(styles, want) {
+			t.Fatalf("serve styles missing %q:\n%s", want, styles)
 		}
 	}
-	if strings.Contains(serveStyles, "body:has(.tab-panel:target) .tab-panel.default{display:none}") {
-		t.Fatalf("README target panel should not be hidden by the default-panel rule:\n%s", serveStyles)
+	if strings.Contains(styles, "body:has(.tab-panel:target) .tab-panel.default{display:none}") {
+		t.Fatalf("README target panel should not be hidden by the default-panel rule:\n%s", styles)
 	}
 }
 

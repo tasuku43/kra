@@ -71,9 +71,22 @@ function renderTaskCards(ws, status) {
 
 function renderWorkspaceBoard(ws) {
   const statuses = ["todo", "doing", "blocked", "done"];
+  const progress = taskProgress(ws);
   return `
     <section class="detail-board" aria-label="workspace board">
-      <div class="status-grid">
+      <header class="detail-board-head">
+        <div class="detail-board-title">
+          <button class="collapse-btn" type="button" aria-expanded="true" aria-controls="detail-board-grid">
+            <span class="collapse-icon" aria-hidden="true"></span>
+          </button>
+          <div>
+            <h2>Board</h2>
+            <p class="meta">current workspace task flow</p>
+          </div>
+        </div>
+        <span class="detail-board-summary">${progress.done} / ${progress.total} done</span>
+      </header>
+      <div class="status-grid" id="detail-board-grid">
         ${statuses.map((status) => `
           <section class="status-column">
             <div class="column-title">
@@ -125,6 +138,12 @@ function renderDetail(ws) {
   `;
   detail.querySelectorAll(".tab").forEach((tab) => {
     tab.addEventListener("click", () => activateTab(tab.getAttribute("href").slice(1)));
+  });
+  const boardToggle = detail.querySelector(".detail-board .collapse-btn");
+  const boardSection = detail.querySelector(".detail-board");
+  boardToggle.addEventListener("click", () => {
+    const collapsed = boardSection.classList.toggle("collapsed");
+    boardToggle.setAttribute("aria-expanded", String(!collapsed));
   });
   activateTab(window.location.hash === "#repositories" ? "repositories" : "readme");
 }

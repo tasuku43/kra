@@ -51,30 +51,36 @@ Unknown routes return `404`.
 `/workspaces/<workspace-id>/` renders:
 
 - page title in the form `<workspace-id>: <workspace title>`
-- the same single-workspace board component used by the root board
-- tabbed read-only sections:
-  - `README`
-  - `Repositories`
-- Board columns use the same fixed-height, vertically scrollable layout as the root board.
-- The workspace board header displays the same task progress summary as the root board swimlane.
-- The workspace board and sidebar progress update from the read-only JSON API without a full page reload.
+- a left sidebar file tree rooted at the workspace directory
+- a central read-only tab viewer for files and workspace-specific virtual views
 
-The `README` tab displays workspace-local Markdown text:
+The file tree:
 
-- prefer `<workspace>/README.md`
-- fall back to `<workspace>/workspace.md`
-- show an empty state when neither exists
-- render Markdown as read-only HTML with GitHub-flavored Markdown support for common authoring features such as tables, strikethrough, task lists, fenced code blocks, and heading anchors
-- escape raw HTML from README content by default
-- render fenced `mermaid` code blocks as Mermaid diagrams in the browser when the Mermaid CDN is reachable
-- use the full available detail panel width for the Markdown view
+- lists regular workspace files and directories.
+- supports collapsible directories.
+- treats `workspace.md` as a special openable item.
+- treats `repos/` as a special openable item and does not list repository children under it.
 
-The `Repositories` tab displays one row per managed worktree/repo binding:
+The tab viewer:
+
+- opens selected tree items as tabs.
+- allows multiple open tabs.
+- renders `workspace.md` as the same board component used by the root board.
+- renders `repos/` as a repository overview.
+- renders Markdown files as read-only HTML with GitHub-flavored Markdown support for common authoring features such as tables, strikethrough, task lists, fenced code blocks, and heading anchors.
+- escapes raw HTML from Markdown content by default.
+- renders fenced `mermaid` code blocks as Mermaid diagrams in the browser when the Mermaid CDN is reachable.
+- renders HTML files in a sandboxed preview frame and exposes source below the preview.
+- renders source files with syntax highlighting based on file extension, including Go, shell (`.sh`, `.bash`, `.zsh`), and JavaScript.
+- keeps the UI read-only.
+
+The `workspace.md` board uses the same fixed-height, vertically scrollable columns as the root board and updates from the read-only JSON API without a full page reload.
+
+The `repos/` tab displays one card per managed worktree/repo binding:
 
 - repository alias/name
 - current branch
 - pull request link when it can be inferred from workspace source metadata; the link text is the stored workspace title, which is the PR title for GitHub PR imports, falling back to `#<number>` when the title is empty
-- the repository, branch, and pull request columns use a `2:2:6` width ratio
 
 ## Pull Request Link Inference
 
