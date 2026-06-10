@@ -931,8 +931,6 @@ const serveLiveScript = `<script>
   }
   window.refreshServeData=refreshServeData;
   initTheme();
-  setInterval(refreshServeData,3000);
-  document.addEventListener('visibilitychange',function(){if(!document.hidden){refreshServeData();}});
 })();
 </script>`
 
