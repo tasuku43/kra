@@ -23,6 +23,7 @@ Serve a local read-only web UI for understanding open workspaces at a glance.
 - `/workspaces/<workspace-id>` redirects to the trailing-slash route.
 - `/api/workspaces` returns read-only JSON for open workspace boards.
 - `/api/workspaces/<workspace-id>` returns read-only JSON for one open workspace board.
+- `/api/workspaces/<workspace-id>/repos` returns read-only HTML for the workspace repository overview, including lazily inferred pull request links.
 
 Unknown routes return `404`.
 
@@ -45,6 +46,7 @@ Unknown routes return `404`.
 - Board columns use a fixed visual height that fits roughly five task cards; overflow tasks remain available via vertical scrolling within the column.
 - Each swimlane header displays a task progress bar derived from `done / total` task counts.
 - The browser polls the read-only JSON API and updates the sidebar, progress bars, and board cards without a full page reload.
+- Polling workspace board JSON does not perform remote pull request lookups.
 
 ## Workspace Detail
 
@@ -83,10 +85,11 @@ The `repos/` tab displays one card per managed worktree/repo binding:
 - current branch
 - matching pull requests with status labels (`open`, `draft`, `merged`, `closed`, or `unknown`)
 - the pull request for the repo's current branch first, followed by other pull requests whose title contains the workspace id
+- Pull request lookup is lazy: the initial workspace detail page may render a loading state in the `repos/` tab, then the browser fetches `/api/workspaces/<workspace-id>/repos` when that tab is opened and replaces the loading state with links.
 
 ## Pull Request Link Inference
 
-- For GitHub repos, `kra serve` uses the local `gh` CLI on a best-effort read-only basis to list pull requests.
+- For GitHub repos, `kra serve` uses the local `gh` CLI on a best-effort read-only basis to list pull requests only when the repository overview is requested.
 - For each managed GitHub repo, collect:
   - pull requests whose head branch matches the current workspace repo branch
   - pull requests whose title contains the workspace id

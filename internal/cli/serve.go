@@ -49,6 +49,7 @@ type serveRepo struct {
 	RepoKey      string
 	Branch       string
 	PullRequests []servePullRequest
+	PRsLoaded    bool
 	Missing      bool
 }
 
@@ -202,6 +203,9 @@ func serveHTTP(root string, w http.ResponseWriter, r *http.Request) {
 	case r.URL.Path == "/api/workspaces" || r.URL.Path == "/api/workspaces/":
 		renderServeWorkspacesAPI(w, root)
 		return
+	case strings.HasPrefix(r.URL.Path, "/api/workspaces/") && strings.HasSuffix(r.URL.Path, "/repos"):
+		renderServeWorkspaceReposAPI(w, root, strings.TrimPrefix(r.URL.Path, "/api/workspaces/"))
+		return
 	case strings.HasPrefix(r.URL.Path, "/api/workspaces/"):
 		renderServeWorkspaceAPI(w, root, strings.TrimPrefix(r.URL.Path, "/api/workspaces/"))
 		return
@@ -264,6 +268,34 @@ func renderServeWorkspaceAPI(w http.ResponseWriter, root string, workspacePath s
 	for _, ws := range workspaces {
 		if ws.ID == id {
 			writeServeJSON(w, serveAPIResponse{Workspaces: serveAPIWorkspaces([]serveWorkspace{ws})})
+			return
+		}
+	}
+	http.Error(w, "workspace not found", http.StatusNotFound)
+}
+
+func renderServeWorkspaceReposAPI(w http.ResponseWriter, root string, workspacePath string) {
+	workspacePath = strings.TrimSuffix(workspacePath, "/repos")
+	workspacePath = strings.TrimSuffix(workspacePath, "/")
+	if strings.TrimSpace(workspacePath) == "" || strings.Contains(workspacePath, "/") {
+		http.NotFound(w, nil)
+		return
+	}
+	id, err := url.PathUnescape(workspacePath)
+	if err != nil || validateWorkspaceID(id) != nil {
+		http.NotFound(w, nil)
+		return
+	}
+	workspaces, err := loadServeWorkspaces(root)
+	if err != nil {
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+	for _, ws := range workspaces {
+		if ws.ID == id {
+			ws = hydrateServeRepoPullRequests(ws)
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, _ = w.Write([]byte(serveReposView(ws).HTML))
 			return
 		}
 	}
@@ -373,14 +405,36 @@ func loadServeWorkspaces(root string) ([]serveWorkspace, error) {
 
 func serveReposForWorkspace(row wsListRow) []serveRepo {
 	repos := make([]serveRepo, 0, len(row.Repos))
-	prRepoKey, prLabel, prURL, hasPR := parseGitHubPullRequestSource(row.SourceURL)
-	prTitle := firstNonEmpty(strings.TrimSpace(row.Title), prLabel)
 	for _, repo := range row.Repos {
 		name := firstNonEmpty(strings.TrimSpace(repo.Alias), strings.TrimSpace(repo.RepoKey), strings.TrimSpace(repo.RepoUID))
 		branch := firstNonEmpty(strings.TrimSpace(repo.Branch), "unknown")
 		repoKey := normalizeGitHubRepoKey(firstNonEmpty(strings.TrimSpace(repo.RepoKey), strings.TrimSpace(repo.RepoUID)))
-		pullRequests, _ := lookupServeGitHubPullRequests(context.Background(), repoKey, row.ID, branch)
-		if hasPR && sourcePRMatchesRepo(prRepoKey, repo.RepoKey, repo.RepoUID, len(row.Repos)) {
+		repos = append(repos, serveRepo{
+			Name:    name,
+			RepoKey: repoKey,
+			Branch:  branch,
+			Missing: repo.MissingAt.Valid,
+		})
+	}
+	return repos
+}
+
+func serveReposForWorkspaceWithPullRequests(row wsListRow) []serveRepo {
+	return hydrateServeRepoPullRequests(serveWorkspace{
+		ID:        row.ID,
+		Title:     firstNonEmpty(strings.TrimSpace(row.Title), row.ID),
+		SourceURL: strings.TrimSpace(row.SourceURL),
+		Repos:     serveReposForWorkspace(row),
+	}).Repos
+}
+
+func hydrateServeRepoPullRequests(workspace serveWorkspace) serveWorkspace {
+	prRepoKey, prLabel, prURL, hasPR := parseGitHubPullRequestSource(workspace.SourceURL)
+	prTitle := firstNonEmpty(strings.TrimSpace(workspace.Title), prLabel)
+	for i := range workspace.Repos {
+		repo := &workspace.Repos[i]
+		pullRequests, _ := lookupServeGitHubPullRequests(context.Background(), repo.RepoKey, workspace.ID, repo.Branch)
+		if hasPR && sourcePRMatchesRepo(prRepoKey, repo.RepoKey, "", len(workspace.Repos)) {
 			pullRequests = mergeServePullRequests(pullRequests, servePullRequest{
 				Number:      parseGitHubPullRequestNumber(prURL),
 				Title:       prTitle,
@@ -390,15 +444,10 @@ func serveReposForWorkspace(row wsListRow) []serveRepo {
 			})
 		}
 		sortServePullRequests(pullRequests)
-		repos = append(repos, serveRepo{
-			Name:         name,
-			RepoKey:      repoKey,
-			Branch:       branch,
-			PullRequests: pullRequests,
-			Missing:      repo.MissingAt.Valid,
-		})
+		repo.PullRequests = pullRequests
+		repo.PRsLoaded = true
 	}
-	return repos
+	return workspace
 }
 
 func parseGitHubPullRequestSource(sourceURL string) (repoKey string, label string, link string, ok bool) {
@@ -824,7 +873,7 @@ func serveWorkspaceBoardView(workspace serveWorkspace) serveFileView {
 
 func serveReposView(workspace serveWorkspace) serveFileView {
 	var b strings.Builder
-	b.WriteString(`<section class="repo-overview"><div class="view-intro"><div><h2>Repositories</h2><p class="meta">repository context opened from repos/</p></div><span class="badge">`)
+	b.WriteString(`<section class="repo-overview" data-repo-overview><div class="view-intro"><div><h2>Repositories</h2><p class="meta">repository context opened from repos/</p></div><span class="badge">`)
 	b.WriteString(template.HTMLEscapeString(fmt.Sprintf("%d linked", len(workspace.Repos))))
 	b.WriteString(`</span></div><div class="repo-grid">`)
 	if len(workspace.Repos) == 0 {
@@ -839,7 +888,9 @@ func serveReposView(workspace serveWorkspace) serveFileView {
 		b.WriteString(`</strong><span class="repo-branch">branch `)
 		b.WriteString(template.HTMLEscapeString(repo.Branch))
 		b.WriteString(`</span><div class="repo-pr-list">`)
-		if len(repo.PullRequests) == 0 {
+		if !repo.PRsLoaded {
+			b.WriteString(`<span class="empty" data-repo-pr-loading>Loading pull requests...</span>`)
+		} else if len(repo.PullRequests) == 0 {
 			b.WriteString(`<span class="empty">No matching pull requests.</span>`)
 		} else {
 			for _, pr := range repo.PullRequests {
@@ -1172,7 +1223,25 @@ const serveLiveScript = `<script>
       header.replaceChildren(titleWrap,meta,note);
     }
     var board=document.querySelector('[data-live-workspace-board]');
-    if(board){board.replaceChildren(statusGrid(workspace,''));}
+    if(board){
+      board.replaceChildren.apply(board,statuses.map(function(status){return statusColumn(workspace,status,'');}));
+    }
+  }
+  async function loadReposView(panel){
+    if(!panel||panel.getAttribute('data-repos-loaded')==='true'){return;}
+    var workspaceID=document.body.getAttribute('data-workspace-id')||'';
+    if(!workspaceID){return;}
+    var body=panel.querySelector('.viewer-body');
+    if(!body){return;}
+    body.setAttribute('aria-busy','true');
+    try{
+      var res=await fetch('/api/workspaces/'+encodeURIComponent(workspaceID)+'/repos?ts='+Date.now(),{cache:'no-store'});
+      if(!res.ok){return;}
+      body.innerHTML=await res.text();
+      panel.setAttribute('data-repos-loaded','true');
+    }catch(e){}finally{
+      body.removeAttribute('aria-busy');
+    }
   }
   async function refreshServeData(){
     try{
@@ -1190,7 +1259,9 @@ const serveLiveScript = `<script>
     }catch(e){}
   }
   window.refreshServeData=refreshServeData;
+  window.loadReposView=loadReposView;
   initTheme();
+  window.setInterval(refreshServeData,5000);
 })();
 </script>`
 
@@ -1260,7 +1331,7 @@ const serveDetailTemplate = `<!doctype html>
           {{range .FileViews}}<button type="button" class="file-tab {{if eq .Path "workspace.md"}}is-open active{{end}}" data-file-tab="{{.Path}}" data-view-id="{{.ID}}" {{if ne .Path "workspace.md"}}hidden{{end}}><span>{{.Path}}</span><span class="tab-close" aria-hidden="true" data-close-view="{{.Path}}"></span></button>{{end}}
         </div>
         <div class="file-panels">
-          {{range .FileViews}}<section class="file-panel {{if eq .Path "workspace.md"}}active{{end}}" id="{{.ID}}" data-file-panel="{{.Path}}" data-kind="{{.Kind}}" {{if ne .Path "workspace.md"}}hidden{{end}}>
+          {{range .FileViews}}<section class="file-panel {{if eq .Path "workspace.md"}}active{{end}}" id="{{.ID}}" data-file-panel="{{.Path}}" data-kind="{{.Kind}}" {{if eq .Kind "repos"}}data-repos-loaded="false"{{end}} {{if ne .Path "workspace.md"}}hidden{{end}}>
             <header class="viewer-head"><div><h2>{{.Name}}</h2><p class="meta">{{.Meta}}</p></div><span class="badge">{{.Badge}}</span></header>
             <div class="viewer-body">
               {{if eq .Kind "workspace"}}
@@ -1292,6 +1363,7 @@ function activateFileView(path){
   document.querySelectorAll('[data-file-tab]').forEach(function(item){item.classList.toggle('active',item===tab);});
   document.querySelectorAll('[data-file-panel]').forEach(function(item){item.hidden=item!==panel;item.classList.toggle('active',item===panel);});
   document.querySelectorAll('[data-open-view]').forEach(function(item){item.classList.toggle('active',item.getAttribute('data-open-view')===path);});
+  if(path==='repos/'&&window.loadReposView){window.loadReposView(panel);}
   resizeHTMLPreviews(panel);
 }
 function resizeHTMLPreview(frame){

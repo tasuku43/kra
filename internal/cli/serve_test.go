@@ -35,7 +35,7 @@ func TestServeHandler_WorkspacesPageRendersActiveWorkspaceKanban(t *testing.T) {
 		t.Fatalf("status = %d, want %d (body=%q)", rec.Code, http.StatusOK, rec.Body.String())
 	}
 	body := rec.Body.String()
-	for _, want := range []string{"All Workspaces", "PROJ-2314", "Serve dashboard spec", `data-live-page="overview" data-theme="light"`, `data-theme-toggle`, `data-theme-label`, `kraServeTheme`, `data-live-sidebar`, `data-live-board`, `refreshServeData`, `<span class="workspace-link-title">Serve dashboard spec</span>`, `class="progress-mini"`, `1 / 3 done`, `style="width: 33%"`, "Todo", "Doing", "Done", "Build board", "Review layout"} {
+	for _, want := range []string{"All Workspaces", "PROJ-2314", "Serve dashboard spec", `data-live-page="overview" data-theme="light"`, `data-theme-toggle`, `data-theme-label`, `kraServeTheme`, `data-live-sidebar`, `data-live-board`, `refreshServeData`, `setInterval(refreshServeData,5000)`, `<span class="workspace-link-title">Serve dashboard spec</span>`, `class="progress-mini"`, `1 / 3 done`, `style="width: 33%"`, "Todo", "Doing", "Done", "Build board", "Review layout"} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body missing %q:\n%s", want, body)
 		}
@@ -46,7 +46,9 @@ func TestServeHandler_WorkspacesPageRendersActiveWorkspaceKanban(t *testing.T) {
 }
 
 func TestServeHandler_WorkspaceDetailRendersBoardReadmeReposAndPR(t *testing.T) {
+	ghCalls := 0
 	restoreGH := stubServeGitHub(t, func(_ context.Context, _ ...string) (string, error) {
+		ghCalls++
 		return "[]", nil
 	})
 	defer restoreGH()
@@ -124,28 +126,109 @@ func TestServeHandler_WorkspaceDetailRendersBoardReadmeReposAndPR(t *testing.T) 
 		`language-shell`,
 		`<span class="code-keyword">if</span> true; <span class="code-keyword">then</span>`,
 		`data-file-panel="repos/" data-kind="repos"`,
+		`data-repos-loaded="false"`,
 		"repository context opened from repos/",
 		"kra",
 		"feature/PROJ-2314/serve-dashboard",
-		`href="https://github.com/tasuku43/kra/pull/128"`,
-		"Serve dashboard spec",
-		`pr-state pr-state-unknown`,
+		"Loading pull requests...",
+		`window.loadReposView=loadReposView`,
+		`board.replaceChildren.apply(board,statuses.map(function(status){return statusColumn(workspace,status,'');}))`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body missing %q:\n%s", want, body)
 		}
+	}
+	if ghCalls != 0 {
+		t.Fatalf("workspace detail initial render called gh %d times, want 0", ghCalls)
 	}
 	if strings.Contains(body, "<script>alert('nope')</script>") {
 		t.Fatalf("README raw HTML should be escaped:\n%s", body)
 	}
 }
 
+func TestServeHandler_WorkspaceReposAPILazilyLoadsPullRequests(t *testing.T) {
+	ghCalls := 0
+	restoreGH := stubServeGitHub(t, func(_ context.Context, args ...string) (string, error) {
+		ghCalls++
+		joined := strings.Join(args, " ")
+		switch {
+		case strings.Contains(joined, "--head feature/current"):
+			return `[{"number":12,"title":"Branch only work","url":"https://github.com/tasuku43/kra/pull/12","state":"OPEN","isDraft":false,"headRefName":"feature/current"}]`, nil
+		case strings.Contains(joined, "--search"):
+			return `[{"number":9,"title":"PROJ-2314 follow-up","url":"https://github.com/tasuku43/kra/pull/9","state":"MERGED","isDraft":false,"headRefName":"feature/old"}]`, nil
+		default:
+			return "[]", nil
+		}
+	})
+	defer restoreGH()
+
+	env := testutil.NewEnv(t)
+	wsPath := seedWorkspaceMeta(t, env.Root, "active", "PROJ-2314")
+	updateServeTestMeta(t, wsPath, func(meta *workspaceMetaFile) {
+		meta.Workspace.Title = "Serve dashboard spec"
+		meta.ReposRestore = []workspaceMetaRepoRestore{{
+			RepoUID:   "github.com/tasuku43/kra",
+			RepoKey:   "tasuku43/kra",
+			RemoteURL: "git@github.com:tasuku43/kra.git",
+			Alias:     "kra",
+			Branch:    "feature/current",
+			BaseRef:   "origin/main",
+		}}
+	})
+
+	req := httptest.NewRequest(http.MethodGet, "/api/workspaces/PROJ-2314/repos", nil)
+	rec := httptest.NewRecorder()
+	newServeHandler(env.Root).ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("status = %d, want %d (body=%q)", rec.Code, http.StatusOK, rec.Body.String())
+	}
+	if got := rec.Header().Get("Content-Type"); !strings.HasPrefix(got, "text/html") {
+		t.Fatalf("Content-Type = %q, want text/html", got)
+	}
+	body := rec.Body.String()
+	for _, want := range []string{
+		`href="https://github.com/tasuku43/kra/pull/12"`,
+		"Branch only work",
+		"PROJ-2314 follow-up",
+		"current branch",
+		"title match",
+		`pr-state pr-state-open`,
+		`pr-state pr-state-merged`,
+	} {
+		if !strings.Contains(body, want) {
+			t.Fatalf("body missing %q:\n%s", want, body)
+		}
+	}
+	if strings.Contains(body, "Loading pull requests...") {
+		t.Fatalf("repos API should return loaded PR state:\n%s", body)
+	}
+	if ghCalls != 2 {
+		t.Fatalf("gh calls = %d, want 2", ghCalls)
+	}
+}
+
 func TestServeHandler_WorkspacesAPIRendersLiveBoardJSON(t *testing.T) {
+	ghCalls := 0
+	restoreGH := stubServeGitHub(t, func(_ context.Context, _ ...string) (string, error) {
+		ghCalls++
+		return "[]", nil
+	})
+	defer restoreGH()
+
 	env := testutil.NewEnv(t)
 	activePath := seedWorkspaceMeta(t, env.Root, "active", "PROJ-2314")
 	archivedPath := seedWorkspaceMeta(t, env.Root, "archived", "OLD-1")
 	updateServeTestMeta(t, activePath, func(meta *workspaceMetaFile) {
 		meta.Workspace.Title = "Serve dashboard spec"
+		meta.ReposRestore = []workspaceMetaRepoRestore{{
+			RepoUID:   "github.com/tasuku43/kra",
+			RepoKey:   "tasuku43/kra",
+			RemoteURL: "git@github.com:tasuku43/kra.git",
+			Alias:     "kra",
+			Branch:    "feature/PROJ-2314/serve-dashboard",
+			BaseRef:   "origin/main",
+		}}
 	})
 	updateServeTestMeta(t, archivedPath, func(meta *workspaceMetaFile) {
 		meta.Workspace.Title = "Archived workspace"
@@ -182,6 +265,9 @@ func TestServeHandler_WorkspacesAPIRendersLiveBoardJSON(t *testing.T) {
 	}
 	if len(ws.Tasks["todo"]) != 1 || ws.Tasks["todo"][0].ID != "TASK-003" {
 		t.Fatalf("todo tasks = %#v", ws.Tasks["todo"])
+	}
+	if ghCalls != 0 {
+		t.Fatalf("workspaces API called gh %d times, want 0", ghCalls)
 	}
 }
 
@@ -259,7 +345,7 @@ func TestServeReposForWorkspaceListsBranchPRBeforeTitleMatches(t *testing.T) {
 	})
 	defer restoreGH()
 
-	repos := serveReposForWorkspace(wsListRow{
+	repos := serveReposForWorkspaceWithPullRequests(wsListRow{
 		ID: "PROJ-2314",
 		Repos: []statestore.WorkspaceRepo{{
 			RepoKey: "tasuku43/kra",
