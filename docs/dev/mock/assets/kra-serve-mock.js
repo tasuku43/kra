@@ -27,7 +27,16 @@ const KRA_WORKSPACES = {
       ]
     },
     repos: [
-      { name: "kra", branch: "feature/PROJ-2314/serve-dashboard", pr: "#128", url: "https://github.com/tasuku43/kra/pull/128" },
+      {
+        name: "kra",
+        branch: "feature/PROJ-2314/serve-dashboard",
+        pr: "#128",
+        url: "https://github.com/tasuku43/kra/pull/128",
+        pullRequests: [
+          { title: "#128 Serve dashboard", url: "https://github.com/tasuku43/kra/pull/128", state: "open", meta: "current branch" },
+          { title: "#121 PROJ-2314 follow-up", url: "https://github.com/tasuku43/kra/pull/121", state: "merged", meta: "title match" }
+        ]
+      },
       { name: "docs-site", branch: "docs/serve-dashboard", pr: "none", url: "" }
     ]
   },

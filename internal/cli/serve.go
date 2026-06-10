@@ -11,10 +11,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tasuku43/kra/internal/app/wstask"
 	"github.com/yuin/goldmark"
@@ -23,6 +26,11 @@ import (
 )
 
 const defaultServeAddr = "127.0.0.1:8765"
+const serveGitHubCommandTimeout = 8 * time.Second
+
+type serveGitHubRunner func(ctx context.Context, args ...string) (string, error)
+
+var runServeGitHubCommand serveGitHubRunner = runServeGHCommand
 
 type serveOptions struct {
 	addr string
@@ -37,11 +45,22 @@ type serveWorkspace struct {
 }
 
 type serveRepo struct {
-	Name    string
-	Branch  string
-	PRLabel string
-	PRURL   string
-	Missing bool
+	Name         string
+	RepoKey      string
+	Branch       string
+	PullRequests []servePullRequest
+	Missing      bool
+}
+
+type servePullRequest struct {
+	Number      int
+	Title       string
+	URL         string
+	State       string
+	HeadRef     string
+	BranchMatch bool
+	TitleMatch  bool
+	SourceMatch bool
 }
 
 type serveReadme struct {
@@ -359,18 +378,24 @@ func serveReposForWorkspace(row wsListRow) []serveRepo {
 	for _, repo := range row.Repos {
 		name := firstNonEmpty(strings.TrimSpace(repo.Alias), strings.TrimSpace(repo.RepoKey), strings.TrimSpace(repo.RepoUID))
 		branch := firstNonEmpty(strings.TrimSpace(repo.Branch), "unknown")
-		prLabelForRepo := "none"
-		prURLForRepo := ""
+		repoKey := normalizeGitHubRepoKey(firstNonEmpty(strings.TrimSpace(repo.RepoKey), strings.TrimSpace(repo.RepoUID)))
+		pullRequests, _ := lookupServeGitHubPullRequests(context.Background(), repoKey, row.ID, branch)
 		if hasPR && sourcePRMatchesRepo(prRepoKey, repo.RepoKey, repo.RepoUID, len(row.Repos)) {
-			prLabelForRepo = prTitle
-			prURLForRepo = prURL
+			pullRequests = mergeServePullRequests(pullRequests, servePullRequest{
+				Number:      parseGitHubPullRequestNumber(prURL),
+				Title:       prTitle,
+				URL:         prURL,
+				State:       "unknown",
+				SourceMatch: true,
+			})
 		}
+		sortServePullRequests(pullRequests)
 		repos = append(repos, serveRepo{
-			Name:    name,
-			Branch:  branch,
-			PRLabel: prLabelForRepo,
-			PRURL:   prURLForRepo,
-			Missing: repo.MissingAt.Valid,
+			Name:         name,
+			RepoKey:      repoKey,
+			Branch:       branch,
+			PullRequests: pullRequests,
+			Missing:      repo.MissingAt.Valid,
 		})
 	}
 	return repos
@@ -396,23 +421,251 @@ func parseGitHubPullRequestSource(sourceURL string) (repoKey string, label strin
 	return repoKey, "#" + parts[3], trimmed, true
 }
 
+func parseGitHubPullRequestNumber(link string) int {
+	_, label, _, ok := parseGitHubPullRequestSource(link)
+	if !ok {
+		return 0
+	}
+	label = strings.TrimPrefix(strings.TrimSpace(label), "#")
+	n, err := strconv.Atoi(label)
+	if err != nil {
+		return 0
+	}
+	return n
+}
+
 func sourcePRMatchesRepo(prRepoKey string, repoKey string, repoUID string, repoCount int) bool {
-	if strings.TrimSpace(prRepoKey) == "" {
+	normalizedPRRepoKey := normalizeGitHubRepoKey(prRepoKey)
+	if normalizedPRRepoKey == "" {
 		return false
 	}
 	if repoCount == 1 {
 		return true
 	}
 	candidates := []string{
-		strings.TrimSpace(repoKey),
-		strings.TrimPrefix(strings.TrimSpace(repoUID), "github.com/"),
+		repoKey,
+		repoUID,
 	}
 	for _, candidate := range candidates {
-		if strings.EqualFold(candidate, prRepoKey) {
+		if normalizeGitHubRepoKey(candidate) == normalizedPRRepoKey {
 			return true
 		}
 	}
 	return false
+}
+
+func normalizeGitHubRepoKey(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if trimmed == "" {
+		return ""
+	}
+	trimmed = strings.TrimSuffix(trimmed, ".git")
+	if strings.HasPrefix(trimmed, "git@github.com:") {
+		return normalizeOwnerRepoKey(strings.TrimPrefix(trimmed, "git@github.com:"))
+	}
+	if u, err := url.Parse(trimmed); err == nil && strings.EqualFold(u.Host, "github.com") {
+		return normalizeOwnerRepoKey(strings.Trim(u.Path, "/"))
+	}
+	if strings.HasPrefix(strings.ToLower(trimmed), "github.com/") {
+		return normalizeOwnerRepoKey(trimmed[len("github.com/"):])
+	}
+	return normalizeOwnerRepoKey(trimmed)
+}
+
+func normalizeOwnerRepoKey(value string) string {
+	parts := strings.Split(strings.Trim(strings.TrimSpace(value), "/"), "/")
+	if len(parts) < 2 {
+		return ""
+	}
+	owner := strings.TrimSpace(parts[0])
+	repo := strings.TrimSuffix(strings.TrimSpace(parts[1]), ".git")
+	if owner == "" || repo == "" {
+		return ""
+	}
+	return strings.ToLower(owner + "/" + repo)
+}
+
+type serveGitHubPullRequestJSON struct {
+	Number      int    `json:"number"`
+	Title       string `json:"title"`
+	URL         string `json:"url"`
+	State       string `json:"state"`
+	IsDraft     bool   `json:"isDraft"`
+	HeadRefName string `json:"headRefName"`
+}
+
+func lookupServeGitHubPullRequests(ctx context.Context, repoKey string, workspaceID string, branch string) ([]servePullRequest, error) {
+	repoKey = normalizeGitHubRepoKey(repoKey)
+	if repoKey == "" || runServeGitHubCommand == nil {
+		return nil, nil
+	}
+	var out []servePullRequest
+	if shouldLookupServeBranchPR(branch) {
+		items, err := runServeGitHubPRList(ctx, repoKey, "--head", strings.TrimSpace(branch), "--limit", "20")
+		if err == nil {
+			for _, item := range items {
+				out = mergeServePullRequests(out, servePullRequestFromGitHub(item, true, titleMatchesWorkspaceID(item.Title, workspaceID)))
+			}
+		}
+	}
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID != "" {
+		items, err := runServeGitHubPRList(ctx, repoKey, "--search", fmt.Sprintf("%q in:title", workspaceID), "--limit", "50")
+		if err == nil {
+			for _, item := range items {
+				out = mergeServePullRequests(out, servePullRequestFromGitHub(item, strings.EqualFold(strings.TrimSpace(item.HeadRefName), strings.TrimSpace(branch)), true))
+			}
+		}
+	}
+	sortServePullRequests(out)
+	return out, nil
+}
+
+func shouldLookupServeBranchPR(branch string) bool {
+	branch = strings.TrimSpace(branch)
+	if branch == "" {
+		return false
+	}
+	switch strings.ToLower(branch) {
+	case "unknown", "head", "(detached)":
+		return false
+	default:
+		return true
+	}
+}
+
+func runServeGitHubPRList(ctx context.Context, repoKey string, filters ...string) ([]serveGitHubPullRequestJSON, error) {
+	args := []string{"pr", "list", "--repo", repoKey, "--state", "all"}
+	args = append(args, filters...)
+	args = append(args, "--json", "number,title,url,state,isDraft,headRefName")
+	out, err := runServeGitHubCommand(ctx, args...)
+	if err != nil {
+		return nil, err
+	}
+	var items []serveGitHubPullRequestJSON
+	if err := json.Unmarshal([]byte(out), &items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+func runServeGHCommand(ctx context.Context, args ...string) (string, error) {
+	if _, err := exec.LookPath("gh"); err != nil {
+		return "", err
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	runCtx, cancel := context.WithTimeout(ctx, serveGitHubCommandTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(runCtx, "gh", args...)
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return strings.TrimSpace(string(out)), err
+	}
+	return strings.TrimSpace(string(out)), nil
+}
+
+func servePullRequestFromGitHub(item serveGitHubPullRequestJSON, branchMatch bool, titleMatch bool) servePullRequest {
+	return servePullRequest{
+		Number:      item.Number,
+		Title:       strings.TrimSpace(item.Title),
+		URL:         strings.TrimSpace(item.URL),
+		State:       servePullRequestState(item.State, item.IsDraft),
+		HeadRef:     strings.TrimSpace(item.HeadRefName),
+		BranchMatch: branchMatch,
+		TitleMatch:  titleMatch,
+	}
+}
+
+func servePullRequestState(state string, isDraft bool) string {
+	normalized := strings.ToLower(strings.TrimSpace(state))
+	if isDraft && normalized == "open" {
+		return "draft"
+	}
+	switch normalized {
+	case "open", "merged", "closed", "draft":
+		return normalized
+	default:
+		return "unknown"
+	}
+}
+
+func titleMatchesWorkspaceID(title string, workspaceID string) bool {
+	title = strings.ToLower(strings.TrimSpace(title))
+	workspaceID = strings.ToLower(strings.TrimSpace(workspaceID))
+	return title != "" && workspaceID != "" && strings.Contains(title, workspaceID)
+}
+
+func mergeServePullRequests(items []servePullRequest, next servePullRequest) []servePullRequest {
+	next.URL = strings.TrimSpace(next.URL)
+	next.Title = strings.TrimSpace(next.Title)
+	next.State = servePullRequestState(next.State, false)
+	if next.Title == "" && next.Number > 0 {
+		next.Title = fmt.Sprintf("#%d", next.Number)
+	}
+	if next.URL == "" && next.Number <= 0 {
+		return items
+	}
+	for i := range items {
+		if servePullRequestSame(items[i], next) {
+			items[i].BranchMatch = items[i].BranchMatch || next.BranchMatch
+			items[i].TitleMatch = items[i].TitleMatch || next.TitleMatch
+			items[i].SourceMatch = items[i].SourceMatch || next.SourceMatch
+			if items[i].State == "unknown" && next.State != "unknown" {
+				items[i].State = next.State
+			}
+			if strings.TrimSpace(items[i].HeadRef) == "" {
+				items[i].HeadRef = next.HeadRef
+			}
+			if strings.TrimSpace(items[i].Title) == "" || strings.HasPrefix(items[i].Title, "#") {
+				items[i].Title = next.Title
+			}
+			return items
+		}
+	}
+	return append(items, next)
+}
+
+func servePullRequestSame(a servePullRequest, b servePullRequest) bool {
+	if a.URL != "" && b.URL != "" {
+		return strings.EqualFold(a.URL, b.URL)
+	}
+	return a.Number > 0 && b.Number > 0 && a.Number == b.Number
+}
+
+func sortServePullRequests(items []servePullRequest) {
+	sort.SliceStable(items, func(i, j int) bool {
+		if items[i].BranchMatch != items[j].BranchMatch {
+			return items[i].BranchMatch
+		}
+		if items[i].SourceMatch != items[j].SourceMatch {
+			return items[i].SourceMatch
+		}
+		if items[i].TitleMatch != items[j].TitleMatch {
+			return items[i].TitleMatch
+		}
+		return items[i].Number > items[j].Number
+	})
+}
+
+func servePullRequestMeta(pr servePullRequest) string {
+	parts := make([]string, 0, 4)
+	if pr.Number > 0 {
+		parts = append(parts, fmt.Sprintf("#%d", pr.Number))
+	}
+	if strings.TrimSpace(pr.HeadRef) != "" {
+		parts = append(parts, pr.HeadRef)
+	}
+	switch {
+	case pr.BranchMatch:
+		parts = append(parts, "current branch")
+	case pr.SourceMatch:
+		parts = append(parts, "workspace source")
+	case pr.TitleMatch:
+		parts = append(parts, "title match")
+	}
+	return strings.Join(parts, " · ")
 }
 
 func loadServeReadme(root string, workspaceID string) serveReadme {
@@ -583,21 +836,28 @@ func serveReposView(workspace serveWorkspace) serveFileView {
 		if repo.Missing {
 			b.WriteString(` <span class="small">(missing)</span>`)
 		}
-		b.WriteString(`</strong><span>`)
+		b.WriteString(`</strong><span class="repo-branch">branch `)
 		b.WriteString(template.HTMLEscapeString(repo.Branch))
-		b.WriteString(`</span>`)
-		if repo.PRURL != "" {
-			b.WriteString(`<a href="`)
-			b.WriteString(template.HTMLEscapeString(repo.PRURL))
-			b.WriteString(`" target="_blank" rel="noreferrer">`)
-			b.WriteString(template.HTMLEscapeString(repo.PRLabel))
-			b.WriteString(`</a>`)
+		b.WriteString(`</span><div class="repo-pr-list">`)
+		if len(repo.PullRequests) == 0 {
+			b.WriteString(`<span class="empty">No matching pull requests.</span>`)
 		} else {
-			b.WriteString(`<span>`)
-			b.WriteString(template.HTMLEscapeString(repo.PRLabel))
-			b.WriteString(`</span>`)
+			for _, pr := range repo.PullRequests {
+				b.WriteString(`<a class="repo-pr" href="`)
+				b.WriteString(template.HTMLEscapeString(pr.URL))
+				b.WriteString(`" target="_blank" rel="noreferrer"><span class="repo-pr-main"><span class="repo-pr-title">`)
+				b.WriteString(template.HTMLEscapeString(firstNonEmpty(pr.Title, fmt.Sprintf("#%d", pr.Number))))
+				b.WriteString(`</span><span class="repo-pr-meta">`)
+				meta := servePullRequestMeta(pr)
+				b.WriteString(template.HTMLEscapeString(meta))
+				b.WriteString(`</span></span><span class="pr-state pr-state-`)
+				b.WriteString(template.HTMLEscapeString(pr.State))
+				b.WriteString(`">`)
+				b.WriteString(template.HTMLEscapeString(pr.State))
+				b.WriteString(`</span></a>`)
+			}
 		}
-		b.WriteString(`</article>`)
+		b.WriteString(`</div></article>`)
 	}
 	b.WriteString(`</div></section>`)
 	return serveFileView{
@@ -781,7 +1041,7 @@ const serveStyles = `
 `
 
 const serveSmartViewStyles = `
-body[data-live-page=detail] .app{grid-template-columns:300px minmax(0,1fr)}.back-link{min-height:32px;display:inline-flex;align-items:center;margin-bottom:12px;color:var(--muted);font-size:12px;font-weight:900}.back-link:before{content:"<";margin-right:6px}.file-tree{min-width:0;border-top:1px solid var(--line);padding-top:10px}.tree-row{width:100%;min-height:30px;display:flex;align-items:center;gap:7px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink);cursor:pointer;font-size:13px;font-weight:700;text-align:left}.tree-row.active,.tree-row:hover{background:var(--nav-hover);color:var(--accent);text-decoration:none}.tree-children{margin-left:16px}.tree-children.hidden{display:none}.folder-chevron{width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-1px)}.tree-row.folder.collapsed .folder-chevron{transform:rotate(-45deg)}.folder-icon,.special-folder-icon{width:13px;height:10px;border:1px solid var(--progress-line);border-top:4px solid var(--progress-line);border-radius:2px;background:var(--surface);flex:0 0 auto}.special-folder-icon{border-color:var(--accent);border-top-color:var(--accent);background:var(--brand-bg)}.file-dot{width:9px;height:11px;border:1px solid var(--progress-line);border-radius:2px;background:var(--surface);flex:0 0 auto}.open-marker{margin-left:auto;color:var(--muted);font-size:11px;font-weight:900;text-transform:uppercase}.file-detail .detail-header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(220px,360px);align-items:start}.header-meta{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.header-meta span{min-height:26px;display:inline-flex;align-items:center;padding:0 9px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase}.layout-note{color:var(--muted);font-size:12px;line-height:1.45;text-align:right}.file-viewer{min-width:0;display:grid;grid-template-rows:auto minmax(0,1fr);background:var(--surface)}.file-tabs{display:flex;gap:4px;padding:8px 10px 0;border-bottom:1px solid var(--line);background:var(--surface-2);overflow-x:auto}.file-tab{min-height:34px;display:inline-flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--brand-bg);color:var(--muted);cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap}.file-tab.active{background:var(--surface);color:var(--ink)}.tab-close{width:8px;height:8px;position:relative;flex:0 0 auto}.tab-close:before,.tab-close:after{content:"";position:absolute;top:3px;left:0;width:8px;height:2px;border-radius:999px;background:var(--muted)}.tab-close:before{transform:rotate(45deg)}.tab-close:after{transform:rotate(-45deg)}.file-panel[hidden],.file-tab[hidden]{display:none}.viewer-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}.viewer-head h2{font-size:14px;line-height:1.25}.badge{min-height:26px;display:inline-flex;align-items:center;padding:0 9px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:900;white-space:nowrap}.viewer-body{min-height:0;overflow:auto}.rendered-markdown{max-width:920px;padding:26px 30px 42px;line-height:1.7}.rendered-markdown h1,.rendered-markdown h2,.rendered-markdown h3{margin:1.35em 0 .55em}.rendered-markdown h1{margin-top:0;padding-bottom:.35em;border-bottom:1px solid var(--line);font-size:30px}.rendered-markdown h2{padding-bottom:.28em;border-bottom:1px solid var(--line);font-size:23px}.rendered-markdown pre,.code-source,.source-details pre{margin:0;overflow:auto;background:var(--readme-code);color:#e5eefc;padding:16px;font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.code-keyword{color:#93c5fd;font-weight:900}.code-source{min-height:420px}.html-preview{min-height:100%;display:grid;grid-template-rows:auto minmax(320px,1fr) auto;background:var(--surface-2)}.preview-toolbar{min-height:38px;display:flex;align-items:center;gap:7px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--surface)}.preview-toolbar span{width:10px;height:10px;border-radius:999px;background:var(--progress-line)}.preview-toolbar strong{margin-left:6px;color:var(--muted);font-size:12px}.html-render{width:100%;height:100%;min-height:320px;border:0;background:#fff}.source-details{border-top:1px solid var(--line);background:var(--surface)}.source-details summary{min-height:38px;display:flex;align-items:center;padding:0 14px;color:var(--muted);cursor:pointer;font-weight:900}.workspace-board-view,.repo-overview{padding:18px}.view-intro{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}.view-intro h2{font-size:18px}.secondary-btn{min-height:32px;display:inline-flex;align-items:center;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-weight:900}.repo-grid{display:grid;grid-template-columns:repeat(2,minmax(220px,1fr));gap:12px}.repo-card{display:grid;gap:5px;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}.repo-card.large{min-height:108px}.repo-card span{color:var(--muted);font-size:12px;overflow-wrap:anywhere}@media(max-width:1100px){body[data-live-page=detail] .app{grid-template-columns:1fr}}@media(max-width:720px){.file-detail .detail-header{display:flex;flex-direction:column;align-items:stretch}.layout-note{text-align:left}.rendered-markdown h1{font-size:24px}.repo-grid{grid-template-columns:1fr}}
+body[data-live-page=detail] .app{grid-template-columns:300px minmax(0,1fr)}.back-link{min-height:32px;display:inline-flex;align-items:center;margin-bottom:12px;color:var(--muted);font-size:12px;font-weight:900}.back-link:before{content:"<";margin-right:6px}.file-tree{min-width:0;border-top:1px solid var(--line);padding-top:10px}.tree-row{width:100%;min-height:30px;display:flex;align-items:center;gap:7px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink);cursor:pointer;font-size:13px;font-weight:700;text-align:left}.tree-row.active,.tree-row:hover{background:var(--nav-hover);color:var(--accent);text-decoration:none}.tree-children{margin-left:16px}.tree-children.hidden{display:none}.folder-chevron{width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-1px)}.tree-row.folder.collapsed .folder-chevron{transform:rotate(-45deg)}.folder-icon,.special-folder-icon{width:13px;height:10px;border:1px solid var(--progress-line);border-top:4px solid var(--progress-line);border-radius:2px;background:var(--surface);flex:0 0 auto}.special-folder-icon{border-color:var(--accent);border-top-color:var(--accent);background:var(--brand-bg)}.file-dot{width:9px;height:11px;border:1px solid var(--progress-line);border-radius:2px;background:var(--surface);flex:0 0 auto}.open-marker{margin-left:auto;color:var(--muted);font-size:11px;font-weight:900;text-transform:uppercase}.file-detail .detail-header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(220px,360px);align-items:start}.header-meta{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.header-meta span{min-height:26px;display:inline-flex;align-items:center;padding:0 9px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase}.layout-note{color:var(--muted);font-size:12px;line-height:1.45;text-align:right}.file-viewer{min-width:0;display:grid;grid-template-rows:auto minmax(0,1fr);background:var(--surface)}.file-tabs{display:flex;gap:4px;padding:8px 10px 0;border-bottom:1px solid var(--line);background:var(--surface-2);overflow-x:auto}.file-tab{min-height:34px;display:inline-flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--brand-bg);color:var(--muted);cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap}.file-tab.active{background:var(--surface);color:var(--ink)}.tab-close{width:8px;height:8px;position:relative;flex:0 0 auto}.tab-close:before,.tab-close:after{content:"";position:absolute;top:3px;left:0;width:8px;height:2px;border-radius:999px;background:var(--muted)}.tab-close:before{transform:rotate(45deg)}.tab-close:after{transform:rotate(-45deg)}.file-panel[hidden],.file-tab[hidden]{display:none}.viewer-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}.viewer-head h2{font-size:14px;line-height:1.25}.badge{min-height:26px;display:inline-flex;align-items:center;padding:0 9px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:900;white-space:nowrap}.viewer-body{min-height:0;overflow:auto}.rendered-markdown{max-width:920px;padding:26px 30px 42px;line-height:1.7}.rendered-markdown h1,.rendered-markdown h2,.rendered-markdown h3{margin:1.35em 0 .55em}.rendered-markdown h1{margin-top:0;padding-bottom:.35em;border-bottom:1px solid var(--line);font-size:30px}.rendered-markdown h2{padding-bottom:.28em;border-bottom:1px solid var(--line);font-size:23px}.rendered-markdown pre,.code-source,.source-details pre{margin:0;overflow:auto;background:var(--readme-code);color:#e5eefc;padding:16px;font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.code-keyword{color:#93c5fd;font-weight:900}.code-source{min-height:420px}.html-preview{display:block;background:var(--surface-2)}.preview-toolbar{min-height:38px;display:flex;align-items:center;gap:7px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--surface)}.preview-toolbar span{width:10px;height:10px;border-radius:999px;background:var(--progress-line)}.preview-toolbar strong{margin-left:6px;color:var(--muted);font-size:12px}.html-render{display:block;width:100%;height:auto;min-height:0;border:0;background:#fff}.source-details{border-top:1px solid var(--line);background:var(--surface)}.source-details summary{min-height:38px;display:flex;align-items:center;padding:0 14px;color:var(--muted);cursor:pointer;font-weight:900}.workspace-board-view,.repo-overview{padding:18px}.view-intro{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}.view-intro h2{font-size:18px}.secondary-btn{min-height:32px;display:inline-flex;align-items:center;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-weight:900}.repo-grid{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:12px}.repo-card{display:grid;gap:5px;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}.repo-card.large{min-height:108px}.repo-card span{color:var(--muted);font-size:12px;overflow-wrap:anywhere}.repo-branch{font-weight:700}.repo-pr-list{display:grid;gap:6px;margin-top:7px}.repo-pr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--ink);font-weight:700}.repo-pr:hover{border-color:var(--accent);text-decoration:none}.repo-pr-main{min-width:0;display:grid;gap:3px}.repo-pr-title{color:var(--ink);font-size:13px}.repo-pr-meta{color:var(--muted);font-size:11px;font-weight:700}.pr-state{min-height:22px;display:inline-flex;align-items:center;padding:0 8px;border-radius:999px;background:var(--brand-bg);color:var(--accent);font-size:11px;font-weight:900;text-transform:uppercase}.pr-state-merged{background:#dcfce7;color:#166534}.pr-state-closed{background:#fee2e2;color:#991b1b}.pr-state-draft{background:#f3e8ff;color:#6b21a8}.pr-state-unknown{background:var(--surface);color:var(--muted);border:1px solid var(--line)}@media(max-width:1100px){body[data-live-page=detail] .app{grid-template-columns:1fr}}@media(max-width:720px){.file-detail .detail-header{display:flex;flex-direction:column;align-items:stretch}.layout-note{text-align:left}.rendered-markdown h1{font-size:24px}.repo-grid{grid-template-columns:1fr}.repo-pr{grid-template-columns:1fr}}
 `
 
 const serveLiveScript = `<script>
@@ -1010,7 +1270,7 @@ const serveDetailTemplate = `<!doctype html>
               {{else if eq .Kind "markdown"}}
                 <article class="rendered-markdown">{{.HTML}}</article>
               {{else if eq .Kind "html"}}
-                <section class="html-preview"><div class="preview-toolbar"><span></span><span></span><span></span><strong>{{.Name}}</strong></div><iframe class="html-render" sandbox srcdoc="{{.SourceHTML}}"></iframe><details class="source-details"><summary>Source</summary><pre><code>{{.SourceHTML}}</code></pre></details></section>
+                <section class="html-preview"><div class="preview-toolbar"><span></span><span></span><span></span><strong>{{.Name}}</strong></div><iframe class="html-render" data-html-preview-frame sandbox="allow-same-origin" srcdoc="{{.SourceHTML}}"></iframe><details class="source-details"><summary>Source</summary><pre><code>{{.SourceHTML}}</code></pre></details></section>
               {{else}}
                 <pre class="code-source language-{{.Language}}"><code>{{.HTML}}</code></pre>
               {{end}}
@@ -1032,7 +1292,26 @@ function activateFileView(path){
   document.querySelectorAll('[data-file-tab]').forEach(function(item){item.classList.toggle('active',item===tab);});
   document.querySelectorAll('[data-file-panel]').forEach(function(item){item.hidden=item!==panel;item.classList.toggle('active',item===panel);});
   document.querySelectorAll('[data-open-view]').forEach(function(item){item.classList.toggle('active',item.getAttribute('data-open-view')===path);});
+  resizeHTMLPreviews(panel);
 }
+function resizeHTMLPreview(frame){
+  try{
+    var doc=frame.contentDocument||(frame.contentWindow&&frame.contentWindow.document);
+    if(!doc||!doc.documentElement||!doc.body){return;}
+    frame.style.height='0px';
+    var height=Math.max(doc.body.scrollHeight,doc.body.offsetHeight,doc.documentElement.scrollHeight,doc.documentElement.offsetHeight);
+    frame.style.height=String(Math.max(1,Math.ceil(height)))+'px';
+  }catch(e){}
+}
+function resizeHTMLPreviews(root){
+  (root||document).querySelectorAll('[data-html-preview-frame]').forEach(function(frame){
+    requestAnimationFrame(function(){resizeHTMLPreview(frame);});
+  });
+}
+document.querySelectorAll('[data-html-preview-frame]').forEach(function(frame){
+  frame.addEventListener('load',function(){resizeHTMLPreview(frame);});
+});
+window.addEventListener('resize',function(){resizeHTMLPreviews(document);});
 document.querySelectorAll('[data-open-view]').forEach(function(item){item.addEventListener('click',function(){activateFileView(item.getAttribute('data-open-view'));});});
 document.querySelectorAll('[data-toggle-dir]').forEach(function(item){item.addEventListener('click',function(){var children=item.parentElement&&item.parentElement.querySelector(':scope > .tree-children');if(!children){return;}var collapsed=children.classList.toggle('hidden');item.classList.toggle('collapsed',collapsed);item.setAttribute('aria-expanded',String(!collapsed));});});
 document.querySelectorAll('[data-file-tab]').forEach(function(item){item.addEventListener('click',function(event){if(event.target&&event.target.hasAttribute('data-close-view')){return;}activateFileView(item.getAttribute('data-file-tab'));});});

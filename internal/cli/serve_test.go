@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/tasuku43/kra/internal/infra/statestore"
 	"github.com/tasuku43/kra/internal/testutil"
 )
 
@@ -44,6 +46,11 @@ func TestServeHandler_WorkspacesPageRendersActiveWorkspaceKanban(t *testing.T) {
 }
 
 func TestServeHandler_WorkspaceDetailRendersBoardReadmeReposAndPR(t *testing.T) {
+	restoreGH := stubServeGitHub(t, func(_ context.Context, _ ...string) (string, error) {
+		return "[]", nil
+	})
+	defer restoreGH()
+
 	env := testutil.NewEnv(t)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "PROJ-2314")
 	updateServeTestMeta(t, wsPath, func(meta *workspaceMetaFile) {
@@ -110,6 +117,8 @@ func TestServeHandler_WorkspaceDetailRendersBoardReadmeReposAndPR(t *testing.T) 
 		"mermaid.initialize",
 		`data-file-panel="docs/dev/mock/preview.html" data-kind="html"`,
 		`class="html-render"`,
+		`data-html-preview-frame sandbox="allow-same-origin"`,
+		"resizeHTMLPreviews(panel)",
 		"Mock Preview",
 		`data-file-panel="scripts/check.sh" data-kind="source"`,
 		`language-shell`,
@@ -118,7 +127,9 @@ func TestServeHandler_WorkspaceDetailRendersBoardReadmeReposAndPR(t *testing.T) 
 		"repository context opened from repos/",
 		"kra",
 		"feature/PROJ-2314/serve-dashboard",
-		`<a href="https://github.com/tasuku43/kra/pull/128" target="_blank" rel="noreferrer">Serve dashboard spec</a>`,
+		`href="https://github.com/tasuku43/kra/pull/128"`,
+		"Serve dashboard spec",
+		`pr-state pr-state-unknown`,
 	} {
 		if !strings.Contains(body, want) {
 			t.Fatalf("body missing %q:\n%s", want, body)
@@ -231,6 +242,128 @@ func TestServeHandler_RedirectsAndNotFound(t *testing.T) {
 	}
 }
 
+func TestServeReposForWorkspaceListsBranchPRBeforeTitleMatches(t *testing.T) {
+	restoreGH := stubServeGitHub(t, func(_ context.Context, args ...string) (string, error) {
+		joined := strings.Join(args, " ")
+		switch {
+		case strings.Contains(joined, "--head feature/current"):
+			return `[{"number":12,"title":"Branch only work","url":"https://github.com/tasuku43/kra/pull/12","state":"OPEN","isDraft":false,"headRefName":"feature/current"}]`, nil
+		case strings.Contains(joined, "--search"):
+			return `[
+				{"number":9,"title":"PROJ-2314 merged follow-up","url":"https://github.com/tasuku43/kra/pull/9","state":"MERGED","isDraft":false,"headRefName":"feature/old"},
+				{"number":8,"title":"PROJ-2314 draft follow-up","url":"https://github.com/tasuku43/kra/pull/8","state":"OPEN","isDraft":true,"headRefName":"feature/draft"}
+			]`, nil
+		default:
+			return "[]", nil
+		}
+	})
+	defer restoreGH()
+
+	repos := serveReposForWorkspace(wsListRow{
+		ID: "PROJ-2314",
+		Repos: []statestore.WorkspaceRepo{{
+			RepoKey: "tasuku43/kra",
+			Alias:   "kra",
+			Branch:  "feature/current",
+		}},
+	})
+	if len(repos) != 1 {
+		t.Fatalf("repos len = %d, want 1", len(repos))
+	}
+	prs := repos[0].PullRequests
+	if len(prs) != 3 {
+		t.Fatalf("pull requests len = %d, want 3: %#v", len(prs), prs)
+	}
+	if prs[0].Number != 12 || !prs[0].BranchMatch || prs[0].State != "open" {
+		t.Fatalf("first PR = %#v, want branch-matched open PR #12", prs[0])
+	}
+	if prs[1].Number != 9 || !prs[1].TitleMatch || prs[1].State != "merged" {
+		t.Fatalf("second PR = %#v, want title-matched merged PR #9", prs[1])
+	}
+	if prs[2].Number != 8 || !prs[2].TitleMatch || prs[2].State != "draft" {
+		t.Fatalf("third PR = %#v, want title-matched draft PR #8", prs[2])
+	}
+
+	html := string(serveReposView(serveWorkspace{Repos: repos}).HTML)
+	for _, want := range []string{
+		"Branch only work",
+		"PROJ-2314 merged follow-up",
+		"PROJ-2314 draft follow-up",
+		"current branch",
+		"title match",
+		`pr-state pr-state-open`,
+		`pr-state pr-state-merged`,
+		`pr-state pr-state-draft`,
+	} {
+		if !strings.Contains(html, want) {
+			t.Fatalf("repo HTML missing %q:\n%s", want, html)
+		}
+	}
+	if branchIndex, mergedIndex := strings.Index(html, "Branch only work"), strings.Index(html, "PROJ-2314 merged follow-up"); branchIndex < 0 || mergedIndex < 0 || branchIndex > mergedIndex {
+		t.Fatalf("branch-matched PR should render before title matches:\n%s", html)
+	}
+}
+
+func TestServePRInference_NormalizesGitHubRepoIdentifiers(t *testing.T) {
+	for _, tc := range []struct {
+		name    string
+		prRepo  string
+		repoKey string
+		repoUID string
+		count   int
+		want    bool
+	}{
+		{
+			name:    "matches repo uid with github host prefix",
+			prRepo:  "tasuku43/kra",
+			repoUID: "github.com/tasuku43/kra",
+			count:   2,
+			want:    true,
+		},
+		{
+			name:    "matches repo uid stored as https remote",
+			prRepo:  "tasuku43/kra",
+			repoUID: "https://github.com/tasuku43/kra.git",
+			count:   2,
+			want:    true,
+		},
+		{
+			name:    "matches repo uid stored as ssh remote",
+			prRepo:  "tasuku43/kra",
+			repoUID: "git@github.com:tasuku43/kra.git",
+			count:   2,
+			want:    true,
+		},
+		{
+			name:    "matches repo key case-insensitively",
+			prRepo:  "tasuku43/kra",
+			repoKey: "Tasuku43/KRA",
+			count:   2,
+			want:    true,
+		},
+		{
+			name:    "does not match other repo in multi repo workspace",
+			prRepo:  "tasuku43/kra",
+			repoKey: "tasuku43/other",
+			repoUID: "github.com/tasuku43/other",
+			count:   2,
+			want:    false,
+		},
+		{
+			name:   "single repo workspace keeps source pr fallback",
+			prRepo: "tasuku43/kra",
+			count:  1,
+			want:   true,
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := sourcePRMatchesRepo(tc.prRepo, tc.repoKey, tc.repoUID, tc.count); got != tc.want {
+				t.Fatalf("sourcePRMatchesRepo() = %v, want %v", got, tc.want)
+			}
+		})
+	}
+}
+
 func TestServeStyles_FixesBoardColumnHeightAndScrollsOverflow(t *testing.T) {
 	styles := serveStyles + serveSmartViewStyles
 	for _, want := range []string{
@@ -255,7 +388,8 @@ func TestServeStyles_FixesBoardColumnHeightAndScrollsOverflow(t *testing.T) {
 		".file-tree{min-width:0",
 		".file-tabs{display:flex",
 		".workspace-board-view,.repo-overview{padding:18px}",
-		".html-render{width:100%",
+		".html-preview{display:block",
+		".html-render{display:block;width:100%;height:auto;min-height:0",
 		".code-keyword{color:#93c5fd",
 	} {
 		if !strings.Contains(styles, want) {
@@ -264,6 +398,15 @@ func TestServeStyles_FixesBoardColumnHeightAndScrollsOverflow(t *testing.T) {
 	}
 	if strings.Contains(styles, "body:has(.tab-panel:target) .tab-panel.default{display:none}") {
 		t.Fatalf("README target panel should not be hidden by the default-panel rule:\n%s", styles)
+	}
+	for _, fixed := range []string{
+		".html-preview{min-height:100%;display:grid",
+		"grid-template-rows:auto minmax(320px,1fr) auto",
+		".html-render{width:100%;height:100%;min-height:320px",
+	} {
+		if strings.Contains(styles, fixed) {
+			t.Fatalf("HTML preview should size to rendered content, found fixed sizing %q:\n%s", fixed, styles)
+		}
 	}
 }
 
@@ -276,5 +419,14 @@ func updateServeTestMeta(t *testing.T, wsPath string, update func(*workspaceMeta
 	update(&meta)
 	if err := writeWorkspaceMetaFile(wsPath, meta); err != nil {
 		t.Fatalf("write workspace meta: %v", err)
+	}
+}
+
+func stubServeGitHub(t *testing.T, run serveGitHubRunner) func() {
+	t.Helper()
+	prev := runServeGitHubCommand
+	runServeGitHubCommand = run
+	return func() {
+		runServeGitHubCommand = prev
 	}
 }

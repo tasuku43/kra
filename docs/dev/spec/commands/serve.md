@@ -71,6 +71,7 @@ The tab viewer:
 - escapes raw HTML from Markdown content by default.
 - renders fenced `mermaid` code blocks as Mermaid diagrams in the browser when the Mermaid CDN is reachable.
 - renders HTML files in a sandboxed preview frame and exposes source below the preview.
+- sizes HTML preview frames to the rendered document height instead of a fixed viewer height.
 - renders source files with syntax highlighting based on file extension, including Go, shell (`.sh`, `.bash`, `.zsh`), and JavaScript.
 - keeps the UI read-only.
 
@@ -80,17 +81,21 @@ The `repos/` tab displays one card per managed worktree/repo binding:
 
 - repository alias/name
 - current branch
-- pull request link when it can be inferred from workspace source metadata; the link text is the stored workspace title, which is the PR title for GitHub PR imports, falling back to `#<number>` when the title is empty
+- matching pull requests with status labels (`open`, `draft`, `merged`, `closed`, or `unknown`)
+- the pull request for the repo's current branch first, followed by other pull requests whose title contains the workspace id
 
 ## Pull Request Link Inference
 
-The MVP does not call remote providers.
-
+- For GitHub repos, `kra serve` uses the local `gh` CLI on a best-effort read-only basis to list pull requests.
+- For each managed GitHub repo, collect:
+  - pull requests whose head branch matches the current workspace repo branch
+  - pull requests whose title contains the workspace id
+- Dedupe pull requests by URL/number and render current-branch matches first.
 - If `.kra.meta.json.workspace.source_url` is a GitHub pull request URL and it matches a managed repo,
-  expose it as that repo's pull request link.
-- If there is exactly one managed repo and the source URL is a GitHub pull request URL, expose it for
-  that repo.
-- Otherwise render `none`.
+  include it as a fallback link when remote lookup is unavailable or does not return that PR. Matching normalizes GitHub identifiers such as `owner/repo`,
+  `github.com/owner/repo`, `https://github.com/owner/repo(.git)`, and `git@github.com:owner/repo.git`.
+- If there is exactly one managed repo and the source URL is a GitHub pull request URL, the fallback link is associated with that repo.
+- If no matching pull request exists or lookup is unavailable and there is no fallback link, render an empty PR state for that repo.
 
 ## Server Behavior
 
@@ -104,4 +109,3 @@ The MVP does not call remote providers.
 - Editing tasks or repository state from the browser
 - Archived workspace browsing
 - Authentication or network exposure beyond the chosen local address
-- Remote provider API aggregation

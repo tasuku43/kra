@@ -351,8 +351,18 @@ function renderReposView() {
         ${ws.repos.map((repo) => `
           <article class="repo-card large">
             <strong>${repo.name}</strong>
-            <span>${repo.branch}</span>
-            <a href="${repo.url || "#"}">${repo.pr}</a>
+            <span class="repo-branch">branch ${repo.branch}</span>
+            <div class="repo-pr-list">
+              ${(repo.pullRequests || [{ title: repo.pr, url: repo.url, state: repo.url ? "open" : "unknown", meta: repo.url ? "current branch" : "" }]).filter((pr) => pr.title && pr.title !== "none").length === 0 ? `<span class="empty">No matching pull requests.</span>` : (repo.pullRequests || [{ title: repo.pr, url: repo.url, state: repo.url ? "open" : "unknown", meta: repo.url ? "current branch" : "" }]).filter((pr) => pr.title && pr.title !== "none").map((pr) => `
+                <a class="repo-pr" href="${pr.url || "#"}">
+                  <span class="repo-pr-main">
+                    <span class="repo-pr-title">${pr.title}</span>
+                    <span class="repo-pr-meta">${pr.meta || "title match"}</span>
+                  </span>
+                  <span class="pr-state pr-state-${pr.state || "unknown"}">${pr.state || "unknown"}</span>
+                </a>
+              `).join("")}
+            </div>
           </article>
         `).join("")}
       </div>
