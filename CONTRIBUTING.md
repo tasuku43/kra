@@ -63,4 +63,4 @@ Please include:
 
 - Releases are tag-driven (`v*`) via GitHub Actions.
 - Distribution artifacts are published to GitHub Releases.
-- Stable tags also update the Homebrew tap (`tasuku43/homebrew-kra`).
+- Stable tags also update the Homebrew tap (`tasuku43/homebrew-tap`).

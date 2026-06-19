@@ -23,7 +23,7 @@ Starting at `v1.0.0`:
 Supported:
 
 - GitHub Releases (binaries)
-- Homebrew (stable releases via `tasuku43/homebrew-kra`)
+- Homebrew (stable releases via `tasuku43/homebrew-tap`)
 - mise (GitHub Releases backend)
 - Build from source (for contributors/operators)
 

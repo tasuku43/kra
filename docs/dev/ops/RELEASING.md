@@ -20,7 +20,7 @@ Releases are triggered automatically by pushing a Git tag.
   - `kra_<tag>_<os>_<arch>.tar.gz`
   - `checksums.txt` (SHA256)
 - Homebrew:
-  - Stable tags only (no prerelease suffix) trigger a formula update PR to `tasuku43/homebrew-kra`.
+  - Stable tags only (no prerelease suffix) trigger a formula update PR to `tasuku43/homebrew-tap`.
   - Uses GitHub App secrets: `HOMEBREW_APP_ID`, `HOMEBREW_APP_KEY`.
 
 ## Build metadata
@@ -43,4 +43,4 @@ In release builds, GoReleaser injects these via `-ldflags`.
    - macOS/Linux archives for amd64/arm64
    - `checksums.txt`
 6. Download one artifact and run `kra version` to verify the expected tag is shown.
-7. For stable tags (without `-rc` or any prerelease suffix), confirm a PR was created in `tasuku43/homebrew-kra` updating `Formula/kra.rb`.
+7. For stable tags (without `-rc` or any prerelease suffix), confirm a PR was created in `tasuku43/homebrew-tap` updating `Formula/kra.rb`.

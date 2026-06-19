@@ -23,7 +23,7 @@ Supported platforms (release artifacts):
 Homebrew uses GitHub Releases as the source of truth (stable tags only).
 
 ```sh
-brew tap tasuku43/kra
+brew tap tasuku43/tap
 brew install kra
 ```
 

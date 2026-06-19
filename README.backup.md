@@ -247,7 +247,7 @@ If `cmux` capabilities are unavailable in a single-target open flow, `kra ws ope
 ### Homebrew (stable releases)
 
 ```sh
-brew tap tasuku43/kra
+brew tap tasuku43/tap
 brew install kra
 ```
 

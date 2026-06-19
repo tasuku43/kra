@@ -153,7 +153,7 @@ Guide: `docs/user/guides/WORKSPACE_DOCS.md`
 ### Homebrew (stable releases)
 
 ```sh
-brew tap tasuku43/kra
+brew tap tasuku43/tap
 brew install kra
 ```
 
