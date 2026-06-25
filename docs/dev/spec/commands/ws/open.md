@@ -61,6 +61,20 @@ Open cmux workspace(s) from workspace action entrypoint and notify the user from
   - fallback response marks `mode=fallback-cd` and keeps `cwd_synced=true`
   - when multiple targets are requested, fallback is not applied (return `cmux_capability_missing`)
 
+## Commit behavior
+
+- On successful open, `ws open` auto-commits kra-managed state updates in `KRA_ROOT`.
+- Commit messages:
+  - single target: `open: <workspace-id>`
+  - multiple targets: `open: <n> workspaces`
+- Staging allowlist:
+  - `.kra/state/cmux-workspaces.json`
+  - `workspaces/<id>/.kra.meta.json` for each successful target
+- In fallback directory-open mode, the allowlist only needs to capture workspace metadata changes; include
+  `.kra/state/cmux-workspaces.json` only when the file exists.
+- Preserve unrelated staged changes outside the allowlist.
+- If the operation produces no Git diff, do not create an empty commit.
+
 ## Notes
 
 - Parent shell cwd mutation still follows action-file protocol.

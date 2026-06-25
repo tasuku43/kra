@@ -50,6 +50,13 @@ func TestCLI_RepoPreset_AddShowListRemove(t *testing.T) {
 		if !strings.Contains(out.String(), "backend") || !strings.Contains(out.String(), "repos: 2") {
 			t.Fatalf("stdout missing add result summary: %q", out.String())
 		}
+		subj, logErr := gitLogHeadSubject(env.Root)
+		if logErr != nil {
+			t.Fatalf("git log head subject: %v", logErr)
+		}
+		if subj != "repo-preset-add: backend" {
+			t.Fatalf("commit subject = %q, want %q", subj, "repo-preset-add: backend")
+		}
 	}
 
 	rootConfigPath := filepath.Join(env.Root, ".kra", "config.yaml")
@@ -94,6 +101,13 @@ func TestCLI_RepoPreset_AddShowListRemove(t *testing.T) {
 		c := New(&out, &err)
 		if code := c.Run([]string{"repo", "preset", "rm", "backend"}); code != exitOK {
 			t.Fatalf("repo preset rm exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+		subj, logErr := gitLogHeadSubject(env.Root)
+		if logErr != nil {
+			t.Fatalf("git log head subject: %v", logErr)
+		}
+		if subj != "repo-preset-remove: backend" {
+			t.Fatalf("commit subject = %q, want %q", subj, "repo-preset-remove: backend")
 		}
 	}
 	{

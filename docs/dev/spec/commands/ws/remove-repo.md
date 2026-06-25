@@ -72,6 +72,16 @@ This command is the operational counterpart of `kra ws add-repo`.
   - on success, remove corresponding entries from `workspaces/<id>/.kra.meta.json` `repos_restore`
   - metadata update must be atomic (`temp + rename`)
 
+## Commit behavior
+
+- On successful metadata update, `ws remove-repo` auto-commits the workspace binding metadata in `KRA_ROOT`.
+- Commit message: `remove-repo: <workspace-id>`
+- Staging allowlist:
+  - `workspaces/<id>/.kra.meta.json`
+- `workspaces/<id>/repos/**` must not be staged or committed by this command.
+- Preserve unrelated staged changes outside the allowlist.
+- If the metadata write produces no Git diff, do not create an empty commit.
+
 6. Result
   - print `Result:`
   - summary: `Removed <n> / <m>`

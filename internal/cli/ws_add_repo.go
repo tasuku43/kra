@@ -610,6 +610,15 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		fmt.Fprintf(c.Err, "update %s: %v\n", workspaceMetaFilename, err)
 		return exitError
 	}
+	metaPathspec, err := workspaceMetaCommitPathspec(root, wsPath)
+	if err != nil {
+		fmt.Fprintf(c.Err, "resolve metadata commit scope: %v\n", err)
+		return exitError
+	}
+	if _, err := commitKRAMetaChange(ctx, root, fmt.Sprintf("add-repo: %s", workspaceID), []string{metaPathspec}); err != nil {
+		fmt.Fprintf(c.Err, "commit add-repo metadata: %v\n", err)
+		return exitError
+	}
 
 	printAddRepoResult(c.Out, applied, skippedPresetRepos, useColorOut)
 	c.debugf("ws add-repo completed workspace=%s added=%d skipped=%d", workspaceID, len(applied), len(skippedPresetRepos))
@@ -904,6 +913,31 @@ func (c *CLI) runWSAddRepoJSON(workspaceID string, root string, repoPoolPath str
 			Error: &cliJSONError{
 				Code:    "internal_error",
 				Message: fmt.Sprintf("update %s: %v", workspaceMetaFilename, err),
+			},
+		})
+		return exitError
+	}
+	metaPathspec, err := workspaceMetaCommitPathspec(root, wsPath)
+	if err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("resolve metadata commit scope: %v", err),
+			},
+		})
+		return exitError
+	}
+	if _, err := commitKRAMetaChange(ctx, root, fmt.Sprintf("add-repo: %s", workspaceID), []string{metaPathspec}); err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "add-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("commit add-repo metadata: %v", err),
 			},
 		})
 		return exitError

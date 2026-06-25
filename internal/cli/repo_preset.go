@@ -141,6 +141,10 @@ func (c *CLI) runRepoPresetAdd(args []string) int {
 		fmt.Fprintf(c.Err, "save root config: %v\n", err)
 		return exitError
 	}
+	if _, err := commitKRAMetaChange(context.Background(), session.Root, fmt.Sprintf("repo-preset-add: %s", presetName), []string{filepath.ToSlash(filepath.Join(".kra", "config.yaml"))}); err != nil {
+		fmt.Fprintf(c.Err, "commit repo preset change: %v\n", err)
+		return exitError
+	}
 
 	printRepoPresetAddResult(c.Out, presetName, selected, exists, writerSupportsColor(c.Out))
 	return exitOK
@@ -192,6 +196,10 @@ func (c *CLI) runRepoPresetRemove(args []string) int {
 	}
 	if err := saveRootConfigFile(rootConfigPath, cfg); err != nil {
 		fmt.Fprintf(c.Err, "save root config: %v\n", err)
+		return exitError
+	}
+	if _, err := commitKRAMetaChange(context.Background(), session.Root, fmt.Sprintf("repo-preset-remove: %s", presetName), []string{filepath.ToSlash(filepath.Join(".kra", "config.yaml"))}); err != nil {
+		fmt.Fprintf(c.Err, "commit repo preset change: %v\n", err)
 		return exitError
 	}
 

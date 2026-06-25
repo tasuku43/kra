@@ -191,6 +191,16 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 - `repos_restore` alias uniqueness must be validated before file replace.
 - Metadata update must be atomic (`temp + rename`).
 
+## Commit behavior
+
+- On successful metadata update, `ws add-repo` auto-commits the workspace binding metadata in `KRA_ROOT`.
+- Commit message: `add-repo: <workspace-id>`
+- Staging allowlist:
+  - `workspaces/<id>/.kra.meta.json`
+- `workspaces/<id>/repos/**` must not be staged or committed by this command.
+- Preserve unrelated staged changes outside the allowlist.
+- If the metadata write produces no Git diff, do not create an empty commit.
+
 ## State store additions
 
 - `repos.last_fetched_at INTEGER NULL` (unix seconds, UTC)

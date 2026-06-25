@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -129,6 +130,15 @@ func (c *CLI) runWSPurgeGuardSet(args []string, enabled bool) int {
 		fmt.Fprintf(c.Err, "update %s: %v\n", workspaceMetaFilename, err)
 		return exitError
 	}
+	metaPathspec, err := workspaceMetaCommitPathspec(root, wsPath)
+	if err != nil {
+		fmt.Fprintf(c.Err, "resolve metadata commit scope: %v\n", err)
+		return exitError
+	}
+	if _, err := commitKRAMetaChange(context.Background(), root, fmt.Sprintf("%s: %s", wsGuardCommitAction(enabled), workspaceID), []string{metaPathspec}); err != nil {
+		fmt.Fprintf(c.Err, "commit workspace guard change: %v\n", err)
+		return exitError
+	}
 	if outputFormat == "json" {
 		_ = writeCLIJSON(c.Out, cliJSONResponse{
 			OK:          true,
@@ -170,4 +180,11 @@ func wsGuardAction(enabled bool) string {
 		return "ws.lock"
 	}
 	return "ws.unlock"
+}
+
+func wsGuardCommitAction(enabled bool) string {
+	if enabled {
+		return "lock"
+	}
+	return "unlock"
 }

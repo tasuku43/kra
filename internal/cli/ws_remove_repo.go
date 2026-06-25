@@ -280,6 +280,15 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 		fmt.Fprintf(c.Err, "update %s: %v\n", workspaceMetaFilename, err)
 		return exitError
 	}
+	metaPathspec, err := workspaceMetaCommitPathspec(root, wsPath)
+	if err != nil {
+		fmt.Fprintf(c.Err, "resolve metadata commit scope: %v\n", err)
+		return exitError
+	}
+	if _, err := commitKRAMetaChange(ctx, root, fmt.Sprintf("remove-repo: %s", workspaceID), []string{metaPathspec}); err != nil {
+		fmt.Fprintf(c.Err, "commit remove-repo metadata: %v\n", err)
+		return exitError
+	}
 
 	printRemoveRepoResult(c.Out, selected, useColorOut)
 	if shouldShiftCWD {
@@ -373,6 +382,31 @@ func (c *CLI) runWSRemoveRepoJSON(root string, workspaceID string, wd string, ca
 			Error: &cliJSONError{
 				Code:    "internal_error",
 				Message: fmt.Sprintf("update %s: %v", workspaceMetaFilename, err),
+			},
+		})
+		return exitError
+	}
+	metaPathspec, err := workspaceMetaCommitPathspec(root, wsPath)
+	if err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "remove-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("resolve metadata commit scope: %v", err),
+			},
+		})
+		return exitError
+	}
+	if _, err := commitKRAMetaChange(context.Background(), root, fmt.Sprintf("remove-repo: %s", workspaceID), []string{metaPathspec}); err != nil {
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:          false,
+			Action:      "remove-repo",
+			WorkspaceID: workspaceID,
+			Error: &cliJSONError{
+				Code:    "internal_error",
+				Message: fmt.Sprintf("commit remove-repo metadata: %v", err),
 			},
 		})
 		return exitError

@@ -41,6 +41,17 @@ This feature is intentionally separate from workspace templates:
 - `repos[]` must be non-empty.
 - order must preserve selection order from `preset add`.
 
+## Commit behavior
+
+- `preset add` and `preset rm/remove` auto-commit root-local config changes in `KRA_ROOT`.
+- Commit messages:
+  - add: `repo-preset-add: <name>`
+  - remove: `repo-preset-remove: <name>`
+- Staging allowlist:
+  - `.kra/config.yaml`
+- Preserve unrelated staged changes outside the allowlist.
+- If the config write produces no Git diff, do not create an empty commit.
+
 ## `preset add`
 
 - syntax: `kra repo preset add <name> [--yes]`

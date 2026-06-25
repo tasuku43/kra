@@ -252,6 +252,9 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 	if err := markWSOpenResultsInProgress(root, results, time.Now().Unix()); err != nil {
 		return c.writeWSOpenError(outputFormat, "workspace_state_update_failed", workspaceHint, fmt.Sprintf("advance workspace work_state: %v", err), exitError)
 	}
+	if _, err := commitWSOpenMetadata(context.Background(), root, results); err != nil {
+		return c.writeWSOpenError(outputFormat, "workspace_state_commit_failed", workspaceHint, fmt.Sprintf("commit workspace open state: %v", err), exitError)
+	}
 	failures := make([]wsOpenFailure, 0, len(openResult.Failures))
 	for _, f := range openResult.Failures {
 		failures = append(failures, wsOpenFailure{
@@ -279,6 +282,12 @@ func (c *CLI) writeWSOpenCDFallback(root string, format string, workspaceHint st
 	}
 	if err := markWorkspaceInProgress(root, target.WorkspaceID, time.Now().Unix()); err != nil {
 		return c.writeWSOpenError(format, "workspace_state_update_failed", target.WorkspaceID, fmt.Sprintf("advance workspace work_state: %v", err), exitError)
+	}
+	if _, err := commitWSOpenMetadata(context.Background(), root, []wsOpenResult{{
+		WorkspaceID:   target.WorkspaceID,
+		WorkspacePath: target.WorkspacePath,
+	}}); err != nil {
+		return c.writeWSOpenError(format, "workspace_state_commit_failed", target.WorkspaceID, fmt.Sprintf("commit workspace open state: %v", err), exitError)
 	}
 
 	if format == "json" {
@@ -311,6 +320,43 @@ func (c *CLI) writeWSOpenCDFallback(root string, format string, workspaceHint st
 		trailingBlank:     true,
 	})
 	return exitOK
+}
+
+func commitWSOpenMetadata(ctx context.Context, root string, results []wsOpenResult) (string, error) {
+	if len(results) == 0 {
+		return "", nil
+	}
+	allowlist := make([]string, 0, len(results)+1)
+	seen := map[string]bool{}
+	cmuxMapPathspec := filepath.ToSlash(filepath.Join(".kra", "state", "cmux-workspaces.json"))
+	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(cmuxMapPathspec))); err == nil {
+		allowlist = append(allowlist, cmuxMapPathspec)
+		seen[cmuxMapPathspec] = true
+	} else if err != nil && !os.IsNotExist(err) {
+		return "", err
+	}
+	ids := make([]string, 0, len(results))
+	for _, result := range results {
+		if strings.TrimSpace(result.WorkspaceID) == "" || strings.TrimSpace(result.WorkspacePath) == "" {
+			continue
+		}
+		pathspec, err := workspaceMetaCommitPathspec(root, result.WorkspacePath)
+		if err != nil {
+			return "", err
+		}
+		if !seen[pathspec] {
+			seen[pathspec] = true
+			allowlist = append(allowlist, pathspec)
+		}
+		ids = append(ids, result.WorkspaceID)
+	}
+	message := "open: workspace"
+	if len(ids) == 1 {
+		message = fmt.Sprintf("open: %s", ids[0])
+	} else if len(ids) > 1 {
+		message = fmt.Sprintf("open: %d workspaces", len(ids))
+	}
+	return commitKRAMetaChange(ctx, root, message, allowlist)
 }
 
 type wsOpenResult struct {

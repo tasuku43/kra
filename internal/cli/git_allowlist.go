@@ -40,3 +40,7 @@ func toGitTopLevelPath(ctx context.Context, root string, rootRelativePath string
 	}
 	return filepath.Clean(filepath.Join(relRoot, p)), nil
 }
+
+func runRootGit(ctx context.Context, root string, args ...string) (string, error) {
+	return gitutil.Run(ctx, root, args...)
+}

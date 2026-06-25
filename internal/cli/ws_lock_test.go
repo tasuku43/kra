@@ -64,3 +64,32 @@ func TestCLI_WS_Purge_BlockedByDefaultGuard(t *testing.T) {
 		t.Fatalf("archive/WS1 should be deleted after purge")
 	}
 }
+
+func TestCLI_WS_Unlock_AutoCommitsMetadata(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	{
+		var out bytes.Buffer
+		var err bytes.Buffer
+		c := New(&out, &err)
+		if code := c.Run([]string{"ws", "create", "--no-prompt", "WS-LOCK-1"}); code != exitOK {
+			t.Fatalf("ws create exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+		}
+	}
+
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+	if code := c.Run([]string{"ws", "unlock", "--id", "WS-LOCK-1"}); code != exitOK {
+		t.Fatalf("ws unlock exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
+	}
+
+	subj, logErr := gitLogHeadSubject(env.Root)
+	if logErr != nil {
+		t.Fatalf("git log head subject: %v", logErr)
+	}
+	if subj != "unlock: WS-LOCK-1" {
+		t.Fatalf("commit subject = %q, want %q", subj, "unlock: WS-LOCK-1")
+	}
+}

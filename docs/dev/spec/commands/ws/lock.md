@@ -45,6 +45,18 @@ Defaults:
 - set `protection.purge_guard.enabled=false`
 - idempotent success when already `false`
 
+## Commit behavior
+
+- `ws lock` and `ws unlock` auto-commit the workspace metadata change in `KRA_ROOT`.
+- Commit messages:
+  - lock: `lock: <workspace-id>`
+  - unlock: `unlock: <workspace-id>`
+- Staging allowlist:
+  - `workspaces/<id>/.kra.meta.json` for active workspaces
+  - `archive/<id>/.kra.meta.json` for archived workspaces
+- Preserve unrelated staged changes outside the allowlist.
+- If the metadata write produces no Git diff, do not create an empty commit.
+
 ## Integration with existing actions
 
 - `ws purge` must fail with `error.code=conflict` when `protection.purge_guard.enabled=true`.
