@@ -12,6 +12,7 @@ func (c *CLI) printRootUsage(w io.Writer) {
 		"  agent             Agent-oriented bootstrap prompt",
 		"  context           Context commands",
 		"  root              Root commands",
+		"  task              Root inbox task commands",
 		"  repo              Repository pool commands",
 		"  template          Workspace template commands",
 		"  shell             Shell integration commands",

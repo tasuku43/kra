@@ -77,6 +77,8 @@ func (c *CLI) Run(args []string) int {
 		return c.runContext(args[1:])
 	case "root":
 		return c.runRoot(args[1:])
+	case "task":
+		return c.runTask(args[1:])
 	case "repo":
 		return c.runRepo(args[1:])
 	case "template":

@@ -32,6 +32,7 @@ At the workspace level, we separate "text-first" logs from "file-first" artifact
 ```
 KRA_ROOT/
   AGENTS.md
+  workspace.md      # optional root inbox / cross-workspace task document
   .kra/
     config.yaml
     logs/
@@ -67,6 +68,7 @@ Notes:
 
 - Track:
   - `.kra/config.yaml`
+  - `workspace.md` when present
   - `workspaces/<id>/` except `repos/` (notes, artifacts, AGENTS.md, and any additional files)
   - everything under `archive/<id>/`
 - Ignore:

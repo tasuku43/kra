@@ -16,3 +16,7 @@ func newWorkspaceTaskService() *wstask.Service {
 		appports.NewWSTaskSyncPort(newCMUXTaskSyncClient, newCMUXTaskMapStore),
 	)
 }
+
+func newRootTaskService() *wstask.Service {
+	return wstask.NewService(appports.NewRootTaskPort())
+}

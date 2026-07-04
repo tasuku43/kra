@@ -42,6 +42,7 @@ type serveWorkspace struct {
 	SourceURL string
 	Tasks     wstask.Overview
 	Repos     []serveRepo
+	TaskGraph *serveTaskGraph
 }
 
 type serveRepo struct {
@@ -104,17 +105,52 @@ type serveAPIResponse struct {
 }
 
 type serveAPIWorkspace struct {
-	ID       string                    `json:"id"`
-	Title    string                    `json:"title"`
-	Href     string                    `json:"href"`
-	Progress serveProgress             `json:"progress"`
-	Tasks    map[string][]serveAPITask `json:"tasks"`
-	Counts   map[string]int            `json:"counts"`
+	ID        string                    `json:"id"`
+	Title     string                    `json:"title"`
+	Href      string                    `json:"href"`
+	Progress  serveProgress             `json:"progress"`
+	Tasks     map[string][]serveAPITask `json:"tasks"`
+	Counts    map[string]int            `json:"counts"`
+	TaskGraph *serveTaskGraph           `json:"task_graph,omitempty"`
 }
 
 type serveAPITask struct {
 	ID    string `json:"id"`
 	Title string `json:"title"`
+}
+
+type serveTaskGraphNode struct {
+	ID          string `json:"id"`
+	Title       string `json:"title"`
+	Status      string `json:"status"`
+	Description string `json:"description,omitempty"`
+}
+
+type serveTaskGraphEdge struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}
+
+type serveTaskGraphDiagnostics struct {
+	Errors   []string `json:"errors"`
+	Warnings []string `json:"warnings"`
+}
+
+type serveTaskGraph struct {
+	Nodes       []serveTaskGraphNode      `json:"nodes"`
+	Edges       []serveTaskGraphEdge      `json:"edges"`
+	Diagnostics serveTaskGraphDiagnostics `json:"diagnostics"`
+}
+
+func (g *serveTaskGraph) JSON() string {
+	if g == nil || (len(g.Nodes) == 0 && len(g.Edges) == 0) {
+		return "{}"
+	}
+	b, err := json.Marshal(g)
+	if err != nil {
+		return "{}"
+	}
+	return string(b)
 }
 
 func (c *CLI) runServe(args []string) int {
@@ -246,7 +282,7 @@ func renderServeWorkspacesAPI(w http.ResponseWriter, root string) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeServeJSON(w, serveAPIResponse{Workspaces: serveAPIWorkspaces(workspaces)})
+	writeServeJSON(w, serveAPIResponse{Workspaces: serveAPIWorkspaces(root, workspaces)})
 }
 
 func renderServeWorkspaceAPI(w http.ResponseWriter, root string, workspacePath string) {
@@ -267,7 +303,7 @@ func renderServeWorkspaceAPI(w http.ResponseWriter, root string, workspacePath s
 	}
 	for _, ws := range workspaces {
 		if ws.ID == id {
-			writeServeJSON(w, serveAPIResponse{Workspaces: serveAPIWorkspaces([]serveWorkspace{ws})})
+			writeServeJSON(w, serveAPIResponse{Workspaces: serveAPIWorkspaces(root, []serveWorkspace{ws})})
 			return
 		}
 	}
@@ -352,7 +388,7 @@ func writeServeJSON(w http.ResponseWriter, data serveAPIResponse) {
 	_ = enc.Encode(data)
 }
 
-func serveAPIWorkspaces(workspaces []serveWorkspace) []serveAPIWorkspace {
+func serveAPIWorkspaces(root string, workspaces []serveWorkspace) []serveAPIWorkspace {
 	out := make([]serveAPIWorkspace, 0, len(workspaces))
 	for _, ws := range workspaces {
 		tasks := make(map[string][]serveAPITask, len(serveStatusIDs()))
@@ -369,16 +405,118 @@ func serveAPIWorkspaces(workspaces []serveWorkspace) []serveAPIWorkspace {
 			}
 			tasks[status] = apiItems
 		}
+		var taskGraph *serveTaskGraph
+		if ws.Tasks.Summary != wstask.SummaryEmpty {
+			taskGraph = buildTaskGraphForWorkspace(root, ws.ID)
+		}
 		out = append(out, serveAPIWorkspace{
-			ID:       ws.ID,
-			Title:    ws.Title,
-			Href:     serveWorkspaceHref(ws.ID),
-			Progress: serveTaskProgress(ws.Tasks),
-			Tasks:    tasks,
-			Counts:   counts,
+			ID:        ws.ID,
+			Title:     ws.Title,
+			Href:      serveWorkspaceHref(ws.ID),
+			Progress:  serveTaskProgress(ws.Tasks),
+			Tasks:     tasks,
+			Counts:    counts,
+			TaskGraph: taskGraph,
 		})
 	}
 	return out
+}
+
+// buildTaskGraphForWorkspace builds graph data from a workspace directory.
+func buildTaskGraphForWorkspace(root string, workspaceID string) *serveTaskGraph {
+	workspaceDir := filepath.Join(root, "workspaces", workspaceID)
+	if _, err := os.Stat(workspaceDir); os.IsNotExist(err) {
+		workspaceDir = filepath.Join(root, "archive", workspaceID)
+	}
+
+	svc := newWorkspaceTaskService()
+	result, err := svc.List(root, workspaceID, "active")
+	if err != nil || result.Overview.Summary == wstask.SummaryEmpty {
+		return nil
+	}
+	return buildTaskGraph(workspaceDir, result.Overview.Items)
+}
+
+// buildTaskGraph builds task_graph data for a workspace.
+func buildTaskGraph(workspaceDir string, items []wstask.Item) *serveTaskGraph {
+	if len(items) == 0 {
+		return nil
+	}
+
+	nodeMap := make(map[string]wstask.Item)
+	for _, item := range items {
+		nodeMap[item.ID] = item
+	}
+
+	yamlPath := filepath.Join(workspaceDir, "workspace.yaml")
+	content, err := os.ReadFile(yamlPath)
+	if err != nil {
+		return &serveTaskGraph{
+			Nodes:       toGraphNodeSlice(items),
+			Diagnostics: serveTaskGraphDiagnostics{},
+		}
+	}
+
+	ws, parseErr := wstask.ParseYAMLWorkspace(content)
+	if parseErr != nil {
+		return &serveTaskGraph{
+			Nodes:       toGraphNodeSlice(items),
+			Diagnostics: serveTaskGraphDiagnostics{Errors: []string{parseErr.Error()}},
+		}
+	}
+
+	nodes := make([]serveTaskGraphNode, 0, len(ws.Tasks))
+	for _, t := range ws.Tasks {
+		if n, ok := nodeMap[t.ID]; ok {
+			n.Description = t.Description
+			nodes = append(nodes, serveTaskGraphNode{
+				ID:          n.ID,
+				Title:       n.Title,
+				Status:      string(n.Status),
+				Description: n.Description,
+			})
+		} else {
+			nodes = append(nodes, serveTaskGraphNode{
+				ID:          t.ID,
+				Title:       t.Title,
+				Status:      string(t.Status),
+				Description: t.Description,
+			})
+		}
+	}
+
+	edges := make([]serveTaskGraphEdge, 0)
+	var diags serveTaskGraphDiagnostics
+	for _, t := range ws.Tasks {
+		for _, dep := range t.DependsOn {
+			if dep == "" || dep == t.ID {
+				continue
+			}
+			if _, exists := nodeMap[dep]; !exists {
+				diags.Errors = append(diags.Errors, fmt.Sprintf("edge %s -> %s references unknown task", dep, t.ID))
+			} else {
+				edges = append(edges, serveTaskGraphEdge{From: dep, To: t.ID})
+			}
+		}
+	}
+
+	return &serveTaskGraph{
+		Nodes:       nodes,
+		Edges:       edges,
+		Diagnostics: diags,
+	}
+}
+
+func toGraphNodeSlice(items []wstask.Item) []serveTaskGraphNode {
+	nodes := make([]serveTaskGraphNode, 0, len(items))
+	for _, item := range items {
+		nodes = append(nodes, serveTaskGraphNode{
+			ID:     item.ID,
+			Title:  item.Title,
+			Status: string(item.Status),
+		})
+	}
+	return nodes
 }
 
 func loadServeWorkspaces(root string) ([]serveWorkspace, error) {
@@ -392,13 +530,17 @@ func loadServeWorkspaces(root string) ([]serveWorkspace, error) {
 	}
 	out := make([]serveWorkspace, 0, len(rowsResult.Rows))
 	for _, row := range rowsResult.Rows {
-		out = append(out, serveWorkspace{
+		ws := serveWorkspace{
 			ID:        row.ID,
 			Title:     firstNonEmpty(strings.TrimSpace(row.Title), row.ID),
 			SourceURL: strings.TrimSpace(row.SourceURL),
 			Tasks:     row.Tasks,
 			Repos:     serveReposForWorkspace(row),
-		})
+		}
+		if row.Tasks.Summary != wstask.SummaryEmpty {
+			ws.TaskGraph = buildTaskGraph(filepath.Join(root, "workspaces", row.ID), row.Tasks.Items)
+		}
+		out = append(out, ws)
 	}
 	return out, nil
 }
@@ -752,8 +894,18 @@ func loadServeWorkspaceFiles(root string, workspaceID string, workspace serveWor
 		workspaceDocumentFilename: workspaceView,
 		"repos/":                  serveReposView(workspace),
 	}
+	graphView := serveFileView{
+		ID:    "graph",
+		Path:  "graph",
+		Name:  "Graph",
+		Kind:  "graph",
+		Meta:  "Task dependency graph",
+		Badge: "read-only",
+	}
+	viewsByPath["graph"] = graphView
 	tree := []serveFileTreeNode{
 		{Name: workspaceDocumentFilename, Path: workspaceDocumentFilename, Type: "workspace"},
+		{Name: "Graph", Path: "graph", Type: "special"},
 		{Name: "repos", Path: "repos/", Type: "special"},
 	}
 
@@ -1093,6 +1245,21 @@ const serveStyles = `
 
 const serveSmartViewStyles = `
 body[data-live-page=detail] .app{grid-template-columns:300px minmax(0,1fr)}.back-link{min-height:32px;display:inline-flex;align-items:center;margin-bottom:12px;color:var(--muted);font-size:12px;font-weight:900}.back-link:before{content:"<";margin-right:6px}.file-tree{min-width:0;border-top:1px solid var(--line);padding-top:10px}.tree-row{width:100%;min-height:30px;display:flex;align-items:center;gap:7px;padding:0 8px;border:0;border-radius:6px;background:transparent;color:var(--ink);cursor:pointer;font-size:13px;font-weight:700;text-align:left}.tree-row.active,.tree-row:hover{background:var(--nav-hover);color:var(--accent);text-decoration:none}.tree-children{margin-left:16px}.tree-children.hidden{display:none}.folder-chevron{width:7px;height:7px;border-right:2px solid currentColor;border-bottom:2px solid currentColor;transform:rotate(45deg) translateY(-1px)}.tree-row.folder.collapsed .folder-chevron{transform:rotate(-45deg)}.folder-icon,.special-folder-icon{width:13px;height:10px;border:1px solid var(--progress-line);border-top:4px solid var(--progress-line);border-radius:2px;background:var(--surface);flex:0 0 auto}.special-folder-icon{border-color:var(--accent);border-top-color:var(--accent);background:var(--brand-bg)}.file-dot{width:9px;height:11px;border:1px solid var(--progress-line);border-radius:2px;background:var(--surface);flex:0 0 auto}.open-marker{margin-left:auto;color:var(--muted);font-size:11px;font-weight:900;text-transform:uppercase}.file-detail .detail-header{display:grid;grid-template-columns:minmax(0,1fr) auto minmax(220px,360px);align-items:start}.header-meta{display:flex;gap:8px;flex-wrap:wrap;justify-content:center}.header-meta span{min-height:26px;display:inline-flex;align-items:center;padding:0 9px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:900;text-transform:uppercase}.layout-note{color:var(--muted);font-size:12px;line-height:1.45;text-align:right}.file-viewer{min-width:0;display:grid;grid-template-rows:auto minmax(0,1fr);background:var(--surface)}.file-tabs{display:flex;gap:4px;padding:8px 10px 0;border-bottom:1px solid var(--line);background:var(--surface-2);overflow-x:auto}.file-tab{min-height:34px;display:inline-flex;align-items:center;gap:8px;padding:0 10px;border:1px solid var(--line);border-bottom:0;border-radius:8px 8px 0 0;background:var(--brand-bg);color:var(--muted);cursor:pointer;font-size:13px;font-weight:800;white-space:nowrap}.file-tab.active{background:var(--surface);color:var(--ink)}.tab-close{width:8px;height:8px;position:relative;flex:0 0 auto}.tab-close:before,.tab-close:after{content:"";position:absolute;top:3px;left:0;width:8px;height:2px;border-radius:999px;background:var(--muted)}.tab-close:before{transform:rotate(45deg)}.tab-close:after{transform:rotate(-45deg)}.file-panel[hidden],.file-tab[hidden]{display:none}.viewer-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:14px 16px;border-bottom:1px solid var(--line)}.viewer-head h2{font-size:14px;line-height:1.25}.badge{min-height:26px;display:inline-flex;align-items:center;padding:0 9px;border-radius:999px;background:var(--surface-2);color:var(--muted);font-size:12px;font-weight:900;white-space:nowrap}.viewer-body{min-height:0;overflow:auto}.rendered-markdown{max-width:920px;padding:26px 30px 42px;line-height:1.7}.rendered-markdown h1,.rendered-markdown h2,.rendered-markdown h3{margin:1.35em 0 .55em}.rendered-markdown h1{margin-top:0;padding-bottom:.35em;border-bottom:1px solid var(--line);font-size:30px}.rendered-markdown h2{padding-bottom:.28em;border-bottom:1px solid var(--line);font-size:23px}.rendered-markdown pre,.code-source,.source-details pre{margin:0;overflow:auto;background:var(--readme-code);color:#e5eefc;padding:16px;font:13px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}.code-keyword{color:#93c5fd;font-weight:900}.code-source{min-height:420px}.html-preview{display:block;background:var(--surface-2)}.preview-toolbar{min-height:38px;display:flex;align-items:center;gap:7px;padding:0 12px;border-bottom:1px solid var(--line);background:var(--surface)}.preview-toolbar span{width:10px;height:10px;border-radius:999px;background:var(--progress-line)}.preview-toolbar strong{margin-left:6px;color:var(--muted);font-size:12px}.html-render{display:block;width:100%;height:auto;min-height:0;border:0;background:#fff}.source-details{border-top:1px solid var(--line);background:var(--surface)}.source-details summary{min-height:38px;display:flex;align-items:center;padding:0 14px;color:var(--muted);cursor:pointer;font-weight:900}.workspace-board-view,.repo-overview{padding:18px}.view-intro{display:flex;justify-content:space-between;align-items:flex-start;gap:16px;margin-bottom:14px}.view-intro h2{font-size:18px}.secondary-btn{min-height:32px;display:inline-flex;align-items:center;padding:0 10px;border:1px solid var(--line);border-radius:8px;background:var(--surface);color:var(--muted);font-weight:900}.repo-grid{display:grid;grid-template-columns:repeat(2,minmax(260px,1fr));gap:12px}.repo-card{display:grid;gap:5px;margin-top:10px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface)}.repo-card.large{min-height:108px}.repo-card span{color:var(--muted);font-size:12px;overflow-wrap:anywhere}.repo-branch{font-weight:700}.repo-pr-list{display:grid;gap:6px;margin-top:7px}.repo-pr{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;padding:8px;border:1px solid var(--line);border-radius:8px;background:var(--surface-2);color:var(--ink);font-weight:700}.repo-pr:hover{border-color:var(--accent);text-decoration:none}.repo-pr-main{min-width:0;display:grid;gap:3px}.repo-pr-title{color:var(--ink);font-size:13px}.repo-pr-meta{color:var(--muted);font-size:11px;font-weight:700}.pr-state{min-height:22px;display:inline-flex;align-items:center;padding:0 8px;border-radius:999px;background:var(--brand-bg);color:var(--accent);font-size:11px;font-weight:900;text-transform:uppercase}.pr-state-merged{background:#dcfce7;color:#166534}.pr-state-closed{background:#fee2e2;color:#991b1b}.pr-state-draft{background:#f3e8ff;color:#6b21a8}.pr-state-unknown{background:var(--surface);color:var(--muted);border:1px solid var(--line)}@media(max-width:1100px){body[data-live-page=detail] .app{grid-template-columns:1fr}}@media(max-width:720px){.file-detail .detail-header{display:flex;flex-direction:column;align-items:stretch}.layout-note{text-align:left}.rendered-markdown h1{font-size:24px}.repo-grid{grid-template-columns:1fr}.repo-pr{grid-template-columns:1fr}}
+
+.graph-canvas{position:relative;min-height:280px;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px;overflow:auto}
+.graph-svg{width:100%;height:100%}
+.graph-node{cursor:pointer;transition:opacity .15s ease}
+.graph-node circle.node-shape{fill:var(--surface);stroke-width:2;stroke:var(--line);transition:all .15s ease}
+.graph-node text.node-label{font-size:11px;font-weight:700;fill:var(--ink)}
+.graph-node text.node-status{font-size:9px;font-weight:600;fill:var(--muted)}
+.graph-edge{stroke:var(--line);stroke-width:1.5}
+.graph-node.focused circle.node-shape{stroke:var(--accent);stroke-width:3;filter:url(#glow-accent)}
+.graph-node.focused text.node-status{fill:var(--accent);font-weight:900}
+.graph-node.highlighted circle.node-shape{stroke:var(--accent-2);stroke-width:2.5}
+.graph-node.dimmed{opacity:.25}
+.graph-edge.highlighted{stroke:var(--accent);stroke-width:3;marker-end:url(#arrow-accent)}
+.graph-edge.dimmed{opacity:.15}
+
 `
 
 const serveLiveScript = `<script>
@@ -1336,6 +1503,11 @@ const serveDetailTemplate = `<!doctype html>
             <div class="viewer-body">
               {{if eq .Kind "workspace"}}
                 <section class="workspace-board-view" aria-label="workspace.md board view"><div class="view-intro"><div><h2>Board from workspace.md</h2><p class="meta">source-backed task state rendered as a workspace board</p></div><a class="secondary-btn" href="#{{.ID}}-source">View source</a></div><div class="status-grid" data-live-workspace-board>{{range $status := listStatuses}}{{template "detailStatusColumn" dict "Workspace" $.Workspace "Status" $status}}{{end}}</div><details class="source-details" id="{{.ID}}-source"><summary>Source</summary><pre><code>{{.SourceHTML}}</code></pre></details></section>
+              {{else if eq .Kind "graph"}}
+                <section class="workspace-board-view" aria-label="task dependency graph">
+                  <div class="view-intro"><div><h2>Task Dependency Graph</h2><p class="meta">read-only view of task dependencies from workspace.yaml</p></div></div>
+                  <div id="graph-canvas-{{$.Workspace.ID}}" class="graph-canvas" data-workspace-id="{{$.Workspace.ID}}" data-task-graph-json="{{with $.Workspace.TaskGraph}}{{.JSON}}{{else}}{}{{end}}"></div>
+                </section>
               {{else if eq .Kind "repos"}}
                 {{.HTML}}
               {{else if eq .Kind "markdown"}}

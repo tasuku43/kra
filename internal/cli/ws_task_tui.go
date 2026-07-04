@@ -119,7 +119,13 @@ func (c *CLI) runWSStatus(args []string) int {
 
 func runWSTaskTUI(in *os.File, out io.Writer, root string, target wsTaskTarget, opts wsTaskTUIOptions, useColor bool) error {
 	model := newWSTaskTUIModel(root, target, opts, useColor)
-	program := tea.NewProgram(
+	program := newWSTaskTUIProgram(in, out, model)
+	_, err := program.Run()
+	return err
+}
+
+func newWSTaskTUIProgram(in *os.File, out io.Writer, model wsTaskTUIModel) *tea.Program {
+	return tea.NewProgram(
 		model,
 		tea.WithInput(in),
 		tea.WithOutput(out),
@@ -127,11 +133,13 @@ func runWSTaskTUI(in *os.File, out io.Writer, root string, target wsTaskTarget, 
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
 	)
-	_, err := program.Run()
-	return err
 }
 
 func newWSTaskTUIModel(root string, target wsTaskTarget, opts wsTaskTUIOptions, useColor bool) wsTaskTUIModel {
+	return newWSTaskTUIModelWithService(root, target, opts, newWorkspaceTaskService(), useColor)
+}
+
+func newWSTaskTUIModelWithService(root string, target wsTaskTarget, opts wsTaskTUIOptions, service *wstask.Service, useColor bool) wsTaskTUIModel {
 	if opts.refresh <= 0 {
 		opts.refresh = 2 * time.Second
 	}
@@ -139,7 +147,7 @@ func newWSTaskTUIModel(root string, target wsTaskTarget, opts wsTaskTUIOptions, 
 		root:     root,
 		target:   target,
 		opts:     opts,
-		service:  newWorkspaceTaskService(),
+		service:  service,
 		width:    80,
 		height:   24,
 		mode:     wsTaskTUIModeRead,

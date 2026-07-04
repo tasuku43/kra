@@ -121,3 +121,12 @@ status: planned
     - `docs/dev/spec/commands/ws/selector.md`
   - Depends: UX-CORE-004
   - Parallel: yes
+
+- [x] UX-CORE-014: Root workspace inbox tasks
+  - What: use root `workspace.md` as the Markdown-first inbox and cross-workspace task document, exposed through
+    root-level `kra task` commands.
+  - Specs:
+    - `docs/dev/spec/concepts/root-workspace-tasks.md`
+    - `docs/dev/spec/commands/task.md`
+  - Depends: UX-WS-023
+  - Parallel: yes

@@ -123,6 +123,8 @@ func (c *CLI) runWSTask(args []string) int {
 		return c.runWSTaskSync(args[1:])
 	case "dock":
 		return c.runWSTaskDock(args[1:])
+	case "validate":
+		return c.runWSTaskValidate(args[1:])
 	default:
 		if strings.HasPrefix(first, "-") {
 			return c.runWSTaskLauncher(args)
@@ -1777,6 +1779,262 @@ func renderWSTaskStatusMarker(status wstask.Status, useColor bool) string {
 		}
 	}
 	return icon
+}
+
+type wsTaskValidateOptions struct {
+	target  wsTaskTargetOptions
+	current bool
+	format  string
+}
+
+func parseWSTaskValidateOptions(args []string) (wsTaskValidateOptions, error) {
+	opts := wsTaskValidateOptions{format: "human"}
+	rest := append([]string{}, args...)
+	for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
+		arg := strings.TrimSpace(rest[0])
+		switch {
+		case arg == "-h" || arg == "--help" || arg == "help":
+			return wsTaskValidateOptions{}, errHelpRequested
+		case arg == "--current":
+			opts.target.useCurrent = true
+			rest = rest[1:]
+		case arg == "--select":
+			opts.target.useSelect = true
+			rest = rest[1:]
+		case arg == "--id":
+			if len(rest) < 2 {
+				return wsTaskValidateOptions{}, fmt.Errorf("--id requires a value")
+			}
+			opts.target.workspaceID = strings.TrimSpace(rest[1])
+			rest = rest[2:]
+		case arg == "--format":
+			if len(rest) < 2 {
+				return wsTaskValidateOptions{}, fmt.Errorf("--format requires a value")
+			}
+			opts.format = strings.TrimSpace(rest[1])
+			rest = rest[2:]
+		case strings.HasPrefix(arg, "--id="):
+			opts.target.workspaceID = strings.TrimSpace(strings.TrimPrefix(arg, "--id="))
+			rest = rest[1:]
+		case strings.HasPrefix(arg, "--current="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--current=")) != "" {
+				return wsTaskValidateOptions{}, fmt.Errorf("--current does not take a value")
+			}
+			opts.target.useCurrent = true
+			rest = rest[1:]
+		case strings.HasPrefix(arg, "--select="):
+			if strings.TrimSpace(strings.TrimPrefix(arg, "--select=")) != "" {
+				return wsTaskValidateOptions{}, fmt.Errorf("--select does not take a value")
+			}
+			opts.target.useSelect = true
+			rest = rest[1:]
+		case strings.HasPrefix(arg, "--format="):
+			opts.format = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
+			rest = rest[1:]
+		default:
+			return wsTaskValidateOptions{}, fmt.Errorf("unknown flag for ws task validate: %q", arg)
+		}
+	}
+	if len(rest) > 0 {
+		return wsTaskValidateOptions{}, fmt.Errorf("unexpected args for ws task validate: %q", strings.Join(rest, " "))
+	}
+	if err := validateWSTaskTargetOptions(opts.target); err != nil {
+		return wsTaskValidateOptions{}, err
+	}
+	switch opts.format {
+	case "human", "json":
+	default:
+		return wsTaskValidateOptions{}, fmt.Errorf("unsupported --format: %q (supported: human, json)", opts.format)
+	}
+	return opts, nil
+}
+
+func (c *CLI) runWSTaskValidate(args []string) int {
+	opts, err := parseWSTaskValidateOptions(args)
+	if err != nil {
+		if err == errHelpRequested {
+			c.printWSTaskValidateUsage(c.Out)
+			return exitOK
+		}
+		fmt.Fprintf(c.Err, "ws task validate: %v\n", err)
+		c.printWSTaskValidateUsage(c.Err)
+		return exitUsage
+	}
+
+	target, root, _, code := c.resolveWSTaskTarget(opts.target, "validate", opts.format, false, "active")
+	if code != exitOK {
+		return code
+	}
+
+	svc := newWorkspaceTaskService()
+
+	// Load the snapshot to get source type via service's overview
+	overview, err := svc.Overview(root, target.workspaceID, "active")
+	if err != nil {
+		if opts.format == "json" {
+			return c.writeWSTaskJSONError("ws.task.validate", target.workspaceID, "internal_error", err.Error(), exitUsage)
+		}
+		fmt.Fprintf(c.Err, "ws task validate: %v\n", err)
+		return exitError
+	}
+
+	// Check for workspace.yaml existence via the path
+	var snapshot wstask.DocumentSnapshot
+	yamlPath := filepath.Join(root, "workspaces", target.workspaceID, "workspace.yaml")
+	if _, yamlErr := os.Stat(yamlPath); yamlErr == nil {
+		contentBytes, readErr := os.ReadFile(yamlPath)
+		if readErr != nil {
+			snapshot = wstask.DocumentSnapshot{
+				Path:   yamlPath,
+				Exists: false,
+			}
+		} else {
+			snapshot = wstask.DocumentSnapshot{
+				Path:    yamlPath,
+				Exists:  true,
+				Content: string(contentBytes),
+				Source:  wstask.SourceYAML,
+			}
+		}
+	} else {
+		snapshot = wstask.DocumentSnapshot{
+			Path:   overview.Path,
+			Exists: len(overview.Overview.Items) > 0 || overview.Overview.Summary == wstask.SummaryInvalid,
+			Source: wstask.SourceMD,
+		}
+	}
+	if err != nil {
+		if opts.format == "json" {
+			return c.writeWSTaskJSONError("ws.task.validate", target.workspaceID, "internal_error", err.Error(), exitUsage)
+		}
+		fmt.Fprintf(c.Err, "ws task validate: %v\n", err)
+		return exitError
+	}
+
+	if !snapshot.Exists || snapshot.Content == "" {
+		result := map[string]any{
+			"path":     snapshot.Path,
+			"source":   "none",
+			"status":   "ok",
+			"summary":  "no task document found (empty workspace)",
+			"errors":   []string{},
+			"warnings": []string{},
+		}
+		if opts.format == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     true,
+				Action: "ws.task.validate",
+				Result: result,
+			})
+			return exitOK
+		}
+		fmt.Fprintln(c.Out, styleMuted("No task document found. Workspace has no tasks.", writerSupportsColor(c.Out)))
+		return exitOK
+	}
+
+	var items []wstask.Item
+	var diags wstask.Diagnostics
+
+	switch snapshot.Source {
+	case wstask.SourceYAML:
+		items, diags = wstask.ParseYAMLContent([]byte(snapshot.Content))
+	default: // MD fallback - use service for parsing
+		listResult, err := svc.List(root, target.workspaceID, "active")
+		if err != nil {
+			diags.Errors = append(diags.Errors, fmt.Sprintf("workspace.md load error: %s", err.Error()))
+		} else {
+			items = listResult.Overview.Items
+		}
+	}
+
+	if opts.format == "json" {
+		result := map[string]any{
+			"path":     snapshot.Path,
+			"source":   snapshot.Source,
+			"errors":   diags.Errors,
+			"warnings": diags.Warnings,
+		}
+		if len(items) > 0 {
+			result["task_count"] = len(items)
+			result["status"] = "ok"
+		} else if snapshot.Exists && !diags.HasErrors() {
+			result["status"] = "empty"
+			result["summary"] = "no valid tasks found in document"
+		} else if diags.HasErrors() {
+			result["status"] = "error"
+		}
+		_ = writeCLIJSON(c.Out, cliJSONResponse{
+			OK:     true,
+			Action: "ws.task.validate",
+			Result: result,
+		})
+		if diags.HasErrors() {
+			return exitError
+		}
+		return exitOK
+	}
+
+	useColor := writerSupportsColor(c.Out)
+	fmt.Fprintf(c.Out, "Validating workspace tasks (%s)\n", snapshot.Path)
+
+	if !snapshot.Exists || snapshot.Content == "" {
+		fmt.Fprintln(c.Out, styleMuted("No task document found.", useColor))
+		return exitOK
+	}
+
+	if len(items) == 0 && diags.HasErrors() {
+		fmt.Fprintf(c.Out, "%s Validation failed\n", styleWarn("", useColor))
+		for _, e := range diags.Errors {
+			fmt.Fprintf(c.Out, "  %s%s\n", uiIndent, styleWarn("✖ "+e, useColor))
+		}
+		if len(diags.Warnings) > 0 {
+			fmt.Fprintln(c.Out)
+			fmt.Fprint(c.Out, styleInfo("Warnings:", useColor))
+			for _, w := range diags.Warnings {
+				fmt.Fprintf(c.Out, "  %s%s\n", uiIndent, styleMuted("● "+w, useColor))
+			}
+		}
+		return exitError
+	}
+
+	if len(items) == 0 && !diags.HasErrors() {
+		fmt.Fprintln(c.Out, styleMuted("No structured tasks found.", useColor))
+		return exitOK
+	}
+
+	fmt.Fprintf(c.Out, "%s %d task(s) found\n", styleSuccess("", useColor), len(items))
+
+	if len(diags.Errors) > 0 {
+		fmt.Fprintln(c.Out)
+		fmt.Fprint(c.Out, styleWarn("Errors:", useColor))
+		for _, e := range diags.Errors {
+			fmt.Fprintf(c.Out, "  %s%s\n", uiIndent, styleWarn("✖ "+e, useColor))
+		}
+		return exitError
+	}
+
+	if len(diags.Warnings) > 0 {
+		fmt.Fprintln(c.Out)
+		fmt.Fprint(c.Out, styleInfo("Warnings:", useColor))
+		for _, w := range diags.Warnings {
+			fmt.Fprintf(c.Out, "  %s%s\n", uiIndent, styleMuted("● "+w, useColor))
+		}
+	}
+
+	return exitOK
+}
+
+func (c *CLI) printWSTaskValidateUsage(w io.Writer) {
+	fmt.Fprintln(w, `Usage: kra ws task validate [options]`)
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Validates the workspace's task document (workspace.yaml or workspace.md).")
+	fmt.Fprintln(w, "Reports schema errors and graph warnings. Non-fatal.")
+	fmt.Fprintln(w)
+	fmt.Fprintln(w, "Options:")
+	fmt.Fprintln(w, "  --id <ws-id>       workspace ID to validate")
+	fmt.Fprintln(w, "  --current          use current cmux workspace as target")
+	fmt.Fprintln(w, "  --select           interactively select a workspace")
+	fmt.Fprintln(w, "  --format human|json output format (default: human)")
 }
 
 func wantsJSONFormat(args []string) bool {

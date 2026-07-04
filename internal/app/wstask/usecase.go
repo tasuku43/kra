@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"gopkg.in/yaml.v3"
 	"regexp"
 	"sort"
 	"strconv"
@@ -13,6 +14,12 @@ import (
 )
 
 type Status string
+
+// Source types for DocumentSnapshot.
+const (
+	SourceMD   = "md"
+	SourceYAML = "yaml"
+)
 
 const (
 	StatusTodo    Status = "todo"
@@ -141,6 +148,7 @@ type DocumentSnapshot struct {
 	Path    string
 	Exists  bool
 	Content string
+	Source  string // "md" or "yaml", empty when missing
 }
 
 type Port interface {
@@ -181,47 +189,100 @@ func NewService(port Port, syncPorts ...SyncPort) *Service {
 	return &Service{port: port, syncPort: syncPort}
 }
 
+func (s *Service) loadItems(root, workspaceID, scope string) ([]Item, DocumentSnapshot, error) {
+	snapshot, err := s.port.Load(root, workspaceID, scope)
+	if err != nil {
+		return nil, DocumentSnapshot{}, err
+	}
+
+	// Handle empty/missing document
+	if !snapshot.Exists || snapshot.Content == "" {
+		return nil, snapshot, nil
+	}
+
+	switch snapshot.Source {
+	case SourceYAML:
+		items, diags := ParseYAMLContent([]byte(snapshot.Content))
+		if diags.HasErrors() {
+			// Return items with errors as warning for non-fatal paths like Overview/List
+			return items, snapshot, nil
+		}
+		return items, snapshot, nil
+
+	default: // SourceMD or empty (default to MD for backward compat)
+		doc, err := parseDocument(snapshot)
+		if err != nil {
+			return nil, snapshot, err
+		}
+		return doc.items(), snapshot, nil
+	}
+}
+
 func (s *Service) Overview(root string, workspaceID string, scope string) (OverviewResult, error) {
 	snapshot, err := s.port.Load(root, workspaceID, scope)
 	if err != nil {
 		return OverviewResult{}, err
 	}
-	doc, err := parseDocument(snapshot)
-	if err != nil {
-		if errors.Is(err, ErrConflict) {
+	if !snapshot.Exists || snapshot.Content == "" {
+		return OverviewResult{
+			Path:     snapshot.Path,
+			Overview: buildOverview(nil, ""),
+		}, nil
+	}
+	switch snapshot.Source {
+	case SourceYAML:
+		items, diags := ParseYAMLContent([]byte(snapshot.Content))
+		if diags.HasErrors() {
 			return OverviewResult{
 				Path: snapshot.Path,
 				Overview: Overview{
 					Summary: SummaryInvalid,
-					Warning: err.Error(),
+					Warning: strings.Join(diags.Errors, "; "),
 				},
 			}, nil
 		}
-		return OverviewResult{}, err
+		return OverviewResult{
+			Path:     snapshot.Path,
+			Overview: buildOverview(items, strings.Join(diags.Warnings, "; ")),
+		}, nil
+	default:
+		doc, err := parseDocument(snapshot)
+		if err != nil {
+			if errors.Is(err, ErrConflict) {
+				return OverviewResult{
+					Path: snapshot.Path,
+					Overview: Overview{
+						Summary: SummaryInvalid,
+						Warning: err.Error(),
+					},
+				}, nil
+			}
+			return OverviewResult{}, err
+		}
+		return OverviewResult{
+			Path:     snapshot.Path,
+			Overview: buildOverview(doc.items(), ""),
+		}, nil
 	}
-	return OverviewResult{
-		Path:     snapshot.Path,
-		Overview: buildOverview(doc.items(), ""),
-	}, nil
 }
 
 func (s *Service) List(root string, workspaceID string, scope string) (ListResult, error) {
-	doc, snapshot, err := s.loadDocument(root, workspaceID, scope)
+	items, snapshot, err := s.loadItems(root, workspaceID, scope)
 	if err != nil {
 		return ListResult{}, err
 	}
 	return ListResult{
 		Path:     snapshot.Path,
-		Overview: buildOverview(doc.items(), ""),
+		Overview: buildOverview(items, ""),
 	}, nil
 }
 
 func (s *Service) View(root string, workspaceID string, scope string) (ViewModel, error) {
-	doc, snapshot, err := s.loadDocument(root, workspaceID, scope)
+	items, snapshot, err := s.loadItems(root, workspaceID, scope)
 	if err != nil {
 		return ViewModel{}, err
 	}
-	overview := buildOverview(doc.items(), "")
+	overview := buildOverview(items, "")
 	return ViewModel{
 		WorkspaceID:  workspaceID,
 		Path:         snapshot.Path,
@@ -239,26 +300,74 @@ func (s *Service) View(root string, workspaceID string, scope string) (ViewModel
 }
 
 func (s *Service) Add(root string, workspaceID string, title string, description string) (AddResult, error) {
-	doc, snapshot, err := s.loadDocument(root, workspaceID, "active")
+	snapshot, err := s.port.Load(root, workspaceID, "active")
 	if err != nil {
 		return AddResult{}, err
 	}
+
 	trimmedTitle := strings.TrimSpace(title)
 	if trimmedTitle == "" {
 		return AddResult{}, fmt.Errorf("title is required")
 	}
+
+	// Read existing items based on source
+	var items []Item
+	switch snapshot.Source {
+	case SourceYAML:
+		items, _ = ParseYAMLContent([]byte(snapshot.Content))
+	default: // MD or empty
+		if snapshot.Exists && snapshot.Content != "" {
+			doc, err := parseDocument(snapshot)
+			if err != nil {
+				return AddResult{}, err
+			}
+			items = doc.items()
+		}
+	}
+
+	newID := nextTaskID(items)
 	item := Item{
-		ID:          nextTaskID(doc.items()),
+		ID:          newID,
 		Title:       trimmedTitle,
 		Status:      StatusTodo,
 		Description: normalizeDescription(description),
 	}
-	doc.ensureTasksSection()
-	doc.appendTask(item)
-	if err := s.port.Save(snapshot, doc.render()); err != nil {
-		return AddResult{}, err
+
+	switch snapshot.Source {
+	case SourceYAML:
+		items = append(items, item)
+		rendered, err := RenderWorkspaceYAML(items)
+		if err != nil {
+			return AddResult{}, fmt.Errorf("render workspace.yaml: %w", err)
+		}
+		if err := s.saveSnapshot(snapshot, string(rendered)); err != nil {
+			return AddResult{}, err
+		}
+		return AddResult{Path: snapshot.Path, Task: item}, nil
+	default: // MD or empty -> create workspace.md
+		var doc *parsedDocument
+		if snapshot.Exists && snapshot.Content != "" {
+			doc, err = parseDocument(snapshot)
+			if err != nil {
+				return AddResult{}, err
+			}
+		} else {
+			doc = new(parsedDocument)
+		}
+		doc.ensureTasksSection()
+		doc.appendTask(item)
+		if err := s.saveSnapshot(snapshot, doc.render()); err != nil {
+			return AddResult{}, err
+		}
+		return AddResult{Path: snapshot.Path, Task: item}, nil
 	}
-	return AddResult{Path: snapshot.Path, Task: item}, nil
+}
+
+func (s *Service) saveSnapshot(snapshot DocumentSnapshot, content string) error {
+	if err := s.port.Save(snapshot, content); err != nil {
+		return err
+	}
+	return nil
 }
 
 func ParseStatus(raw string) (Status, error) {
@@ -315,7 +424,7 @@ func (s *Service) Sync(ctx context.Context, root string, workspaceID string) (Sy
 		}, nil
 	}
 
-	doc, _, err := s.loadDocument(root, workspaceID, "active")
+	items, _, err := s.loadItems(root, workspaceID, "active")
 	if err != nil {
 		return SyncResult{}, err
 	}
@@ -330,7 +439,7 @@ func (s *Service) Sync(ctx context.Context, root string, workspaceID string) (Sy
 		}, nil
 	}
 
-	desired := desiredSyncEntries(doc.items())
+	desired := desiredSyncEntries(items)
 	result := SyncResult{
 		State:   SyncStateApplied,
 		Targets: len(targets),
@@ -366,18 +475,81 @@ func (s *Service) Sync(ctx context.Context, root string, workspaceID string) (Sy
 }
 
 func (s *Service) transition(root string, workspaceID string, taskID string, next Status) (TransitionResult, error) {
-	doc, snapshot, err := s.loadDocument(root, workspaceID, "active")
+	snapshot, err := s.port.Load(root, workspaceID, "active")
 	if err != nil {
 		return TransitionResult{}, err
 	}
+
 	targetID := strings.TrimSpace(taskID)
 	if targetID == "" {
 		return TransitionResult{}, fmt.Errorf("%w: %s", ErrTaskNotFound, targetID)
 	}
+
+	switch snapshot.Source {
+	case SourceYAML:
+		return s.transitionYAML(snapshot, targetID, next)
+	default: // MD or empty
+		return s.transitionMD(snapshot, targetID, next)
+	}
+}
+
+func (s *Service) transitionYAML(snapshot DocumentSnapshot, taskID string, next Status) (TransitionResult, error) {
+	items, diags := ParseYAMLContent([]byte(snapshot.Content))
+	if diags.HasErrors() && len(items) == 0 {
+		return TransitionResult{}, fmt.Errorf("parse workspace.yaml: %s", strings.Join(diags.Errors, "; "))
+	}
+
+	idx := -1
+	for i, item := range items {
+		if item.ID == taskID {
+			idx = i
+			break
+		}
+	}
+	if idx < 0 {
+		return TransitionResult{}, fmt.Errorf("%w: %s", ErrTaskNotFound, taskID)
+	}
+
+	previous := items[idx].Status
+	changed, err := applyTransition(&items[idx], next)
+	if err != nil {
+		return TransitionResult{}, err
+	}
+
+	if changed {
+		rendered, err := RenderWorkspaceYAML(items)
+		if err != nil {
+			return TransitionResult{}, fmt.Errorf("render workspace.yaml: %w", err)
+		}
+		if err := s.port.Save(snapshot, string(rendered)); err != nil {
+			return TransitionResult{}, err
+		}
+	}
+
+	return TransitionResult{
+		Path: snapshot.Path,
+		Task: Change{
+			ID:             items[idx].ID,
+			Title:          items[idx].Title,
+			PreviousStatus: previous,
+			Status:         items[idx].Status,
+			Changed:        changed,
+		},
+	}, nil
+}
+
+func (s *Service) transitionMD(snapshot DocumentSnapshot, taskID string, next Status) (TransitionResult, error) {
+	doc, err := parseDocument(snapshot)
+	if err != nil {
+		return TransitionResult{}, err
+	}
+
+	targetID := strings.TrimSpace(taskID)
 	task, ok := doc.findTask(targetID)
 	if !ok {
 		return TransitionResult{}, fmt.Errorf("%w: %s", ErrTaskNotFound, targetID)
 	}
+
 	previous := task.Status
 	changed, err := applyTransition(task, next)
 	if err != nil {
@@ -388,6 +560,7 @@ func (s *Service) transition(root string, workspaceID string, taskID string, nex
 			return TransitionResult{}, err
 		}
 	}
+
 	return TransitionResult{
 		Path: snapshot.Path,
 		Task: Change{
@@ -1006,4 +1179,83 @@ func cloneLines(lines []string) []string {
 
 func newConflict(format string, args ...any) error {
 	return fmt.Errorf("%w: %s", ErrConflict, fmt.Sprintf(format, args...))
+}
+
+// ParseYAMLContent parses workspace.yaml content and returns (items, diagnostics).
+// If the YAML is invalid or fails schema validation, items will be nil and diagnostics
+// will contain errors. Warnings are always preserved.
+func ParseYAMLContent(content []byte) ([]Item, Diagnostics) {
+	ws, err := ParseYAMLWorkspace(content)
+	if err != nil {
+		return nil, Diagnostics{Errors: []string{err.Error()}}
+	}
+	items, diags := Validate(ws)
+	return items, diags
+}
+
+// RenderWorkspaceYAML renders an in-memory set of Items back to workspace.yaml format.
+// It generates IDs if not provided and preserves task order.
+func RenderWorkspaceYAML(items []Item) ([]byte, error) {
+	ws := &YAMLWorkspace{
+		SchemaVersion: 1,
+		Tasks:         make([]YAMLTask, 0, len(items)),
+	}
+	for _, item := range items {
+		t := YAMLTask{
+			ID:          item.ID,
+			Title:       item.Title,
+			Status:      item.Status,
+			Description: item.Description,
+			DependsOn:   []string{},
+		}
+		ws.Tasks = append(ws.Tasks, t)
+	}
+	return yaml.Marshal(ws)
+}
+
+// YAMLTaskList represents the list of items with YAML metadata for round-tripping.
+type YAMLTaskList struct {
+	SchemaVersion int        `yaml:"schema_version"`
+	Tasks         []YAMLItem `yaml:"tasks"`
+}
+
+// YAMLItem is a single item in the YAML task list.
+type YAMLItem struct {
+	ID          string   `yaml:"id"`
+	Title       string   `yaml:"title"`
+	Status      Status   `yaml:"status"`
+	Description string   `yaml:"description,omitempty"`
+	DependsOn   []string `yaml:"depends_on,omitempty"`
+}
+
+// ToYAMLTaskList converts Item slices to YAMLTaskList for round-tripping.
+func ToYAMLTaskList(items []Item) *YAMLTaskList {
+	if len(items) == 0 {
+		return &YAMLTaskList{SchemaVersion: 1, Tasks: []YAMLItem{}}
+	}
+	tasks := make([]YAMLItem, len(items))
+	for i, item := range items {
+		tasks[i] = YAMLItem{
+			ID:          item.ID,
+			Title:       item.Title,
+			Status:      item.Status,
+			Description: item.Description,
+			DependsOn:   []string{},
+		}
+	}
+	return &YAMLTaskList{SchemaVersion: 1, Tasks: tasks}
+}
+
+// FromItems converts YAMLItem slices back to Item slices.
+func FromItems(yamlTasks []YAMLItem) []Item {
+	items := make([]Item, len(yamlTasks))
+	for i, t := range yamlTasks {
+		items[i] = Item{
+			ID:          t.ID,
+			Title:       t.Title,
+			Status:      t.Status,
+			Description: t.Description,
+		}
+	}
+	return items
 }
