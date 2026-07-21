@@ -38,6 +38,12 @@ Discover repositories from provider API and bulk-add selected repos into the sha
 - target scope: org repositories (`--org` required)
 - include all accessible repos (private + public)
 - pagination: fetch all pages
+- clone URL policy:
+  - resolve the preferred protocol from `gh config get git_protocol --host github.com`
+  - use the provider's HTTPS clone URL when the preference is `https`, or its SSH clone URL when it is `ssh`
+  - fall back to HTTPS when the preference cannot be read or is unsupported
+  - if the provider response omits the selected clone URL, derive one in the selected scheme
+  - pass that URL to `git clone` unchanged so Git's normal `url.<base>.insteadOf` rewriting remains effective
 
 ## Selection policy
 

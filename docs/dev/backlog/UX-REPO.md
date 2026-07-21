@@ -28,3 +28,12 @@ status: planned
     - `docs/dev/spec/concepts/config.md`
   - Depends: UX-WS-018, MVP-030
   - Parallel: yes
+
+- [x] UX-REPO-004: User-configured clone protocol for `repo discover`
+  - What: make GitHub discovery follow the host-specific `gh` clone protocol preference, preserving
+    Git's normal `url.<base>.insteadOf` rewriting and falling back to HTTPS when unset.
+  - Specs:
+    - `docs/dev/spec/commands/repo/discover.md`
+    - `docs/dev/spec/commands/repo/add.md`
+  - Depends: MVP-061
+  - Parallel: yes

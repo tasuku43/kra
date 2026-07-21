@@ -43,14 +43,20 @@ func (p *GitHubGHProvider) ListOrgRepos(ctx context.Context, org string) ([]Repo
 	if org == "" {
 		return nil, fmt.Errorf("org is required")
 	}
+	gitProtocol := p.preferredGitProtocol(ctx)
+	urlField := ".clone_url"
+	if gitProtocol == "ssh" {
+		urlField = ".ssh_url"
+	}
+	jqExpression := fmt.Sprintf(".[] | [.full_name,%s] | @tsv", urlField)
 
-	out, err := p.run(ctx, "api", "--paginate", fmt.Sprintf("/orgs/%s/repos?per_page=100&type=all", org), "--jq", ".[] | [.full_name,.ssh_url,.clone_url] | @tsv")
+	out, err := p.run(ctx, "api", "--paginate", fmt.Sprintf("/orgs/%s/repos?per_page=100&type=all", org), "--jq", jqExpression)
 	if err != nil {
 		if !isGitHubNotFound(err) {
 			return nil, fmt.Errorf("list github repos for org %s: %w", org, err)
 		}
 		// Compat fallback: allow personal account handles in --org.
-		out, err = p.run(ctx, "api", "--paginate", fmt.Sprintf("/users/%s/repos?per_page=100&type=owner", org), "--jq", ".[] | [.full_name,.ssh_url,.clone_url] | @tsv")
+		out, err = p.run(ctx, "api", "--paginate", fmt.Sprintf("/users/%s/repos?per_page=100&type=owner", org), "--jq", jqExpression)
 		if err != nil {
 			return nil, fmt.Errorf("list github repos for owner %s: %w", org, err)
 		}
@@ -70,21 +76,16 @@ func (p *GitHubGHProvider) ListOrgRepos(ctx context.Context, org string) ([]Repo
 		if fullName == "" || !strings.Contains(fullName, "/") {
 			continue
 		}
-		sshURL := ""
-		cloneURL := ""
+		remoteURL := ""
 		if len(parts) >= 2 {
-			sshURL = strings.TrimSpace(parts[1])
-		}
-		if len(parts) >= 3 {
-			cloneURL = strings.TrimSpace(parts[2])
-		}
-
-		remoteURL := sshURL
-		if remoteURL == "" {
-			remoteURL = cloneURL
+			remoteURL = strings.TrimSpace(parts[1])
 		}
 		if remoteURL == "" {
-			remoteURL = fmt.Sprintf("git@github.com:%s.git", fullName)
+			if gitProtocol == "ssh" {
+				remoteURL = fmt.Sprintf("git@github.com:%s.git", fullName)
+			} else {
+				remoteURL = fmt.Sprintf("https://github.com/%s.git", fullName)
+			}
 		}
 
 		spec, err := repospec.Normalize(remoteURL)
@@ -108,6 +109,18 @@ func (p *GitHubGHProvider) ListOrgRepos(ctx context.Context, org string) ([]Repo
 		return strings.Compare(a.RepoKey, b.RepoKey)
 	})
 	return repos, nil
+}
+
+func (p *GitHubGHProvider) preferredGitProtocol(ctx context.Context) string {
+	out, err := p.run(ctx, "config", "get", "git_protocol", "--host", "github.com")
+	if err != nil {
+		return "https"
+	}
+	protocol := strings.ToLower(strings.TrimSpace(out))
+	if protocol != "https" && protocol != "ssh" {
+		return "https"
+	}
+	return protocol
 }
 
 func isGitHubNotFound(err error) bool {
