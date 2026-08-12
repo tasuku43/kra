@@ -18,6 +18,7 @@ Manage root-level inbox and cross-workspace tasks stored in `<KRA_ROOT>/workspac
 - `kra task status [--todo-only] [--include-done] [--no-color]`
 - `kra task tui [--todo-only] [--include-done] [--no-color]`
 - `kra task status <task-id> <todo|doing|blocked|done> [--format human|json]`
+- `kra task sync [--prefer kra|cmux] [--dry-run] [--format human|json]`
 
 ## Behavior
 
@@ -32,7 +33,9 @@ Manage root-level inbox and cross-workspace tasks stored in `<KRA_ROOT>/workspac
 - `kra task status <task-id> <status>` updates only the target task in root `workspace.md`.
 - Task IDs use the same `TASK-<nnn>` sequence as workspace-local tasks.
 - Root task commands do not mutate workspace-local task documents.
-- Root task commands do not invoke cmux task sync.
+- `task sync` explicitly reconciles the root inbox with native Todo on the mapped Workspace Group anchor.
+- `task sync --dry-run` reports the plan without changing the root document, live Todo, or ignored base.
+- Other root task commands do not mutate cmux implicitly.
 
 ## Output
 
@@ -42,6 +45,7 @@ Manage root-level inbox and cross-workspace tasks stored in `<KRA_ROOT>/workspac
   - `task.list`
   - `task.add`
   - `task.status`
+  - `task.sync`
 - JSON result payloads include:
   - `path`
   - task overview fields for `list`

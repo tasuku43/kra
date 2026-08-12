@@ -9,7 +9,6 @@ import (
 	"os"
 	"os/signal"
 	"path/filepath"
-	"sort"
 	"strings"
 	"time"
 
@@ -77,26 +76,10 @@ type wsTaskStatusOptions struct {
 	format string
 }
 
-type wsTaskSyncOptions struct {
-	target wsTaskTargetOptions
-	format string
-}
-
-type wsTaskDockInstallOptions struct {
-	format string
-}
-
-type wsTaskSyncBatchItem struct {
-	WorkspaceID string
-	Sync        wstask.SyncResult
-	Error       error
-}
-
 type wsTaskStatusExecution struct {
 	Transition wstask.TransitionResult
 }
 
-const deprecatedWSTaskSyncWarning = "task sync is deprecated; use kra ws status or cmux Dock instead"
 const wsTaskTargetScopeAll = "all"
 
 func (c *CLI) runWSTask(args []string) int {
@@ -121,8 +104,6 @@ func (c *CLI) runWSTask(args []string) int {
 		return c.runWSTaskStatus(args[1:])
 	case "sync":
 		return c.runWSTaskSync(args[1:])
-	case "dock":
-		return c.runWSTaskDock(args[1:])
 	case "validate":
 		return c.runWSTaskValidate(args[1:])
 	default:
@@ -133,89 +114,6 @@ func (c *CLI) runWSTask(args []string) int {
 		c.printWSTaskUsage(c.Err)
 		return exitUsage
 	}
-}
-
-func (c *CLI) runWSTaskDock(args []string) int {
-	if len(args) == 0 {
-		c.printWSTaskDockUsage(c.Err)
-		return exitUsage
-	}
-	switch first := strings.TrimSpace(args[0]); first {
-	case "-h", "--help", "help":
-		c.printWSTaskDockUsage(c.Out)
-		return exitOK
-	case "install":
-		return c.runWSTaskDockInstall(args[1:])
-	default:
-		fmt.Fprintf(c.Err, "unknown command: %q\n", strings.Join(append([]string{"ws", "task", "dock"}, args[0]), " "))
-		c.printWSTaskDockUsage(c.Err)
-		return exitUsage
-	}
-}
-
-func (c *CLI) runWSTaskDockInstall(args []string) int {
-	opts, err := parseWSTaskDockInstallOptions(args)
-	if err != nil {
-		if err == errHelpRequested {
-			c.printWSTaskDockInstallUsage(c.Out)
-			return exitOK
-		}
-		if opts.format == "json" {
-			return c.writeWSTaskJSONError("ws.task.dock.install", "", "invalid_argument", err.Error(), exitUsage)
-		}
-		fmt.Fprintln(c.Err, err)
-		c.printWSTaskDockInstallUsage(c.Err)
-		return exitUsage
-	}
-	path, err := globalCMUXDockPath()
-	if err != nil {
-		if opts.format == "json" {
-			return c.writeWSTaskJSONError("ws.task.dock.install", "", "internal_error", err.Error(), exitError)
-		}
-		fmt.Fprintf(c.Err, "task dock install: %v\n", err)
-		return exitError
-	}
-	command := standardGlobalDockCommand(false)
-	before, err := inspectGlobalDock(path, command, true)
-	if err != nil {
-		if opts.format == "json" {
-			return c.writeWSTaskJSONError("ws.task.dock.install", "", "internal_error", err.Error(), exitError)
-		}
-		fmt.Fprintf(c.Err, "task dock install: %v\n", err)
-		return exitError
-	}
-	if before.Changed {
-		if err := applyGlobalDockMigration(path, command); err != nil {
-			if opts.format == "json" {
-				return c.writeWSTaskJSONError("ws.task.dock.install", "", "internal_error", err.Error(), exitError)
-			}
-			fmt.Fprintf(c.Err, "task dock install: %v\n", err)
-			return exitError
-		}
-	}
-	if opts.format == "json" {
-		_ = writeCLIJSON(c.Out, cliJSONResponse{
-			OK:     true,
-			Action: "ws.task.dock.install",
-			Result: map[string]any{
-				"global_dock": before,
-			},
-		})
-		return exitOK
-	}
-	useColor := writerSupportsColor(c.Out)
-	action := "unchanged"
-	if before.Created {
-		action = "created"
-	} else if before.Updated {
-		action = "updated"
-	}
-	printResultSection(c.Out, useColor,
-		styleSuccess("cmux Dock installed", useColor),
-		styleMuted(fmt.Sprintf("path: %s", path), useColor),
-		styleMuted(fmt.Sprintf("kra-tasks: %s", action), useColor),
-	)
-	return exitOK
 }
 
 func (c *CLI) runWSTaskView(args []string) int {
@@ -537,63 +435,6 @@ func (c *CLI) runWSTaskStatus(args []string) int {
 	}
 	printWSTaskStatusHuman(c.Out, target.workspaceID, result, writerSupportsColor(c.Out))
 	return exitOK
-}
-
-func (c *CLI) runWSTaskSync(args []string) int {
-	requestedJSON := wantsJSONFormat(args)
-	opts, err := parseWSTaskSyncOptions(args)
-	if err != nil {
-		if err == errHelpRequested {
-			c.printWSTaskSyncUsage(c.Out)
-			return exitOK
-		}
-		if requestedJSON {
-			return c.writeWSTaskJSONError("ws.task.sync", "", "invalid_argument", err.Error(), exitUsage)
-		}
-		fmt.Fprintf(c.Err, "%v\n", err)
-		c.printWSTaskSyncUsage(c.Err)
-		return exitUsage
-	}
-	if opts.target.useAll {
-		return c.runWSTaskSyncAll(opts.format)
-	}
-
-	target, _, _, code := c.resolveWSTaskTarget(opts.target, "sync", opts.format, false, "active")
-	if code != exitOK {
-		return code
-	}
-
-	result := deprecatedWSTaskSyncResult(0)
-
-	if opts.format == "json" {
-		return writeWSTaskSyncJSON(c.Out, target.workspaceID, result)
-	}
-	printWSTaskSyncHuman(c.Out, target.workspaceID, result, writerSupportsColor(c.Out))
-	return exitOK
-}
-
-func (c *CLI) runWSTaskSyncAll(format string) int {
-	wd, err := os.Getwd()
-	if err != nil {
-		return c.writeWSTaskRuntimeError(format, "ws.task.sync", "", fmt.Errorf("get working dir: %w", err))
-	}
-	root, err := paths.ResolveExistingRoot(wd)
-	if err != nil {
-		return c.writeWSTaskRuntimeError(format, "ws.task.sync", "", fmt.Errorf("resolve KRA_ROOT: %w", err))
-	}
-	workspaceIDs, err := listWorkspaceIDsByStatus(context.Background(), root, "active")
-	if err != nil {
-		return c.writeWSTaskRuntimeError(format, "ws.task.sync", "", fmt.Errorf("list workspaces: %w", err))
-	}
-	if len(workspaceIDs) == 0 {
-		return c.writeWSTaskRuntimeError(format, "ws.task.sync", "", errNoActiveWorkspaces)
-	}
-
-	items := executeDeprecatedWSTaskSyncBatch(workspaceIDs)
-	if format == "json" {
-		return writeWSTaskSyncBatchJSON(c.Out, items)
-	}
-	return printWSTaskSyncBatchHuman(c.Out, c.Err, items, writerSupportsColor(c.Out))
 }
 
 func (c *CLI) executeWSTaskStatus(root string, workspaceID string, taskID string, next wstask.Status) (wsTaskStatusExecution, error) {
@@ -1081,127 +922,6 @@ func parseWSTaskStatusOptions(args []string) (wsTaskStatusOptions, error) {
 	return opts, nil
 }
 
-func parseWSTaskSyncOptions(args []string) (wsTaskSyncOptions, error) {
-	opts := wsTaskSyncOptions{format: "human"}
-	rest := append([]string{}, args...)
-	for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
-		arg := strings.TrimSpace(rest[0])
-		switch {
-		case arg == "-h" || arg == "--help" || arg == "help":
-			return wsTaskSyncOptions{}, errHelpRequested
-		case arg == "--current":
-			opts.target.useCurrent = true
-			rest = rest[1:]
-		case arg == "--select":
-			opts.target.useSelect = true
-			rest = rest[1:]
-		case arg == "--all":
-			opts.target.useAll = true
-			rest = rest[1:]
-		case arg == "--id":
-			if len(rest) < 2 {
-				return wsTaskSyncOptions{}, fmt.Errorf("--id requires a value")
-			}
-			opts.target.workspaceID = strings.TrimSpace(rest[1])
-			rest = rest[2:]
-		case arg == "--format":
-			if len(rest) < 2 {
-				return wsTaskSyncOptions{}, fmt.Errorf("--format requires a value")
-			}
-			opts.format = strings.TrimSpace(rest[1])
-			rest = rest[2:]
-		case strings.HasPrefix(arg, "--id="):
-			opts.target.workspaceID = strings.TrimSpace(strings.TrimPrefix(arg, "--id="))
-			rest = rest[1:]
-		case strings.HasPrefix(arg, "--format="):
-			opts.format = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
-			rest = rest[1:]
-		case strings.HasPrefix(arg, "--current="):
-			if strings.TrimSpace(strings.TrimPrefix(arg, "--current=")) != "" {
-				return wsTaskSyncOptions{}, fmt.Errorf("--current does not take a value")
-			}
-			opts.target.useCurrent = true
-			rest = rest[1:]
-		case strings.HasPrefix(arg, "--all="):
-			if strings.TrimSpace(strings.TrimPrefix(arg, "--all=")) != "" {
-				return wsTaskSyncOptions{}, fmt.Errorf("--all does not take a value")
-			}
-			opts.target.useAll = true
-			rest = rest[1:]
-		case strings.HasPrefix(arg, "--select="):
-			if strings.TrimSpace(strings.TrimPrefix(arg, "--select=")) != "" {
-				return wsTaskSyncOptions{}, fmt.Errorf("--select does not take a value")
-			}
-			opts.target.useSelect = true
-			rest = rest[1:]
-		default:
-			return wsTaskSyncOptions{}, fmt.Errorf("unknown flag for ws task sync: %q", arg)
-		}
-	}
-	if len(rest) > 0 {
-		return wsTaskSyncOptions{}, fmt.Errorf("unexpected args for ws task sync: %q", strings.Join(rest, " "))
-	}
-	if opts.target.useAll {
-		switch opts.format {
-		case "human", "json":
-		default:
-			return wsTaskSyncOptions{}, fmt.Errorf("unsupported --format: %q (supported: human, json)", opts.format)
-		}
-		if opts.target.workspaceID != "" {
-			return wsTaskSyncOptions{}, fmt.Errorf("--id and --all cannot be used together")
-		}
-		if opts.target.useCurrent {
-			return wsTaskSyncOptions{}, fmt.Errorf("--current and --all cannot be used together")
-		}
-		if opts.target.useSelect {
-			return wsTaskSyncOptions{}, fmt.Errorf("--select and --all cannot be used together")
-		}
-		return opts, nil
-	}
-	if err := validateWSTaskTargetOptions(opts.target); err != nil {
-		return wsTaskSyncOptions{}, err
-	}
-	switch opts.format {
-	case "human", "json":
-	default:
-		return wsTaskSyncOptions{}, fmt.Errorf("unsupported --format: %q (supported: human, json)", opts.format)
-	}
-	return opts, nil
-}
-
-func parseWSTaskDockInstallOptions(args []string) (wsTaskDockInstallOptions, error) {
-	opts := wsTaskDockInstallOptions{format: "human"}
-	for i := 0; i < len(args); i++ {
-		arg := strings.TrimSpace(args[i])
-		switch {
-		case arg == "-h" || arg == "--help" || arg == "help":
-			return wsTaskDockInstallOptions{}, errHelpRequested
-		case arg == "--global":
-			// Global Dock is the only supported install target. Keep this as a compatibility alias.
-		case strings.HasPrefix(arg, "--global="):
-			if strings.TrimSpace(strings.TrimPrefix(arg, "--global=")) != "" {
-				return opts, fmt.Errorf("--global does not take a value")
-			}
-		case arg == "--format":
-			if i+1 >= len(args) {
-				return opts, fmt.Errorf("--format requires a value")
-			}
-			opts.format = strings.TrimSpace(args[i+1])
-			i++
-		case strings.HasPrefix(arg, "--format="):
-			opts.format = strings.TrimSpace(strings.TrimPrefix(arg, "--format="))
-		default:
-			return opts, fmt.Errorf("unexpected args for ws task dock install: %q", arg)
-		}
-	}
-	switch opts.format {
-	case "human", "json":
-	default:
-		return opts, fmt.Errorf("unsupported --format: %q (supported: human, json)", opts.format)
-	}
-	return opts, nil
-}
-
 func validateWSTaskTargetOptions(opts wsTaskTargetOptions) error {
 	if opts.workspaceID != "" && opts.useAll {
 		return fmt.Errorf("--id and --all cannot be used together")
@@ -1312,6 +1032,14 @@ func resolveWSTaskTargetFromCMUXCurrent(root string) (wsTaskTarget, error) {
 	candidates := map[string]struct{}{cmuxWorkspaceID: {}}
 	for _, workspace := range resolveCMUXWorkspaceHandleAliases(context.Background(), cmuxWorkspaceID) {
 		candidates[workspace] = struct{}{}
+	}
+	// RootGroup is the authoritative native Workspace Group anchor. Keep this
+	// routing independent of the legacy KRA_ROOT workspace entry so a valid
+	// group mapping still gets batch semantics during migration or repair.
+	if mapping.RootGroup != nil {
+		if _, ok := candidates[strings.TrimSpace(mapping.RootGroup.AnchorWorkspaceID)]; ok {
+			return wsTaskTarget{scope: wsTaskTargetScopeAll}, nil
+		}
 	}
 	for workspaceID, workspaceMapping := range mapping.Workspaces {
 		for _, entry := range workspaceMapping.Entries {
@@ -1484,86 +1212,6 @@ func writeWSTaskStatusJSON(out io.Writer, workspaceID string, result wsTaskStatu
 	return exitOK
 }
 
-func writeWSTaskSyncJSON(out io.Writer, workspaceID string, result wstask.SyncResult) int {
-	_ = writeCLIJSON(out, cliJSONResponse{
-		OK:          true,
-		Action:      "ws.task.sync",
-		WorkspaceID: workspaceID,
-		Result: map[string]any{
-			"sync": syncResultMap(result),
-		},
-	})
-	return exitOK
-}
-
-func writeWSTaskSyncBatchJSON(out io.Writer, items []wsTaskSyncBatchItem) int {
-	successes := make([]map[string]any, 0, len(items))
-	failures := make([]map[string]any, 0)
-	skipped := 0
-	totalTargets := 0
-	totalSet := 0
-	totalCleared := 0
-	for _, item := range items {
-		if item.Error != nil {
-			failures = append(failures, map[string]any{
-				"workspace_id": item.WorkspaceID,
-				"code":         "internal_error",
-				"message":      item.Error.Error(),
-			})
-			continue
-		}
-		if item.Sync.State == wstask.SyncStateSkipped {
-			skipped++
-		}
-		totalTargets += item.Sync.Targets
-		totalSet += item.Sync.SetCount
-		totalCleared += item.Sync.ClearCount
-		successes = append(successes, map[string]any{
-			"workspace_id": item.WorkspaceID,
-			"sync":         syncResultMap(item.Sync),
-		})
-	}
-
-	payload := cliJSONResponse{
-		OK:     len(failures) == 0,
-		Action: "ws.task.sync",
-		Result: map[string]any{
-			"count":      len(items),
-			"succeeded":  len(successes),
-			"failed":     len(failures),
-			"skipped":    skipped,
-			"targets":    totalTargets,
-			"set":        totalSet,
-			"cleared":    totalCleared,
-			"workspaces": successes,
-			"failures":   failures,
-		},
-	}
-	if len(failures) > 0 {
-		payload.Error = &cliJSONError{
-			Code:    "partial_failure",
-			Message: "some workspaces failed to sync tasks",
-		}
-		_ = writeCLIJSON(out, payload)
-		return exitError
-	}
-	_ = writeCLIJSON(out, payload)
-	return exitOK
-}
-
-func syncResultMap(result wstask.SyncResult) map[string]any {
-	out := map[string]any{
-		"state":   string(result.State),
-		"targets": result.Targets,
-		"set":     result.SetCount,
-		"cleared": result.ClearCount,
-	}
-	if strings.TrimSpace(result.WarningText) != "" {
-		out["warning"] = result.WarningText
-	}
-	return out
-}
-
 func printWSTaskListHuman(out io.Writer, result wstask.ListResult, useColor bool) {
 	body := make([]string, 0, len(result.Overview.Items))
 	if len(result.Overview.Items) == 0 {
@@ -1587,85 +1235,6 @@ func printWSTaskStatusHuman(out io.Writer, workspaceID string, result wsTaskStat
 		styleMuted(fmt.Sprintf("status: %s", result.Transition.Task.Status), useColor),
 	}
 	printResultSection(out, useColor, lines...)
-}
-
-func printWSTaskSyncHuman(out io.Writer, workspaceID string, result wstask.SyncResult, useColor bool) {
-	printResultSection(
-		out,
-		useColor,
-		renderWSTaskSyncSummary(result, useColor),
-		styleMuted(fmt.Sprintf("workspace: %s", workspaceID), useColor),
-	)
-}
-
-func renderWSTaskSyncSummary(result wstask.SyncResult, useColor bool) string {
-	if result.State == wstask.SyncStateSkipped {
-		if strings.TrimSpace(result.WarningText) != "" {
-			return styleMuted(fmt.Sprintf("task sync skipped: %s", result.WarningText), useColor)
-		}
-		return styleMuted("task sync skipped", useColor)
-	}
-	return styleMuted(
-		fmt.Sprintf("task sync: applied %d (set %d, cleared %d)", result.Targets, result.SetCount, result.ClearCount),
-		useColor,
-	)
-}
-
-func executeDeprecatedWSTaskSyncBatch(workspaceIDs []string) []wsTaskSyncBatchItem {
-	items := make([]wsTaskSyncBatchItem, len(workspaceIDs))
-	for i, workspaceID := range workspaceIDs {
-		items[i] = wsTaskSyncBatchItem{
-			WorkspaceID: workspaceID,
-			Sync:        deprecatedWSTaskSyncResult(0),
-		}
-	}
-	sort.Slice(items, func(i, j int) bool { return items[i].WorkspaceID < items[j].WorkspaceID })
-	return items
-}
-
-func deprecatedWSTaskSyncResult(targets int) wstask.SyncResult {
-	return wstask.SyncResult{
-		State:       wstask.SyncStateSkipped,
-		Targets:     targets,
-		WarningText: deprecatedWSTaskSyncWarning,
-	}
-}
-
-func printWSTaskSyncBatchHuman(out io.Writer, errOut io.Writer, items []wsTaskSyncBatchItem, useColor bool) int {
-	totalTargets := 0
-	totalSet := 0
-	totalCleared := 0
-	skipped := 0
-	failed := 0
-	lines := make([]string, 0, len(items)+2)
-	for _, item := range items {
-		if item.Error != nil {
-			failed++
-			lines = append(lines, fmt.Sprintf("%s %s", styleWarn("✖", useColor), item.WorkspaceID))
-			fmt.Fprintf(errOut, "ws task sync (%s): %v\n", item.WorkspaceID, item.Error)
-			continue
-		}
-		totalTargets += item.Sync.Targets
-		totalSet += item.Sync.SetCount
-		totalCleared += item.Sync.ClearCount
-		if item.Sync.State == wstask.SyncStateSkipped {
-			skipped++
-		}
-		lines = append(lines, fmt.Sprintf("%s %s", styleMuted("•", useColor), item.WorkspaceID))
-		lines = append(lines, fmt.Sprintf("%s%s", uiIndent, renderWSTaskSyncSummary(item.Sync, useColor)))
-	}
-	printResultSection(
-		out,
-		useColor,
-		append([]string{
-			styleMuted(fmt.Sprintf("task sync: applied %d workspaces (set %d, cleared %d)", totalTargets, totalSet, totalCleared), useColor),
-			styleMuted(fmt.Sprintf("workspace: all (succeeded %d, skipped %d, failed %d)", len(items)-failed, skipped, failed), useColor),
-		}, lines...)...,
-	)
-	if failed > 0 {
-		return exitError
-	}
-	return exitOK
 }
 
 func renderWSTaskListRow(item wstask.Item, useColor bool) string {
@@ -1911,7 +1480,7 @@ func (c *CLI) runWSTaskValidate(args []string) int {
 		return exitError
 	}
 
-	if !snapshot.Exists || snapshot.Content == "" {
+	if !snapshot.Exists {
 		result := map[string]any{
 			"path":     snapshot.Path,
 			"source":   "none",
@@ -1977,7 +1546,7 @@ func (c *CLI) runWSTaskValidate(args []string) int {
 	useColor := writerSupportsColor(c.Out)
 	fmt.Fprintf(c.Out, "Validating workspace tasks (%s)\n", snapshot.Path)
 
-	if !snapshot.Exists || snapshot.Content == "" {
+	if !snapshot.Exists {
 		fmt.Fprintln(c.Out, styleMuted("No task document found.", useColor))
 		return exitOK
 	}
@@ -2032,7 +1601,7 @@ func (c *CLI) printWSTaskValidateUsage(w io.Writer) {
 	fmt.Fprintln(w)
 	fmt.Fprintln(w, "Options:")
 	fmt.Fprintln(w, "  --id <ws-id>       workspace ID to validate")
-	fmt.Fprintln(w, "  --current          use current cmux workspace as target")
+	fmt.Fprintln(w, "  --current          use workspace resolved from the current directory")
 	fmt.Fprintln(w, "  --select           interactively select a workspace")
 	fmt.Fprintln(w, "  --format human|json output format (default: human)")
 }

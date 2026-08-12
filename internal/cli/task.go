@@ -61,6 +61,8 @@ func (c *CLI) runTask(args []string) int {
 			return c.runTaskTUI(args[1:])
 		}
 		return c.runTaskStatus(args[1:])
+	case "sync":
+		return c.runTaskSync(args[1:])
 	default:
 		fmt.Fprintf(c.Err, "unknown command: %q\n", strings.Join(append([]string{"task"}, args[0]), " "))
 		c.printTaskUsage(c.Err)
@@ -485,6 +487,7 @@ Subcommands:
   tui|view         Compatibility aliases for task status
   list|ls          List root inbox tasks
   add              Add one root inbox task
+  sync             Reconcile root inbox with cmux native Todo
   help             Show this help
 `)
 }

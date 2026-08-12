@@ -66,7 +66,7 @@ When an AI agent edits `workspace.md` directly:
 - preserve non-target task blocks unless intentionally changing them
 - keep one required `status:` line per structured task
 - write new tasks as new `### TASK-<nnn> <title>` blocks
-- inspect direct edits with `kra ws status` or the cmux Dock
+- inspect direct edits with `kra ws task validate`, `kra ws task list`, or `kra ws status`
 
 ## Invalid examples
 

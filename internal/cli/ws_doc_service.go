@@ -20,7 +20,6 @@ var newWSDocService = func() *appwsdoc.Service {
 				WorkspaceID:   rootCMUXMappingID,
 				WorkspacePath: root,
 				Title:         "KRA_ROOT",
-				StatusText:    "kra:root",
 			}
 			svc := appcmux.NewService(func() appcmux.Client {
 				return wsOpenClientAdapter{inner: newCMUXOpenClient()}

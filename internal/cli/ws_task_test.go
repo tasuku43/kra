@@ -3,7 +3,6 @@ package cli
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -14,81 +13,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/tasuku43/kra/internal/app/wstask"
 	"github.com/tasuku43/kra/internal/cmuxmap"
-	"github.com/tasuku43/kra/internal/infra/appports"
 	"github.com/tasuku43/kra/internal/infra/cmuxctl"
 	"github.com/tasuku43/kra/internal/infra/paths"
 	"github.com/tasuku43/kra/internal/testutil"
 )
-
-type fakeWSTaskSyncClient struct {
-	statuses   map[string][]cmuxctl.StatusEntry
-	setCalls   []cmuxctl.StatusEntry
-	clearCalls []struct {
-		workspace string
-		key       string
-	}
-}
-
-func newFakeWSTaskSyncClient() *fakeWSTaskSyncClient {
-	return &fakeWSTaskSyncClient{
-		statuses: map[string][]cmuxctl.StatusEntry{},
-	}
-}
-
-func (f *fakeWSTaskSyncClient) ListStatus(_ context.Context, workspace string) ([]cmuxctl.StatusEntry, error) {
-	return append([]cmuxctl.StatusEntry{}, f.statuses[workspace]...), nil
-}
-
-func (f *fakeWSTaskSyncClient) SetStatus(_ context.Context, workspace string, label string, text string, icon string, color string) error {
-	entry := cmuxctl.StatusEntry{
-		Key:   label,
-		Value: text,
-		Icon:  icon,
-		Color: color,
-	}
-	f.setCalls = append(f.setCalls, entry)
-	rows := append([]cmuxctl.StatusEntry{}, f.statuses[workspace]...)
-	replaced := false
-	for i := range rows {
-		if rows[i].Key == label {
-			rows[i] = entry
-			replaced = true
-			break
-		}
-	}
-	if !replaced {
-		rows = append([]cmuxctl.StatusEntry{entry}, rows...)
-	}
-	f.statuses[workspace] = rows
-	return nil
-}
-
-func (f *fakeWSTaskSyncClient) ClearStatus(_ context.Context, workspace string, label string) error {
-	f.clearCalls = append(f.clearCalls, struct {
-		workspace string
-		key       string
-	}{workspace: workspace, key: label})
-	rows := f.statuses[workspace]
-	out := rows[:0]
-	for _, row := range rows {
-		if row.Key != label {
-			out = append(out, row)
-		}
-	}
-	f.statuses[workspace] = append([]cmuxctl.StatusEntry{}, out...)
-	return nil
-}
-
-func useFakeWSTaskSyncClient(t *testing.T, client appports.CMUXTaskSyncClient) {
-	t.Helper()
-	orig := newCMUXTaskSyncClient
-	newCMUXTaskSyncClient = func() appports.CMUXTaskSyncClient {
-		return client
-	}
-	t.Cleanup(func() {
-		newCMUXTaskSyncClient = orig
-	})
-}
 
 func seedCMUXWorkspaceMapping(t *testing.T, root string, workspaceID string, cmuxWorkspaceID string) {
 	t.Helper()
@@ -166,18 +94,11 @@ func TestCLI_WSTaskAdd_JSON_CreatesTaskDocumentAndPreservesOutsideContent(t *tes
 	}
 }
 
-func TestCLI_WSTaskStatus_JSON_AllowsDoneToTodoWithoutSync(t *testing.T) {
+func TestCLI_WSTaskStatus_JSON_AllowsDoneToTodo(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
 	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 Start me\nstatus: done\n")
-	seedCMUXWorkspaceMapping(t, env.Root, "WS1", "cmux-1")
-	syncClient := newFakeWSTaskSyncClient()
-	syncClient.statuses["cmux-1"] = []cmuxctl.StatusEntry{
-		{Key: "task:TASK-001", Value: "✔ TASK-001 Start me", Icon: "checklist", Color: "#64748b"},
-	}
-	useFakeWSTaskSyncClient(t, syncClient)
-
 	var out bytes.Buffer
 	var err bytes.Buffer
 	c := New(&out, &err)
@@ -196,19 +117,12 @@ func TestCLI_WSTaskStatus_JSON_AllowsDoneToTodoWithoutSync(t *testing.T) {
 	if got := task["status"]; got != "todo" {
 		t.Fatalf("task.status = %v, want %q", got, "todo")
 	}
-	if _, ok := resp.Result["sync"]; ok {
-		t.Fatalf("result.sync should be absent after sync deprecation: %+v", resp.Result)
-	}
-
 	content, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
 	if readErr != nil {
 		t.Fatalf("read workspace.md: %v", readErr)
 	}
 	if !bytes.Contains(content, []byte("status: todo")) {
 		t.Fatalf("workspace.md should be updated to todo: %q", string(content))
-	}
-	if len(syncClient.setCalls) != 0 || len(syncClient.clearCalls) != 0 {
-		t.Fatalf("cmux sync calls = set:%+v clear:%+v, want none", syncClient.setCalls, syncClient.clearCalls)
 	}
 }
 
@@ -941,281 +855,38 @@ func TestCLI_WSTaskAdd_JSON_RejectsArchivedWorkspace(t *testing.T) {
 	}
 }
 
-func TestCLI_WSTaskSync_JSON_DeprecatedNoOp(t *testing.T) {
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-003 Draft docs\nstatus: todo\n\n### TASK-001 Build parser\nstatus: doing\n\n### TASK-004 Shipped\nstatus: done\n\n### TASK-002 Waiting review\nstatus: blocked\n")
-	seedCMUXWorkspaceMapping(t, env.Root, "WS1", "cmux-1")
-	syncClient := newFakeWSTaskSyncClient()
-	syncClient.statuses["cmux-1"] = []cmuxctl.StatusEntry{
-		{Key: "task:TASK-001", Value: "● TASK-001 Build parser", Icon: "checklist", Color: "#0ea5e9"},
-		{Key: "task:TASK-003", Value: "○ TASK-003 Draft docs", Icon: "checklist", Color: "#ffffff"},
-		{Key: "task:TASK-999", Value: "✔ TASK-999 Legacy", Icon: "checklist", Color: "#64748b"},
-		{Key: "kra", Value: "kra:workspace", Icon: "tag", Color: "#4F46E5"},
-	}
-	useFakeWSTaskSyncClient(t, syncClient)
-
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-	code := c.Run([]string{"ws", "task", "sync", "--id", "WS1", "--format", "json"})
-	if code != exitOK {
-		t.Fatalf("ws task sync exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-	}
-	resp := decodeJSONResponse(t, out.String())
-	if !resp.OK || resp.Action != "ws.task.sync" {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
-	syncResult, ok := resp.Result["sync"].(map[string]any)
-	if !ok {
-		t.Fatalf("result.sync missing: %+v", resp.Result)
-	}
-	if got := syncResult["state"]; got != "skipped" {
-		t.Fatalf("sync.state = %v, want skipped", got)
-	}
-	if warning, _ := syncResult["warning"].(string); !strings.Contains(warning, "deprecated") {
-		t.Fatalf("sync.warning = %v, want deprecated warning", syncResult["warning"])
-	}
-	if got := syncResult["set"]; got != float64(0) {
-		t.Fatalf("sync.set = %v, want 0", got)
-	}
-	if got := syncResult["cleared"]; got != float64(0) {
-		t.Fatalf("sync.cleared = %v, want 0", got)
-	}
-	if len(syncClient.setCalls) != 0 || len(syncClient.clearCalls) != 0 {
-		t.Fatalf("cmux sync calls = set:%+v clear:%+v, want none", syncClient.setCalls, syncClient.clearCalls)
-	}
-}
-
-func TestCLI_WSTaskSync_JSON_DoesNotClearMissingTaskNamespaceEntries(t *testing.T) {
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n---\n")
-	seedCMUXWorkspaceMapping(t, env.Root, "WS1", "cmux-1")
-	syncClient := newFakeWSTaskSyncClient()
-	syncClient.statuses["cmux-1"] = []cmuxctl.StatusEntry{
-		{Key: "task:TASK-001", Value: "● TASK-001 Build parser", Icon: "checklist", Color: "#0ea5e9"},
-		{Key: "task:TASK-002", Value: "✔ TASK-002 Legacy", Icon: "checklist", Color: "#64748b"},
-		{Key: "kra", Value: "kra:workspace", Icon: "tag", Color: "#4F46E5"},
-	}
-	useFakeWSTaskSyncClient(t, syncClient)
-
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-	code := c.Run([]string{"ws", "task", "sync", "--id", "WS1", "--format", "json"})
-	if code != exitOK {
-		t.Fatalf("ws task sync exit code = %d, want %d (stderr=%q)", code, exitOK, err.String())
-	}
-	resp := decodeJSONResponse(t, out.String())
-	if !resp.OK || resp.Action != "ws.task.sync" {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
-	syncResult, ok := resp.Result["sync"].(map[string]any)
-	if !ok {
-		t.Fatalf("result.sync missing: %+v", resp.Result)
-	}
-	if got := syncResult["state"]; got != "skipped" {
-		t.Fatalf("sync.state = %v, want skipped", got)
-	}
-	if warning, _ := syncResult["warning"].(string); !strings.Contains(warning, "deprecated") {
-		t.Fatalf("sync.warning = %v, want deprecated warning", syncResult["warning"])
-	}
-	if len(syncClient.setCalls) != 0 || len(syncClient.clearCalls) != 0 {
-		t.Fatalf("cmux sync calls = set:%+v clear:%+v, want none", syncClient.setCalls, syncClient.clearCalls)
-	}
-}
-
-func TestCLI_WSTaskSync_JSON_All_Success(t *testing.T) {
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-	wsPath1 := seedWorkspaceMeta(t, env.Root, "active", "WS1")
-	wsPath2 := seedWorkspaceMeta(t, env.Root, "active", "WS2")
-	writeWorkspaceTasksFile(t, wsPath1, "## Tasks\n\n### TASK-001 First\nstatus: todo\n")
-	writeWorkspaceTasksFile(t, wsPath2, "## Tasks\n\n### TASK-002 Second\nstatus: doing\n")
-	seedCMUXWorkspaceMapping(t, env.Root, "WS1", "cmux-1")
-	seedCMUXWorkspaceMapping(t, env.Root, "WS2", "cmux-2")
-	syncClient := newFakeWSTaskSyncClient()
-	useFakeWSTaskSyncClient(t, syncClient)
-
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-	code := c.Run([]string{"ws", "task", "sync", "--all", "--format", "json"})
-	if code != exitOK {
-		t.Fatalf("ws task sync --all exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, err.String(), out.String())
-	}
-	resp := decodeJSONResponse(t, out.String())
-	if !resp.OK || resp.Action != "ws.task.sync" {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
-	if got := resp.Result["count"]; got != float64(2) {
-		t.Fatalf("result.count = %v, want 2", got)
-	}
-	if got := resp.Result["set"]; got != float64(0) {
-		t.Fatalf("result.set = %v, want 0", got)
-	}
-	if got := resp.Result["skipped"]; got != float64(2) {
-		t.Fatalf("result.skipped = %v, want 2", got)
-	}
-	if got := resp.Result["failed"]; got != float64(0) {
-		t.Fatalf("result.failed = %v, want 0", got)
-	}
-}
-
-func TestCLI_WSTaskSync_JSON_All_RejectsID(t *testing.T) {
-	env := testutil.NewEnv(t)
-	initAndConfigureRootRepo(t, env.Root)
-
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-	code := c.Run([]string{"ws", "task", "sync", "--id", "WS1", "--all", "--format", "json"})
-	if code != exitUsage {
-		t.Fatalf("ws task sync exit code = %d, want %d", code, exitUsage)
-	}
-	resp := decodeJSONResponse(t, out.String())
-	if resp.OK || resp.Error.Code != "invalid_argument" || !strings.Contains(resp.Error.Message, "--id and --all cannot be used together") {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
-}
-
-func TestCLI_WSTaskDockInstall_CreatesGlobalDock(t *testing.T) {
+func TestCLI_WSTaskRetiredDockCommand_IsUnknown(t *testing.T) {
 	setKraHomeForTest(t)
-	home, homeErr := os.UserHomeDir()
-	if homeErr != nil {
-		t.Fatalf("user home dir: %v", homeErr)
-	}
-	globalPath := filepath.Join(home, ".config", "cmux", "dock.json")
 
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-	code := c.Run([]string{"ws", "task", "dock", "install"})
-	if code != exitOK {
-		t.Fatalf("ws task dock install exit code=%d, want %d (stderr=%q)", code, exitOK, err.String())
-	}
-	b, readErr := os.ReadFile(globalPath)
-	if readErr != nil {
-		t.Fatalf("read global dock: %v", readErr)
-	}
-	var dock cmuxDockConfig
-	if err := json.Unmarshal(b, &dock); err != nil {
-		t.Fatalf("unmarshal global dock: %v", err)
-	}
-	if len(dock.Controls) != 1 || dock.Controls[0].ID != "kra-tasks" {
-		t.Fatalf("unexpected controls: %+v", dock.Controls)
-	}
-	if !strings.Contains(dock.Controls[0].Command, "kra ws status --cmux-current") {
-		t.Fatalf("unexpected command: %q", dock.Controls[0].Command)
+	for _, tc := range []struct {
+		name string
+		args []string
+		want string
+	}{
+		{name: "dock", args: []string{"ws", "task", "dock", "install"}, want: `unknown command: "ws task dock"`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			var out bytes.Buffer
+			var err bytes.Buffer
+			code := New(&out, &err).Run(tc.args)
+			if code != exitUsage {
+				t.Fatalf("exit code = %d, want %d", code, exitUsage)
+			}
+			if out.Len() != 0 {
+				t.Fatalf("stdout = %q, want empty", out.String())
+			}
+			if !strings.Contains(err.String(), tc.want) {
+				t.Fatalf("stderr = %q, want %q", err.String(), tc.want)
+			}
+		})
 	}
 }
 
-func TestCLI_WSTaskDockInstall_PreservesExistingControlsAndUpdatesKraTasks(t *testing.T) {
-	setKraHomeForTest(t)
-	home, homeErr := os.UserHomeDir()
-	if homeErr != nil {
-		t.Fatalf("user home dir: %v", homeErr)
-	}
-	globalPath := filepath.Join(home, ".config", "cmux", "dock.json")
-	if err := os.MkdirAll(filepath.Dir(globalPath), 0o755); err != nil {
-		t.Fatalf("mkdir global dock dir: %v", err)
-	}
-	existing := `{
-  "controls": [
-    {
-      "id": "custom",
-      "title": "Custom",
-      "command": "echo custom",
-      "height": 100
-    },
-    {
-      "id": "kra-tasks",
-      "title": "Old",
-      "command": "old command",
-      "height": 123
-    }
-  ]
-}
-`
-	if err := os.WriteFile(globalPath, []byte(existing), 0o644); err != nil {
-		t.Fatalf("write global dock: %v", err)
-	}
-
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-	code := c.Run([]string{"ws", "task", "dock", "install", "--global", "--format", "json"})
-	if code != exitOK {
-		t.Fatalf("ws task dock install exit code=%d, want %d (stderr=%q)", code, exitOK, err.String())
-	}
-	var resp testJSONResponse
-	if uerr := json.Unmarshal(out.Bytes(), &resp); uerr != nil {
-		t.Fatalf("json unmarshal error: %v", uerr)
-	}
-	if !resp.OK || resp.Action != "ws.task.dock.install" {
-		t.Fatalf("unexpected response: %+v", resp)
-	}
-
-	b, readErr := os.ReadFile(globalPath)
-	if readErr != nil {
-		t.Fatalf("read global dock: %v", readErr)
-	}
-	var dock cmuxDockConfig
-	if err := json.Unmarshal(b, &dock); err != nil {
-		t.Fatalf("unmarshal global dock: %v", err)
-	}
-	if len(dock.Controls) != 2 {
-		t.Fatalf("controls len=%d, want 2: %+v", len(dock.Controls), dock.Controls)
-	}
-	if dock.Controls[0].ID != "custom" || dock.Controls[0].Command != "echo custom" {
-		t.Fatalf("custom control not preserved: %+v", dock.Controls[0])
-	}
-	if dock.Controls[1].ID != "kra-tasks" || dock.Controls[1].Title != "Status" || dock.Controls[1].Height != 420 {
-		t.Fatalf("kra-tasks not updated: %+v", dock.Controls[1])
-	}
-}
-
-func TestCLI_WSTaskDockInstall_InvalidGlobalDockFailsClosed(t *testing.T) {
-	setKraHomeForTest(t)
-	home, homeErr := os.UserHomeDir()
-	if homeErr != nil {
-		t.Fatalf("user home dir: %v", homeErr)
-	}
-	globalPath := filepath.Join(home, ".config", "cmux", "dock.json")
-	if err := os.MkdirAll(filepath.Dir(globalPath), 0o755); err != nil {
-		t.Fatalf("mkdir global dock dir: %v", err)
-	}
-	if err := os.WriteFile(globalPath, []byte("{not json\n"), 0o644); err != nil {
-		t.Fatalf("write invalid global dock: %v", err)
-	}
-
-	var out bytes.Buffer
-	var err bytes.Buffer
-	c := New(&out, &err)
-	code := c.Run([]string{"ws", "task", "dock", "install"})
-	if code == exitOK {
-		t.Fatalf("ws task dock install exit code=%d, want failure", code)
-	}
-	got, readErr := os.ReadFile(globalPath)
-	if readErr != nil {
-		t.Fatalf("read global dock: %v", readErr)
-	}
-	if string(got) != "{not json\n" {
-		t.Fatalf("invalid global dock was modified: %q", string(got))
-	}
-}
-
-func TestCLI_WSTaskLauncher_UpdatesSelectedTaskWithoutSync(t *testing.T) {
+func TestCLI_WSTaskLauncher_UpdatesSelectedTask(t *testing.T) {
 	env := testutil.NewEnv(t)
 	initAndConfigureRootRepo(t, env.Root)
 	wsPath := seedWorkspaceMeta(t, env.Root, "active", "WS1")
 	writeWorkspaceTasksFile(t, wsPath, "## Tasks\n\n### TASK-001 First\nstatus: todo\n\n### TASK-002 Second\nstatus: blocked\n")
-	seedCMUXWorkspaceMapping(t, env.Root, "WS1", "cmux-1")
-	syncClient := newFakeWSTaskSyncClient()
-	useFakeWSTaskSyncClient(t, syncClient)
 
 	origTaskPrompt := promptWSTaskSelection
 	origStatusPrompt := promptWSTaskStatusSelection
@@ -1247,9 +918,6 @@ func TestCLI_WSTaskLauncher_UpdatesSelectedTaskWithoutSync(t *testing.T) {
 	}
 	if !bytes.Contains(content, []byte("### TASK-002 Second\nstatus: done")) {
 		t.Fatalf("workspace.md should be updated to done: %q", string(content))
-	}
-	if len(syncClient.setCalls) != 0 || len(syncClient.clearCalls) != 0 {
-		t.Fatalf("cmux sync calls = set:%+v clear:%+v, want none", syncClient.setCalls, syncClient.clearCalls)
 	}
 }
 

@@ -21,9 +21,10 @@ editor.
 
 ## Source of truth
 
-- Task commands use the workspace task contract defined in:
-  - `docs/dev/spec/concepts/workspace-workspace.md`
-- The canonical structured task document is `<workspace>/workspace.md`.
+- Task commands use the task contracts defined in:
+  - `docs/dev/spec/concepts/workspace-tasks-yaml.md`
+  - `docs/dev/spec/concepts/workspace-tasks.md`
+- Source priority is `<workspace>/workspace.yaml`, then legacy `<workspace>/workspace.md`.
 - Task commands must work when the file was created or edited outside `kra`, as long as the minimum
   contract is satisfied.
 
@@ -43,8 +44,8 @@ editor.
 - `list` is read-only and may target both active and archived workspaces.
 - `tui`, `add`, `status`, and the launcher are valid only for active workspaces because they may
   mutate task status.
-- `sync` is a deprecated compatibility no-op; it still resolves active workspace targets so invalid
-  targets fail normally.
+- `sync` is the explicit permission boundary for cmux native Todo reconciliation and is valid only for active
+  mapped workspaces.
 
 ## Mutation safety
 
@@ -59,14 +60,15 @@ editor.
   must fail closed.
 - `status` and the launcher update `workspace.md` only.
 
-## CMUX status view
+## cmux native Todo view
 
-- `workspace.md` remains the single source of truth.
-- `kra ws status` is the supported human-facing display for terminals and cmux Dock.
-- cmux Dock configs should run `kra ws status --current` for one
-  workspace or `kra ws status --all --todo-only` from the root.
-- `kra ws task sync` no longer projects cmux task pills. It returns a deprecated/skipped result and
-  does not update cmux state.
+- The selected local task document remains the structured source of truth; cmux Todo is a state projection.
+- `kra ws task sync` reconciles KRA-managed Todo items and preserves foreign Todo items.
+- The command supports `--prefer kra|cmux` for explicit conflict resolution as defined by
+  `cmux-todo-reconcile.md`.
+- `kra ws status` remains the full terminal view for descriptions, blockers, and dependencies that cmux Todo
+  cannot represent.
+- Legacy status pills and the managed cmux Dock are not used.
 
 ## Phase 1 non-goals
 

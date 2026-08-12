@@ -9,12 +9,13 @@ This guide explains how to manage workspace-local tasks with `kra ws task`.
 
 ## What task data lives in
 
-Workspace handoff state and structured tasks are stored in `<workspace>/workspace.md`.
+Workspace handoff state and structured tasks are read from `<workspace>/workspace.yaml` when present, then
+legacy `<workspace>/workspace.md` as a fallback.
 
-- `workspace.md` is the source of truth for tasks and handoff state
-- `kra` is not the only editor; direct Markdown edits are allowed
-- the cmux Dock can show a constantly refreshed task-derived Current Task / Next Task view, but it is only a view over `workspace.md`
-- `kra ws task sync` is deprecated and no longer updates cmux task pills
+- the selected local document is the source of truth for task identity and structure
+- `kra` is not the only editor; direct YAML or Markdown edits are allowed when the corresponding contract is kept
+- `kra ws status` provides the full terminal view
+- `kra ws task sync` explicitly reconciles managed task state with cmux native Todo
 
 Canonical task shape:
 
@@ -53,16 +54,16 @@ kra ws task status --current TASK-001 doing
 
 `kra ws task` without a subcommand is also available as a human launcher for one active workspace.
 
-New default workspaces include `workspace.md`, `AGENTS.md`, `CLAUDE.md`, and `.cmux/dock.json`. The Dock control runs `kra ws status --current` from the workspace root so the cmux right sidebar can keep Current Task / Next Task visible. When needed, the generated command prefixes the detected shell init file such as `source ~/.zshrc`. Existing roots and active workspaces can be updated with `kra root migrate --apply`; legacy `tasks.md` files are converted to `workspace.md` when needed.
+New default workspaces include `workspace.md`, `AGENTS.md`, and `CLAUDE.md`; kra does not generate a cmux Dock config. Existing roots and active workspaces can be updated with `kra root migrate --apply`; legacy `tasks.md` files are converted to `workspace.md` when needed, while existing user-authored Dock files remain untouched.
 
 ## Common commands
 
-- `kra ws task list` or `kra ws task ls` lists structured tasks from `workspace.md` and works for active and archived workspaces.
-- `kra ws status` opens an interactive terminal list in `workspace.md` order. It starts in read mode; press `i` to enter write mode, then click or press Space/Enter to toggle a task done. Esc returns to read mode.
+- `kra ws task list` or `kra ws task ls` lists structured tasks from `workspace.yaml`, or legacy `workspace.md`, and works for active and archived workspaces.
+- `kra ws status` opens an interactive terminal list in document order. It starts in read mode; press `i` to enter write mode, then click or press Space/Enter to toggle a task done. Esc returns to read mode.
 - `kra ws status --all --todo-only` renders active workspace task-derived Current Task / Next Task across the root, with progress counts as context.
 - `kra ws task add --title "<text>"` lazily creates `workspace.md` and `## Tasks` when missing, and new tasks always start as `todo`.
 - `kra ws task status <task-id> <todo|doing|blocked|done>` updates one task status.
-- `kra ws task sync` is a deprecated no-op kept for compatibility; use `kra ws status` and Dock.
+- `kra ws task sync` explicitly reconciles managed tasks with the mapped cmux workspace's native Todo checklist.
 
 ## Reading the list
 
@@ -77,24 +78,26 @@ This keeps backlog and in-progress items visible without requiring `cmux`.
 
 ## Direct edits
 
-You can edit `workspace.md` directly as long as the structured task contract under `## Tasks` is preserved.
+You can edit `workspace.yaml` directly as long as its schema and dependency graph remain valid. When YAML is
+absent, you can edit `workspace.md` as long as the structured task contract under `## Tasks` is preserved.
 
-Agents should mark the current task as `doing`, keep the next task as `todo`, and put resumable detail in task descriptions. After direct edits, run `kra ws status --current` or use the cmux Dock to inspect the rendered state.
+Agents should mark the current task as `doing`, keep the next task as `todo`, and put resumable detail in task descriptions. After direct edits, run `kra ws task validate`, `kra ws task list`, or `kra ws status --current`; run `kra ws task sync` only when native Todo reconciliation is intended.
 
 ## Scope and limits
 
 - `list` can read both active and archived workspaces
 - `add`, `status`, and the launcher are active-workspace operations
-- `sync` is deprecated and performs no cmux updates
+- `sync` is an explicit active-workspace integration and preserves foreign cmux Todo items
 - phase 1 does not include task delete, reorder, rename, or nested subtasks
 
 ## Related docs
 
 - Command overview: `docs/user/guides/COMMANDS.md`
 - cmux integration guide: `docs/user/guides/CMUX.md`
-- Workspace task contract: `docs/dev/spec/concepts/workspace-workspace.md`
+- Workspace task contract: `docs/dev/spec/concepts/workspace-tasks.md`
+- YAML task contract: `docs/dev/spec/concepts/workspace-tasks-yaml.md`
 - Command contract: `docs/dev/spec/commands/ws/task.md`
 - Add contract: `docs/dev/spec/commands/ws/task/add.md`
 - List contract: `docs/dev/spec/commands/ws/task/list.md`
 - Status contract: `docs/dev/spec/commands/ws/task/status.md`
-- Deprecated sync contract: `docs/dev/spec/commands/ws/task/sync.md`
+- Native Todo sync contract: `docs/dev/spec/commands/ws/task/sync.md`

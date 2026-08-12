@@ -13,19 +13,18 @@ Define one workspace-local, AI-editable workspace state and task contract that r
 ## Scope
 
 - Applies to active and archived workspace folders.
-- Canonical task document path is:
+- Legacy Markdown task document path is:
   - `workspaces/<id>/workspace.md`
   - `archive/<id>/workspace.md`
-- The file is optional.
-- Absence of `workspace.md` means the workspace has no recorded current state and zero structured
-  tasks.
+- When `workspace.yaml` exists it is the preferred structured source; otherwise `workspace.md` is used.
+- Both files are optional. Absence means zero structured tasks.
 
 ## Design goals
 
 - AI agents and humans may read and write `workspace.md` directly.
 - `kra` is not the sole editor for task data.
 - `kra` defines the minimum contract, parses compliant task blocks, and writes a canonical form.
-- `workspace.md` is the single source of truth for current workspace state and task state.
+- The selected local structured document is the source of truth for task identity and structure.
 - Arbitrary freeform Markdown may coexist with structured tasks in the same file.
 - `kra` must ignore freeform content outside the structured task section.
 
@@ -77,16 +76,15 @@ Define one workspace-local, AI-editable workspace state and task contract that r
 
 ## View policy
 
-- cmux Dock is the supported persistent status view.
-- `kra ws status` reads `workspace.md`, renders task-derived `Current Task` / `Next Task` and the current
-  structured task state for terminal or Dock use, and writes status changes back to `workspace.md`.
+- cmux native Todo is the supported persistent runtime projection for mapped workspaces.
+- `kra ws status` reads the selected local document and renders task-derived `Current Task` / `Next Task` and
+  the full structured task state for terminals.
 - With root/all-workspace views, `kra ws status --all` emphasizes each workspace's task-derived
   `Current Task` / `Next Task` and shows task progress as supplemental context instead of listing every task.
 - `kra ws status` starts in read mode; users must enter write mode before clicks or keys mutate
   task status.
-- Direct `workspace.md` edits remain valid as long as the contract is preserved; users or AI agents can
-  run `kra ws status` afterward or rely on Dock refresh.
-- `kra ws task sync` is deprecated and no longer updates cmux task pills.
+- Direct local document edits remain valid as long as its contract is preserved. `kra ws task sync` performs an
+  explicit three-way reconcile with native Todo; it never uses legacy status pills.
 
 ## Task model
 

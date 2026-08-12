@@ -1,20 +1,22 @@
 package cli
 
 import (
+	"github.com/tasuku43/kra/internal/app/cmuxtodo"
 	"github.com/tasuku43/kra/internal/app/wstask"
 	"github.com/tasuku43/kra/internal/cmuxmap"
 	"github.com/tasuku43/kra/internal/infra/appports"
-	"github.com/tasuku43/kra/internal/infra/cmuxctl"
 )
 
-var newCMUXTaskSyncClient = func() appports.CMUXTaskSyncClient { return cmuxctl.NewClient() }
-var newCMUXTaskMapStore = func(root string) cmuxmap.Store { return cmuxmap.NewStore(root) }
+var newCMUXTodoReconciler = func() cmuxTodoReconciler {
+	return cmuxtodo.NewService(
+		func(root string) cmuxtodo.MappingStore { return cmuxmap.NewStore(root) },
+		func() cmuxtodo.Client { return appports.NewCMUXTodoClient() },
+		appports.NewCMUXTodoTaskDocument(),
+	)
+}
 
 func newWorkspaceTaskService() *wstask.Service {
-	return wstask.NewService(
-		appports.NewWSTaskPort(),
-		appports.NewWSTaskSyncPort(newCMUXTaskSyncClient, newCMUXTaskMapStore),
-	)
+	return wstask.NewService(appports.NewWSTaskPort())
 }
 
 func newRootTaskService() *wstask.Service {
