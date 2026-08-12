@@ -1,7 +1,6 @@
 package wstask
 
 import (
-	"context"
 	"errors"
 	"strings"
 	"testing"
@@ -13,30 +12,10 @@ type memoryPort struct {
 	beforeSave func()
 }
 
-type memorySyncPort struct {
-	targets  map[string][]string
-	statuses map[string][]SyncStatusEntry
-	setCalls []struct {
-		workspace string
-		entry     SyncStatusEntry
-	}
-	clearCalls []struct {
-		workspace string
-		key       string
-	}
-}
-
 func newMemoryPort() *memoryPort {
 	return &memoryPort{
 		docs:      map[string]DocumentSnapshot{},
 		pathToKey: map[string]string{},
-	}
-}
-
-func newMemorySyncPort() *memorySyncPort {
-	return &memorySyncPort{
-		targets:  map[string][]string{},
-		statuses: map[string][]SyncStatusEntry{},
 	}
 }
 
@@ -74,55 +53,6 @@ func (p *memoryPort) Save(snapshot DocumentSnapshot, content string) error {
 	current.Exists = true
 	current.Content = content
 	p.docs[key] = current
-	return nil
-}
-
-func (p *memorySyncPort) key(root string, workspaceID string) string {
-	return root + ":" + workspaceID
-}
-
-func (p *memorySyncPort) ListCMUXWorkspaceIDs(root string, workspaceID string) ([]string, error) {
-	return append([]string{}, p.targets[p.key(root, workspaceID)]...), nil
-}
-
-func (p *memorySyncPort) ListStatuses(_ context.Context, cmuxWorkspaceID string) ([]SyncStatusEntry, error) {
-	return append([]SyncStatusEntry{}, p.statuses[cmuxWorkspaceID]...), nil
-}
-
-func (p *memorySyncPort) SetStatus(_ context.Context, cmuxWorkspaceID string, entry SyncStatusEntry) error {
-	p.setCalls = append(p.setCalls, struct {
-		workspace string
-		entry     SyncStatusEntry
-	}{workspace: cmuxWorkspaceID, entry: entry})
-	rows := append([]SyncStatusEntry{}, p.statuses[cmuxWorkspaceID]...)
-	replaced := false
-	for i := range rows {
-		if rows[i].Key == entry.Key {
-			rows[i] = entry
-			replaced = true
-			break
-		}
-	}
-	if !replaced {
-		rows = append([]SyncStatusEntry{entry}, rows...)
-	}
-	p.statuses[cmuxWorkspaceID] = rows
-	return nil
-}
-
-func (p *memorySyncPort) ClearStatus(_ context.Context, cmuxWorkspaceID string, key string) error {
-	p.clearCalls = append(p.clearCalls, struct {
-		workspace string
-		key       string
-	}{workspace: cmuxWorkspaceID, key: key})
-	rows := p.statuses[cmuxWorkspaceID]
-	out := rows[:0]
-	for _, row := range rows {
-		if row.Key != key {
-			out = append(out, row)
-		}
-	}
-	p.statuses[cmuxWorkspaceID] = append([]SyncStatusEntry{}, out...)
 	return nil
 }
 
@@ -209,6 +139,117 @@ func TestServiceAdd_IgnoresExtendedTaskIDsWhenChoosingNextNumericID(t *testing.T
 	}
 	if result.Task.ID != "TASK-010" {
 		t.Fatalf("task id = %q, want TASK-010", result.Task.ID)
+	}
+}
+
+func TestServiceAdd_YAMLPreservesDependencyGraph(t *testing.T) {
+	port := newMemoryPort()
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:   "/root/workspaces/WS1/workspace.yaml",
+		Exists: true,
+		Source: SourceYAML,
+		Content: "schema_version: 1\n" +
+			"tasks:\n" +
+			"  - id: TASK-001\n" +
+			"    title: Foundation\n" +
+			"    status: done\n" +
+			"    depends_on: []\n" +
+			"  - id: TASK-002\n" +
+			"    title: Integration\n" +
+			"    status: todo\n" +
+			"    depends_on: [TASK-001]\n",
+	})
+
+	result, err := NewService(port).Add("/root", "WS1", "Regression test", "")
+	if err != nil {
+		t.Fatalf("Add() error = %v", err)
+	}
+	if result.Task.ID != "TASK-003" {
+		t.Fatalf("task id = %q, want TASK-003", result.Task.ID)
+	}
+
+	ws, err := ParseYAMLWorkspace([]byte(port.docs["active:WS1"].Content))
+	if err != nil {
+		t.Fatalf("ParseYAMLWorkspace() error = %v", err)
+	}
+	if got := ws.Tasks[1].DependsOn; len(got) != 1 || got[0] != "TASK-001" {
+		t.Fatalf("TASK-002 depends_on = %v, want [TASK-001]", got)
+	}
+	if got := ws.Tasks[2].DependsOn; got == nil || len(got) != 0 {
+		t.Fatalf("TASK-003 depends_on = %#v, want an explicit empty list", got)
+	}
+}
+
+func TestServiceStatus_YAMLPreservesDependencyGraph(t *testing.T) {
+	port := newMemoryPort()
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:   "/root/workspaces/WS1/workspace.yaml",
+		Exists: true,
+		Source: SourceYAML,
+		Content: "schema_version: 1\n" +
+			"tasks:\n" +
+			"  - id: TASK-001\n" +
+			"    title: Foundation\n" +
+			"    status: done\n" +
+			"    depends_on: []\n" +
+			"  - id: TASK-002\n" +
+			"    title: Integration\n" +
+			"    status: todo\n" +
+			"    depends_on: [TASK-001]\n",
+	})
+
+	result, err := NewService(port).Status("/root", "WS1", "TASK-002", StatusDoing)
+	if err != nil {
+		t.Fatalf("Status() error = %v", err)
+	}
+	if !result.Task.Changed || result.Task.Status != StatusDoing {
+		t.Fatalf("task change = %+v", result.Task)
+	}
+
+	ws, err := ParseYAMLWorkspace([]byte(port.docs["active:WS1"].Content))
+	if err != nil {
+		t.Fatalf("ParseYAMLWorkspace() error = %v", err)
+	}
+	if got := ws.Tasks[1].DependsOn; len(got) != 1 || got[0] != "TASK-001" {
+		t.Fatalf("TASK-002 depends_on = %v, want [TASK-001]", got)
+	}
+}
+
+func TestServiceAdd_InvalidYAMLFailsClosed(t *testing.T) {
+	port := newMemoryPort()
+	const original = "schema_version: 1\ntasks:\n  - id: TASK-001\n    title: Broken\n    status: todo\n    depends_on: [TASK-999]\n"
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:    "/root/workspaces/WS1/workspace.yaml",
+		Exists:  true,
+		Source:  SourceYAML,
+		Content: original,
+	})
+
+	_, err := NewService(port).Add("/root", "WS1", "Must not be written", "")
+	if err == nil || !strings.Contains(err.Error(), "depends_on references missing task") {
+		t.Fatalf("Add() error = %v, want dependency validation failure", err)
+	}
+	if got := port.docs["active:WS1"].Content; got != original {
+		t.Fatalf("invalid workspace.yaml was modified\nwant:\n%s\ngot:\n%s", original, got)
+	}
+}
+
+func TestServiceStatus_InvalidYAMLFailsClosed(t *testing.T) {
+	port := newMemoryPort()
+	const original = "schema_version: 1\ntasks:\n  - id: TASK-001\n    title: Broken\n    status: todo\n    depends_on: [TASK-999]\n"
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:    "/root/workspaces/WS1/workspace.yaml",
+		Exists:  true,
+		Source:  SourceYAML,
+		Content: original,
+	})
+
+	_, err := NewService(port).Status("/root", "WS1", "TASK-001", StatusDoing)
+	if err == nil || !strings.Contains(err.Error(), "depends_on references missing task") {
+		t.Fatalf("Status() error = %v, want dependency validation failure", err)
+	}
+	if got := port.docs["active:WS1"].Content; got != original {
+		t.Fatalf("invalid workspace.yaml was modified\nwant:\n%s\ngot:\n%s", original, got)
 	}
 }
 
@@ -304,6 +345,82 @@ func TestServiceStatus_RefusesToOverwriteConcurrentDocumentChange(t *testing.T) 
 	}
 }
 
+func TestServiceApplyStatuses_IsAtomicAndPreservesYAMLDependencies(t *testing.T) {
+	port := newMemoryPort()
+	const original = "schema_version: 1\ntasks:\n" +
+		"  - id: TASK-001\n    title: Foundation\n    status: done\n    depends_on: []\n" +
+		"  - id: TASK-002\n    title: Integration\n    status: todo\n    depends_on: [TASK-001]\n"
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:    "/root/workspaces/WS1/workspace.yaml",
+		Exists:  true,
+		Source:  SourceYAML,
+		Content: original,
+	})
+	service := NewService(port)
+	snapshot, err := service.Snapshot("/root", "WS1", "active")
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+
+	updated, err := service.ApplyStatuses("/root", "WS1", "active", snapshot.Revision, []BatchStatusChange{
+		{TaskID: "TASK-001", From: StatusDone, To: StatusTodo},
+		{TaskID: "TASK-002", From: StatusTodo, To: StatusDoing},
+	})
+	if err != nil {
+		t.Fatalf("ApplyStatuses() error = %v", err)
+	}
+	if updated.Revision == snapshot.Revision || len(updated.Items) != 2 || updated.Items[0].Status != StatusTodo || updated.Items[1].Status != StatusDoing {
+		t.Fatalf("updated = %#v", updated)
+	}
+	workspace, err := ParseYAMLWorkspace([]byte(port.docs["active:WS1"].Content))
+	if err != nil {
+		t.Fatalf("ParseYAMLWorkspace() error = %v", err)
+	}
+	if got := workspace.Tasks[1].DependsOn; len(got) != 1 || got[0] != "TASK-001" {
+		t.Fatalf("TASK-002 depends_on = %#v", got)
+	}
+}
+
+func TestServiceApplyStatuses_RejectsStaleOrMismatchedBatchWithoutWrite(t *testing.T) {
+	port := newMemoryPort()
+	const original = "## Tasks\n\n### TASK-001 One\nstatus: todo\n\n### TASK-002 Two\nstatus: doing\n"
+	port.set("active", "WS1", DocumentSnapshot{
+		Path:    "/root/workspaces/WS1/workspace.md",
+		Exists:  true,
+		Source:  SourceMD,
+		Content: original,
+	})
+	service := NewService(port)
+	snapshot, err := service.Snapshot("/root", "WS1", "active")
+	if err != nil {
+		t.Fatalf("Snapshot() error = %v", err)
+	}
+
+	_, err = service.ApplyStatuses("/root", "WS1", "active", snapshot.Revision, []BatchStatusChange{
+		{TaskID: "TASK-001", From: StatusTodo, To: StatusDone},
+		{TaskID: "TASK-002", From: StatusTodo, To: StatusDone},
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("mismatched ApplyStatuses() error = %v", err)
+	}
+	if got := port.docs["active:WS1"].Content; got != original {
+		t.Fatalf("document changed after rejected batch: %q", got)
+	}
+
+	port.docs["active:WS1"] = DocumentSnapshot{
+		Path:    "/root/workspaces/WS1/workspace.md",
+		Exists:  true,
+		Source:  SourceMD,
+		Content: strings.Replace(original, "status: todo", "status: blocked", 1),
+	}
+	_, err = service.ApplyStatuses("/root", "WS1", "active", snapshot.Revision, []BatchStatusChange{
+		{TaskID: "TASK-001", From: StatusTodo, To: StatusDone},
+	})
+	if !errors.Is(err, ErrConflict) {
+		t.Fatalf("stale ApplyStatuses() error = %v", err)
+	}
+}
+
 func TestServiceList_FailsOnDuplicateTaskIDs(t *testing.T) {
 	port := newMemoryPort()
 	port.set("active", "WS1", DocumentSnapshot{
@@ -375,123 +492,5 @@ func TestServiceStatus_AllowsDoneToTodo(t *testing.T) {
 	}
 	if !result.Task.Changed || result.Task.Status != StatusTodo {
 		t.Fatalf("changed=%v status=%s, want true/todo", result.Task.Changed, result.Task.Status)
-	}
-}
-
-func TestServiceSync_ReconcilesTaskNamespace(t *testing.T) {
-	port := newMemoryPort()
-	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/workspace.md",
-		Exists:  true,
-		Content: "## Tasks\n\n### TASK-003 Draft docs\nstatus: todo\n\n### TASK-001 Build parser\nstatus: doing\n\n### TASK-004 Shipped\nstatus: done\n\n### TASK-002 Waiting review\nstatus: blocked\n",
-	})
-	syncPort := newMemorySyncPort()
-	syncPort.targets[syncPort.key("/root", "WS1")] = []string{"cmux-1"}
-	syncPort.statuses["cmux-1"] = []SyncStatusEntry{
-		{Key: "task:TASK-001", Value: "● TASK-001 Build parser", Icon: "checklist", Color: "#0ea5e9"},
-		{Key: "task:TASK-003", Value: "○ TASK-003 Draft docs", Icon: "checklist", Color: "#ffffff"},
-		{Key: "task:TASK-999", Value: "✔ TASK-999 Legacy", Icon: "checklist", Color: "#64748b"},
-		{Key: "kra", Value: "kra:workspace", Icon: "tag", Color: "#4F46E5"},
-	}
-
-	result, err := NewService(port, syncPort).Sync(context.Background(), "/root", "WS1")
-	if err != nil {
-		t.Fatalf("Sync() error = %v", err)
-	}
-	if result.State != SyncStateApplied || result.Targets != 1 || result.SetCount != 4 || result.ClearCount != 3 {
-		t.Fatalf("sync result = %+v", result)
-	}
-	if len(syncPort.setCalls) != 4 {
-		t.Fatalf("set calls = %+v, want 4 calls", syncPort.setCalls)
-	}
-	if syncPort.setCalls[0].entry.Key != "task:TASK-002" || syncPort.setCalls[1].entry.Key != "task:TASK-004" || syncPort.setCalls[2].entry.Key != "task:TASK-001" || syncPort.setCalls[3].entry.Key != "task:TASK-003" {
-		t.Fatalf("set calls = %+v, want reverse replay TASK-002/TASK-004/TASK-001/TASK-003", syncPort.setCalls)
-	}
-	if got := syncPort.statuses["cmux-1"]; len(got) != 5 || got[0].Key != "task:TASK-003" || got[1].Key != "task:TASK-001" || got[2].Key != "task:TASK-004" || got[3].Key != "task:TASK-002" {
-		t.Fatalf("statuses = %+v, want rendered order TASK-003/TASK-001/TASK-004/TASK-002", got)
-	}
-	if got := syncPort.statuses["cmux-1"][0]; got.Value != "○ TASK-003 Draft docs" || got.Color != "#ffffff" {
-		t.Fatalf("todo sync entry = %+v, want white todo pill", got)
-	}
-	if len(syncPort.clearCalls) != 3 {
-		t.Fatalf("clear calls = %+v, want 3 calls", syncPort.clearCalls)
-	}
-	if syncPort.clearCalls[0].key != "task:TASK-001" || syncPort.clearCalls[1].key != "task:TASK-003" || syncPort.clearCalls[2].key != "task:TASK-999" {
-		t.Fatalf("clear calls = %+v, want all existing task pills cleared first", syncPort.clearCalls)
-	}
-}
-
-func TestServiceSync_ClearsAllTaskNamespaceWhenStructuredTasksAreEmpty(t *testing.T) {
-	port := newMemoryPort()
-	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/workspace.md",
-		Exists:  true,
-		Content: "## Tasks\n\n---\n",
-	})
-	syncPort := newMemorySyncPort()
-	syncPort.targets[syncPort.key("/root", "WS1")] = []string{"cmux-1"}
-	syncPort.statuses["cmux-1"] = []SyncStatusEntry{
-		{Key: "task:TASK-001", Value: "● TASK-001 Build parser", Icon: "checklist", Color: "#0ea5e9"},
-		{Key: "task:TASK-002", Value: "○ TASK-002 Draft docs", Icon: "checklist", Color: "#ffffff"},
-		{Key: "kra", Value: "kra:workspace", Icon: "tag", Color: "#4F46E5"},
-	}
-
-	result, err := NewService(port, syncPort).Sync(context.Background(), "/root", "WS1")
-	if err != nil {
-		t.Fatalf("Sync() error = %v", err)
-	}
-	if result.State != SyncStateApplied || result.Targets != 1 || result.SetCount != 0 || result.ClearCount != 2 {
-		t.Fatalf("sync result = %+v", result)
-	}
-	if len(syncPort.setCalls) != 0 {
-		t.Fatalf("set calls = %+v, want none", syncPort.setCalls)
-	}
-	if len(syncPort.clearCalls) != 2 {
-		t.Fatalf("clear calls = %+v, want 2 calls", syncPort.clearCalls)
-	}
-	if syncPort.clearCalls[0].key != "task:TASK-001" || syncPort.clearCalls[1].key != "task:TASK-002" {
-		t.Fatalf("clear calls = %+v, want TASK-001/TASK-002", syncPort.clearCalls)
-	}
-}
-
-func TestServiceSync_FailsClosedOnInvalidTaskLikeBlock(t *testing.T) {
-	port := newMemoryPort()
-	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/workspace.md",
-		Exists:  true,
-		Content: "## Tasks\n\n### TASK-001\nstatus: doing\n",
-	})
-	syncPort := newMemorySyncPort()
-	syncPort.targets[syncPort.key("/root", "WS1")] = []string{"cmux-1"}
-	syncPort.statuses["cmux-1"] = []SyncStatusEntry{
-		{Key: "task:TASK-001", Value: "● TASK-001 Legacy", Icon: "checklist", Color: "#0ea5e9"},
-	}
-
-	_, err := NewService(port, syncPort).Sync(context.Background(), "/root", "WS1")
-	if !errors.Is(err, ErrConflict) {
-		t.Fatalf("Sync() error = %v, want conflict", err)
-	}
-	if len(syncPort.setCalls) != 0 {
-		t.Fatalf("set calls = %+v, want none", syncPort.setCalls)
-	}
-	if len(syncPort.clearCalls) != 0 {
-		t.Fatalf("clear calls = %+v, want none", syncPort.clearCalls)
-	}
-}
-
-func TestServiceSync_SkipsWhenNoMappedCMUXWorkspace(t *testing.T) {
-	port := newMemoryPort()
-	port.set("active", "WS1", DocumentSnapshot{
-		Path:    "/root/workspaces/WS1/workspace.md",
-		Exists:  false,
-		Content: "",
-	})
-
-	result, err := NewService(port, newMemorySyncPort()).Sync(context.Background(), "/root", "WS1")
-	if err != nil {
-		t.Fatalf("Sync() error = %v", err)
-	}
-	if result.State != SyncStateSkipped || result.WarningText == "" {
-		t.Fatalf("sync result = %+v, want skipped with warning", result)
 	}
 }

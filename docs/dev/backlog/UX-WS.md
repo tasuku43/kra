@@ -332,4 +332,14 @@ status: planned
   - Depends: OPS-016, OPS-017
   - Serial: yes
 
+- [x] UX-WS-033: `workspace.yaml` mutation integrity
+  - What: preserve each task's `depends_on` graph across `kra ws task add/status` mutations and fail closed
+    when structured YAML validation fails, so task commands never rewrite valid dependencies to empty lists or
+    replace invalid task state with partial data. Serialize compare-and-swap document saves so concurrent task
+    mutations report a conflict instead of silently overwriting one update.
+  - Specs:
+    - `docs/dev/spec/concepts/workspace-tasks-yaml.md`
+  - Depends: UX-WS-031
+  - Serial: yes
+
 ## Architecture Refactor (full layering migration)

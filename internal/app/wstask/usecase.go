@@ -1,16 +1,16 @@
 package wstask
 
 import (
-	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
-	"gopkg.in/yaml.v3"
 	"regexp"
 	"sort"
 	"strconv"
 	"strings"
 
-	"github.com/tasuku43/kra/internal/core/cmuxstyle"
+	"gopkg.in/yaml.v3"
 )
 
 type Status string
@@ -47,10 +47,11 @@ const (
 )
 
 type Item struct {
-	ID          string `json:"id"`
-	Title       string `json:"title"`
-	Status      Status `json:"status"`
-	Description string `json:"description"`
+	ID          string   `json:"id"`
+	Title       string   `json:"title"`
+	Status      Status   `json:"status"`
+	Description string   `json:"description"`
+	DependsOn   []string `json:"depends_on"`
 }
 
 type Counts struct {
@@ -122,26 +123,21 @@ type TransitionResult struct {
 	Task Change
 }
 
-type SyncState string
-
-const (
-	SyncStateApplied SyncState = "applied"
-	SyncStateSkipped SyncState = "skipped"
-)
-
-type SyncStatusEntry struct {
-	Key   string
-	Value string
-	Icon  string
-	Color string
+// TaskSnapshot is an immutable task-document view used by external
+// reconciliation. Revision is an opaque compare-and-swap token derived from
+// the exact document snapshot, including its path and source format.
+type TaskSnapshot struct {
+	Items    []Item
+	Revision string
 }
 
-type SyncResult struct {
-	State       SyncState `json:"state"`
-	Targets     int       `json:"targets"`
-	SetCount    int       `json:"set"`
-	ClearCount  int       `json:"cleared"`
-	WarningText string    `json:"warning,omitempty"`
+// BatchStatusChange describes one exact status replacement. From is checked
+// before any write so a batch either applies completely or leaves the document
+// untouched.
+type BatchStatusChange struct {
+	TaskID string
+	From   Status
+	To     Status
 }
 
 type DocumentSnapshot struct {
@@ -156,16 +152,8 @@ type Port interface {
 	Save(snapshot DocumentSnapshot, content string) error
 }
 
-type SyncPort interface {
-	ListCMUXWorkspaceIDs(root string, workspaceID string) ([]string, error)
-	ListStatuses(ctx context.Context, cmuxWorkspaceID string) ([]SyncStatusEntry, error)
-	SetStatus(ctx context.Context, cmuxWorkspaceID string, entry SyncStatusEntry) error
-	ClearStatus(ctx context.Context, cmuxWorkspaceID string, key string) error
-}
-
 type Service struct {
-	port     Port
-	syncPort SyncPort
+	port Port
 }
 
 var (
@@ -181,12 +169,8 @@ var (
 	numericTaskIDPattern = regexp.MustCompile(`^TASK-(\d+)$`)
 )
 
-func NewService(port Port, syncPorts ...SyncPort) *Service {
-	var syncPort SyncPort
-	if len(syncPorts) > 0 {
-		syncPort = syncPorts[0]
-	}
-	return &Service{port: port, syncPort: syncPort}
+func NewService(port Port) *Service {
+	return &Service{port: port}
 }
 
 func (s *Service) loadItems(root, workspaceID, scope string) ([]Item, DocumentSnapshot, error) {
@@ -196,7 +180,7 @@ func (s *Service) loadItems(root, workspaceID, scope string) ([]Item, DocumentSn
 	}
 
 	// Handle empty/missing document
-	if !snapshot.Exists || snapshot.Content == "" {
+	if !snapshot.Exists {
 		return nil, snapshot, nil
 	}
 
@@ -204,8 +188,7 @@ func (s *Service) loadItems(root, workspaceID, scope string) ([]Item, DocumentSn
 	case SourceYAML:
 		items, diags := ParseYAMLContent([]byte(snapshot.Content))
 		if diags.HasErrors() {
-			// Return items with errors as warning for non-fatal paths like Overview/List
-			return items, snapshot, nil
+			return nil, snapshot, fmt.Errorf("parse workspace.yaml: %s", strings.Join(diags.Errors, "; "))
 		}
 		return items, snapshot, nil
 
@@ -223,7 +206,7 @@ func (s *Service) Overview(root string, workspaceID string, scope string) (Overv
 	if err != nil {
 		return OverviewResult{}, err
 	}
-	if !snapshot.Exists || snapshot.Content == "" {
+	if !snapshot.Exists {
 		return OverviewResult{
 			Path:     snapshot.Path,
 			Overview: buildOverview(nil, ""),
@@ -277,6 +260,146 @@ func (s *Service) List(root string, workspaceID string, scope string) (ListResul
 	}, nil
 }
 
+// Snapshot returns the task list plus an opaque document revision for an
+// external compare-and-swap workflow.
+func (s *Service) Snapshot(root string, workspaceID string, scope string) (TaskSnapshot, error) {
+	items, snapshot, err := s.loadItems(root, workspaceID, scope)
+	if err != nil {
+		return TaskSnapshot{}, err
+	}
+	return TaskSnapshot{Items: cloneItems(items), Revision: taskDocumentRevision(snapshot)}, nil
+}
+
+// ApplyStatuses applies an exact batch of status replacements without the
+// interactive transition restrictions. This is intentionally reserved for
+// three-way external reconciliation, where cmux may legitimately move a task
+// back from done to doing. The document port still performs its own CAS at
+// Save, closing the race between this revision check and persistence.
+func (s *Service) ApplyStatuses(
+	root string,
+	workspaceID string,
+	scope string,
+	expectedRevision string,
+	changes []BatchStatusChange,
+) (TaskSnapshot, error) {
+	snapshot, err := s.port.Load(root, workspaceID, scope)
+	if err != nil {
+		return TaskSnapshot{}, err
+	}
+	if got := taskDocumentRevision(snapshot); got != strings.TrimSpace(expectedRevision) {
+		return TaskSnapshot{}, newConflict("task document changed during reconciliation")
+	}
+
+	items, err := itemsFromDocumentSnapshot(snapshot)
+	if err != nil {
+		return TaskSnapshot{}, err
+	}
+	indexes := make(map[string]int, len(items))
+	for i := range items {
+		indexes[items[i].ID] = i
+	}
+	seen := make(map[string]struct{}, len(changes))
+	changed := false
+	for _, change := range changes {
+		id := strings.TrimSpace(change.TaskID)
+		if id == "" {
+			return TaskSnapshot{}, newConflict("status batch contains an empty task id")
+		}
+		if _, duplicate := seen[id]; duplicate {
+			return TaskSnapshot{}, newConflict("status batch contains duplicate task id: %s", id)
+		}
+		seen[id] = struct{}{}
+		if !isValidStatus(change.From) || !isValidStatus(change.To) {
+			return TaskSnapshot{}, newConflict("status batch contains invalid status for %s", id)
+		}
+		index, ok := indexes[id]
+		if !ok {
+			return TaskSnapshot{}, fmt.Errorf("%w: %s", ErrTaskNotFound, id)
+		}
+		if items[index].Status != change.From {
+			return TaskSnapshot{}, newConflict(
+				"task %s status changed from expected %s to %s",
+				id,
+				change.From,
+				items[index].Status,
+			)
+		}
+		if change.From != change.To {
+			items[index].Status = change.To
+			changed = true
+		}
+	}
+	if !changed {
+		return TaskSnapshot{Items: cloneItems(items), Revision: taskDocumentRevision(snapshot)}, nil
+	}
+
+	var rendered string
+	switch snapshot.Source {
+	case SourceYAML:
+		content, renderErr := RenderWorkspaceYAML(items)
+		if renderErr != nil {
+			return TaskSnapshot{}, fmt.Errorf("render workspace.yaml: %w", renderErr)
+		}
+		rendered = string(content)
+	default:
+		doc, parseErr := parseDocument(snapshot)
+		if parseErr != nil {
+			return TaskSnapshot{}, parseErr
+		}
+		for _, change := range changes {
+			task, ok := doc.findTask(strings.TrimSpace(change.TaskID))
+			if !ok {
+				return TaskSnapshot{}, fmt.Errorf("%w: %s", ErrTaskNotFound, strings.TrimSpace(change.TaskID))
+			}
+			task.Status = change.To
+		}
+		rendered = doc.render()
+	}
+	if err := s.port.Save(snapshot, rendered); err != nil {
+		return TaskSnapshot{}, err
+	}
+	next := snapshot
+	next.Exists = true
+	next.Content = rendered
+	return TaskSnapshot{Items: cloneItems(items), Revision: taskDocumentRevision(next)}, nil
+}
+
+func itemsFromDocumentSnapshot(snapshot DocumentSnapshot) ([]Item, error) {
+	if !snapshot.Exists {
+		return nil, nil
+	}
+	if snapshot.Source == SourceYAML {
+		items, diags := ParseYAMLContent([]byte(snapshot.Content))
+		if diags.HasErrors() {
+			return nil, fmt.Errorf("parse workspace.yaml: %s", strings.Join(diags.Errors, "; "))
+		}
+		return items, nil
+	}
+	doc, err := parseDocument(snapshot)
+	if err != nil {
+		return nil, err
+	}
+	return doc.items(), nil
+}
+
+func taskDocumentRevision(snapshot DocumentSnapshot) string {
+	payload := strings.Join([]string{
+		filepathCleanForRevision(snapshot.Path),
+		strconv.FormatBool(snapshot.Exists),
+		strings.TrimSpace(snapshot.Source),
+		snapshot.Content,
+	}, "\x00")
+	digest := sha256.Sum256([]byte(payload))
+	return hex.EncodeToString(digest[:])
+}
+
+func filepathCleanForRevision(path string) string {
+	// Avoid importing path/filepath into this application parser solely for an
+	// opaque token: normalizing separators is unnecessary because the port
+	// returns the same canonical path throughout a transaction.
+	return strings.TrimSpace(path)
+}
+
 func (s *Service) View(root string, workspaceID string, scope string) (ViewModel, error) {
 	items, snapshot, err := s.loadItems(root, workspaceID, scope)
 	if err != nil {
@@ -314,7 +437,11 @@ func (s *Service) Add(root string, workspaceID string, title string, description
 	var items []Item
 	switch snapshot.Source {
 	case SourceYAML:
-		items, _ = ParseYAMLContent([]byte(snapshot.Content))
+		var diags Diagnostics
+		items, diags = ParseYAMLContent([]byte(snapshot.Content))
+		if diags.HasErrors() {
+			return AddResult{}, fmt.Errorf("parse workspace.yaml: %s", strings.Join(diags.Errors, "; "))
+		}
 	default: // MD or empty
 		if snapshot.Exists && snapshot.Content != "" {
 			doc, err := parseDocument(snapshot)
@@ -331,6 +458,7 @@ func (s *Service) Add(root string, workspaceID string, title string, description
 		Title:       trimmedTitle,
 		Status:      StatusTodo,
 		Description: normalizeDescription(description),
+		DependsOn:   []string{},
 	}
 
 	switch snapshot.Source {
@@ -416,64 +544,6 @@ func (s *Service) Done(root string, workspaceID string, taskID string) (Transiti
 	return s.Status(root, workspaceID, taskID, StatusDone)
 }
 
-func (s *Service) Sync(ctx context.Context, root string, workspaceID string) (SyncResult, error) {
-	if s.syncPort == nil {
-		return SyncResult{
-			State:       SyncStateSkipped,
-			WarningText: "cmux task sync is not configured",
-		}, nil
-	}
-
-	items, _, err := s.loadItems(root, workspaceID, "active")
-	if err != nil {
-		return SyncResult{}, err
-	}
-	targets, err := s.syncPort.ListCMUXWorkspaceIDs(root, workspaceID)
-	if err != nil {
-		return SyncResult{}, err
-	}
-	if len(targets) == 0 {
-		return SyncResult{
-			State:       SyncStateSkipped,
-			WarningText: "no mapped cmux workspace",
-		}, nil
-	}
-
-	desired := desiredSyncEntries(items)
-	result := SyncResult{
-		State:   SyncStateApplied,
-		Targets: len(targets),
-	}
-	for _, target := range targets {
-		existing, err := s.syncPort.ListStatuses(ctx, target)
-		if err != nil {
-			return SyncResult{}, err
-		}
-		existingTaskKeys := make([]string, 0, len(existing))
-		for _, entry := range existing {
-			if strings.HasPrefix(strings.TrimSpace(entry.Key), "task:") {
-				existingTaskKeys = append(existingTaskKeys, strings.TrimSpace(entry.Key))
-			}
-		}
-		sort.Strings(existingTaskKeys)
-		for _, key := range existingTaskKeys {
-			if err := s.syncPort.ClearStatus(ctx, target, key); err != nil {
-				return SyncResult{}, err
-			}
-			result.ClearCount++
-		}
-		// cmux inserts newly created status pills at the head, so replay in reverse
-		// to preserve the declaration order in the rendered sidebar.
-		for i := len(desired) - 1; i >= 0; i-- {
-			if err := s.syncPort.SetStatus(ctx, target, desired[i]); err != nil {
-				return SyncResult{}, err
-			}
-			result.SetCount++
-		}
-	}
-	return result, nil
-}
-
 func (s *Service) transition(root string, workspaceID string, taskID string, next Status) (TransitionResult, error) {
 	snapshot, err := s.port.Load(root, workspaceID, "active")
 	if err != nil {
@@ -495,7 +565,7 @@ func (s *Service) transition(root string, workspaceID string, taskID string, nex
 
 func (s *Service) transitionYAML(snapshot DocumentSnapshot, taskID string, next Status) (TransitionResult, error) {
 	items, diags := ParseYAMLContent([]byte(snapshot.Content))
-	if diags.HasErrors() && len(items) == 0 {
+	if diags.HasErrors() {
 		return TransitionResult{}, fmt.Errorf("parse workspace.yaml: %s", strings.Join(diags.Errors, "; "))
 	}
 
@@ -888,6 +958,7 @@ func parseTaskBlock(lines []string) (Item, error) {
 		Title:       title,
 		Status:      Status(statusMatches[1]),
 		Description: description,
+		DependsOn:   []string{},
 	}, nil
 }
 
@@ -1090,53 +1161,6 @@ func nextTaskID(items []Item) string {
 	return fmt.Sprintf("TASK-%0*d", width, next)
 }
 
-func desiredSyncEntries(items []Item) []SyncStatusEntry {
-	out := make([]SyncStatusEntry, 0, len(items))
-	for _, item := range items {
-		entry, ok := syncEntryForItem(item)
-		if !ok {
-			continue
-		}
-		out = append(out, entry)
-	}
-	return out
-}
-
-func syncEntryForItem(item Item) (SyncStatusEntry, bool) {
-	switch item.Status {
-	case StatusTodo:
-		return SyncStatusEntry{
-			Key:   "task:" + item.ID,
-			Value: "○ " + item.ID + " " + item.Title,
-			Icon:  cmuxstyle.TaskStatusIcon,
-			Color: cmuxstyle.TaskStatusTodoColor,
-		}, true
-	case StatusDoing:
-		return SyncStatusEntry{
-			Key:   "task:" + item.ID,
-			Value: "● " + item.ID + " " + item.Title,
-			Icon:  cmuxstyle.TaskStatusIcon,
-			Color: cmuxstyle.TaskStatusDoingColor,
-		}, true
-	case StatusBlocked:
-		return SyncStatusEntry{
-			Key:   "task:" + item.ID,
-			Value: "▲ " + item.ID + " " + item.Title,
-			Icon:  cmuxstyle.TaskStatusIcon,
-			Color: cmuxstyle.TaskStatusBlockedColor,
-		}, true
-	case StatusDone:
-		return SyncStatusEntry{
-			Key:   "task:" + item.ID,
-			Value: "✔ " + item.ID + " " + item.Title,
-			Icon:  cmuxstyle.TaskStatusIcon,
-			Color: cmuxstyle.TaskStatusDoneColor,
-		}, true
-	default:
-		return SyncStatusEntry{}, false
-	}
-}
-
 func splitNormalizedLines(content string) []string {
 	normalized := strings.ReplaceAll(content, "\r\n", "\n")
 	normalized = strings.TrimSuffix(normalized, "\n")
@@ -1164,7 +1188,19 @@ func cloneItems(items []Item) []Item {
 		return nil
 	}
 	out := make([]Item, len(items))
-	copy(out, items)
+	for i := range items {
+		out[i] = items[i]
+		out[i].DependsOn = cloneStringSlice(items[i].DependsOn)
+	}
+	return out
+}
+
+func cloneStringSlice(values []string) []string {
+	if len(values) == 0 {
+		return []string{}
+	}
+	out := make([]string, len(values))
+	copy(out, values)
 	return out
 }
 
@@ -1206,7 +1242,7 @@ func RenderWorkspaceYAML(items []Item) ([]byte, error) {
 			Title:       item.Title,
 			Status:      item.Status,
 			Description: item.Description,
-			DependsOn:   []string{},
+			DependsOn:   cloneStringSlice(item.DependsOn),
 		}
 		ws.Tasks = append(ws.Tasks, t)
 	}
@@ -1225,7 +1261,7 @@ type YAMLItem struct {
 	Title       string   `yaml:"title"`
 	Status      Status   `yaml:"status"`
 	Description string   `yaml:"description,omitempty"`
-	DependsOn   []string `yaml:"depends_on,omitempty"`
+	DependsOn   []string `yaml:"depends_on"`
 }
 
 // ToYAMLTaskList converts Item slices to YAMLTaskList for round-tripping.
@@ -1240,7 +1276,7 @@ func ToYAMLTaskList(items []Item) *YAMLTaskList {
 			Title:       item.Title,
 			Status:      item.Status,
 			Description: item.Description,
-			DependsOn:   []string{},
+			DependsOn:   cloneStringSlice(item.DependsOn),
 		}
 	}
 	return &YAMLTaskList{SchemaVersion: 1, Tasks: tasks}
@@ -1255,6 +1291,7 @@ func FromItems(yamlTasks []YAMLItem) []Item {
 			Title:       t.Title,
 			Status:      t.Status,
 			Description: t.Description,
+			DependsOn:   cloneStringSlice(t.DependsOn),
 		}
 	}
 	return items

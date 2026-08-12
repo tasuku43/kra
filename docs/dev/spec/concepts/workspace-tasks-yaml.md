@@ -38,7 +38,7 @@ tasks:
     title: Inspect current task implementation
     status: done
     description: |
-      Read the existing workspace task parser, task commands, and kra serve board implementation.
+      Read the existing workspace task parser, task commands, and native Todo projection.
     depends_on: []
 ```
 
@@ -93,7 +93,8 @@ Only the exact field names defined above are supported. The following aliases ar
 - `dependencies` or `dependencies_on`
 - `blocked_by` or `blocks`
 
-These are silently ignored for forward compatibility but will not be parsed.
+These are ignored for forward compatibility and do not satisfy the required `depends_on` field, so a task that
+uses only an alias fails validation.
 
 ### Order
 
@@ -111,6 +112,7 @@ type Item struct {
     Title       string `json:"title"`
     Status      wstask.Status `json:"status"`
     Description string `json:"description"`
+    DependsOn   []string `json:"depends_on"`
 }
 ```
 
@@ -132,50 +134,31 @@ When `workspace.yaml` exists in a workspace:
 - `list`, `view`: read tasks from `workspace.yaml`.
 - `add`: append to `workspace.yaml` (generates next `TASK-<nnn>` ID).
 - `status`: update only the target task's status; preserve all other fields.
+- Mutation commands must preserve every existing task's `id`, `title`, `description`, `depends_on`, and
+  declaration order except for the field the command explicitly changes.
+- Mutation commands must fail closed without writing the file when YAML parsing, schema validation, or
+  dependency-graph validation reports a fatal error.
+- An existing but empty `workspace.yaml`, a missing/null `tasks`, or a missing/null `depends_on` is invalid;
+  empty lists must be written explicitly as `tasks: []` and `depends_on: []`.
+- List, view, and cmux sync operations also fail closed on invalid YAML; sync must not clear remote task state
+  when the local structured document is invalid.
+- Task document saves use a per-document process lock and compare the locked current content with the loaded
+  snapshot before an atomic replacement. Concurrent mutations from the same snapshot yield one success and one
+  conflict instead of silently overwriting either update.
 
 When only `workspace.md` exists:
 
 - All commands operate on `workspace.md` as before (no breaking changes).
 
-## kra serve integration
+## cmux native Todo integration
 
-The serve API payload extends each workspace with `task_graph`:
-
-```json
-{
-  "workspaces": [
-    {
-      "id": "PROJ-2314",
-      "title": "Workspace title",
-      "progress": { "done": 1, "total": 3, "percent": 33 },
-      "tasks": { "todo": [], "doing": [], "blocked": [], "done": [] },
-      "task_graph": {
-        "nodes": [
-          { "id": "TASK-001", "title": "...", "status": "done" }
-        ],
-        "edges": [
-          { "from": "TASK-001", "to": "TASK-002" }
-        ],
-        "diagnostics": { "errors": [], "warnings": [] }
-      }
-    }
-  ]
-}
-```
-
-The browser renders:
-
-- A task dependency graph view (SVG-based, read-only).
-- Each node shows: ID, title, status.
-- Each edge is a directed arrow from dependency to dependent.
-- Clicking a node highlights it and its upstream dependency path.
-- Unfinished blockers are displayed in the focus panel.
-
-The existing status board remains as a secondary/fallback view.
+- `workspace.yaml` remains authoritative for task identity, description, dependencies, and order.
+- Native Todo projects ID, title, and state only; dependency graphs remain available through local task commands.
+- Synchronization follows `cmux-todo-reconcile.md` and fails closed on schema or graph diagnostics.
 
 ## Non-goals
 
-- Browser-side task editing (out of scope).
+- Editing task structure from cmux Todo (out of scope; only state is pulled).
 - Dependency add/remove CLI commands (direct editing + validate is the workflow).
 - tasks/*.yaml per-task files (task state centralized in workspace.yaml).
 .verification evidence, timestamps, labels, assignees, priorities, events.
@@ -183,4 +166,4 @@ The existing status board remains as a secondary/fallback view.
 ## Related docs
 
 - workspace-tasks.md: existing `workspace.md` contract (legacy fallback).
-- serve.md: `kra serve` specification with graph view notes above.
+- cmux-todo-reconcile.md: native Todo projection and conflict rules.

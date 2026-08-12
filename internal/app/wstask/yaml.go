@@ -47,8 +47,12 @@ func Validate(ws *YAMLWorkspace) ([]Item, Diagnostics) {
 		return nil, diags
 	}
 
-	// 2. tasks must be a list (YAML unmarshal always produces a slice for lists)
-	// If 'tasks' is absent in YAML, ws.Tasks will be nil/empty.
+	// 2. tasks is required and must be an explicit list. yaml.v3 keeps both a
+	// missing key and an explicit null as nil, while [] is non-nil and valid.
+	if ws.Tasks == nil {
+		diags.Errors = append(diags.Errors, "missing or null tasks list")
+		return nil, diags
+	}
 	if len(ws.Tasks) == 0 {
 		return nil, diags
 	}
@@ -88,9 +92,10 @@ func Validate(ws *YAMLWorkspace) ([]Item, Diagnostics) {
 			continue
 		}
 
-		// depends_on must be a list
+		// depends_on is required and must be an explicit list.
 		if t.DependsOn == nil {
-			t.DependsOn = []string{}
+			diags.Errors = append(diags.Errors, fmt.Sprintf("task %s: missing or null depends_on list", t.ID))
+			continue
 		}
 
 		item := Item{
@@ -98,6 +103,7 @@ func Validate(ws *YAMLWorkspace) ([]Item, Diagnostics) {
 			Title:       t.Title,
 			Status:      t.Status,
 			Description: t.Description,
+			DependsOn:   cloneStringSlice(t.DependsOn),
 		}
 		items = append(items, item)
 	}
@@ -122,6 +128,7 @@ func Validate(ws *YAMLWorkspace) ([]Item, Diagnostics) {
 	for _, t := range ws.Tasks {
 		for _, dep := range t.DependsOn {
 			if dep == "" {
+				diags.Errors = append(diags.Errors, fmt.Sprintf("task %s: depends_on contains an empty task ID", t.ID))
 				continue
 			}
 			if _, exists := idMap[dep]; !exists {

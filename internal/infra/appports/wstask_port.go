@@ -59,23 +59,7 @@ func (p *WSTaskPort) Load(root string, workspaceID string, scope string) (wstask
 }
 
 func (p *WSTaskPort) Save(snapshot wstask.DocumentSnapshot, content string) error {
-	current, err := os.ReadFile(snapshot.Path)
-	switch {
-	case err == nil:
-		if !snapshot.Exists || string(current) != snapshot.Content {
-			return fmt.Errorf("%w: workspace document changed during update", wstask.ErrConflict)
-		}
-	case os.IsNotExist(err):
-		if snapshot.Exists {
-			return fmt.Errorf("%w: workspace document changed during update", wstask.ErrConflict)
-		}
-	default:
-		return fmt.Errorf("read workspace document before write: %w", err)
-	}
-	if err := os.WriteFile(snapshot.Path, []byte(content), 0o644); err != nil {
-		return fmt.Errorf("write workspace document: %w", err)
-	}
-	return nil
+	return saveTaskDocumentCAS(snapshot, content, "workspace document changed during update")
 }
 
 func wsTaskWorkspacePath(root string, workspaceID string, scope string) (string, error) {

@@ -36,20 +36,5 @@ func (p *RootTaskPort) Load(root string, _ string, _ string) (wstask.DocumentSna
 }
 
 func (p *RootTaskPort) Save(snapshot wstask.DocumentSnapshot, content string) error {
-	switch current, err := os.ReadFile(snapshot.Path); {
-	case err == nil:
-		if string(current) != snapshot.Content {
-			return fmt.Errorf("%w: root workspace.md changed during update", wstask.ErrConflict)
-		}
-	case os.IsNotExist(err):
-		if snapshot.Exists {
-			return fmt.Errorf("%w: root workspace.md changed during update", wstask.ErrConflict)
-		}
-	default:
-		return fmt.Errorf("read root workspace.md before write: %w", err)
-	}
-	if err := os.WriteFile(snapshot.Path, []byte(content), 0o644); err != nil {
-		return fmt.Errorf("write root workspace.md: %w", err)
-	}
-	return nil
+	return saveTaskDocumentCAS(snapshot, content, "root workspace.md changed during update")
 }
