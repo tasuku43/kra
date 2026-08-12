@@ -5,7 +5,6 @@ stdout:
 Result:
   Initialized: <ROOT>
   Context selected: ui-e2e
-  cmux Dock: run `kra ws task dock install` to enable the global Status Dock
 
 
 $ kra ws unlock --id UI-200

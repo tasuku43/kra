@@ -64,6 +64,26 @@ func TestCLI_UnknownCommand_ShowsUsage(t *testing.T) {
 	}
 }
 
+func TestCLI_Serve_IsUnknownCommand(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"serve"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout not empty: %q", out.String())
+	}
+	if !strings.Contains(err.String(), `unknown command: "serve"`) {
+		t.Fatalf("stderr missing retired command error: %q", err.String())
+	}
+	if strings.Contains(err.String(), "Serve read-only workspace boards") {
+		t.Fatalf("root usage still advertises serve: %q", err.String())
+	}
+}
+
 func TestCLI_WS_NoArgs_ShowsWSUsage(t *testing.T) {
 	var out bytes.Buffer
 	var err bytes.Buffer
@@ -392,8 +412,8 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if got := out.String(); !strings.Contains(got, "Result:") || !strings.Contains(got, "Initialized: "+root) {
 		t.Fatalf("stdout missing result section: %q", got)
 	}
-	if !strings.Contains(out.String(), "kra ws task dock install") {
-		t.Fatalf("stdout missing cmux Dock next step: %q", out.String())
+	if strings.Contains(out.String(), "Dock") || strings.Contains(out.String(), "ws task dock") {
+		t.Fatalf("stdout still advertises retired Dock integration: %q", out.String())
 	}
 
 	if _, statErr := os.Stat(filepath.Join(root, "workspaces")); statErr != nil {
@@ -421,17 +441,14 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	if _, statErr := os.Stat(filepath.Join(root, "templates", "default", "AGENTS.md")); statErr != nil {
 		t.Fatalf("default template AGENTS.md not created: %v", statErr)
 	}
-	rootDockBytes, statErr := os.ReadFile(filepath.Join(root, ".cmux", "dock.json"))
-	if statErr != nil {
-		t.Fatalf("root .cmux/dock.json not created: %v", statErr)
+	for _, path := range []string{
+		filepath.Join(root, ".cmux", "dock.json"),
+		filepath.Join(root, "templates", "default", ".cmux", "dock.json"),
+	} {
+		if _, statErr := os.Stat(path); !os.IsNotExist(statErr) {
+			t.Fatalf("init should not create Dock config %s, stat err=%v", path, statErr)
+		}
 	}
-	assertDockJSONCommandContains(t, rootDockBytes, "kra ws status --all --todo-only")
-	dockPath := filepath.Join(root, "templates", "default", ".cmux", "dock.json")
-	dockBytes, statErr := os.ReadFile(dockPath)
-	if statErr != nil {
-		t.Fatalf("default template .cmux/dock.json not created: %v", statErr)
-	}
-	assertDefaultDockJSON(t, dockBytes)
 	tasksBytes, statErr := os.ReadFile(filepath.Join(root, "templates", "default", workspaceDocumentFilename))
 	if statErr != nil {
 		t.Fatalf("default template workspace.md not created: %v", statErr)
@@ -466,14 +483,12 @@ func TestCLI_Init_CreatesLayoutGitignoreGitRepoAndSettings(t *testing.T) {
 	}
 	tracked := strings.Fields(runGit(t, root, "ls-files"))
 	wantTracked := map[string]bool{
-		".gitignore":                        true,
-		".cmux/dock.json":                   true,
-		".kra/config.yaml":                  true,
-		"AGENTS.md":                         true,
-		"templates/default/.cmux/dock.json": true,
-		"templates/default/AGENTS.md":       true,
-		"templates/default/CLAUDE.md":       true,
-		"templates/default/workspace.md":    true,
+		".gitignore":                     true,
+		".kra/config.yaml":               true,
+		"AGENTS.md":                      true,
+		"templates/default/AGENTS.md":    true,
+		"templates/default/CLAUDE.md":    true,
+		"templates/default/workspace.md": true,
 	}
 	if len(tracked) != len(wantTracked) {
 		t.Fatalf("tracked file count = %d, want %d (files=%q)", len(tracked), len(wantTracked), strings.Join(tracked, ", "))
@@ -529,37 +544,47 @@ func TestCLI_Init_DoesNotOverwriteExistingDefaultTemplate(t *testing.T) {
 	}
 }
 
-func assertDefaultDockJSON(t *testing.T, b []byte) {
-	t.Helper()
-	assertDockJSONCommandContains(t, b, "kra ws status --current")
-}
+func TestCLI_Init_PreservesExistingDockFiles(t *testing.T) {
+	root := t.TempDir()
+	setKraHomeForTest(t)
+	setGitIdentity(t)
+	home, err := os.UserHomeDir()
+	if err != nil {
+		t.Fatalf("user home dir: %v", err)
+	}
+	files := map[string]string{
+		filepath.Join(root, ".cmux", "dock.json"):                         "{root user content\n",
+		filepath.Join(root, "templates", "default", ".cmux", "dock.json"): "{template user content\n",
+		filepath.Join(home, ".config", "cmux", "dock.json"):               "{global user content\n",
+	}
+	for path, content := range files {
+		if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+			t.Fatalf("mkdir %s: %v", path, err)
+		}
+		if err := os.WriteFile(path, []byte(content), 0o644); err != nil {
+			t.Fatalf("write %s: %v", path, err)
+		}
+	}
 
-func assertDockJSONCommandContains(t *testing.T, b []byte, commandPart string) {
-	t.Helper()
-	var got struct {
-		Controls []struct {
-			ID      string `json:"id"`
-			Title   string `json:"title"`
-			Command string `json:"command"`
-			Cwd     string `json:"cwd"`
-			Height  int    `json:"height"`
-		} `json:"controls"`
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := New(&out, &errOut).Run([]string{"init", "--root", root, "--context", "test"})
+	if code != exitOK {
+		t.Fatalf("exit code=%d, want=%d (stderr=%q)", code, exitOK, errOut.String())
 	}
-	if err := json.Unmarshal(b, &got); err != nil {
-		t.Fatalf("dock.json is not valid JSON: %v", err)
+	for path, want := range files {
+		got, readErr := os.ReadFile(path)
+		if readErr != nil {
+			t.Fatalf("read %s: %v", path, readErr)
+		}
+		if string(got) != want {
+			t.Fatalf("Dock file changed at %s: got %q, want %q", path, string(got), want)
+		}
 	}
-	if len(got.Controls) != 1 {
-		t.Fatalf("dock.json controls length = %d, want 1", len(got.Controls))
-	}
-	ctrl := got.Controls[0]
-	if ctrl.ID != "kra-tasks" {
-		t.Fatalf("dock.json controls[0].id = %q, want %q", ctrl.ID, "kra-tasks")
-	}
-	if !strings.Contains(ctrl.Command, commandPart) {
-		t.Fatalf("dock.json command missing task tui: %q", ctrl.Command)
-	}
-	if ctrl.Cwd != "." {
-		t.Fatalf("dock.json cwd = %q, want %q", ctrl.Cwd, ".")
+	for _, path := range strings.Fields(runGit(t, root, "ls-files")) {
+		if strings.HasSuffix(path, ".cmux/dock.json") || path == ".cmux/dock.json" {
+			t.Fatalf("init staged user-authored Dock file: %s", path)
+		}
 	}
 }
 
@@ -735,14 +760,8 @@ func seedDefaultTemplate(t *testing.T, root string) {
 	if err := os.MkdirAll(filepath.Join(root, "templates", "default", "artifacts"), 0o755); err != nil {
 		t.Fatalf("create default template artifacts/: %v", err)
 	}
-	if err := os.MkdirAll(filepath.Join(root, "templates", "default", ".cmux"), 0o755); err != nil {
-		t.Fatalf("create default template .cmux/: %v", err)
-	}
 	if err := os.WriteFile(filepath.Join(root, "templates", "default", "AGENTS.md"), []byte("workspace guide\n"), 0o644); err != nil {
 		t.Fatalf("write default template AGENTS.md: %v", err)
-	}
-	if err := os.WriteFile(filepath.Join(root, "templates", "default", ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
-		t.Fatalf("write default template .cmux/dock.json: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(root, "templates", "default", workspaceDocumentFilename), []byte(defaultWorkspaceDocumentContent), 0o644); err != nil {
 		t.Fatalf("write default template workspace.md: %v", err)
@@ -803,11 +822,9 @@ func TestCLI_WS_Create_CreatesScaffoldAndStateStoreRows(t *testing.T) {
 	if strings.TrimSpace(string(guideBytes)) != "workspace guide" {
 		t.Fatalf("AGENTS.md mismatch: %q", string(guideBytes))
 	}
-	dockBytes, statErr := os.ReadFile(filepath.Join(wsDir, ".cmux", "dock.json"))
-	if statErr != nil {
-		t.Fatalf(".cmux/dock.json not created: %v", statErr)
+	if _, statErr := os.Stat(filepath.Join(wsDir, ".cmux", "dock.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("default workspace should not contain Dock config, stat err=%v", statErr)
 	}
-	assertDefaultDockJSON(t, dockBytes)
 	tasksBytes, statErr := os.ReadFile(filepath.Join(wsDir, workspaceDocumentFilename))
 	if statErr != nil {
 		t.Fatalf("workspace.md not created: %v", statErr)

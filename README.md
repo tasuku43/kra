@@ -3,7 +3,7 @@
 `kra` is a local CLI for ticket-driven development workflows on your filesystem.
 It creates an isolated workspace per task, attaches only the repositories you need as Git worktrees, and closes work safely into `archive/` when done.
 It is useful standalone for workspace lifecycle operations, and becomes more valuable with `cmux` by aligning ticket, `kra` workspace, and `cmux` workspace in a 1:1:1 operating model.
-The default workspace template starts with `notes/`, `artifacts/`, `workspace.md`, and a cmux Dock config at `.cmux/dock.json`; you can extend it with your own files and directories.
+The default workspace template starts with `notes/`, `artifacts/`, and `workspace.md`; you can extend it with your own files and directories.
 `<KRA_ROOT>` stores active/archived task workspaces, while `$KRA_HOME` (default: `~/.kra/`) stores shared state such as config and the repo pool.
 
 > [!TIP]
@@ -22,8 +22,6 @@ Ticket System     Filesystem (KRA_ROOT)       cmux
 PROJ-1234  --->   workspaces/PROJ-1234/ --->  workspace: PROJ-1234
                   ├─ repos/
                   │  (no repo attached)
-                  ├─ .cmux/
-                  │  └─ dock.json
                   ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
@@ -31,8 +29,6 @@ PROJ-1234  --->   workspaces/PROJ-1234/ --->  workspace: PROJ-1234
 PROJ-1235  --->   workspaces/PROJ-1235/ --->  workspace: PROJ-1235
                   ├─ repos/
                   │  └─ backend/
-                  ├─ .cmux/
-                  │  └─ dock.json
                   ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
@@ -42,8 +38,6 @@ PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
                   │  ├─ api/
                   │  ├─ web/
                   │  └─ infra/
-                  ├─ .cmux/
-                  │  └─ dock.json
                   ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
@@ -66,8 +60,8 @@ kra ws open --id TASK-1234 --command "claude"
 
 When using `cmux`, `kra ws open` creates or reuses the corresponding `cmux` workspace and sends a cmux notification from that workspace. Use the notification action in cmux to jump to the workspace; `kra ws open` does not automatically steal focus. Pass `--command "<cmd>"` to send a startup command to the workspace terminal after it has opened in the workspace directory.
 In single-target open, if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior; with shell integration, it can also sync parent shell `cwd`.
-New roots and default workspaces include `.cmux/dock.json`, which cmux reads to show a right-sidebar `Status` Dock control. Workspace Dock runs `kra ws status --current`; root Dock runs `kra ws status --all --todo-only` for active workspace task-derived Current Task / Next Task across the root. `<workspace>/workspace.md` remains the source of truth; `kra ws task sync` is deprecated and no longer updates cmux task pills.
-For an existing root and active workspaces, run `kra root migrate --apply` to add missing Dock/task scaffold without overwriting custom files. The generated Dock command may source the detected shell init file, such as `source ~/.zshrc`, before running `kra`.
+cmux Workspace Groups organize a KRA root and its workspaces, while `kra ws task sync` explicitly reconciles structured tasks with cmux native Todo. kra no longer creates or installs cmux Dock controls. Existing user-authored `.cmux/dock.json` files are preserved but unmanaged.
+For an existing root and active workspaces, run `kra root migrate --apply` to add missing workspace handoff files without overwriting custom files.
 
 For day-to-day operations (`repo add`, `ws add-repo`, `ws close`, `ws task`, `ws doc open`), see:
 
@@ -126,7 +120,7 @@ Details:
 - `docs/user/guides/REPO_WORKTREE.md`
 
 ### 4) Workspace-local task tracking
-Keep a structured `workspace.md` inside each workspace, update statuses with `kra ws task`, and view it continuously through `kra ws status` and the default cmux Dock control.
+Keep structured tasks inside each workspace, update statuses with `kra ws task`, inspect them with `kra ws status`, and explicitly reconcile their state with cmux native Todo using `kra ws task sync`.
 
 Example:
 

@@ -17,9 +17,10 @@ Provide root-level helpers around the conceptual `KRA_ROOT`.
   - json: `action=root.current`, `result.root=<path>`
 
 - `kra root open [--format human|json]`
-  - open conceptual `KRA_ROOT` as a single cmux workspace target
-  - uses cmux mapping key `KRA_ROOT` under `.kra/state/cmux-workspaces.json`
-  - cmux status text must be `kra:root`
+  - ensure the root's cmux Workspace Group and focus its managed anchor
+  - the group anchor is a dedicated cmux workspace at `KRA_ROOT` and is mirrored by mapping key `KRA_ROOT`
+  - do not override the user's group collapse, pin, color, icon, or later name customization
+  - when group capabilities are absent, open/reuse the legacy ungrouped `KRA_ROOT` target with a warning
   - when cmux capability is unavailable, fallback to shell-action `cd <KRA_ROOT>`
     - json: `mode=fallback-cd`, `runtime_available=false`
 
@@ -35,61 +36,23 @@ Provide root-level helpers around the conceptual `KRA_ROOT`.
   - do not overwrite existing files
   - do not write under `workspaces/<id>/repos/`
   - do not commit automatically
-  - do not create new project-local `.cmux/dock.json` as standard scaffold
   - workspace task and handoff source of truth is `<workspace>/workspace.md`
-  - detect legacy project-local Dock config at:
-    - `<KRA_ROOT>/.cmux/dock.json`
-    - `<KRA_ROOT>/templates/default/.cmux/dock.json`
-    - `<KRA_ROOT>/workspaces/<id>/.cmux/dock.json`
-  - archived workspaces are excluded from legacy Dock migration
-  - `--apply` migrates detected managed legacy project-local Dock config to global Dock config:
-    - path: `~/.config/cmux/dock.json`
-    - create parent directory when missing
-    - create global Dock config when missing
-    - preserve existing global controls
-    - add or update the `id == "kra-tasks"` control
-    - pretty-print JSON with stable struct field order
-  - standard global `kra-tasks` control:
-    - `id`: `kra-tasks`
-    - `title`: `Tasks`
-    - `command`: `kra ws status --cmux-current`
-    - `height`: `420`
-  - global Dock uses the `--cmux-current` resolver so the current cmux workspace maps to the corresponding kra workspace
-  - managed legacy control detection:
-    - `id == "kra-tasks"`
-    - `command` contains one of:
-      - `kra ws status --current`
-      - `kra ws task view --current`
-      - `kra ws status --all`
-      - `kra ws task view --all`
-    - title `Tasks` or empty is only advisory; id and command are authoritative
-    - controls with a different id, such as `kra-tasks2`, are custom and never auto-managed
-  - legacy project-local Dock cleanup:
-    - managed-only Dock config: install/update global `kra-tasks`, remove legacy `.cmux/dock.json`, and remove `.cmux/` when it becomes empty
-    - mixed managed and custom controls: install/update global `kra-tasks`, leave legacy file unchanged, and warn that cmux may prefer project-local Dock over global Dock
-    - custom-only controls: leave unchanged
-    - invalid project-local Dock JSON: fail closed; do not modify the invalid file and do not continue other migrations
-  - invalid global Dock JSON fails closed; existing file is not modified
-  - human output includes:
-    - global Dock config path
-    - whether global `kra-tasks` is created, updated, or skipped
-    - whether managed legacy project Dock config is removed
-    - whether mixed/custom project Dock config is left unchanged
-    - warning that trust prompts can remain while project-local Dock config remains
+  - Dock management is retired:
+    - do not create, inspect, parse, update, migrate, report, or remove `.cmux/dock.json`
+    - leave existing files byte-for-byte unchanged at:
+      - `<KRA_ROOT>/.cmux/dock.json`
+      - `<KRA_ROOT>/templates/default/.cmux/dock.json`
+      - `<KRA_ROOT>/workspaces/<id>/.cmux/dock.json`
+      - `~/.config/cmux/dock.json`
+    - invalid Dock JSON is also ignored because Dock files are outside this command's managed scope
+  - human output includes the root, action count, and planned/applied workspace handoff actions
   - json output includes:
     - `action=root.migrate`
-    - `result.global_dock.path`
-    - `result.global_dock.changed`
-    - `result.global_dock.created`
-    - `result.global_dock.updated`
-    - `result.global_dock.skipped`
-    - `result.legacy_project_docks[]`
-      - `path`
-      - `kind`: `root`, `template`, or `workspace`
-      - `workspace_id` when applicable
-      - `action`: `remove`, `leave_unchanged`, or `error`
-      - `reason`
-    - `result.recommendations[]`
+    - `result.root`
+    - `result.mode`
+    - `result.planned`
+    - `result.applied`
+    - `result.actions[]`
 
 ## Error handling
 

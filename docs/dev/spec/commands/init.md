@@ -45,14 +45,13 @@ Initialize a kra root and filesystem-first runtime metadata.
   - create:
     - `<root>/templates/default/notes/`
     - `<root>/templates/default/artifacts/`
-    - `<root>/templates/default/.cmux/dock.json`
     - `<root>/templates/default/AGENTS.md`
+    - `<root>/templates/default/CLAUDE.md`
     - `<root>/templates/default/workspace.md`
   - do not overwrite existing `templates/default/` content
   - existing roots with an already-present `templates/default/` are not retroactively updated by init; use `kra root migrate --apply` to add missing default template and active workspace scaffold
-- Ensure `<root>/.cmux/dock.json` exists on first init
-  - Dock command lists active workspace task-derived Current Task / Next Task with `kra ws status --all --todo-only`
-  - do not overwrite existing root Dock config
+- Do not create, parse, update, stage, or remove `.cmux/dock.json` at the root or in the default template.
+  Existing user-authored Dock files are left byte-for-byte unchanged.
 - Ensure `<root>/.kra/config.yaml` exists on first init
   - create default content:
     - `workspace.defaults.template = default`
@@ -66,9 +65,8 @@ Initialize a kra root and filesystem-first runtime metadata.
   - `<root>/.gitignore`
   - `<root>/.kra/config.yaml`
   - `<root>/AGENTS.md`
-  - `<root>/.cmux/dock.json` (if created)
   - `<root>/templates/default/AGENTS.md` (if created)
-  - `<root>/templates/default/.cmux/dock.json` (if created)
+  - `<root>/templates/default/CLAUDE.md` (if created)
   - `<root>/templates/default/workspace.md` (if created)
 - Write `.gitignore` such that `workspaces/**/repos/**` is ignored
 - Default `.gitignore` entries managed by `kra init` should also include:
@@ -95,7 +93,5 @@ Initialize a kra root and filesystem-first runtime metadata.
   - `Result:`
   - `  Initialized: <root>`
   - `  Context selected: <name>`
-  - `  cmux Dock: run \`kra ws task dock install\` to enable the global Status Dock`
 - `Result:` heading style follows shared UI token rules (`text.primary` + bold).
 - Success line should use shared success semantics (`status.success`).
-- `init` only prints the cmux Dock integration hint; it does not install or mutate the global cmux Dock config automatically.

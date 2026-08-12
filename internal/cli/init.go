@@ -161,7 +161,6 @@ func (c *CLI) runInit(args []string) int {
 	resultLines := []string{
 		styleSuccess(fmt.Sprintf("Initialized: %s", result.Root), useColorOut),
 		styleSuccess(fmt.Sprintf("Context selected: %s", contextName), useColorOut),
-		styleMuted("cmux Dock: run `kra ws task dock install` to enable the global Status Dock", useColorOut),
 	}
 	printResultSection(c.Out, useColorOut, resultLines...)
 	c.debugf("init completed root=%s", result.Root)
@@ -295,9 +294,6 @@ func ensureInitLayout(root string) error {
 	if err := ensureDefaultWorkspaceTemplate(root); err != nil {
 		return err
 	}
-	if err := ensureRootCMUXDock(root); err != nil {
-		return err
-	}
 	if err := ensureRootConfig(root); err != nil {
 		return err
 	}
@@ -427,7 +423,6 @@ func commitInitFiles(root string) error {
 		return err
 	}
 	rootConfigRel := filepath.Join(".kra", "config.yaml")
-	rootDockRel := filepath.Join(".cmux", "dock.json")
 	allowlist := map[string]struct{}{
 		allowGitignore: {},
 		allowAgents:    {},
@@ -456,17 +451,6 @@ func commitInitFiles(root string) error {
 	} else if statErr != nil && !os.IsNotExist(statErr) {
 		return fmt.Errorf("stat root config: %w", statErr)
 	}
-	if _, statErr := os.Stat(filepath.Join(root, rootDockRel)); statErr == nil {
-		allowRootDock, allowErr := toGitTopLevelPath(ctx, root, rootDockRel)
-		if allowErr != nil {
-			return allowErr
-		}
-		allowlist[allowRootDock] = struct{}{}
-		addArgs = append(addArgs, filepath.ToSlash(rootDockRel))
-	} else if statErr != nil && !os.IsNotExist(statErr) {
-		return fmt.Errorf("stat root cmux Dock config: %w", statErr)
-	}
-
 	if _, err := gitutil.Run(ctx, root, addArgs...); err != nil {
 		return err
 	}
@@ -507,22 +491,6 @@ func ensureDir(path string) error {
 	}
 	if !fi.IsDir() {
 		return fmt.Errorf("not a directory: %s", path)
-	}
-	return nil
-}
-
-func ensureRootCMUXDock(root string) error {
-	dockPath := filepath.Join(root, ".cmux", "dock.json")
-	if _, err := os.Stat(dockPath); err == nil {
-		return nil
-	} else if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("stat root .cmux/dock.json: %w", err)
-	}
-	if err := os.MkdirAll(filepath.Dir(dockPath), 0o755); err != nil {
-		return fmt.Errorf("create root .cmux/: %w", err)
-	}
-	if err := os.WriteFile(dockPath, []byte(defaultRootCMUXDockContent()), 0o644); err != nil {
-		return fmt.Errorf("write root .cmux/dock.json: %w", err)
 	}
 	return nil
 }
@@ -627,17 +595,11 @@ func ensureDefaultWorkspaceTemplate(root string) error {
 	if err := os.MkdirAll(filepath.Join(defaultPath, "artifacts"), 0o755); err != nil {
 		return fmt.Errorf("create default template artifacts/: %w", err)
 	}
-	if err := os.MkdirAll(filepath.Join(defaultPath, ".cmux"), 0o755); err != nil {
-		return fmt.Errorf("create default template .cmux/: %w", err)
-	}
 	if err := os.WriteFile(filepath.Join(defaultPath, rootAgentsFilename), []byte(defaultWorkspaceTemplateAgentsContent()), 0o644); err != nil {
 		return fmt.Errorf("write default template AGENTS.md: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(defaultPath, rootClaudeFilename), []byte(defaultWorkspaceTemplateAgentsContent()), 0o644); err != nil {
 		return fmt.Errorf("write default template CLAUDE.md: %w", err)
-	}
-	if err := os.WriteFile(filepath.Join(defaultPath, ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
-		return fmt.Errorf("write default template .cmux/dock.json: %w", err)
 	}
 	if err := os.WriteFile(filepath.Join(defaultPath, workspaceDocumentFilename), []byte(defaultWorkspaceDocumentContent), 0o644); err != nil {
 		return fmt.Errorf("write default template workspace.md: %w", err)
@@ -650,7 +612,6 @@ func defaultWorkspaceTemplateTrackedFiles() []string {
 	return []string{
 		filepath.Join(base, rootAgentsFilename),
 		filepath.Join(base, rootClaudeFilename),
-		filepath.Join(base, ".cmux", "dock.json"),
 		filepath.Join(base, workspaceDocumentFilename),
 	}
 }

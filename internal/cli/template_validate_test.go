@@ -67,7 +67,7 @@ func TestCLI_TemplateValidate_Name_Success(t *testing.T) {
 	}
 }
 
-func TestCLI_TemplateValidate_AllowsCMUXDockAndTasks(t *testing.T) {
+func TestCLI_TemplateValidate_AllowsUserAuthoredCMUXDockAndTasks(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
 
@@ -75,7 +75,7 @@ func TestCLI_TemplateValidate_AllowsCMUXDockAndTasks(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(tmpl, ".cmux"), 0o755); err != nil {
 		t.Fatalf("mkdir .cmux/: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(tmpl, ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(tmpl, ".cmux", "dock.json"), []byte("{\"controls\": [{\"id\": \"custom\"}]}\n"), 0o644); err != nil {
 		t.Fatalf("write dock.json: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(tmpl, workspaceDocumentFilename), []byte(defaultWorkspaceDocumentContent), 0o644); err != nil {

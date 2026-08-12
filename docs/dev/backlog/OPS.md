@@ -165,8 +165,8 @@ status: planned
   - Serial: yes
 
 - [x] OPS-018: `kra serve` read-only workspace boards
-  - What: add a local read-only web UI with `/workspaces/` and `/workspaces/<id>/` pages for open
-    workspace task boards, README, repositories, branches, and inferred PR links.
+  - Historical: this local read-only web UI was delivered, then retired by CMUX-016 in favor of cmux
+    Workspace Groups, native Todo, and terminal inspection commands. `kra serve` is no longer available.
   - Specs:
     - `docs/dev/spec/commands/serve.md`
   - Depends: OPS-008

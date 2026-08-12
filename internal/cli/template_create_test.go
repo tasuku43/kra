@@ -27,7 +27,6 @@ func TestCLI_TemplateCreate_NameFlag_CreatesScaffold(t *testing.T) {
 	for _, rel := range []string{
 		filepath.Join("templates", "custom", "notes"),
 		filepath.Join("templates", "custom", "artifacts"),
-		filepath.Join("templates", "custom", ".cmux", "dock.json"),
 		filepath.Join("templates", "custom", "AGENTS.md"),
 		filepath.Join("templates", "custom", workspaceDocumentFilename),
 	} {
@@ -35,11 +34,9 @@ func TestCLI_TemplateCreate_NameFlag_CreatesScaffold(t *testing.T) {
 			t.Fatalf("missing scaffold path %q: %v", rel, statErr)
 		}
 	}
-	dockBytes, readErr := os.ReadFile(filepath.Join(env.Root, "templates", "custom", ".cmux", "dock.json"))
-	if readErr != nil {
-		t.Fatalf("read scaffold dock.json: %v", readErr)
+	if _, statErr := os.Stat(filepath.Join(env.Root, "templates", "custom", ".cmux", "dock.json")); !os.IsNotExist(statErr) {
+		t.Fatalf("template scaffold should not create Dock config, stat err=%v", statErr)
 	}
-	assertDefaultDockJSON(t, dockBytes)
 	if !strings.Contains(out.String(), "✔ custom") {
 		t.Fatalf("stdout missing created template name: %q", out.String())
 	}
@@ -123,11 +120,18 @@ func TestCLI_TemplateCreate_From_CopiesSourceTemplate(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
 	src := filepath.Join(env.Root, "templates", "source")
+	const dockContent = "{\n  \"controls\": [{\"id\": \"source-custom\"}]\n}\n"
 	if err := os.MkdirAll(filepath.Join(src, "notes"), 0o755); err != nil {
 		t.Fatalf("mkdir source notes/: %v", err)
 	}
+	if err := os.MkdirAll(filepath.Join(src, ".cmux"), 0o755); err != nil {
+		t.Fatalf("mkdir source .cmux/: %v", err)
+	}
 	if err := os.WriteFile(filepath.Join(src, "notes", "README.md"), []byte("from source\n"), 0o644); err != nil {
 		t.Fatalf("write source file: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(src, ".cmux", "dock.json"), []byte(dockContent), 0o644); err != nil {
+		t.Fatalf("write source dock.json: %v", err)
 	}
 
 	var out bytes.Buffer
@@ -144,6 +148,13 @@ func TestCLI_TemplateCreate_From_CopiesSourceTemplate(t *testing.T) {
 	}
 	if strings.TrimSpace(string(got)) != "from source" {
 		t.Fatalf("copied file content=%q, want %q", string(got), "from source\n")
+	}
+	dock, err := os.ReadFile(filepath.Join(env.Root, "templates", "copied", ".cmux", "dock.json"))
+	if err != nil {
+		t.Fatalf("read copied dock.json: %v", err)
+	}
+	if string(dock) != dockContent {
+		t.Fatalf("copied user Dock changed: got %q, want %q", string(dock), dockContent)
 	}
 	if !strings.Contains(out.String(), "from: source") {
 		t.Fatalf("stdout missing from summary: %q", out.String())

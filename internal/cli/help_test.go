@@ -107,3 +107,20 @@ func TestCLI_Help_UnknownTarget(t *testing.T) {
 		t.Fatalf("stderr missing unknown target message: %q", err.String())
 	}
 }
+
+func TestCLI_Help_Serve_IsUnknownTarget(t *testing.T) {
+	var out bytes.Buffer
+	var err bytes.Buffer
+	c := New(&out, &err)
+
+	code := c.Run([]string{"help", "serve"})
+	if code != exitUsage {
+		t.Fatalf("exit code = %d, want %d", code, exitUsage)
+	}
+	if out.Len() != 0 {
+		t.Fatalf("stdout not empty: %q", out.String())
+	}
+	if !strings.Contains(err.String(), `unknown help target: "serve"`) {
+		t.Fatalf("stderr missing retired help target error: %q", err.String())
+	}
+}

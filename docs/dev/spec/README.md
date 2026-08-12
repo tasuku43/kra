@@ -46,6 +46,11 @@ Implementation should reference these specs. When behavior changes, update the s
   - `concepts/fs-source-of-truth.md`: FS=SoT and index-store downgrade policy (planned)
   - `concepts/workspace-meta-json.md`: `.kra.meta.json` schema and atomic update rules
   - `concepts/workspace-template.md`: root-local workspace template model and validation
+  - `concepts/workspace-tasks.md`: Markdown workspace task contract and native Todo projection boundary
+  - `concepts/workspace-tasks-yaml.md`: preferred structured YAML task contract
+  - `concepts/cmux-mapping.md`: ignored cmux workspace/group/Todo mapping state
+  - `concepts/cmux-workspace-groups.md`: KRA root to cmux Workspace Group lifecycle
+  - `concepts/cmux-todo-reconcile.md`: native Todo three-way reconciliation and recovery
   - `concepts/ui-color.md`: CLI/TUI semantic color token policy
   - `concepts/architecture.md`: Layered architecture (`cli/app/domain/infra/ui`) and migration rules
   - `concepts/workspace-lifecycle.md`: Workspace lifecycle state machine and transition policy
@@ -68,7 +73,8 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/template/validate.md`: `kra template validate`
   - `commands/shell/init.md`: `kra shell init`
   - `commands/shell/completion.md`: `kra shell completion`
-  - `commands/serve.md`: `kra serve`
+  - `commands/serve.md`: removed `kra serve` tombstone
+  - `commands/task.md`: root inbox commands and native Todo sync
   - `commands/state/registry.md`: `kra state` foundation (registry)
   - `commands/ws/selector.md`: Shared inline selector UI for workspace actions
   - `commands/ws/select.md`: Workspace targeting options (`--id` / `--current` / `--select`)
@@ -80,6 +86,8 @@ Implementation should reference these specs. When behavior changes, update the s
   - `commands/ws/import/jira.md`: `kra ws import jira`
   - `commands/ws/dashboard.md`: `kra ws dashboard`
   - `commands/ws/open.md`: `kra ws open`
+  - `commands/ws/task.md`: structured workspace task commands
+  - `commands/ws/task/sync.md`: explicit native Todo sync
   - `commands/ws/add-repo.md`: `kra ws add-repo`
   - `commands/ws/dry-run.md`: `kra ws <close|reopen|purge> --dry-run`
   - `commands/ws/lock.md`: `kra ws lock` / `kra ws unlock`

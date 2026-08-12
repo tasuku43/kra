@@ -37,11 +37,14 @@ Generated default templates include:
 
 - `notes/`
 - `artifacts/`
-- `.cmux/dock.json`
 - `AGENTS.md`
+- `CLAUDE.md`
 - `workspace.md`
 
-`.cmux/` is template-managed cmux project configuration. `workspace.md` remains the workspace current-state and task source of truth at `<workspace>/workspace.md`.
+The generated scaffold does not include `.cmux/dock.json`. A user-authored template may still contain
+that file; validation accepts it and static copy preserves it unchanged, but kra does not generate or
+manage its contents. `workspace.md` remains the workspace current-state and task source of truth at
+`<workspace>/workspace.md`.
 
 ## Entry constraints
 

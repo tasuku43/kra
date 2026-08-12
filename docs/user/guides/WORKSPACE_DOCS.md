@@ -64,7 +64,7 @@ If no docs pane exists yet, `kra` creates one and reuses it for later `ws doc op
 
 This command requires `cmux` Markdown viewer support.
 
-`kra` uses the `KRA_ROOT` `cmux` workspace as an internal staging workspace when opening Markdown and then moves the viewer into the target workspace docs pane. The `KRA_ROOT` mapping is ensured automatically when needed, using the same runtime creation logic as `kra root open` without selecting it.
+`kra` uses the managed `KRA_ROOT` cmux Workspace Group anchor as an internal staging workspace when opening Markdown and then moves the viewer into the target workspace docs pane. The anchor mapping is ensured automatically when needed, using the same runtime creation logic as `kra root open` without selecting it.
 
 ## Advanced usage
 

@@ -7,6 +7,13 @@ status: implemented
 
 This guide explains how `kra` works with `cmux` in task-driven workflows.
 
+## Compatibility and socket access
+
+The native Group and Todo paths are verified against cmux `v0.64.22` and are enabled by advertised/probed
+methods rather than a version-string gate. cmux's default `cmuxOnly` socket mode accepts processes launched
+under a cmux terminal, which is the normal KRA workflow. To invoke KRA from an external launcher, use cmux's
+same-user `automation` mode or password authentication. Do not broaden access with `allowAll` just for KRA.
+
 ## Operating model
 
 `kra` aligns three entities in one operating model:
@@ -25,8 +32,6 @@ Ticket System     Filesystem (KRA_ROOT)       cmux
 PROJ-1234  --->   workspaces/PROJ-1234/ --->  workspace: PROJ-1234
                   ├─ repos/
                   │  (no repo attached)
-                  ├─ .cmux/
-                  │  └─ dock.json
                   ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
@@ -34,8 +39,6 @@ PROJ-1234  --->   workspaces/PROJ-1234/ --->  workspace: PROJ-1234
 PROJ-1235  --->   workspaces/PROJ-1235/ --->  workspace: PROJ-1235
                   ├─ repos/
                   │  └─ backend/
-                  ├─ .cmux/
-                  │  └─ dock.json
                   ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
@@ -45,71 +48,36 @@ PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
                   │  ├─ api/
                   │  ├─ web/
                   │  └─ infra/
-                  ├─ .cmux/
-                  │  └─ dock.json
                   ├─ workspace.md
                   ├─ notes/
                   └─ artifacts/
 ```
 
-## Dock status view
+## Workspace Groups and native Todo
 
-KRA_ROOT can also have `.cmux/dock.json`. The root Dock is useful for seeing open tasks across active workspaces:
+`kra root open` and `kra ws open` organize a KRA root and its managed workspaces as a cmux Workspace
+Group when the installed cmux exposes the required group APIs. The root target is the managed group
+anchor; workspace targets join the same group without overwriting user-customized group presentation.
 
-```json
-{
-  "controls": [
-    {
-      "id": "kra-tasks",
-      "title": "Status",
-      "command": "kra ws status --all --todo-only",
-      "cwd": ".",
-      "height": 420
-    }
-  ]
-}
-```
+Structured task state remains filesystem-authoritative. Run `kra ws task sync` explicitly to
+reconcile KRA-managed tasks with the mapped cmux workspace's native Todo checklist. Foreign Todo
+items are preserved. Use `--dry-run` to inspect the plan before applying it; `kra task sync` applies
+the same contract to the root inbox on the managed group anchor. Opening a root or workspace never
+mutates Todo implicitly.
 
-New default workspaces include `.cmux/dock.json`. cmux reads this project Dock config from the workspace root and can show a right-sidebar `Status` control.
+kra no longer creates, installs, migrates, or removes cmux Dock controls. New roots, templates, and
+workspaces do not receive `.cmux/dock.json`. Existing user-authored Dock files remain byte-for-byte
+unchanged and outside kra's managed scope.
 
-Default `.cmux/dock.json`:
-
-```json
-{
-  "controls": [
-    {
-      "id": "kra-tasks",
-      "title": "Status",
-      "command": "kra ws status --current",
-      "cwd": ".",
-      "height": 420
-    }
-  ]
-}
-```
-
-The command runs:
-
-```sh
-kra ws status --current
-```
-
-When `kra` is made available by shell startup files, generated Dock configs may prefix the command with the detected shell init file. For example, zsh users may see:
-
-```sh
-source ~/.zshrc; kra ws status --current
-```
-
-This makes the Dock a constantly visible view of `<workspace>/workspace.md`. The TUI starts in read mode; press `i` to enter write mode before clicking tasks to update `workspace.md`. The current-state and task source of truth remains `<workspace>/workspace.md`; `kra ws task sync` is deprecated and no longer refreshes cmux task pills. The project Dock config may trigger a cmux trust prompt the first time the workspace is opened.
-
-`kra init` does not overwrite an existing `templates/default/`, and template changes are not applied retroactively by init. For an existing root and active workspaces, run:
+For an existing root and active workspaces, use:
 
 ```sh
 kra root migrate
 kra root migrate --apply
 ```
 
-The migration adds missing `.cmux/dock.json`, `templates/default/.cmux/dock.json`, `templates/default/workspace.md`, `workspaces/<id>/.cmux/dock.json`, and `workspaces/<id>/workspace.md` without overwriting custom files.
+This migration only adds or converts workspace handoff files such as `workspace.md`; it does not
+inspect or mutate Dock configuration.
 
 ## Open behavior
 

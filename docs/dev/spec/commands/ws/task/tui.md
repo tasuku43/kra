@@ -7,8 +7,8 @@ status: implemented
 
 ## Purpose
 
-Render an interactive terminal workspace-state/task view for humans and cmux Dock, and write status
-changes back to `workspace.md`.
+Render an interactive terminal workspace-state/task view for humans and write status changes back to
+`workspace.md`.
 
 ## Behavior
 
@@ -54,13 +54,13 @@ changes back to `workspace.md`.
   - `--all`
 - `--id`, `--current`, and `--select` target active workspaces because TUI can mutate task status.
 - `--select` selects active workspaces.
-- `--all` reads active workspaces under the current KRA_ROOT and is intended for root-level Dock.
+- `--all` reads active workspaces under the current KRA_ROOT as a root-level terminal overview.
 
 ## Updates
 
 - TUI stays open until the user quits.
 - TUI automatically follows `workspace.md` changes so direct edits can appear without restarting the
-  Dock.
+  view.
 - `--refresh` is not part of the public status command surface.
 - Legacy `--refresh <duration>` arguments may be accepted as compatibility no-ops.
 - `q` or Ctrl-C exits.
@@ -77,37 +77,10 @@ changes back to `workspace.md`.
   - no raw ANSI color codes
   - use shared semantic style helpers
 
-## cmux Dock
+## Runtime integration
 
-Install the global cmux Dock integration explicitly with:
+`kra ws status` is a standalone terminal view. kra does not scaffold or install a cmux Dock control,
+and the former `kra ws task dock install` command is unavailable.
 
-```sh
-kra ws task dock install
-```
-
-`kra ws task dock install --global` is accepted as a compatibility alias because global Dock is the
-only supported install target.
-
-The global Dock command is:
-
-```sh
-kra ws status --cmux-current
-```
-
-When an existing global Dock config is present, install preserves existing controls and adds or
-updates the managed `id == "kra-tasks"` control. Invalid global Dock JSON fails closed.
-
-The legacy workspace Dock command was:
-
-```sh
-kra ws status --current
-```
-
-The legacy root Dock command was:
-
-```sh
-kra ws status --all --todo-only
-```
-
-`kra root migrate --apply` can migrate managed legacy project-local Dock configs to the global Dock.
-`kra ws task sync` is deprecated and no longer projects cmux task pills.
+cmux native Todo reconciliation is an explicit, separate `kra ws task sync` workflow. It does not
+depend on keeping this TUI open.

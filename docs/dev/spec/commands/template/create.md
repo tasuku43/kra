@@ -27,15 +27,16 @@ Create a workspace template scaffold under the current root.
 - Create scaffold at `<current-root>/templates/<name>/`:
   - `notes/`
   - `artifacts/`
-  - `.cmux/dock.json`
   - `AGENTS.md` (default guidance content)
   - `workspace.md`
   - `CLAUDE.md`
   - scaffold matches the default template shape because custom templates are expected to be drop-in workspace seeds
+  - do not create `.cmux/dock.json`
 - when `--from <template>` is provided:
   - resolve source template from `<current-root>/templates/<template>/`
   - validate source template with shared template validation rules
   - copy source template contents as-is into `<current-root>/templates/<name>/`
+  - preserve a user-authored `.cmux/dock.json` when it exists in the source; kra does not manage it
 - Fail when target template path already exists.
 - Commit policy (inside current root git worktree):
   - stage only `templates/<name>/` (`git add -A -- templates/<name>`)

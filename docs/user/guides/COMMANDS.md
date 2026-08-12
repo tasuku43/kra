@@ -22,7 +22,7 @@ kra ws dashboard
 
 Notes:
 
-- `kra ws create` uses the default workspace template unless you pass `--template`; the baseline template starts with `notes/`, `artifacts/`, `workspace.md`, and `.cmux/dock.json`.
+- `kra ws create` uses the default workspace template unless you pass `--template`; the baseline template starts with `notes/`, `artifacts/`, and `workspace.md`.
 - Ticket/provider integrations are designed to be extensible; current implemented support includes Jira (`kra ws create --jira`, `kra ws import jira`) and GitHub import (`kra ws import github issue|review`).
 
 ## Root commands
@@ -60,7 +60,8 @@ Notes:
 - `kra ws status [--id <id> | --current | --select | --all] [--todo-only] [--include-done] [--no-color]`
 - `kra ws task add [--id <id> | --current | --select] --title "<text>"`
 - `kra ws task status [--id <id> | --current | --select] <task-id> <todo|doing|blocked|done>`
-- `kra ws task sync [--id <id> | --current | --select | --all]` (deprecated no-op)
+- `kra ws task sync [--id <id> | --current | --cmux-current | --select | --all] [--prefer kra|cmux] [--dry-run]`
+- `kra task sync [--prefer kra|cmux] [--dry-run]`
 - `kra ws close [--id <id> | --current | --select | --multi-select]`
 - `kra ws reopen [--id <id> | --current | --select]`
 - `kra ws purge [--id <id> | --current | --select]`
@@ -69,7 +70,7 @@ Notes:
 
 ## Task and doc flows
 
-Use workspace-local tasks when you want a Markdown source of truth with a cmux Dock view.
+Use workspace-local tasks when you want a filesystem source of truth with terminal and cmux native Todo views.
 
 ```sh
 kra ws task add --current --title "Draft docs"
@@ -77,9 +78,11 @@ kra ws task list --current
 kra ws status --current
 kra ws status --all --todo-only
 kra ws task status --current TASK-001 doing
+kra ws task sync --current --dry-run
+kra ws task sync --current
 ```
 
-New default workspaces include a cmux Dock config at `.cmux/dock.json`. cmux reads it from the workspace root and can keep a right-sidebar `Status` control visible by running `kra ws status --current`. `workspace.md` remains the source of truth, and `kra ws task sync` is deprecated. Existing roots/templates/workspaces are not rewritten by this default template change.
+New default workspaces do not include a managed `.cmux/dock.json`. `kra ws task sync` is the explicit permission boundary for reconciling task state with cmux native Todo. Existing user-authored Dock files are copied and preserved as ordinary template content but are not managed by kra.
 
 Use `kra ws doc open` when you want GitHub-like Markdown viewing in `cmux` for workspace-local docs:
 

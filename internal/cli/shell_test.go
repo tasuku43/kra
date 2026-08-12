@@ -156,8 +156,13 @@ func TestCLI_Shell_Completion_Zsh_PrintsCompdef(t *testing.T) {
 	if !strings.Contains(text, `"ws import all:--target"`) || !strings.Contains(text, `"jira" "github-review" "both"`) {
 		t.Fatalf("missing zsh ws import all target values: %q", text)
 	}
-	if !strings.Contains(text, "\"ws task sync\")\n      has_target=0") {
-		t.Fatalf("missing target-selector gate for ws task sync: %q", text)
+	for _, retired := range []string{`"serve"`, `"ws task dock"`} {
+		if strings.Contains(text, retired) {
+			t.Fatalf("retired completion path %s is still present: %q", retired, text)
+		}
+	}
+	if !strings.Contains(text, `"ws task sync"`) || !strings.Contains(text, `"task sync"`) || !strings.Contains(text, "--prefer") {
+		t.Fatalf("missing native Todo sync completion paths: %q", text)
 	}
 	if !strings.Contains(text, `--id|--id=*|--current|--select|--multi-select|--all`) {
 		t.Fatalf("missing target-detection for --all in zsh gate: %q", text)
@@ -208,8 +213,13 @@ func TestCLI_Shell_Completion_Bash_PrintsCompleteHook(t *testing.T) {
 	if !strings.Contains(text, `"ws import all:--target"`) || !strings.Contains(text, `"jira github-review both"`) {
 		t.Fatalf("missing bash ws import all target values: %q", text)
 	}
-	if !strings.Contains(text, "\"ws task sync\")\n        has_target=0") {
-		t.Fatalf("missing target-selector gate for ws task sync: %q", text)
+	for _, retired := range []string{`"serve"`, `"ws task dock"`} {
+		if strings.Contains(text, retired) {
+			t.Fatalf("retired completion path %s is still present: %q", retired, text)
+		}
+	}
+	if !strings.Contains(text, `"ws task sync"`) || !strings.Contains(text, `"task sync"`) || !strings.Contains(text, "--prefer") {
+		t.Fatalf("missing native Todo sync completion paths: %q", text)
 	}
 	if !strings.Contains(text, `--id|--id=*|--current|--select|--multi-select|--all`) {
 		t.Fatalf("missing target-detection for --all in bash gate: %q", text)
@@ -286,6 +296,25 @@ func TestKraCompletionSubcommands_WS_ExcludeCompatAlias(t *testing.T) {
 	}
 	if contains(got, "insight") {
 		t.Fatalf("ws subcommands should not suggest experimental insight by default: %v", got)
+	}
+}
+
+func TestKraCompletionGraphIncludesActiveTaskAndRootCommands(t *testing.T) {
+	if !contains(kraCompletionSubcommandOrder, "task") {
+		t.Fatal("root task command is absent from generated completion graph")
+	}
+	if !contains(kraCompletionSubcommands["root"], "migrate") {
+		t.Fatal("root migrate is absent from generated completion graph")
+	}
+	for _, subcommand := range []string{"view", "validate"} {
+		if !contains(kraCompletionPathSubcommands["ws task"], subcommand) {
+			t.Fatalf("ws task %s is absent from generated completion graph", subcommand)
+		}
+	}
+	for _, path := range []string{"ws task view", "ws task validate"} {
+		if !contains(kraCompletionPathFlagOrder, path) {
+			t.Fatalf("%s flags are absent from generated completion graph", path)
+		}
 	}
 }
 

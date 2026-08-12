@@ -1,7 +1,6 @@
 package cli
 
 import (
-	"encoding/json"
 	"fmt"
 	"io"
 	"os"
@@ -21,29 +20,8 @@ type rootMigrateAction struct {
 }
 
 type rootMigrationPlan struct {
-	Root               string
-	Actions            []rootMigrateAction
-	GlobalDock         rootMigrateGlobalDockResult
-	LegacyProjectDocks []rootMigrateLegacyDockResult
-	Recommendations    []string
-	InstallGlobalDock  bool
-	GlobalDockCommand  string
-}
-
-type rootMigrateGlobalDockResult struct {
-	Path    string `json:"path"`
-	Changed bool   `json:"changed"`
-	Created bool   `json:"created"`
-	Updated bool   `json:"updated"`
-	Skipped bool   `json:"skipped"`
-}
-
-type rootMigrateLegacyDockResult struct {
-	Path        string `json:"path"`
-	Kind        string `json:"kind"`
-	WorkspaceID string `json:"workspace_id,omitempty"`
-	Action      string `json:"action"`
-	Reason      string `json:"reason"`
+	Root    string
+	Actions []rootMigrateAction
 }
 
 func (c *CLI) runRootMigrate(args []string) int {
@@ -69,11 +47,6 @@ func (c *CLI) runRootMigrate(args []string) int {
 	}
 	applied := 0
 	if opts.apply {
-		if plan.InstallGlobalDock {
-			if err := applyGlobalDockMigration(plan.GlobalDock.Path, plan.GlobalDockCommand); err != nil {
-				return c.writeRootRuntimeError(opts.format, "root.migrate", "internal_error", fmt.Sprintf("%s: %v", plan.GlobalDock.Path, err))
-			}
-		}
 		for _, action := range plan.Actions {
 			if err := action.apply(); err != nil {
 				return c.writeRootRuntimeError(opts.format, "root.migrate", "internal_error", fmt.Sprintf("%s: %v", action.Path, err))
@@ -94,14 +67,11 @@ func (c *CLI) runRootMigrate(args []string) int {
 			OK:     true,
 			Action: "root.migrate",
 			Result: map[string]any{
-				"root":                 root,
-				"mode":                 rootMigrateMode(opts.apply),
-				"planned":              len(plan.Actions),
-				"applied":              applied,
-				"actions":              items,
-				"global_dock":          plan.GlobalDock,
-				"legacy_project_docks": plan.LegacyProjectDocks,
-				"recommendations":      plan.Recommendations,
+				"root":    root,
+				"mode":    rootMigrateMode(opts.apply),
+				"planned": len(plan.Actions),
+				"applied": applied,
+				"actions": items,
 			},
 		})
 		return exitOK
@@ -199,9 +169,6 @@ func planRootMigration(root string) (rootMigrationPlan, error) {
 		}
 	}
 	plan.Actions = actions
-	if err := appendLegacyDockMigrationPlan(root, &plan); err != nil {
-		return plan, err
-	}
 	return plan, nil
 }
 
@@ -448,272 +415,6 @@ func appendMissingFileAction(actions []rootMigrateAction, path string, descripti
 	return actions
 }
 
-func isManagedKraTasksDockCommand(command string) bool {
-	trimmed := strings.TrimSpace(command)
-	for _, marker := range []string{
-		"kra ws task tui --current",
-		"kra ws task view --current",
-		"kra ws task tui --all",
-		"kra ws task view --all",
-		"kra ws status --current",
-		"kra ws status --all",
-	} {
-		if strings.Contains(trimmed, marker) {
-			return true
-		}
-	}
-	return false
-}
-
-func appendLegacyDockMigrationPlan(root string, plan *rootMigrationPlan) error {
-	globalPath, err := globalCMUXDockPath()
-	if err != nil {
-		return err
-	}
-	plan.GlobalDock.Path = globalPath
-
-	candidates := []rootMigrateLegacyDockResult{{
-		Path: filepath.Join(root, ".cmux", "dock.json"),
-		Kind: "root",
-	}, {
-		Path: filepath.Join(root, "templates", "default", ".cmux", "dock.json"),
-		Kind: "template",
-	}}
-	workspacesDir := filepath.Join(root, "workspaces")
-	entries, err := os.ReadDir(workspacesDir)
-	if err != nil {
-		return fmt.Errorf("read workspaces/: %w", err)
-	}
-	for _, ent := range entries {
-		if !ent.IsDir() {
-			continue
-		}
-		id := strings.TrimSpace(ent.Name())
-		if err := validateWorkspaceID(id); err != nil {
-			continue
-		}
-		candidates = append(candidates, rootMigrateLegacyDockResult{
-			Path:        filepath.Join(workspacesDir, id, ".cmux", "dock.json"),
-			Kind:        "workspace",
-			WorkspaceID: id,
-		})
-	}
-
-	legacyUsesTUI := false
-	for _, candidate := range candidates {
-		result, usesTUI, err := inspectLegacyProjectDock(candidate)
-		if err != nil {
-			return err
-		}
-		if result.Action == "" {
-			continue
-		}
-		if usesTUI {
-			legacyUsesTUI = true
-		}
-		if result.Action == "remove" {
-			path := result.Path
-			plan.Actions = append(plan.Actions, rootMigrateAction{
-				Path:        path,
-				Description: "remove managed legacy project Dock config",
-				apply: func() error {
-					if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
-						return err
-					}
-					return removeDirIfEmpty(filepath.Dir(path))
-				},
-			})
-		}
-		if result.Action == "leave_unchanged" && strings.Contains(result.Reason, "mixed") {
-			plan.Recommendations = append(plan.Recommendations, "project-local Dock config remains and cmux may prefer it over global Dock config; move custom controls to the global config or remove the project-local .cmux/dock.json to fully migrate")
-		}
-		plan.LegacyProjectDocks = append(plan.LegacyProjectDocks, result)
-	}
-
-	plan.GlobalDockCommand = standardGlobalDockCommand(legacyUsesTUI)
-	state, err := inspectGlobalDock(globalPath, plan.GlobalDockCommand, hasManagedLegacyDock(plan.LegacyProjectDocks))
-	if err != nil {
-		return err
-	}
-	plan.GlobalDock = state
-	plan.InstallGlobalDock = state.Changed
-	if plan.GlobalDock.Path == "" {
-		plan.GlobalDock.Path = globalPath
-	}
-	return nil
-}
-
-func inspectLegacyProjectDock(result rootMigrateLegacyDockResult) (rootMigrateLegacyDockResult, bool, error) {
-	info, err := os.Stat(result.Path)
-	if os.IsNotExist(err) {
-		return result, false, nil
-	}
-	if err != nil {
-		return result, false, fmt.Errorf("stat legacy Dock config %s: %w", result.Path, err)
-	}
-	if info.IsDir() {
-		result.Action = "error"
-		result.Reason = "path is a directory"
-		return result, false, fmt.Errorf("legacy Dock config path is a directory: %s", result.Path)
-	}
-	b, err := os.ReadFile(result.Path)
-	if err != nil {
-		return result, false, fmt.Errorf("read legacy Dock config %s: %w", result.Path, err)
-	}
-	var config cmuxDockConfig
-	if err := json.Unmarshal(b, &config); err != nil {
-		result.Action = "error"
-		result.Reason = "invalid JSON"
-		return result, false, fmt.Errorf("invalid legacy project Dock JSON %s: %w", result.Path, err)
-	}
-	managed := 0
-	custom := 0
-	usesTUI := false
-	for _, control := range config.Controls {
-		if control.ID == "kra-tasks" && isManagedKraTasksDockCommand(control.Command) {
-			managed++
-			if strings.Contains(control.Command, "kra ws task tui ") || strings.Contains(control.Command, "kra ws status ") {
-				usesTUI = true
-			}
-			continue
-		}
-		custom++
-	}
-	switch {
-	case managed > 0 && custom == 0:
-		result.Action = "remove"
-		result.Reason = "managed legacy project Dock config"
-	case managed > 0 && custom > 0:
-		result.Action = "leave_unchanged"
-		result.Reason = "mixed managed and custom project Dock controls"
-	case managed == 0 && custom > 0:
-		result.Action = "leave_unchanged"
-		result.Reason = "custom project Dock config left unchanged"
-	default:
-		result.Action = "leave_unchanged"
-		result.Reason = "empty project Dock config left unchanged"
-	}
-	return result, usesTUI, nil
-}
-
-func hasManagedLegacyDock(results []rootMigrateLegacyDockResult) bool {
-	for _, result := range results {
-		if result.Action == "remove" || strings.Contains(result.Reason, "mixed managed") {
-			return true
-		}
-	}
-	return false
-}
-
-func globalCMUXDockPath() (string, error) {
-	home, err := os.UserHomeDir()
-	if err != nil {
-		return "", fmt.Errorf("resolve home dir: %w", err)
-	}
-	if strings.TrimSpace(home) == "" {
-		return "", fmt.Errorf("resolve home dir: empty")
-	}
-	return filepath.Join(home, ".config", "cmux", "dock.json"), nil
-}
-
-func standardGlobalDockCommand(_ bool) string {
-	return "kra ws status --cmux-current"
-}
-
-func inspectGlobalDock(path string, desiredCommand string, createIfMissing bool) (rootMigrateGlobalDockResult, error) {
-	result := rootMigrateGlobalDockResult{Path: path}
-	info, err := os.Stat(path)
-	if os.IsNotExist(err) {
-		if createIfMissing {
-			result.Changed = true
-			result.Created = true
-		} else {
-			result.Skipped = true
-		}
-		return result, nil
-	}
-	if err != nil {
-		return result, fmt.Errorf("stat global Dock config: %w", err)
-	}
-	if info.IsDir() {
-		return result, fmt.Errorf("global Dock config path is a directory: %s", path)
-	}
-	b, err := os.ReadFile(path)
-	if err != nil {
-		return result, fmt.Errorf("read global Dock config: %w", err)
-	}
-	var config cmuxDockConfig
-	if err := json.Unmarshal(b, &config); err != nil {
-		return result, fmt.Errorf("invalid global Dock JSON %s: %w", path, err)
-	}
-	updated := upsertGlobalKraTasksControl(&config, desiredCommand, false)
-	if updated {
-		result.Changed = true
-		result.Updated = true
-	} else {
-		result.Skipped = true
-	}
-	return result, nil
-}
-
-func applyGlobalDockMigration(path string, desiredCommand string) error {
-	config := cmuxDockConfig{}
-	if b, err := os.ReadFile(path); err == nil {
-		if err := json.Unmarshal(b, &config); err != nil {
-			return fmt.Errorf("invalid global Dock JSON: %w", err)
-		}
-	} else if !os.IsNotExist(err) {
-		return err
-	}
-	upsertGlobalKraTasksControl(&config, desiredCommand, true)
-	b, err := json.MarshalIndent(config, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		return err
-	}
-	return os.WriteFile(path, append(b, '\n'), 0o644)
-}
-
-func upsertGlobalKraTasksControl(config *cmuxDockConfig, desiredCommand string, createIfMissing bool) bool {
-	desired := cmuxDockControl{
-		ID:      "kra-tasks",
-		Title:   "Status",
-		Command: desiredCommand,
-		Height:  420,
-	}
-	for i := range config.Controls {
-		if config.Controls[i].ID != "kra-tasks" {
-			continue
-		}
-		if config.Controls[i] == desired {
-			return false
-		}
-		config.Controls[i] = desired
-		return true
-	}
-	if !createIfMissing {
-		return false
-	}
-	config.Controls = append(config.Controls, desired)
-	return true
-}
-
-func removeDirIfEmpty(path string) error {
-	entries, err := os.ReadDir(path)
-	if os.IsNotExist(err) {
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	if len(entries) != 0 {
-		return nil
-	}
-	return os.Remove(path)
-}
-
 func rootMigrateMode(apply bool) string {
 	if apply {
 		return "apply"
@@ -726,27 +427,6 @@ func printRootMigrateHuman(out io.Writer, plan rootMigrationPlan, apply bool, us
 	lines := []string{
 		styleSuccess(fmt.Sprintf("%s: %d action(s)", mode, len(plan.Actions)), useColor),
 		styleMuted(fmt.Sprintf("root: %s", plan.Root), useColor),
-		styleMuted(fmt.Sprintf("global Dock config: %s", plan.GlobalDock.Path), useColor),
-	}
-	if plan.InstallGlobalDock {
-		switch {
-		case plan.GlobalDock.Created:
-			lines = append(lines, "global kra-tasks control: create")
-		case plan.GlobalDock.Updated:
-			lines = append(lines, "global kra-tasks control: update")
-		case plan.GlobalDock.Skipped:
-			lines = append(lines, "global kra-tasks control: skip")
-		}
-	} else {
-		lines = append(lines, "global kra-tasks control: skip")
-	}
-	for _, legacy := range plan.LegacyProjectDocks {
-		lines = append(lines, fmt.Sprintf("legacy project Dock: %s", legacy.Action))
-		lines = append(lines, styleMuted(fmt.Sprintf("  path: %s", legacy.Path), useColor))
-		lines = append(lines, styleMuted(fmt.Sprintf("  reason: %s", legacy.Reason), useColor))
-	}
-	for _, recommendation := range plan.Recommendations {
-		lines = append(lines, styleWarn("warning: "+recommendation, useColor))
 	}
 	if len(plan.Actions) == 0 {
 		lines = append(lines, styleMuted("nothing to migrate", useColor))

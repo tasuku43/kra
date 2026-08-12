@@ -16,7 +16,6 @@ func (c *CLI) printRootUsage(w io.Writer) {
 		"  repo              Repository pool commands",
 		"  template          Workspace template commands",
 		"  shell             Shell integration commands",
-		"  serve             Serve read-only workspace boards",
 		"  ws                Workspace commands",
 		"  doctor            Diagnose KRA_ROOT health",
 	}
@@ -30,21 +29,6 @@ func (c *CLI) printRootUsage(w io.Writer) {
 		"Usage:\n  kra [global-flags] <command> [args]\n  kra --version\n\nCommands:\n%s\n\nGlobal flags:\n  --debug            Enable debug logging to <KRA_ROOT>/.kra/logs/\n  --version          Print version and exit\n  --help, -h         Show this help\n\nRun:\n  kra <command> --help\n  kra help <command-path> --mode agent\n",
 		strings.Join(commands, "\n"),
 	)
-}
-
-func (c *CLI) printServeUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
-  kra serve [--addr <host:port>]
-
-Serve a local read-only web UI for open workspace boards.
-
-Routes:
-  /workspaces/       All Workspaces board
-  /workspaces/<id>/  Workspace detail
-
-Options:
-  --addr             Listen address (default: 127.0.0.1:8765)
-`)
 }
 
 func (c *CLI) printHelpUsage(w io.Writer) {
@@ -120,7 +104,7 @@ Subcommands:
   current [--format human|json]
                    Print conceptual KRA_ROOT resolved for current execution context
   open [--format human|json]
-                   Open KRA_ROOT as a cmux workspace (single target)
+                   Focus the KRA_ROOT cmux Workspace Group anchor
   migrate [--apply] [--format human|json]
                    Plan or apply safe root/workspace scaffold migrations
   help              Show this help
@@ -131,7 +115,7 @@ func (c *CLI) printRootMigrateUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra root migrate [--apply] [--format human|json]
 
-Plan or apply missing default template and active workspace task Dock scaffold.
+Plan or apply missing default template and active workspace handoff files.
 Existing files are never overwritten.
 `)
 }
@@ -377,29 +361,13 @@ func (c *CLI) printWSTaskUsage(w io.Writer) {
 Subcommands:
   (no subcommand)   Launch task status picker for one workspace
   list|ls          List structured workspace tasks
+  view             Open the workspace task status view
   tui              Compatibility alias for ws status
-  dock             Install cmux Dock integration
   add              Add one structured task
   status           Set one task status explicitly
-  sync             Deprecated no-op; use ws status / cmux Dock
+  sync             Reconcile tasks with cmux native Todo
+  validate         Validate the workspace task document
   help             Show this help
-`)
-}
-
-func (c *CLI) printWSTaskDockUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
-  kra ws task dock install [--format human|json]
-
-Install global cmux Dock integration for kra tasks.
-`)
-}
-
-func (c *CLI) printWSTaskDockInstallUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
-  kra ws task dock install [--format human|json]
-  kra ws task dock install --global [--format human|json]
-
-Install or update the global cmux Dock kra-tasks control.
 `)
 }
 
@@ -429,7 +397,11 @@ Open an interactive terminal-friendly workspace status view.
 }
 
 func (c *CLI) printWSTaskViewUsage(w io.Writer) {
-	c.printWSTaskTUIUsage(w)
+	fmt.Fprint(w, `Usage:
+  kra ws task view [--id <workspace-id> | --current | --cmux-current | --select | --all] [--watch] [--todo-only] [--include-done] [--no-color]
+
+Open the workspace task status view. With --watch, refresh when task documents change.
+`)
 }
 
 func (c *CLI) printWSTaskAddUsage(w io.Writer) {
@@ -445,14 +417,6 @@ func (c *CLI) printWSTaskStatusUsage(w io.Writer) {
   kra ws task status [--id <workspace-id>] [--current] [--select] <task-id> <todo|doing|blocked|done> [--format human|json]
 
 Set one structured task to the requested status.
-`)
-}
-
-func (c *CLI) printWSTaskSyncUsage(w io.Writer) {
-	fmt.Fprint(w, `Usage:
-  kra ws task sync [--id <workspace-id>] [--current] [--select | --all] [--format human|json]
-
-Deprecated no-op kept for compatibility. Use kra ws status or cmux Dock instead.
 `)
 }
 

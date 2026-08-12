@@ -93,15 +93,16 @@ func TestCLI_WSCreate_TemplateOption_CopiesSelectedTemplate(t *testing.T) {
 	}
 }
 
-func TestCLI_WSCreate_CopiesDockAndTasksFromTemplate(t *testing.T) {
+func TestCLI_WSCreate_CopiesUserAuthoredDockAndTasksFromTemplate(t *testing.T) {
 	env := testutil.NewEnv(t)
 	env.EnsureRootLayout(t)
+	const dockContent = "{\n  \"controls\": [{\"id\": \"custom-user-control\", \"command\": \"echo custom\"}]\n}\n"
 
 	custom := filepath.Join(env.Root, "templates", "dock-template")
 	if err := os.MkdirAll(filepath.Join(custom, ".cmux"), 0o755); err != nil {
 		t.Fatalf("mkdir custom/.cmux: %v", err)
 	}
-	if err := os.WriteFile(filepath.Join(custom, ".cmux", "dock.json"), []byte(defaultWorkspaceCMUXDockContent()), 0o644); err != nil {
+	if err := os.WriteFile(filepath.Join(custom, ".cmux", "dock.json"), []byte(dockContent), 0o644); err != nil {
 		t.Fatalf("write custom dock.json: %v", err)
 	}
 	if err := os.WriteFile(filepath.Join(custom, workspaceDocumentFilename), []byte(defaultWorkspaceDocumentContent), 0o644); err != nil {
@@ -122,7 +123,9 @@ func TestCLI_WSCreate_CopiesDockAndTasksFromTemplate(t *testing.T) {
 	if readErr != nil {
 		t.Fatalf("read workspace dock.json: %v", readErr)
 	}
-	assertDefaultDockJSON(t, dockBytes)
+	if string(dockBytes) != dockContent {
+		t.Fatalf("user-authored dock.json changed: got %q, want %q", string(dockBytes), dockContent)
+	}
 	tasksBytes, readErr := os.ReadFile(filepath.Join(wsPath, workspaceDocumentFilename))
 	if readErr != nil {
 		t.Fatalf("read workspace workspace.md: %v", readErr)
