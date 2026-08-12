@@ -6,8 +6,6 @@ import (
 	"reflect"
 	"strings"
 	"testing"
-
-	"github.com/tasuku43/kra/internal/core/cmuxstyle"
 )
 
 type fakeRunner struct {
@@ -71,7 +69,7 @@ func TestClientCreateWorkspace_ParsesOKResponse(t *testing.T) {
 	if got != "1234-ABCD" {
 		t.Fatalf("workspace id = %q, want %q", got, "1234-ABCD")
 	}
-	wantArgs := []string{"new-workspace"}
+	wantArgs := []string{"workspace", "create"}
 	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
 		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
 	}
@@ -88,7 +86,7 @@ func TestClientCreateWorkspaceWithCommand_BuildsArgs(t *testing.T) {
 	if got != "ws-1" {
 		t.Fatalf("workspace id = %q, want %q", got, "ws-1")
 	}
-	wantArgs := []string{"new-workspace", "--command", "cd '/tmp/ws-1'"}
+	wantArgs := []string{"workspace", "create", "--command", "cd '/tmp/ws-1'"}
 	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
 		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
 	}
@@ -105,7 +103,7 @@ func TestClientListWorkspaces_JSONMode(t *testing.T) {
 	if len(got) != 1 || got[0].ID != "id1" || got[0].Ref != "workspace:1" || !got[0].Selected {
 		t.Fatalf("unexpected workspaces: %+v", got)
 	}
-	wantArgs := []string{"--json", "--id-format", "both", "list-workspaces"}
+	wantArgs := []string{"--json", "--id-format", "both", "workspace", "list"}
 	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
 		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
 	}
@@ -134,7 +132,7 @@ func TestClientListWorkspaces_FallsBackToTreeWhenCurrentWindowEmpty(t *testing.T
 	if len(f.names) != 2 {
 		t.Fatalf("call count = %d, want 2", len(f.names))
 	}
-	wantFirst := []string{"cmux", "--json", "--id-format", "both", "list-workspaces"}
+	wantFirst := []string{"cmux", "--json", "--id-format", "both", "workspace", "list"}
 	if !reflect.DeepEqual(f.names[0], wantFirst) {
 		t.Fatalf("first call = %v, want %v", f.names[0], wantFirst)
 	}
@@ -201,78 +199,6 @@ func TestClientCloseWorkspace_RequiresInput(t *testing.T) {
 	}
 }
 
-func TestClientSetStatus_RequiresInputs(t *testing.T) {
-	c := &Client{}
-	if err := c.SetStatus(context.Background(), "", "kra", "managed by kra", "tag", cmuxstyle.WorkspaceLabelColor); err == nil {
-		t.Fatalf("SetStatus() with empty workspace should fail")
-	}
-	if err := c.SetStatus(context.Background(), "ws-1", "", "managed by kra", "tag", cmuxstyle.WorkspaceLabelColor); err == nil {
-		t.Fatalf("SetStatus() with empty label should fail")
-	}
-	if err := c.SetStatus(context.Background(), "ws-1", "kra", "", "tag", cmuxstyle.WorkspaceLabelColor); err == nil {
-		t.Fatalf("SetStatus() with empty text should fail")
-	}
-}
-
-func TestClientSetStatus_BuildsCommandArgs(t *testing.T) {
-	f := &fakeRunner{stdout: []byte("OK\n")}
-	c := &Client{Runner: f}
-
-	if err := c.SetStatus(context.Background(), "ws-1", "kra", "managed by kra", "tag", cmuxstyle.WorkspaceLabelColor); err != nil {
-		t.Fatalf("SetStatus() error: %v", err)
-	}
-	wantArgs := []string{"set-status", "kra", "managed by kra", "--workspace", "ws-1", "--icon", "tag", "--color", cmuxstyle.WorkspaceLabelColor}
-	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
-		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
-	}
-}
-
-func TestClientClearStatus_BuildsCommandArgs(t *testing.T) {
-	f := &fakeRunner{stdout: []byte("OK\n")}
-	c := &Client{Runner: f}
-
-	if err := c.ClearStatus(context.Background(), "ws-1", "task:TASK-001"); err != nil {
-		t.Fatalf("ClearStatus() error: %v", err)
-	}
-	wantArgs := []string{"clear-status", "task:TASK-001", "--workspace", "ws-1"}
-	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
-		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
-	}
-}
-
-func TestClientListStatus_ParsesPlainOutput(t *testing.T) {
-	f := &fakeRunner{stdout: []byte("task:TASK-001=● TASK-001 Build parser icon=checklist color=#0ea5e9\n")}
-	c := &Client{Runner: f}
-
-	got, err := c.ListStatus(context.Background(), "ws-1")
-	if err != nil {
-		t.Fatalf("ListStatus() error: %v", err)
-	}
-	wantArgs := []string{"list-status", "--workspace", "ws-1"}
-	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
-		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
-	}
-	if len(got) != 1 {
-		t.Fatalf("entries = %+v, want 1 entry", got)
-	}
-	if got[0].Key != "task:TASK-001" || got[0].Value != "● TASK-001 Build parser" || got[0].Icon != "checklist" || got[0].Color != "#0ea5e9" {
-		t.Fatalf("entry = %+v", got[0])
-	}
-}
-
-func TestClientListStatus_NoEntriesReturnsEmpty(t *testing.T) {
-	f := &fakeRunner{stdout: []byte("No status entries\n")}
-	c := &Client{Runner: f}
-
-	got, err := c.ListStatus(context.Background(), "ws-1")
-	if err != nil {
-		t.Fatalf("ListStatus() error: %v", err)
-	}
-	if len(got) != 0 {
-		t.Fatalf("entries = %+v, want empty", got)
-	}
-}
-
 func TestClientLog_RequiresMessage(t *testing.T) {
 	c := &Client{}
 	if err := c.Log(context.Background(), "", "", "", ""); err == nil {
@@ -300,7 +226,7 @@ func TestClientCloseWorkspace_BuildsCommandArgs(t *testing.T) {
 	if err := c.CloseWorkspace(context.Background(), "ws-1"); err != nil {
 		t.Fatalf("CloseWorkspace() error: %v", err)
 	}
-	wantArgs := []string{"close-workspace", "--workspace", "ws-1"}
+	wantArgs := []string{"workspace", "close", "ws-1"}
 	if !reflect.DeepEqual(f.lastArgs, wantArgs) {
 		t.Fatalf("args = %v, want %v", f.lastArgs, wantArgs)
 	}
@@ -349,7 +275,7 @@ func TestClientCommandError_UsesStderr(t *testing.T) {
 	if err == nil {
 		t.Fatalf("SelectWorkspace() error = nil, want non-nil")
 	}
-	if got := err.Error(); got == "" || !containsAll(got, []string{"cmux select-workspace", "boom"}) {
+	if got := err.Error(); got == "" || !containsAll(got, []string{"cmux workspace select", "boom"}) {
 		t.Fatalf("error message = %q, want command + stderr", got)
 	}
 }

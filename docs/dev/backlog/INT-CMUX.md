@@ -113,3 +113,54 @@ Note:
     - `docs/dev/spec/commands/ws/select.md`
   - Depends: CMUX-011
   - Serial: yes
+
+- [x] CMUX-013: `ws open` runtime-state and side-effect integrity
+  - What: keep ignored cmux mapping state outside Git commits and treat newly-created cmux workspaces as
+    provisional until mandatory setup and mapping persistence succeed. Compensate failures by closing only the
+    newly-created runtime, never close reused/relinked workspaces, and align the current mapping/title contract
+    with the implemented 1:1 policy.
+  - Specs:
+    - `docs/dev/spec/commands/ws/open.md`
+    - `docs/dev/spec/concepts/cmux-mapping.md`
+    - `docs/dev/spec/concepts/cmux-title-policy.md`
+  - Depends: CMUX-012
+  - Serial: yes
+
+- [x] CMUX-014: KRA root Workspace Group
+  - What: represent one KRA root as a cmux Workspace Group whose managed `KRA_ROOT` runtime is the anchor
+    and whose managed KRA workspace runtimes are children. Persist window/group/anchor identity as ignored
+    runtime state, reconcile stale membership without taking over foreign groups, and keep the legacy
+    ungrouped open flow as an explicit capability fallback.
+  - Specs:
+    - `docs/dev/spec/concepts/cmux-workspace-groups.md`
+    - `docs/dev/spec/commands/root.md`
+    - `docs/dev/spec/commands/ws/open.md`
+    - `docs/dev/spec/concepts/cmux-mapping.md`
+  - Depends: CMUX-013
+  - Serial: yes
+
+- [x] CMUX-015: cmux native Todo three-way reconciliation
+  - What: project KRA root/workspace tasks into the mapped cmux workspace native Todo checklist and reconcile
+    task state through local document, live Todo, and ignored last-sync base. Preserve foreign Todo items,
+    fail closed on divergent edits or capacity loss, and make `task sync` the explicit permission boundary.
+  - Specs:
+    - `docs/dev/spec/concepts/cmux-todo-reconcile.md`
+    - `docs/dev/spec/concepts/workspace-tasks.md`
+    - `docs/dev/spec/concepts/workspace-tasks-yaml.md`
+    - `docs/dev/spec/commands/task.md`
+    - `docs/dev/spec/commands/ws/task.md`
+    - `docs/dev/spec/commands/ws/task/sync.md`
+  - Depends: CMUX-014, UX-WS-033, UX-CORE-014
+  - Serial: yes
+
+- [x] CMUX-016: retire `kra serve` and legacy task status-pill/Dock paths
+  - What: remove the local web server and obsolete sidebar status-pill synchronization, stop scaffolding or
+    installing the legacy task Dock, and make cmux Workspace Groups plus native Todo the supported runtime UI.
+    Preserve existing user-authored Dock files but do not create or migrate new managed entries.
+  - Specs:
+    - `docs/dev/spec/commands/serve.md`
+    - `docs/dev/spec/commands/root.md`
+    - `docs/dev/spec/commands/ws/task.md`
+    - `docs/dev/spec/concepts/workspace-template.md`
+  - Depends: CMUX-015, OPS-018
+  - Serial: yes

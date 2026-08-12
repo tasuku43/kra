@@ -10,16 +10,15 @@ import (
 	"time"
 
 	"github.com/tasuku43/kra/internal/cmuxmap"
-	"github.com/tasuku43/kra/internal/core/cmuxstyle"
 	"github.com/tasuku43/kra/internal/infra/cmuxctl"
 )
 
 type Client interface {
 	Capabilities(ctx context.Context) (cmuxctl.Capabilities, error)
 	CreateWorkspaceWithCommand(ctx context.Context, command string) (string, error)
+	CloseWorkspace(ctx context.Context, workspace string) error
 	RenameWorkspace(ctx context.Context, workspace string, title string) error
 	SelectWorkspace(ctx context.Context, workspace string) error
-	SetStatus(ctx context.Context, workspace string, label string, text string, icon string, color string) error
 	Notify(ctx context.Context, opts cmuxctl.NotifyOptions) error
 	SendText(ctx context.Context, workspace string, surface string, text string) error
 	ListPanes(ctx context.Context, workspace string) ([]cmuxctl.Pane, error)
@@ -27,15 +26,14 @@ type Client interface {
 	Identify(ctx context.Context, workspace string, surface string) (map[string]any, error)
 }
 
-const (
-	defaultWorkspaceStatusLabel = "kra"
-	defaultWorkspaceStatusText  = "kra:workspace"
-	defaultWorkspaceStatusIcon  = "tag"
-	defaultWorkspaceStatusColor = cmuxstyle.WorkspaceLabelColor
-)
+type MappingStore interface {
+	AcquireLock(ctx context.Context) (func(), error)
+	Load() (cmuxmap.File, error)
+	Save(cmuxmap.File) error
+}
 
 type NewClientFunc func() Client
-type NewStoreFunc func(root string) cmuxmap.Store
+type NewStoreFunc func(root string) MappingStore
 
 type Service struct {
 	NewClient NewClientFunc
@@ -56,7 +54,6 @@ type OpenTarget struct {
 	WorkspaceID   string
 	WorkspacePath string
 	Title         string
-	StatusText    string
 }
 
 type OpenResultItem struct {
@@ -68,6 +65,9 @@ type OpenResultItem struct {
 	ReusedExisting  bool
 	Command         string
 	CommandExecuted bool
+
+	groupID              string
+	groupMembershipAdded bool
 }
 
 type OpenFailure struct {
@@ -77,14 +77,16 @@ type OpenFailure struct {
 }
 
 type OpenResult struct {
-	Results  []OpenResultItem
-	Failures []OpenFailure
+	Results      []OpenResultItem
+	Failures     []OpenFailure
+	GroupWarning string
 }
 
 type openOptions struct {
 	SelectWorkspace bool
-	NotifyOpened    bool
 	Command         string
+	Group           *cmuxmap.GroupMapping
+	GroupAnchorNew  bool
 }
 
 func (s *Service) Open(ctx context.Context, root string, targets []OpenTarget, concurrency int, multi bool, command string) (OpenResult, string, string) {
@@ -103,36 +105,62 @@ func (s *Service) Open(ctx context.Context, root string, targets []OpenTarget, c
 	}
 
 	store := s.NewStore(root)
+	releaseLock, err := store.AcquireLock(ctx)
+	if err != nil {
+		return OpenResult{}, "state_write_failed", fmt.Sprintf("acquire cmux mapping lock: %v", err)
+	}
+	locked := true
+	defer func() {
+		if locked {
+			releaseLock()
+		}
+	}()
 	mapping, err := store.Load()
 	if err != nil {
 		return OpenResult{}, "state_write_failed", fmt.Sprintf("load cmux mapping: %v", err)
 	}
+	groupTxn, groupCode, groupMessage := s.ensureRootGroup(ctx, root, client, caps, &mapping)
+	if groupCode != "" {
+		return OpenResult{}, groupCode, groupMessage
+	}
 
 	result := OpenResult{
-		Results:  make([]OpenResultItem, 0, len(targets)),
-		Failures: make([]OpenFailure, 0),
+		Results:      make([]OpenResultItem, 0, len(targets)),
+		Failures:     make([]OpenFailure, 0),
+		GroupWarning: groupTxn.Warning,
 	}
 	if multi && concurrency > 1 {
-		result = s.openConcurrent(ctx, targets, concurrency, &mapping, command)
+		result = s.openConcurrent(ctx, targets, concurrency, &mapping, command, groupTxn)
 	} else {
-		result = s.openSequential(ctx, client, targets, &mapping, command)
+		result = s.openSequential(ctx, client, targets, &mapping, command, groupTxn)
 	}
-	if len(result.Results) > 0 {
+	result.GroupWarning = groupTxn.Warning
+	if len(result.Results) > 0 || groupTxn.Changed {
 		if err := store.Save(mapping); err != nil {
-			return OpenResult{}, "state_write_failed", fmt.Sprintf("save cmux mapping: %v", err)
+			msg := fmt.Sprintf("save cmux mapping: %v", err)
+			msg = appendOpenFailures(msg, result.Failures)
+			msg = s.compensateOpenTransaction(ctx, client, result.Results, groupTxn, msg)
+			return OpenResult{}, "state_write_failed", msg
+		}
+	}
+	releaseLock()
+	locked = false
+	if len(result.Results) > 0 {
+		for _, item := range result.Results {
+			s.notifyWorkspaceOpened(ctx, client, item)
 		}
 	}
 	return result, "", ""
 }
 
-func (s *Service) openSequential(ctx context.Context, client Client, targets []OpenTarget, mapping *cmuxmap.File, command string) OpenResult {
+func (s *Service) openSequential(ctx context.Context, client Client, targets []OpenTarget, mapping *cmuxmap.File, command string, groupTxn groupTransaction) OpenResult {
 	res := OpenResult{
 		Results:  make([]OpenResultItem, 0, len(targets)),
 		Failures: make([]OpenFailure, 0),
 	}
 	var mapMu sync.Mutex
 	for _, target := range targets {
-		item, code, msg := s.openOne(ctx, client, target, mapping, &mapMu, openOptions{NotifyOpened: true, Command: command})
+		item, code, msg := s.openOne(ctx, client, target, mapping, &mapMu, openOptions{Command: command, Group: groupMappingForOpen(groupTxn), GroupAnchorNew: groupTxn.CreatedAnchorID != ""})
 		if code != "" {
 			res.Failures = append(res.Failures, OpenFailure{WorkspaceID: target.WorkspaceID, Code: code, Message: msg})
 			return res
@@ -142,7 +170,7 @@ func (s *Service) openSequential(ctx context.Context, client Client, targets []O
 	return res
 }
 
-func (s *Service) openConcurrent(ctx context.Context, targets []OpenTarget, concurrency int, mapping *cmuxmap.File, command string) OpenResult {
+func (s *Service) openConcurrent(ctx context.Context, targets []OpenTarget, concurrency int, mapping *cmuxmap.File, command string, groupTxn groupTransaction) OpenResult {
 	type task struct {
 		index  int
 		target OpenTarget
@@ -166,7 +194,7 @@ func (s *Service) openConcurrent(ctx context.Context, targets []OpenTarget, conc
 			defer wg.Done()
 			client := s.NewClient()
 			for job := range jobs {
-				item, code, msg := s.openOne(ctx, client, job.target, mapping, &mapMu, openOptions{NotifyOpened: true, Command: command})
+				item, code, msg := s.openOne(ctx, client, job.target, mapping, &mapMu, openOptions{Command: command, Group: groupMappingForOpen(groupTxn), GroupAnchorNew: groupTxn.CreatedAnchorID != ""})
 				if code != "" {
 					out <- outItem{
 						index: job.index,
@@ -229,38 +257,92 @@ func (s *Service) EnsureWorkspace(ctx context.Context, root string, target OpenT
 	}
 
 	store := s.NewStore(root)
+	releaseLock, err := store.AcquireLock(ctx)
+	if err != nil {
+		return OpenResultItem{}, "state_write_failed", fmt.Sprintf("acquire cmux mapping lock: %v", err)
+	}
+	defer releaseLock()
 	mapping, err := store.Load()
 	if err != nil {
 		return OpenResultItem{}, "state_write_failed", fmt.Sprintf("load cmux mapping: %v", err)
 	}
+	groupTxn, groupCode, groupMessage := s.ensureRootGroup(ctx, root, client, caps, &mapping)
+	if groupCode != "" {
+		return OpenResultItem{}, groupCode, groupMessage
+	}
 	var mapMu sync.Mutex
-	item, code, msg := s.openOne(ctx, client, target, &mapping, &mapMu, openOptions{SelectWorkspace: selectWorkspace})
+	item, code, msg := s.openOne(ctx, client, target, &mapping, &mapMu, openOptions{
+		SelectWorkspace: selectWorkspace,
+		Group:           groupMappingForOpen(groupTxn),
+		GroupAnchorNew:  groupTxn.CreatedAnchorID != "",
+	})
 	if code != "" {
+		if groupTxn.Changed {
+			if err := store.Save(mapping); err != nil {
+				msg = s.compensateOpenTransaction(ctx, client, nil, groupTxn, fmt.Sprintf("%s; save cmux group mapping: %v", msg, err))
+			}
+		}
 		return OpenResultItem{}, code, msg
 	}
 	if err := store.Save(mapping); err != nil {
-		return OpenResultItem{}, "state_write_failed", fmt.Sprintf("save cmux mapping: %v", err)
+		msg := fmt.Sprintf("save cmux mapping: %v", err)
+		msg = s.compensateOpenTransaction(ctx, client, []OpenResultItem{item}, groupTxn, msg)
+		return OpenResultItem{}, "state_write_failed", msg
 	}
 	return item, "", ""
 }
 
-func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget, mapping *cmuxmap.File, mapMu *sync.Mutex, opts openOptions) (OpenResultItem, string, string) {
+func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget, mapping *cmuxmap.File, mapMu *sync.Mutex, opts openOptions) (item OpenResultItem, code string, msg string) {
+	mapMu.Lock()
+	previousMapping, previousMappingExists := mapping.Workspaces[target.WorkspaceID]
+	previousMapping = cloneWorkspaceMapping(previousMapping)
+	mapMu.Unlock()
+	createdWorkspaceID := ""
+	defer func() {
+		if code == "" {
+			return
+		}
+		restoreWorkspaceMapping(mapping, mapMu, target.WorkspaceID, previousMapping, previousMappingExists)
+		if createdWorkspaceID != "" {
+			msg = s.compensateCreatedWorkspace(ctx, client, createdWorkspaceID, msg)
+		}
+	}()
+
+	if opts.Group != nil && target.WorkspaceID == rootMappingWorkspaceID {
+		anchorID := strings.TrimSpace(opts.Group.AnchorWorkspaceID)
+		if anchorID == "" {
+			return OpenResultItem{}, "cmux_group_setup_failed", "cmux root group anchor is empty"
+		}
+		if groups, ok := client.(workspaceGroupClient); ok {
+			if err := groups.FocusWorkspaceGroup(ctx, opts.Group.CMUXGroupID); err != nil {
+				return OpenResultItem{}, "cmux_group_focus_failed", fmt.Sprintf("focus cmux root group: %v", err)
+			}
+		} else if opts.SelectWorkspace {
+			if err := client.SelectWorkspace(ctx, anchorID); err != nil {
+				return OpenResultItem{}, "cmux_select_failed", fmt.Sprintf("select cmux root workspace: %v", err)
+			}
+		}
+		return OpenResultItem{
+			WorkspaceID:     target.WorkspaceID,
+			WorkspacePath:   target.WorkspacePath,
+			CMUXWorkspaceID: anchorID,
+			Ordinal:         1,
+			Title:           opts.Group.NameSnapshot,
+			ReusedExisting:  !opts.GroupAnchorNew,
+			groupID:         opts.Group.CMUXGroupID,
+		}, "", ""
+	}
+
 	// 1:1 policy: if mapping already exists and runtime workspace is reachable, switch to it.
 	mapMu.Lock()
 	existingEntries := append([]cmuxmap.Entry{}, mapping.Workspaces[target.WorkspaceID].Entries...)
 	mapMu.Unlock()
 	if len(existingEntries) > 0 {
-		existing := existingEntries[0]
-		payload, ierr := client.Identify(ctx, existing.CMUXWorkspaceID, "")
-		if ierr == nil {
-			switch identifyWorkspaceHandleState(payload, existing.CMUXWorkspaceID) {
-			case -1:
-				ierr = errCMUXWorkspaceNotFound
-			case 0:
-				return OpenResultItem{}, "cmux_identify_failed", fmt.Sprintf("identify cmux workspace: could not verify requested workspace: %s", existing.CMUXWorkspaceID)
-			}
+		existing, reachable, identifyCode, identifyMessage := firstReachableWorkspaceEntry(ctx, client, existingEntries)
+		if identifyCode != "" {
+			return OpenResultItem{}, identifyCode, identifyMessage
 		}
-		if ierr == nil {
+		if reachable {
 			if opts.SelectWorkspace {
 				item := s.reuseExistingWorkspace(target, existing, mapping, mapMu)
 				selected := false
@@ -271,6 +353,14 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 							return OpenResultItem{}, code, msg
 						}
 						if relinked != nil {
+							added, groupCode, groupMessage := s.ensureWorkspaceGroupMembership(ctx, client, opts.Group, relinked.CMUXWorkspaceID)
+							if groupCode != "" {
+								return OpenResultItem{}, groupCode, groupMessage
+							}
+							if added {
+								relinked.groupMembershipAdded = true
+								relinked.groupID = opts.Group.CMUXGroupID
+							}
 							return *relinked, "", ""
 						}
 						// runtime entry disappeared between identify and select; recreate below.
@@ -282,6 +372,14 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 					selected = true
 				}
 				if selected {
+					added, groupCode, groupMessage := s.ensureWorkspaceGroupMembership(ctx, client, opts.Group, item.CMUXWorkspaceID)
+					if groupCode != "" {
+						return OpenResultItem{}, groupCode, groupMessage
+					}
+					if added {
+						item.groupMembershipAdded = true
+						item.groupID = opts.Group.CMUXGroupID
+					}
 					return item, "", ""
 				}
 			} else {
@@ -289,21 +387,31 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 				if code, msg := s.runOpenCommandInExisting(ctx, client, item, opts.Command); code != "" {
 					return OpenResultItem{}, code, msg
 				}
-				item = withOpenCommandResult(item, opts.Command)
-				if opts.NotifyOpened {
-					s.notifyWorkspaceOpened(ctx, client, item)
+				added, groupCode, groupMessage := s.ensureWorkspaceGroupMembership(ctx, client, opts.Group, item.CMUXWorkspaceID)
+				if groupCode != "" {
+					return OpenResultItem{}, groupCode, groupMessage
 				}
+				if added {
+					item.groupMembershipAdded = true
+					item.groupID = opts.Group.CMUXGroupID
+				}
+				item = withOpenCommandResult(item, opts.Command)
 				return item, "", ""
 			}
 		} else {
-			if !IsNotFoundError(ierr) {
-				return OpenResultItem{}, "cmux_identify_failed", fmt.Sprintf("identify cmux workspace: %v", ierr)
-			}
-			relinked, code, msg := s.tryRelinkWorkspaceByTitle(ctx, client, target, existing, mapping, mapMu, opts)
+			relinked, code, msg := s.tryRelinkWorkspaceByTitle(ctx, client, target, existingEntries[0], mapping, mapMu, opts)
 			if code != "" {
 				return OpenResultItem{}, code, msg
 			}
 			if relinked != nil {
+				added, groupCode, groupMessage := s.ensureWorkspaceGroupMembership(ctx, client, opts.Group, relinked.CMUXWorkspaceID)
+				if groupCode != "" {
+					return OpenResultItem{}, groupCode, groupMessage
+				}
+				if added {
+					relinked.groupMembershipAdded = true
+					relinked.groupID = opts.Group.CMUXGroupID
+				}
 				return *relinked, "", ""
 			}
 			// stale mapping entry: clear and recreate with ordinal reset.
@@ -311,10 +419,6 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 		}
 	}
 
-	cmuxWorkspaceID, err := client.CreateWorkspaceWithCommand(ctx, workspaceCDCommand(target.WorkspacePath))
-	if err != nil {
-		return OpenResultItem{}, "cmux_create_failed", fmt.Sprintf("create cmux workspace: %v", err)
-	}
 	mapMu.Lock()
 	ordinal, err := cmuxmap.AllocateOrdinal(mapping, target.WorkspaceID)
 	mapMu.Unlock()
@@ -325,15 +429,64 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 	if err != nil {
 		return OpenResultItem{}, "cmux_rename_failed", fmt.Sprintf("format cmux workspace title: %v", err)
 	}
-	if err := client.RenameWorkspace(ctx, cmuxWorkspaceID, cmuxTitle); err != nil {
-		return OpenResultItem{}, "cmux_rename_failed", fmt.Sprintf("rename cmux workspace: %v", err)
+	cmuxWorkspaceID := ""
+	if opts.Group != nil {
+		creator, ok := client.(workspaceOptionsClient)
+		if !ok {
+			return OpenResultItem{}, "cmux_create_failed", "atomic cmux workspace create is unavailable"
+		}
+		created, err := createWorkspaceWithIdempotencyRetry(ctx, creator, cmuxctl.WorkspaceCreateOptions{
+			OperationID:    newOperationID(),
+			Title:          cmuxTitle,
+			CWD:            target.WorkspacePath,
+			Focus:          false,
+			WindowID:       opts.Group.CMUXWindowID,
+			GroupID:        opts.Group.CMUXGroupID,
+			GroupPlacement: "end",
+		})
+		if err != nil {
+			return OpenResultItem{}, "cmux_create_failed", fmt.Sprintf("create grouped cmux workspace: %v", err)
+		}
+		createdWorkspaceID = chooseWorkspaceCreateHandle(created)
+		cmuxWorkspaceID = strings.TrimSpace(created.WorkspaceID)
+		if cmuxWorkspaceID == "" {
+			return OpenResultItem{}, "cmux_create_failed", "create grouped cmux workspace: response omitted stable workspace id"
+		}
+		if !workspaceCreateResultMatchesGroup(created, opts.Group.CMUXGroupID) {
+			returnedGroup := firstNonEmpty(created.GroupID, created.GroupRef, "<empty>")
+			return OpenResultItem{}, "cmux_group_setup_failed", fmt.Sprintf("created cmux workspace joined unexpected group %s (wanted %s)", returnedGroup, opts.Group.CMUXGroupID)
+		}
+		if created.WindowID != "" && opts.Group.CMUXWindowID != "" && strings.TrimSpace(created.WindowID) != strings.TrimSpace(opts.Group.CMUXWindowID) {
+			return OpenResultItem{}, "cmux_group_setup_failed", fmt.Sprintf("created cmux workspace joined unexpected window %s (wanted %s)", created.WindowID, opts.Group.CMUXWindowID)
+		}
+	} else {
+		cmuxWorkspaceID, err = client.CreateWorkspaceWithCommand(ctx, workspaceCDCommand(target.WorkspacePath))
+		if err != nil {
+			return OpenResultItem{}, "cmux_create_failed", fmt.Sprintf("create cmux workspace: %v", err)
+		}
+		createdWorkspaceID = cmuxWorkspaceID
+		if err := client.RenameWorkspace(ctx, cmuxWorkspaceID, cmuxTitle); err != nil {
+			return OpenResultItem{}, "cmux_rename_failed", fmt.Sprintf("rename cmux workspace: %v", err)
+		}
 	}
-	statusText := defaultWorkspaceStatusText
-	if strings.TrimSpace(target.StatusText) != "" {
-		statusText = strings.TrimSpace(target.StatusText)
+	item = OpenResultItem{
+		WorkspaceID:     target.WorkspaceID,
+		WorkspacePath:   target.WorkspacePath,
+		CMUXWorkspaceID: cmuxWorkspaceID,
+		Ordinal:         ordinal,
+		Title:           cmuxTitle,
+		ReusedExisting:  false,
+		Command:         strings.TrimSpace(opts.Command),
+		CommandExecuted: strings.TrimSpace(opts.Command) != "",
+		groupID:         firstGroupID(opts.Group),
 	}
-	if err := client.SetStatus(ctx, cmuxWorkspaceID, defaultWorkspaceStatusLabel, statusText, defaultWorkspaceStatusIcon, defaultWorkspaceStatusColor); err != nil {
-		return OpenResultItem{}, "cmux_set_status_failed", fmt.Sprintf("set cmux workspace status: %v", err)
+	if code, msg := s.runOpenCommand(ctx, client, item, opts.Command); code != "" {
+		return OpenResultItem{}, code, msg
+	}
+	if opts.SelectWorkspace {
+		if err := client.SelectWorkspace(ctx, cmuxWorkspaceID); err != nil {
+			return OpenResultItem{}, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
+		}
 	}
 	now := s.Now().UTC().Format(time.RFC3339)
 	mapMu.Lock()
@@ -347,28 +500,85 @@ func (s *Service) openOne(ctx context.Context, client Client, target OpenTarget,
 	}}
 	mapping.Workspaces[target.WorkspaceID] = ws
 	mapMu.Unlock()
-	item := OpenResultItem{
-		WorkspaceID:     target.WorkspaceID,
-		WorkspacePath:   target.WorkspacePath,
-		CMUXWorkspaceID: cmuxWorkspaceID,
-		Ordinal:         ordinal,
-		Title:           cmuxTitle,
-		ReusedExisting:  false,
-		Command:         strings.TrimSpace(opts.Command),
-		CommandExecuted: strings.TrimSpace(opts.Command) != "",
+	return item, "", ""
+}
+
+func cloneWorkspaceMapping(in cmuxmap.WorkspaceMapping) cmuxmap.WorkspaceMapping {
+	out := in
+	out.Entries = append([]cmuxmap.Entry{}, in.Entries...)
+	return out
+}
+
+func restoreWorkspaceMapping(mapping *cmuxmap.File, mapMu *sync.Mutex, workspaceID string, previous cmuxmap.WorkspaceMapping, existed bool) {
+	mapMu.Lock()
+	defer mapMu.Unlock()
+	if !existed {
+		delete(mapping.Workspaces, workspaceID)
+		return
 	}
-	if code, msg := s.runOpenCommand(ctx, client, item, opts.Command); code != "" {
-		return OpenResultItem{}, code, msg
+	mapping.Workspaces[workspaceID] = cloneWorkspaceMapping(previous)
+}
+
+const cmuxCleanupTimeout = 5 * time.Second
+
+func (s *Service) compensateCreatedWorkspace(ctx context.Context, client Client, workspaceID string, primaryMessage string) string {
+	workspaceID = strings.TrimSpace(workspaceID)
+	if workspaceID == "" {
+		return primaryMessage
 	}
-	if opts.NotifyOpened {
-		s.notifyWorkspaceOpened(ctx, client, item)
+	base := ctx
+	if base == nil {
+		base = context.Background()
 	}
-	if opts.SelectWorkspace {
-		if err := client.SelectWorkspace(ctx, cmuxWorkspaceID); err != nil {
-			return OpenResultItem{}, "cmux_select_failed", fmt.Sprintf("select cmux workspace: %v", err)
+	cleanupCtx, cancel := context.WithTimeout(context.WithoutCancel(base), cmuxCleanupTimeout)
+	defer cancel()
+	if err := client.CloseWorkspace(cleanupCtx, workspaceID); err != nil && !IsNotFoundError(err) {
+		s.debugf("cmux provisional workspace cleanup failed cmux=%s err=%v", workspaceID, err)
+		return fmt.Sprintf("%s; cleanup failed for cmux workspace %s: %v; workspace may remain open; close it manually", primaryMessage, workspaceID, err)
+	}
+	s.debugf("cmux provisional workspace cleanup ok cmux=%s", workspaceID)
+	return primaryMessage
+}
+
+func (s *Service) compensateCreatedResults(ctx context.Context, results []OpenResultItem, primaryMessage string) string {
+	client := s.NewClient()
+	message := primaryMessage
+	for _, item := range results {
+		if item.ReusedExisting {
+			continue
+		}
+		message = s.compensateCreatedWorkspace(ctx, client, item.CMUXWorkspaceID, message)
+	}
+	return message
+}
+
+func appendOpenFailures(primaryMessage string, failures []OpenFailure) string {
+	message := primaryMessage
+	for _, failure := range failures {
+		message = fmt.Sprintf("%s; target %s failed (%s): %s", message, failure.WorkspaceID, failure.Code, failure.Message)
+	}
+	return message
+}
+
+func firstReachableWorkspaceEntry(ctx context.Context, client Client, entries []cmuxmap.Entry) (cmuxmap.Entry, bool, string, string) {
+	for _, entry := range entries {
+		payload, err := client.Identify(ctx, entry.CMUXWorkspaceID, "")
+		if err != nil {
+			if IsNotFoundError(err) {
+				continue
+			}
+			return cmuxmap.Entry{}, false, "cmux_identify_failed", fmt.Sprintf("identify cmux workspace: %v", err)
+		}
+		switch identifyWorkspaceHandleState(payload, entry.CMUXWorkspaceID) {
+		case 1:
+			return entry, true, "", ""
+		case -1:
+			continue
+		default:
+			return cmuxmap.Entry{}, false, "cmux_identify_failed", fmt.Sprintf("identify cmux workspace: could not verify requested workspace: %s", entry.CMUXWorkspaceID)
 		}
 	}
-	return item, "", ""
+	return cmuxmap.Entry{}, false, "", ""
 }
 
 func (s *Service) reuseExistingWorkspace(target OpenTarget, existing cmuxmap.Entry, mapping *cmuxmap.File, mapMu *sync.Mutex) OpenResultItem {
@@ -398,7 +608,7 @@ func (s *Service) tryRelinkWorkspaceByTitle(ctx context.Context, client Client, 
 	if err != nil {
 		return nil, "cmux_list_failed", fmt.Sprintf("list cmux workspaces: %v", err)
 	}
-	match, ok := findWorkspaceByExactTitle(runtime, expectedTitle)
+	match, ok := findWorkspaceByAnyExactTitle(runtime, expectedTitle, existing.TitleSnapshot)
 	if !ok {
 		return nil, "", ""
 	}
@@ -423,9 +633,6 @@ func (s *Service) tryRelinkWorkspaceByTitle(ctx context.Context, client Client, 
 		return nil, code, msg
 	}
 	item = withOpenCommandResult(item, opts.Command)
-	if opts.NotifyOpened {
-		s.notifyWorkspaceOpened(ctx, client, item)
-	}
 	return &item, "", ""
 }
 
@@ -547,15 +754,17 @@ func identifyFocusedSurfaceHandle(payload map[string]any) string {
 	return ""
 }
 
-func findWorkspaceByExactTitle(workspaces []cmuxctl.Workspace, title string) (cmuxctl.Workspace, bool) {
-	title = strings.TrimSpace(title)
-	if title == "" {
-		return cmuxctl.Workspace{}, false
+func findWorkspaceByAnyExactTitle(workspaces []cmuxctl.Workspace, titles ...string) (cmuxctl.Workspace, bool) {
+	wanted := make(map[string]struct{}, len(titles))
+	for _, title := range titles {
+		if title = strings.TrimSpace(title); title != "" {
+			wanted[title] = struct{}{}
+		}
 	}
 	var match cmuxctl.Workspace
 	found := false
 	for _, workspace := range workspaces {
-		if strings.TrimSpace(workspace.Title) != title {
+		if _, ok := wanted[strings.TrimSpace(workspace.Title)]; !ok {
 			continue
 		}
 		if found {
@@ -618,6 +827,11 @@ type ListResult struct {
 
 func (s *Service) List(ctx context.Context, root string, workspaceID string) (ListResult, string, string) {
 	store := s.NewStore(root)
+	releaseLock, err := store.AcquireLock(ctx)
+	if err != nil {
+		return ListResult{}, "internal_error", fmt.Sprintf("acquire cmux mapping lock: %v", err)
+	}
+	defer releaseLock()
 	mapping, err := store.Load()
 	if err != nil {
 		return ListResult{}, "internal_error", fmt.Sprintf("load cmux mapping: %v", err)
@@ -719,7 +933,7 @@ func (s *Service) Status(ctx context.Context, root string, workspaceID string) (
 	return out, "", ""
 }
 
-func ReconcileMappingWithRuntime(store cmuxmap.Store, mapping cmuxmap.File, runtime []cmuxctl.Workspace, prune bool) (cmuxmap.File, map[string]bool, int, error) {
+func ReconcileMappingWithRuntime(store MappingStore, mapping cmuxmap.File, runtime []cmuxctl.Workspace, prune bool) (cmuxmap.File, map[string]bool, int, error) {
 	exists := map[string]bool{}
 	for _, row := range runtime {
 		for _, handle := range []string{row.ID, row.Ref} {
@@ -753,7 +967,7 @@ func ReconcileMappingWithRuntime(store cmuxmap.Store, mapping cmuxmap.File, runt
 	return mapping, exists, prunedCount, nil
 }
 
-func probeAndPruneByID(ctx context.Context, store cmuxmap.Store, mapping *cmuxmap.File, client Client) (int, string) {
+func probeAndPruneByID(ctx context.Context, store MappingStore, mapping *cmuxmap.File, client Client) (int, string) {
 	statusByID := map[string]int{}
 	for _, ws := range mapping.Workspaces {
 		for _, e := range ws.Entries {
@@ -808,8 +1022,6 @@ func probeAndPruneByID(ctx context.Context, store cmuxmap.Store, mapping *cmuxma
 	}
 	return prunedCount, ""
 }
-
-var errCMUXWorkspaceNotFound = fmt.Errorf("cmux workspace not found")
 
 func resetWorkspaceCMUXMapping(mapping *cmuxmap.File, mapMu *sync.Mutex, workspaceID string) {
 	mapMu.Lock()
@@ -909,6 +1121,11 @@ func (s *Service) Switch(ctx context.Context, root string, workspaceID string, c
 		return SwitchResult{}, "internal_error", "cmux service is not initialized"
 	}
 	store := s.NewStore(root)
+	releaseLock, err := store.AcquireLock(ctx)
+	if err != nil {
+		return SwitchResult{}, "state_write_failed", fmt.Sprintf("acquire cmux mapping lock: %v", err)
+	}
+	defer releaseLock()
 	mapping, err := store.Load()
 	if err != nil {
 		return SwitchResult{}, "state_write_failed", fmt.Sprintf("load cmux mapping: %v", err)

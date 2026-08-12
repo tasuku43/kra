@@ -19,9 +19,9 @@ import (
 type cmuxOpenClient interface {
 	Capabilities(ctx context.Context) (cmuxctl.Capabilities, error)
 	CreateWorkspaceWithCommand(ctx context.Context, command string) (string, error)
+	CloseWorkspace(ctx context.Context, workspace string) error
 	RenameWorkspace(ctx context.Context, workspace string, title string) error
 	SelectWorkspace(ctx context.Context, workspace string) error
-	SetStatus(ctx context.Context, workspace string, label string, text string, icon string, color string) error
 	Notify(ctx context.Context, opts cmuxctl.NotifyOptions) error
 	SendText(ctx context.Context, workspace string, surface string, text string) error
 	ListPanes(ctx context.Context, workspace string) ([]cmuxctl.Pane, error)
@@ -30,7 +30,7 @@ type cmuxOpenClient interface {
 }
 
 var newCMUXOpenClient = func() cmuxOpenClient { return cmuxctl.NewClient() }
-var newCMUXMapStore = func(root string) cmuxmap.Store { return cmuxmap.NewStore(root) }
+var newCMUXMapStore = func(root string) appcmux.MappingStore { return cmuxmap.NewStore(root) }
 
 func (c *CLI) runWSOpenRuntime(args []string) int {
 	outputFormat := "human"
@@ -224,6 +224,9 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 		}
 		targets = append(targets, target)
 	}
+	if len(targets) == 0 && len(preFailures) > 0 {
+		return c.writeWSOpenResult(outputFormat, multi, nil, preFailures)
+	}
 
 	svc := appcmux.NewService(func() appcmux.Client {
 		return wsOpenClientAdapter{inner: newCMUXOpenClient()}
@@ -247,6 +250,7 @@ func (c *CLI) runWSOpenRuntime(args []string) int {
 			ReusedExisting:  r.ReusedExisting,
 			Command:         r.Command,
 			CommandExecuted: r.CommandExecuted,
+			GroupWarning:    openResult.GroupWarning,
 		})
 	}
 	if err := markWSOpenResultsInProgress(root, results, time.Now().Unix()); err != nil {
@@ -326,15 +330,8 @@ func commitWSOpenMetadata(ctx context.Context, root string, results []wsOpenResu
 	if len(results) == 0 {
 		return "", nil
 	}
-	allowlist := make([]string, 0, len(results)+1)
+	allowlist := make([]string, 0, len(results))
 	seen := map[string]bool{}
-	cmuxMapPathspec := filepath.ToSlash(filepath.Join(".kra", "state", "cmux-workspaces.json"))
-	if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(cmuxMapPathspec))); err == nil {
-		allowlist = append(allowlist, cmuxMapPathspec)
-		seen[cmuxMapPathspec] = true
-	} else if err != nil && !os.IsNotExist(err) {
-		return "", err
-	}
 	ids := make([]string, 0, len(results))
 	for _, result := range results {
 		if strings.TrimSpace(result.WorkspaceID) == "" || strings.TrimSpace(result.WorkspacePath) == "" {
@@ -368,6 +365,7 @@ type wsOpenResult struct {
 	ReusedExisting  bool
 	Command         string
 	CommandExecuted bool
+	GroupWarning    string
 }
 
 type wsOpenFailure struct {
@@ -390,7 +388,6 @@ func resolveWSOpenTarget(root string, workspaceID string) (appcmux.OpenTarget, s
 		WorkspaceID:   workspaceID,
 		WorkspacePath: wsPath,
 		Title:         title,
-		StatusText:    "kra:workspace",
 	}, "", ""
 }
 
@@ -412,6 +409,7 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 					"reused_existing":    result.ReusedExisting,
 					"command":            result.Command,
 					"command_executed":   result.CommandExecuted,
+					"group_warning":      result.GroupWarning,
 				},
 			})
 			return exitOK
@@ -442,11 +440,12 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 			OK:     len(failures) == 0,
 			Action: "ws.open",
 			Result: map[string]any{
-				"count":     len(successes) + len(failureItems),
-				"succeeded": len(successes),
-				"failed":    len(failureItems),
-				"items":     successes,
-				"failures":  failureItems,
+				"count":         len(successes) + len(failureItems),
+				"succeeded":     len(successes),
+				"failed":        len(failureItems),
+				"items":         successes,
+				"failures":      failureItems,
+				"group_warning": firstWSOpenGroupWarning(results),
 			},
 		}
 		if len(failures) > 0 {
@@ -475,6 +474,9 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 		if strings.TrimSpace(result.Command) != "" {
 			body = append(body, fmt.Sprintf("%s%s %s: %t", uiIndent, styleMuted("•", useColor), styleMuted("command_executed", useColor), result.CommandExecuted))
 		}
+		if strings.TrimSpace(result.GroupWarning) != "" {
+			body = append(body, fmt.Sprintf("%s%s %s", uiIndent, styleWarn("warning:", useColor), result.GroupWarning))
+		}
 		printSection(c.Out, renderResultTitle(useColor), body, sectionRenderOptions{
 			blankAfterHeading: false,
 			trailingBlank:     true,
@@ -495,6 +497,9 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 			body = append(body, fmt.Sprintf("%s%s %t", uiIndent+uiIndent, styleMuted("command_executed:", useColor), result.CommandExecuted))
 		}
 	}
+	if warning := firstWSOpenGroupWarning(results); warning != "" {
+		body = append(body, fmt.Sprintf("%s%s %s", uiIndent, styleWarn("warning:", useColor), warning))
+	}
 	if len(failures) > 0 {
 		body = append(body, fmt.Sprintf("%s%s %d", uiIndent, styleWarn("failed:", useColor), len(failures)))
 		for _, fail := range failures {
@@ -512,6 +517,15 @@ func (c *CLI) writeWSOpenResult(format string, multi bool, results []wsOpenResul
 		return exitError
 	}
 	return exitOK
+}
+
+func firstWSOpenGroupWarning(results []wsOpenResult) string {
+	for _, result := range results {
+		if warning := strings.TrimSpace(result.GroupWarning); warning != "" {
+			return warning
+		}
+	}
+	return ""
 }
 
 func markWSOpenResultsInProgress(root string, results []wsOpenResult, now int64) error {
@@ -624,16 +638,16 @@ func (a wsOpenClientAdapter) CreateWorkspaceWithCommand(ctx context.Context, com
 	return a.inner.CreateWorkspaceWithCommand(ctx, command)
 }
 
+func (a wsOpenClientAdapter) CloseWorkspace(ctx context.Context, workspace string) error {
+	return a.inner.CloseWorkspace(ctx, workspace)
+}
+
 func (a wsOpenClientAdapter) RenameWorkspace(ctx context.Context, workspace string, title string) error {
 	return a.inner.RenameWorkspace(ctx, workspace, title)
 }
 
 func (a wsOpenClientAdapter) SelectWorkspace(ctx context.Context, workspace string) error {
 	return a.inner.SelectWorkspace(ctx, workspace)
-}
-
-func (a wsOpenClientAdapter) SetStatus(ctx context.Context, workspace string, label string, text string, icon string, color string) error {
-	return a.inner.SetStatus(ctx, workspace, label, text, icon, color)
 }
 
 func (a wsOpenClientAdapter) Notify(ctx context.Context, opts cmuxctl.NotifyOptions) error {
@@ -654,6 +668,96 @@ func (a wsOpenClientAdapter) ListWorkspaces(ctx context.Context) ([]cmuxctl.Work
 
 func (a wsOpenClientAdapter) Identify(ctx context.Context, workspace string, surface string) (map[string]any, error) {
 	return a.inner.Identify(ctx, workspace, surface)
+}
+
+func (a wsOpenClientAdapter) CreateWorkspaceWithOptions(ctx context.Context, opts cmuxctl.WorkspaceCreateOptions) (cmuxctl.WorkspaceCreateResult, error) {
+	client, ok := a.inner.(interface {
+		CreateWorkspaceWithOptions(context.Context, cmuxctl.WorkspaceCreateOptions) (cmuxctl.WorkspaceCreateResult, error)
+	})
+	if !ok {
+		return cmuxctl.WorkspaceCreateResult{}, fmt.Errorf("cmux atomic workspace create is unavailable")
+	}
+	return client.CreateWorkspaceWithOptions(ctx, opts)
+}
+
+func (a wsOpenClientAdapter) ListWindows(ctx context.Context) ([]cmuxctl.Window, error) {
+	client, ok := a.inner.(interface {
+		ListWindows(context.Context) ([]cmuxctl.Window, error)
+	})
+	if !ok {
+		return nil, fmt.Errorf("cmux window enumeration API is unavailable")
+	}
+	return client.ListWindows(ctx)
+}
+
+func (a wsOpenClientAdapter) ListWorkspaceGroups(ctx context.Context, window string) (cmuxctl.WorkspaceGroupList, error) {
+	client, ok := a.inner.(interface {
+		ListWorkspaceGroups(context.Context, string) (cmuxctl.WorkspaceGroupList, error)
+	})
+	if !ok {
+		return cmuxctl.WorkspaceGroupList{}, fmt.Errorf("cmux Workspace Group API is unavailable")
+	}
+	return client.ListWorkspaceGroups(ctx, window)
+}
+
+func (a wsOpenClientAdapter) CreateWorkspaceGroup(ctx context.Context, opts cmuxctl.WorkspaceGroupCreateOptions) (cmuxctl.WorkspaceGroup, error) {
+	client, ok := a.inner.(interface {
+		CreateWorkspaceGroup(context.Context, cmuxctl.WorkspaceGroupCreateOptions) (cmuxctl.WorkspaceGroup, error)
+	})
+	if !ok {
+		return cmuxctl.WorkspaceGroup{}, fmt.Errorf("cmux Workspace Group API is unavailable")
+	}
+	return client.CreateWorkspaceGroup(ctx, opts)
+}
+
+func (a wsOpenClientAdapter) AddWorkspaceToGroup(ctx context.Context, group string, workspace string) error {
+	client, ok := a.inner.(interface {
+		AddWorkspaceToGroup(context.Context, string, string) error
+	})
+	if !ok {
+		return fmt.Errorf("cmux Workspace Group API is unavailable")
+	}
+	return client.AddWorkspaceToGroup(ctx, group, workspace)
+}
+
+func (a wsOpenClientAdapter) RemoveWorkspaceFromGroup(ctx context.Context, group string, workspace string) error {
+	client, ok := a.inner.(interface {
+		RemoveWorkspaceFromGroup(context.Context, string, string) error
+	})
+	if !ok {
+		return fmt.Errorf("cmux Workspace Group API is unavailable")
+	}
+	return client.RemoveWorkspaceFromGroup(ctx, group, workspace)
+}
+
+func (a wsOpenClientAdapter) SetWorkspaceGroupAnchor(ctx context.Context, group string, workspace string) error {
+	client, ok := a.inner.(interface {
+		SetWorkspaceGroupAnchor(context.Context, string, string) error
+	})
+	if !ok {
+		return fmt.Errorf("cmux Workspace Group API is unavailable")
+	}
+	return client.SetWorkspaceGroupAnchor(ctx, group, workspace)
+}
+
+func (a wsOpenClientAdapter) UngroupWorkspaceGroup(ctx context.Context, group string) error {
+	client, ok := a.inner.(interface {
+		UngroupWorkspaceGroup(context.Context, string) error
+	})
+	if !ok {
+		return fmt.Errorf("cmux Workspace Group API is unavailable")
+	}
+	return client.UngroupWorkspaceGroup(ctx, group)
+}
+
+func (a wsOpenClientAdapter) FocusWorkspaceGroup(ctx context.Context, group string) error {
+	client, ok := a.inner.(interface {
+		FocusWorkspaceGroup(context.Context, string) error
+	})
+	if !ok {
+		return fmt.Errorf("cmux Workspace Group API is unavailable")
+	}
+	return client.FocusWorkspaceGroup(ctx, group)
 }
 
 func (c *CLI) writeWSOpenError(format string, code string, workspaceID string, message string, exitCode int) int {

@@ -304,6 +304,14 @@ func resumeWSCloseLifecycleJournal(ctx context.Context, root string, journal wsC
 
 func closeMappedCMUXWorkspacesBestEffort(ctx context.Context, root string, workspaceID string, debugf func(string, ...any)) {
 	store := cmuxmap.NewStore(root)
+	releaseLock, err := store.AcquireLock(ctx)
+	if err != nil {
+		if debugf != nil {
+			debugf("ws close cmux mapping lock skipped workspace=%s err=%v", workspaceID, err)
+		}
+		return
+	}
+	defer releaseLock()
 	mapping, err := store.Load()
 	if err != nil {
 		if debugf != nil {
@@ -313,6 +321,20 @@ func closeMappedCMUXWorkspacesBestEffort(ctx context.Context, root string, works
 	}
 	ws, ok := mapping.Workspaces[workspaceID]
 	if !ok || len(ws.Entries) == 0 {
+		changed := false
+		if ok {
+			delete(mapping.Workspaces, workspaceID)
+			changed = true
+		}
+		if _, hasTodoBase := mapping.Todos[workspaceID]; hasTodoBase {
+			delete(mapping.Todos, workspaceID)
+			changed = true
+		}
+		if changed {
+			if err := store.Save(mapping); err != nil && debugf != nil {
+				debugf("ws close stale cmux mapping cleanup skipped workspace=%s err=%v", workspaceID, err)
+			}
+		}
 		return
 	}
 	client := newCMUXCloseClient()
@@ -354,6 +376,7 @@ func closeMappedCMUXWorkspacesBestEffort(ctx context.Context, root string, works
 	}
 
 	delete(mapping.Workspaces, workspaceID)
+	delete(mapping.Todos, workspaceID)
 	if err := store.Save(mapping); err != nil && debugf != nil {
 		debugf("ws close cmux mapping save skipped workspace=%s err=%v", workspaceID, err)
 	}

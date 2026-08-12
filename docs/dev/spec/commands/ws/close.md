@@ -108,8 +108,10 @@ This flow must be recoverable when interrupted after irreversible filesystem pha
 - If `.kra/state/cmux-workspaces.json` has mapping entries for `<id>`, call `cmux close-workspace --workspace <cmux-id>`
   for each mapped entry.
 - `not_found`/`unknown workspace` is treated as already-closed and does not fail `ws close`.
-- When all mapped entries are closed (or already absent), remove the workspace mapping entry from
-  `.kra/state/cmux-workspaces.json`.
+- When all mapped entries are closed (or already absent), remove both the workspace mapping entry and its
+  native Todo three-way base from `.kra/state/cmux-workspaces.json`.
+- A stale Todo base without a workspace mapping is also removed; it must not retain archived task text or cmux
+  item UUIDs after the runtime relationship has ended.
 - cmux close failures must not rollback archive results.
 
 11) Finalize lifecycle journal

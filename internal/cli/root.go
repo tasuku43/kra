@@ -180,7 +180,6 @@ func (c *CLI) runRootOpen(args []string) int {
 		WorkspaceID:   rootCMUXMappingID,
 		WorkspacePath: root,
 		Title:         "KRA_ROOT",
-		StatusText:    "kra:root",
 	}
 	svc := appcmux.NewService(func() appcmux.Client {
 		return wsOpenClientAdapter{inner: newCMUXOpenClient()}
@@ -207,6 +206,7 @@ func (c *CLI) runRootOpen(args []string) int {
 				"mode":              "cmux",
 				"cmux_workspace_id": item.CMUXWorkspaceID,
 				"reused_existing":   item.ReusedExisting,
+				"group_warning":     openResult.GroupWarning,
 			},
 		})
 		return exitOK
@@ -219,6 +219,9 @@ func (c *CLI) runRootOpen(args []string) int {
 		fmt.Sprintf("%s %s", styleSuccess("✔", useColor), root),
 		styleMuted(fmt.Sprintf("cmux_workspace_id: %s", item.CMUXWorkspaceID), useColor),
 	)
+	if strings.TrimSpace(openResult.GroupWarning) != "" {
+		fmt.Fprintf(c.Err, "root open: %s\n", openResult.GroupWarning)
+	}
 	return exitOK
 }
 

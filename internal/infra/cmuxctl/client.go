@@ -33,12 +33,113 @@ type Capabilities struct {
 	Methods map[string]struct{}
 }
 
+// Supports reports whether capabilities explicitly advertise method. Some
+// cmux releases omit implemented Todo methods from this list; callers may use
+// a read-only method probe as a fallback for those families.
+func (c Capabilities) Supports(method string) bool {
+	_, ok := c.Methods[strings.TrimSpace(method)]
+	return ok
+}
+
 type Workspace struct {
 	ID       string
 	Ref      string
 	Index    int
 	Title    string
 	Selected bool
+}
+
+type Window struct {
+	ID                  string
+	Index               int
+	Key                 bool
+	SelectedWorkspaceID string
+	WorkspaceCount      int
+}
+
+type WorkspaceCreateOptions struct {
+	OperationID               string
+	Title                     string
+	CWD                       string
+	Focus                     bool
+	WindowID                  string
+	GroupID                   string
+	GroupPlacement            string
+	GroupReferenceWorkspaceID string
+}
+
+type WorkspaceCreateResult struct {
+	WorkspaceID  string
+	WorkspaceRef string
+	WindowID     string
+	WindowRef    string
+	GroupID      string
+	GroupRef     string
+	SurfaceID    string
+	SurfaceRef   string
+}
+
+type WorkspaceGroupPreferences struct {
+	Collapsed   bool
+	Pinned      bool
+	CustomColor string
+	IconSymbol  string
+}
+
+type WorkspaceGroup struct {
+	ID                  string
+	Ref                 string
+	Name                string
+	WindowID            string
+	WindowRef           string
+	AnchorWorkspaceID   string
+	AnchorWorkspaceRef  string
+	MemberWorkspaceIDs  []string
+	MemberWorkspaceRefs []string
+	MemberCount         int
+	Preferences         WorkspaceGroupPreferences
+}
+
+type WorkspaceGroupList struct {
+	WindowID  string
+	WindowRef string
+	Groups    []WorkspaceGroup
+}
+
+type WorkspaceGroupCreateOptions struct {
+	Name              string
+	CWD               string
+	Window            string
+	ChildWorkspaceIDs []string
+}
+
+type TodoItem struct {
+	ID     string `json:"id"`
+	Index  int    `json:"index"`
+	Text   string `json:"text"`
+	State  string `json:"state"`
+	Origin string `json:"origin"`
+}
+
+type TodoItemInput struct {
+	Text   string `json:"text"`
+	State  string `json:"state,omitempty"`
+	Origin string `json:"origin,omitempty"`
+}
+
+type TodoProgress struct {
+	Completed          int    `json:"completed"`
+	Total              int    `json:"total"`
+	FirstUncheckedText string `json:"first_unchecked_text"`
+}
+
+type TodoList struct {
+	WorkspaceID  string       `json:"workspace_id"`
+	WorkspaceRef string       `json:"workspace_ref"`
+	WindowID     string       `json:"window_id"`
+	WindowRef    string       `json:"window_ref"`
+	Items        []TodoItem   `json:"items"`
+	Progress     TodoProgress `json:"progress"`
 }
 
 type Pane struct {
@@ -103,13 +204,6 @@ type NotifyOptions struct {
 	Surface   string
 }
 
-type StatusEntry struct {
-	Key   string
-	Value string
-	Icon  string
-	Color string
-}
-
 func NewClient() *Client {
 	return &Client{Runner: execRunner{}}
 }
@@ -143,6 +237,30 @@ func (c *Client) Identify(ctx context.Context, workspace string, surface string)
 	return payload, nil
 }
 
+func (c *Client) ListWindows(ctx context.Context) ([]Window, error) {
+	var payload []struct {
+		ID                  string `json:"id"`
+		Index               int    `json:"index"`
+		Key                 bool   `json:"key"`
+		SelectedWorkspaceID string `json:"selected_workspace_id"`
+		WorkspaceCount      int    `json:"workspace_count"`
+	}
+	if err := c.runJSON(ctx, &payload, "list-windows"); err != nil {
+		return nil, err
+	}
+	out := make([]Window, 0, len(payload))
+	for _, row := range payload {
+		out = append(out, Window{
+			ID:                  strings.TrimSpace(row.ID),
+			Index:               row.Index,
+			Key:                 row.Key,
+			SelectedWorkspaceID: strings.TrimSpace(row.SelectedWorkspaceID),
+			WorkspaceCount:      row.WorkspaceCount,
+		})
+	}
+	return out, nil
+}
+
 func (c *Client) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
 	var payload struct {
 		Workspaces []struct {
@@ -153,7 +271,7 @@ func (c *Client) ListWorkspaces(ctx context.Context) ([]Workspace, error) {
 			Selected bool   `json:"selected"`
 		} `json:"workspaces"`
 	}
-	if err := c.runJSON(ctx, &payload, "list-workspaces"); err != nil {
+	if err := c.runJSON(ctx, &payload, "workspace", "list"); err != nil {
 		return nil, err
 	}
 	out := make([]Workspace, 0, len(payload.Workspaces))
@@ -222,23 +340,82 @@ func (c *Client) CreateWorkspace(ctx context.Context) (string, error) {
 
 func (c *Client) CreateWorkspaceWithCommand(ctx context.Context, command string) (string, error) {
 	command = strings.TrimSpace(command)
-	args := []string{"new-workspace"}
+	args := []string{"workspace", "create"}
 	if command != "" {
 		args = append(args, "--command", command)
 	}
 	stdout, stderr, err := c.run(ctx, false, false, args...)
 	if err != nil {
-		return "", commandError("new-workspace", stderr, err)
+		return "", commandError("workspace create", stderr, err)
 	}
 	raw := strings.TrimSpace(string(stdout))
 	if !strings.HasPrefix(raw, "OK ") {
-		return "", fmt.Errorf("cmux new-workspace: unexpected response: %q", raw)
+		return "", fmt.Errorf("cmux workspace create: unexpected response: %q", raw)
 	}
 	id := strings.TrimSpace(strings.TrimPrefix(raw, "OK "))
 	if id == "" {
-		return "", fmt.Errorf("cmux new-workspace: empty workspace id")
+		return "", fmt.Errorf("cmux workspace create: empty workspace id")
 	}
 	return id, nil
+}
+
+func (c *Client) CreateWorkspaceWithOptions(ctx context.Context, opts WorkspaceCreateOptions) (WorkspaceCreateResult, error) {
+	operationID := strings.TrimSpace(opts.OperationID)
+	title := strings.TrimSpace(opts.Title)
+	cwd := strings.TrimSpace(opts.CWD)
+	windowID := strings.TrimSpace(opts.WindowID)
+	groupID := strings.TrimSpace(opts.GroupID)
+	groupPlacement := strings.TrimSpace(opts.GroupPlacement)
+	groupReferenceWorkspaceID := strings.TrimSpace(opts.GroupReferenceWorkspaceID)
+	if groupID == "" && (groupPlacement != "" || groupReferenceWorkspaceID != "") {
+		return WorkspaceCreateResult{}, fmt.Errorf("group id is required for group placement")
+	}
+	params := struct {
+		OperationID               string `json:"operation_id,omitempty"`
+		Title                     string `json:"title,omitempty"`
+		CWD                       string `json:"cwd,omitempty"`
+		Focus                     bool   `json:"focus"`
+		WindowID                  string `json:"window_id,omitempty"`
+		GroupID                   string `json:"group_id,omitempty"`
+		GroupPlacement            string `json:"group_placement,omitempty"`
+		GroupReferenceWorkspaceID string `json:"group_reference_workspace_id,omitempty"`
+	}{
+		OperationID:               operationID,
+		Title:                     title,
+		CWD:                       cwd,
+		Focus:                     opts.Focus,
+		WindowID:                  windowID,
+		GroupID:                   groupID,
+		GroupPlacement:            groupPlacement,
+		GroupReferenceWorkspaceID: groupReferenceWorkspaceID,
+	}
+	var payload struct {
+		WorkspaceID  string `json:"workspace_id"`
+		WorkspaceRef string `json:"workspace_ref"`
+		WindowID     string `json:"window_id"`
+		WindowRef    string `json:"window_ref"`
+		GroupID      string `json:"group_id"`
+		GroupRef     string `json:"group_ref"`
+		SurfaceID    string `json:"surface_id"`
+		SurfaceRef   string `json:"surface_ref"`
+	}
+	if err := c.runRPCJSON(ctx, &payload, "workspace.create", params); err != nil {
+		return WorkspaceCreateResult{}, err
+	}
+	result := WorkspaceCreateResult{
+		WorkspaceID:  strings.TrimSpace(payload.WorkspaceID),
+		WorkspaceRef: strings.TrimSpace(payload.WorkspaceRef),
+		WindowID:     strings.TrimSpace(payload.WindowID),
+		WindowRef:    strings.TrimSpace(payload.WindowRef),
+		GroupID:      strings.TrimSpace(payload.GroupID),
+		GroupRef:     strings.TrimSpace(payload.GroupRef),
+		SurfaceID:    strings.TrimSpace(payload.SurfaceID),
+		SurfaceRef:   strings.TrimSpace(payload.SurfaceRef),
+	}
+	if result.WorkspaceID == "" && result.WorkspaceRef == "" {
+		return WorkspaceCreateResult{}, fmt.Errorf("cmux rpc workspace.create: empty workspace id")
+	}
+	return result, nil
 }
 
 func (c *Client) RenameWorkspace(ctx context.Context, workspace string, title string) error {
@@ -250,9 +427,9 @@ func (c *Client) RenameWorkspace(ctx context.Context, workspace string, title st
 	if title == "" {
 		return fmt.Errorf("title is required")
 	}
-	_, stderr, err := c.run(ctx, false, false, "rename-workspace", "--workspace", workspace, title)
+	_, stderr, err := c.run(ctx, false, false, "workspace", "rename", workspace, "--title", title)
 	if err != nil {
-		return commandError("rename-workspace", stderr, err)
+		return commandError("workspace rename", stderr, err)
 	}
 	return nil
 }
@@ -262,9 +439,9 @@ func (c *Client) SelectWorkspace(ctx context.Context, workspace string) error {
 	if workspace == "" {
 		return fmt.Errorf("workspace is required")
 	}
-	_, stderr, err := c.run(ctx, false, false, "select-workspace", "--workspace", workspace)
+	_, stderr, err := c.run(ctx, false, false, "workspace", "select", workspace)
 	if err != nil {
-		return commandError("select-workspace", stderr, err)
+		return commandError("workspace select", stderr, err)
 	}
 	return nil
 }
@@ -274,83 +451,331 @@ func (c *Client) CloseWorkspace(ctx context.Context, workspace string) error {
 	if workspace == "" {
 		return fmt.Errorf("workspace is required")
 	}
-	_, stderr, err := c.run(ctx, false, false, "close-workspace", "--workspace", workspace)
+	_, stderr, err := c.run(ctx, false, false, "workspace", "close", workspace)
 	if err != nil {
-		return commandError("close-workspace", stderr, err)
+		return commandError("workspace close", stderr, err)
 	}
 	return nil
 }
 
-func (c *Client) SetStatus(ctx context.Context, workspace string, label string, text string, icon string, color string) error {
+type workspaceGroupJSON struct {
+	ID                  string   `json:"id"`
+	Ref                 string   `json:"ref"`
+	Name                string   `json:"name"`
+	Collapsed           bool     `json:"is_collapsed"`
+	Pinned              bool     `json:"is_pinned"`
+	AnchorWorkspaceID   string   `json:"anchor_workspace_id"`
+	AnchorWorkspaceRef  string   `json:"anchor_workspace_ref"`
+	CustomColor         string   `json:"custom_color"`
+	IconSymbol          string   `json:"icon_symbol"`
+	MemberWorkspaceIDs  []string `json:"member_workspace_ids"`
+	MemberWorkspaceRefs []string `json:"member_workspace_refs"`
+	MemberCount         int      `json:"member_count"`
+}
+
+func (c *Client) ListWorkspaceGroups(ctx context.Context, window string) (WorkspaceGroupList, error) {
+	window = strings.TrimSpace(window)
+	args := []string{"workspace", "group", "list"}
+	if window != "" {
+		args = append(args, "--window", window)
+	}
+	var payload struct {
+		WindowID  string               `json:"window_id"`
+		WindowRef string               `json:"window_ref"`
+		Groups    []workspaceGroupJSON `json:"groups"`
+	}
+	if err := c.runJSON(ctx, &payload, args...); err != nil {
+		return WorkspaceGroupList{}, err
+	}
+	result := WorkspaceGroupList{
+		WindowID:  strings.TrimSpace(payload.WindowID),
+		WindowRef: strings.TrimSpace(payload.WindowRef),
+		Groups:    make([]WorkspaceGroup, 0, len(payload.Groups)),
+	}
+	for _, group := range payload.Groups {
+		result.Groups = append(result.Groups, workspaceGroupFromJSON(group, result.WindowID, result.WindowRef))
+	}
+	return result, nil
+}
+
+func (c *Client) CreateWorkspaceGroup(ctx context.Context, opts WorkspaceGroupCreateOptions) (WorkspaceGroup, error) {
+	name := strings.TrimSpace(opts.Name)
+	cwd := strings.TrimSpace(opts.CWD)
+	window := strings.TrimSpace(opts.Window)
+	if cwd == "" {
+		return WorkspaceGroup{}, fmt.Errorf("cwd is required")
+	}
+	children := make([]string, 0, len(opts.ChildWorkspaceIDs))
+	for _, child := range opts.ChildWorkspaceIDs {
+		child = strings.TrimSpace(child)
+		if child == "" {
+			return WorkspaceGroup{}, fmt.Errorf("child workspace id is required")
+		}
+		children = append(children, child)
+	}
+	args := []string{"workspace", "group", "create"}
+	if name != "" {
+		args = append(args, "--name", name)
+	}
+	args = append(args, "--cwd", cwd)
+	if len(children) > 0 {
+		args = append(args, "--from", strings.Join(children, ","))
+	}
+	if window != "" {
+		args = append(args, "--window", window)
+	}
+	var payload struct {
+		Group workspaceGroupJSON `json:"group"`
+	}
+	if err := c.runJSON(ctx, &payload, args...); err != nil {
+		return WorkspaceGroup{}, err
+	}
+	group := workspaceGroupFromJSON(payload.Group, "", "")
+	if group.ID == "" && group.Ref == "" {
+		return WorkspaceGroup{}, fmt.Errorf("cmux workspace group create: empty group id")
+	}
+	return group, nil
+}
+
+func (c *Client) AddWorkspaceToGroup(ctx context.Context, group string, workspace string) error {
+	group = strings.TrimSpace(group)
 	workspace = strings.TrimSpace(workspace)
-	label = strings.TrimSpace(label)
-	text = strings.TrimSpace(text)
-	icon = strings.TrimSpace(icon)
-	color = strings.TrimSpace(color)
+	if group == "" {
+		return fmt.Errorf("group is required")
+	}
 	if workspace == "" {
 		return fmt.Errorf("workspace is required")
 	}
-	if label == "" {
-		return fmt.Errorf("label is required")
+	_, stderr, err := c.run(
+		ctx,
+		false,
+		false,
+		"workspace", "group", "add", "--group", group, "--workspace", workspace,
+	)
+	if err != nil {
+		return commandError("workspace group add", stderr, err)
+	}
+	return nil
+}
+
+func (c *Client) RemoveWorkspaceFromGroup(ctx context.Context, group string, workspace string) error {
+	group = strings.TrimSpace(group)
+	workspace = strings.TrimSpace(workspace)
+	if group == "" {
+		return fmt.Errorf("group is required")
+	}
+	if workspace == "" {
+		return fmt.Errorf("workspace is required")
+	}
+	_, stderr, err := c.run(ctx, false, false, "workspace", "group", "remove", "--workspace", workspace)
+	if err != nil {
+		return commandError("workspace group remove", stderr, err)
+	}
+	return nil
+}
+
+func (c *Client) SetWorkspaceGroupAnchor(ctx context.Context, group string, workspace string) error {
+	group = strings.TrimSpace(group)
+	workspace = strings.TrimSpace(workspace)
+	if group == "" {
+		return fmt.Errorf("group is required")
+	}
+	if workspace == "" {
+		return fmt.Errorf("workspace is required")
+	}
+	_, stderr, err := c.run(
+		ctx,
+		false,
+		false,
+		"workspace", "group", "set-anchor", "--group", group, "--workspace", workspace,
+	)
+	if err != nil {
+		return commandError("workspace group set-anchor", stderr, err)
+	}
+	return nil
+}
+
+func (c *Client) UngroupWorkspaceGroup(ctx context.Context, group string) error {
+	group = strings.TrimSpace(group)
+	if group == "" {
+		return fmt.Errorf("group is required")
+	}
+	_, stderr, err := c.run(ctx, false, false, "workspace", "group", "ungroup", group)
+	if err != nil {
+		return commandError("workspace group ungroup", stderr, err)
+	}
+	return nil
+}
+
+func (c *Client) FocusWorkspaceGroup(ctx context.Context, group string) error {
+	group = strings.TrimSpace(group)
+	if group == "" {
+		return fmt.Errorf("group is required")
+	}
+	_, stderr, err := c.run(ctx, false, false, "workspace", "group", "focus", group)
+	if err != nil {
+		return commandError("workspace group focus", stderr, err)
+	}
+	return nil
+}
+
+func workspaceGroupFromJSON(group workspaceGroupJSON, windowID string, windowRef string) WorkspaceGroup {
+	memberIDs := make([]string, len(group.MemberWorkspaceIDs))
+	for i, id := range group.MemberWorkspaceIDs {
+		memberIDs[i] = strings.TrimSpace(id)
+	}
+	memberRefs := make([]string, len(group.MemberWorkspaceRefs))
+	for i, ref := range group.MemberWorkspaceRefs {
+		memberRefs[i] = strings.TrimSpace(ref)
+	}
+	return WorkspaceGroup{
+		ID:                  strings.TrimSpace(group.ID),
+		Ref:                 strings.TrimSpace(group.Ref),
+		Name:                strings.TrimSpace(group.Name),
+		WindowID:            strings.TrimSpace(windowID),
+		WindowRef:           strings.TrimSpace(windowRef),
+		AnchorWorkspaceID:   strings.TrimSpace(group.AnchorWorkspaceID),
+		AnchorWorkspaceRef:  strings.TrimSpace(group.AnchorWorkspaceRef),
+		MemberWorkspaceIDs:  memberIDs,
+		MemberWorkspaceRefs: memberRefs,
+		MemberCount:         group.MemberCount,
+		Preferences: WorkspaceGroupPreferences{
+			Collapsed:   group.Collapsed,
+			Pinned:      group.Pinned,
+			CustomColor: strings.TrimSpace(group.CustomColor),
+			IconSymbol:  strings.TrimSpace(group.IconSymbol),
+		},
+	}
+}
+
+func (c *Client) ListTodos(ctx context.Context, workspace string) (TodoList, error) {
+	workspace = strings.TrimSpace(workspace)
+	if workspace == "" {
+		return TodoList{}, fmt.Errorf("workspace is required")
+	}
+	var payload TodoList
+	if err := c.runRPCJSON(ctx, &payload, "workspace.todo.list", struct {
+		WorkspaceID string `json:"workspace_id"`
+	}{WorkspaceID: workspace}); err != nil {
+		return TodoList{}, err
+	}
+	normalizeTodoList(&payload)
+	return payload, nil
+}
+
+func (c *Client) AddTodo(ctx context.Context, workspace string, input TodoItemInput) (TodoItem, error) {
+	workspace = strings.TrimSpace(workspace)
+	text := strings.TrimSpace(input.Text)
+	if workspace == "" {
+		return TodoItem{}, fmt.Errorf("workspace is required")
 	}
 	if text == "" {
-		return fmt.Errorf("text is required")
+		return TodoItem{}, fmt.Errorf("todo text is required")
 	}
-	args := []string{"set-status", label, text, "--workspace", workspace}
-	if icon != "" {
-		args = append(args, "--icon", icon)
+	params := struct {
+		WorkspaceID string `json:"workspace_id"`
+		Text        string `json:"text"`
+		State       string `json:"state,omitempty"`
+		Origin      string `json:"origin,omitempty"`
+	}{
+		WorkspaceID: workspace,
+		Text:        text,
+		State:       strings.TrimSpace(input.State),
+		Origin:      strings.TrimSpace(input.Origin),
 	}
-	if color != "" {
-		args = append(args, "--color", color)
-	}
-	_, stderr, err := c.run(ctx, false, false, args...)
-	if err != nil {
-		return commandError("set-status", stderr, err)
-	}
-	return nil
+	return c.runTodoItemMutation(ctx, "workspace.todo.add", params)
 }
 
-func (c *Client) ClearStatus(ctx context.Context, workspace string, label string) error {
+func (c *Client) SetTodoState(ctx context.Context, workspace string, itemID string, state string) (TodoItem, error) {
 	workspace = strings.TrimSpace(workspace)
-	label = strings.TrimSpace(label)
+	itemID = strings.TrimSpace(itemID)
+	state = strings.TrimSpace(state)
+	if workspace == "" {
+		return TodoItem{}, fmt.Errorf("workspace is required")
+	}
+	if itemID == "" {
+		return TodoItem{}, fmt.Errorf("todo item id is required")
+	}
+	if state == "" {
+		return TodoItem{}, fmt.Errorf("todo state is required")
+	}
+	params := struct {
+		WorkspaceID string `json:"workspace_id"`
+		ID          string `json:"id"`
+		State       string `json:"state"`
+	}{WorkspaceID: workspace, ID: itemID, State: state}
+	return c.runTodoItemMutation(ctx, "workspace.todo.set_state", params)
+}
+
+func (c *Client) EditTodo(ctx context.Context, workspace string, itemID string, text string) (TodoItem, error) {
+	workspace = strings.TrimSpace(workspace)
+	itemID = strings.TrimSpace(itemID)
+	text = strings.TrimSpace(text)
+	if workspace == "" {
+		return TodoItem{}, fmt.Errorf("workspace is required")
+	}
+	if itemID == "" {
+		return TodoItem{}, fmt.Errorf("todo item id is required")
+	}
+	if text == "" {
+		return TodoItem{}, fmt.Errorf("todo text is required")
+	}
+	params := struct {
+		WorkspaceID string `json:"workspace_id"`
+		ID          string `json:"id"`
+		Text        string `json:"text"`
+	}{WorkspaceID: workspace, ID: itemID, Text: text}
+	return c.runTodoItemMutation(ctx, "workspace.todo.edit", params)
+}
+
+func (c *Client) RemoveTodo(ctx context.Context, workspace string, itemID string) error {
+	workspace = strings.TrimSpace(workspace)
+	itemID = strings.TrimSpace(itemID)
 	if workspace == "" {
 		return fmt.Errorf("workspace is required")
 	}
-	if label == "" {
-		return fmt.Errorf("label is required")
+	if itemID == "" {
+		return fmt.Errorf("todo item id is required")
 	}
-	_, stderr, err := c.run(ctx, false, false, "clear-status", label, "--workspace", workspace)
-	if err != nil {
-		return commandError("clear-status", stderr, err)
+	params := struct {
+		WorkspaceID string `json:"workspace_id"`
+		ID          string `json:"id"`
+	}{WorkspaceID: workspace, ID: itemID}
+	var payload struct {
+		RemovedCount int `json:"removed_count"`
 	}
-	return nil
+	return c.runRPCJSON(ctx, &payload, "workspace.todo.remove", params)
 }
 
-func (c *Client) ListStatus(ctx context.Context, workspace string) ([]StatusEntry, error) {
-	workspace = strings.TrimSpace(workspace)
-	if workspace == "" {
-		return nil, fmt.Errorf("workspace is required")
+func (c *Client) runTodoItemMutation(ctx context.Context, method string, params any) (TodoItem, error) {
+	var payload struct {
+		Item TodoItem `json:"item"`
 	}
-	stdout, stderr, err := c.run(ctx, false, false, "list-status", "--workspace", workspace)
-	if err != nil {
-		return nil, commandError("list-status", stderr, err)
+	if err := c.runRPCJSON(ctx, &payload, method, params); err != nil {
+		return TodoItem{}, err
 	}
-	trimmed := strings.TrimSpace(string(stdout))
-	if trimmed == "" || trimmed == "No status entries" {
-		return nil, nil
+	payload.Item.ID = strings.TrimSpace(payload.Item.ID)
+	payload.Item.Text = strings.TrimSpace(payload.Item.Text)
+	payload.Item.State = strings.TrimSpace(payload.Item.State)
+	payload.Item.Origin = strings.TrimSpace(payload.Item.Origin)
+	if payload.Item.ID == "" {
+		return TodoItem{}, fmt.Errorf("cmux rpc %s: empty todo item id", method)
 	}
-	lines := strings.Split(trimmed, "\n")
-	entries := make([]StatusEntry, 0, len(lines))
-	for _, line := range lines {
-		entry, ok, perr := parseStatusEntryLine(line)
-		if perr != nil {
-			return nil, perr
-		}
-		if ok {
-			entries = append(entries, entry)
-		}
+	return payload.Item, nil
+}
+
+func normalizeTodoList(list *TodoList) {
+	list.WorkspaceID = strings.TrimSpace(list.WorkspaceID)
+	list.WorkspaceRef = strings.TrimSpace(list.WorkspaceRef)
+	list.WindowID = strings.TrimSpace(list.WindowID)
+	list.WindowRef = strings.TrimSpace(list.WindowRef)
+	list.Progress.FirstUncheckedText = strings.TrimSpace(list.Progress.FirstUncheckedText)
+	for i := range list.Items {
+		list.Items[i].ID = strings.TrimSpace(list.Items[i].ID)
+		list.Items[i].Text = strings.TrimSpace(list.Items[i].Text)
+		list.Items[i].State = strings.TrimSpace(list.Items[i].State)
+		list.Items[i].Origin = strings.TrimSpace(list.Items[i].Origin)
 	}
-	return entries, nil
 }
 
 func (c *Client) Log(ctx context.Context, message string, level string, source string, workspace string) error {
@@ -753,46 +1178,6 @@ func (c *Client) BrowserStateLoad(ctx context.Context, workspace string, surface
 	return nil
 }
 
-func parseStatusEntryLine(line string) (StatusEntry, bool, error) {
-	line = strings.TrimSpace(line)
-	if line == "" {
-		return StatusEntry{}, false, nil
-	}
-	key, rest, ok := strings.Cut(line, "=")
-	if !ok {
-		return StatusEntry{}, false, fmt.Errorf("parse list-status line: invalid entry: %q", line)
-	}
-	key = strings.TrimSpace(key)
-	rest = strings.TrimSpace(rest)
-	if key == "" || rest == "" {
-		return StatusEntry{}, false, fmt.Errorf("parse list-status line: invalid entry: %q", line)
-	}
-
-	entry := StatusEntry{Key: key}
-	cut := len(rest)
-	for _, marker := range []string{" icon=", " color="} {
-		if idx := strings.Index(rest, marker); idx >= 0 && idx < cut {
-			cut = idx
-		}
-	}
-	entry.Value = strings.TrimSpace(rest[:cut])
-	if entry.Value == "" {
-		return StatusEntry{}, false, fmt.Errorf("parse list-status line: invalid entry: %q", line)
-	}
-	if cut < len(rest) {
-		tokens := strings.Fields(strings.TrimSpace(rest[cut:]))
-		for _, token := range tokens {
-			switch {
-			case strings.HasPrefix(token, "icon="):
-				entry.Icon = strings.TrimSpace(strings.TrimPrefix(token, "icon="))
-			case strings.HasPrefix(token, "color="):
-				entry.Color = strings.TrimSpace(strings.TrimPrefix(token, "color="))
-			}
-		}
-	}
-	return entry, true, nil
-}
-
 func (c *Client) ReadScreen(ctx context.Context, workspace string, surface string, lines int, scrollback bool) (string, error) {
 	workspace = strings.TrimSpace(workspace)
 	surface = strings.TrimSpace(surface)
@@ -942,6 +1327,28 @@ func (c *Client) runJSON(ctx context.Context, dst any, args ...string) error {
 	}
 	if err := json.Unmarshal(stdout, dst); err != nil {
 		return fmt.Errorf("decode cmux json output: %w", err)
+	}
+	return nil
+}
+
+func (c *Client) runRPCJSON(ctx context.Context, dst any, method string, params any) error {
+	method = strings.TrimSpace(method)
+	if method == "" {
+		return fmt.Errorf("rpc method is required")
+	}
+	if params == nil {
+		params = struct{}{}
+	}
+	rawParams, err := json.Marshal(params)
+	if err != nil {
+		return fmt.Errorf("encode cmux rpc %s params: %w", method, err)
+	}
+	stdout, stderr, err := c.run(ctx, false, false, "rpc", method, string(rawParams))
+	if err != nil {
+		return commandError("rpc "+method, stderr, err)
+	}
+	if err := json.Unmarshal(stdout, dst); err != nil {
+		return fmt.Errorf("decode cmux rpc %s json output: %w", method, err)
 	}
 	return nil
 }

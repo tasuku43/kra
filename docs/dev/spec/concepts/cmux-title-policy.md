@@ -7,25 +7,23 @@ status: implemented
 
 ## Purpose
 
-Provide deterministic title rendering and per-workspace ordinal allocation for
-cmux workspace creation flows.
+Provide deterministic title rendering for cmux workspace creation flows while retaining legacy ordinal metadata
+compatibility.
 
 ## Title Format
 
-- `"<kra-id> | <kra-title> [<n>]"`
-- `n` is 1-based (`[1]` is the first cmux workspace under one `kra` workspace).
+- `"<kra-id> | <kra-title>"`
+- The 1:1 mapping policy does not render an ordinal suffix.
 
 ## Fallback Rules
 
 - If `kra-title` is empty, use `(untitled)`.
 - `kra-id` is required.
-- `n` must be `>= 1`.
+- The legacy ordinal argument is accepted for mapping compatibility but does not affect title rendering.
 
-## Ordinal Allocation
+## Legacy Ordinal Metadata
 
-- Allocation is per `kra` workspace ID.
-- Source of truth is `.kra/state/cmux-workspaces.json`.
-- Each workspace mapping keeps `next_ordinal`.
-- On allocation:
-  - return current `next_ordinal`
-  - increment and persist `next_ordinal`
+- Schema v1 continues to store 1-based `ordinal` and `next_ordinal` values so existing files remain readable.
+- A newly-created mapping normally receives ordinal `1`; stale mapping replacement resets allocation before
+  creating the replacement.
+- Ordinal metadata is not a user-facing workspace multiplicity contract.

@@ -65,6 +65,9 @@ func TestCLI_WS_Close_ClosesMappedCMUXWorkspaceAndPrunesMapping(t *testing.T) {
 				},
 			},
 		},
+		Todos: map[string]cmuxmap.TodoMapping{
+			"WS1": {CMUXWorkspaceID: "CMUX-WS-1", Items: []cmuxmap.TodoItemBase{}},
+		},
 	}); err != nil {
 		t.Fatalf("save cmux mapping: %v", err)
 	}
@@ -91,6 +94,9 @@ func TestCLI_WS_Close_ClosesMappedCMUXWorkspaceAndPrunesMapping(t *testing.T) {
 	if _, ok := mapping.Workspaces["WS1"]; ok {
 		t.Fatalf("cmux mapping should be removed for WS1: %+v", mapping.Workspaces["WS1"])
 	}
+	if _, ok := mapping.Todos["WS1"]; ok {
+		t.Fatalf("cmux Todo base should be removed for WS1: %+v", mapping.Todos["WS1"])
+	}
 }
 
 func TestCLI_WS_Close_CMUXCloseFailure_DoesNotFailWorkspaceClose(t *testing.T) {
@@ -107,6 +113,9 @@ func TestCLI_WS_Close_CMUXCloseFailure_DoesNotFailWorkspaceClose(t *testing.T) {
 					{CMUXWorkspaceID: "CMUX-WS-1", Ordinal: 1},
 				},
 			},
+		},
+		Todos: map[string]cmuxmap.TodoMapping{
+			"WS1": {CMUXWorkspaceID: "CMUX-WS-1", Items: []cmuxmap.TodoItemBase{}},
 		},
 	}); err != nil {
 		t.Fatalf("save cmux mapping: %v", err)
@@ -137,6 +146,33 @@ func TestCLI_WS_Close_CMUXCloseFailure_DoesNotFailWorkspaceClose(t *testing.T) {
 	}
 	if _, ok := mapping.Workspaces["WS1"]; !ok {
 		t.Fatalf("cmux mapping should remain when close fails")
+	}
+	if _, ok := mapping.Todos["WS1"]; !ok {
+		t.Fatalf("cmux Todo base should remain when close fails")
+	}
+}
+
+func TestCloseMappedCMUXWorkspacesBestEffort_PrunesStaleTodoBaseWithoutRuntime(t *testing.T) {
+	root := t.TempDir()
+	store := cmuxmap.NewStore(root)
+	if err := store.Save(cmuxmap.File{
+		Version:    cmuxmap.CurrentVersion,
+		Workspaces: map[string]cmuxmap.WorkspaceMapping{},
+		Todos: map[string]cmuxmap.TodoMapping{
+			"WS1": {CMUXWorkspaceID: "CMUX-OLD", Items: []cmuxmap.TodoItemBase{}},
+		},
+	}); err != nil {
+		t.Fatalf("save cmux mapping: %v", err)
+	}
+
+	closeMappedCMUXWorkspacesBestEffort(context.Background(), root, "WS1", nil)
+
+	mapping, err := store.Load()
+	if err != nil {
+		t.Fatalf("load cmux mapping: %v", err)
+	}
+	if _, ok := mapping.Todos["WS1"]; ok {
+		t.Fatalf("stale cmux Todo base should be removed: %+v", mapping.Todos["WS1"])
 	}
 }
 

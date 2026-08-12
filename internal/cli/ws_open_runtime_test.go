@@ -8,34 +8,32 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/tasuku43/kra/internal/cmuxmap"
-	"github.com/tasuku43/kra/internal/core/cmuxstyle"
 	"github.com/tasuku43/kra/internal/infra/cmuxctl"
+	"github.com/tasuku43/kra/internal/testutil"
 )
 
 type fakeCMUXOpenClient struct {
+	mu           sync.Mutex
 	capabilities cmuxctl.Capabilities
 	createID     string
 	createIDs    []string
 	createIndex  int
 	createErr    error
 	createCmds   []string
+	closeErr     error
+	closed       []string
 	renameErr    error
 	selectErr    error
 	selectErrBy  map[string]error
-	setStatusErr error
 
 	renameWorkspace string
 	renameTitle     string
 	selectWorkspace string
-	statusWorkspace string
-	statusLabel     string
-	statusText      string
-	statusIcon      string
-	statusColor     string
 	notify          cmuxctl.NotifyOptions
 	sentWorkspace   string
 	sentSurface     string
@@ -51,6 +49,8 @@ func (f *fakeCMUXOpenClient) Capabilities(context.Context) (cmuxctl.Capabilities
 }
 
 func (f *fakeCMUXOpenClient) CreateWorkspaceWithCommand(_ context.Context, command string) (string, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.createCmds = append(f.createCmds, command)
 	if f.createErr != nil {
 		return "", f.createErr
@@ -66,13 +66,24 @@ func (f *fakeCMUXOpenClient) CreateWorkspaceWithCommand(_ context.Context, comma
 	return f.createID, nil
 }
 
+func (f *fakeCMUXOpenClient) CloseWorkspace(_ context.Context, workspace string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.closed = append(f.closed, workspace)
+	return f.closeErr
+}
+
 func (f *fakeCMUXOpenClient) RenameWorkspace(_ context.Context, workspace string, title string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.renameWorkspace = workspace
 	f.renameTitle = title
 	return f.renameErr
 }
 
 func (f *fakeCMUXOpenClient) SelectWorkspace(_ context.Context, workspace string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls = append(f.calls, "select:"+workspace)
 	f.selectWorkspace = workspace
 	if f.selectErrBy != nil {
@@ -83,22 +94,17 @@ func (f *fakeCMUXOpenClient) SelectWorkspace(_ context.Context, workspace string
 	return f.selectErr
 }
 
-func (f *fakeCMUXOpenClient) SetStatus(_ context.Context, workspace string, label string, text string, icon string, color string) error {
-	f.statusWorkspace = workspace
-	f.statusLabel = label
-	f.statusText = text
-	f.statusIcon = icon
-	f.statusColor = color
-	return f.setStatusErr
-}
-
 func (f *fakeCMUXOpenClient) Notify(_ context.Context, opts cmuxctl.NotifyOptions) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls = append(f.calls, "notify:"+opts.Workspace)
 	f.notify = opts
 	return nil
 }
 
 func (f *fakeCMUXOpenClient) SendText(_ context.Context, workspace string, surface string, text string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	f.calls = append(f.calls, "send:"+workspace)
 	f.sentWorkspace = workspace
 	f.sentSurface = surface
@@ -116,6 +122,8 @@ func (f *fakeCMUXOpenClient) ListPanes(_ context.Context, workspace string) ([]c
 }
 
 func (f *fakeCMUXOpenClient) Identify(_ context.Context, workspace string, _ string) (map[string]any, error) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
 	if f.identifyErr != nil {
 		if err, ok := f.identifyErr[workspace]; ok {
 			return nil, err
@@ -211,9 +219,6 @@ func TestCLI_CMUX_Open_JSON_Success_PersistsMapping(t *testing.T) {
 	if fake.selectWorkspace != "" {
 		t.Fatalf("select should be skipped for ws open, got %q", fake.selectWorkspace)
 	}
-	if fake.statusWorkspace != "CMUX-WS-1" || fake.statusLabel != "kra" || fake.statusText != "kra:workspace" || fake.statusIcon != "tag" || fake.statusColor != cmuxstyle.WorkspaceLabelColor {
-		t.Fatalf("status args = workspace=%q label=%q text=%q icon=%q color=%q", fake.statusWorkspace, fake.statusLabel, fake.statusText, fake.statusIcon, fake.statusColor)
-	}
 	if fake.notify.Workspace != "CMUX-WS-1" || fake.notify.Surface != "surface-id-CMUX-WS-1" || fake.notify.Title != "kra workspace opened" || fake.notify.Subtitle != "WS1" {
 		t.Fatalf("notify args = %+v", fake.notify)
 	}
@@ -239,6 +244,104 @@ func TestCLI_CMUX_Open_JSON_Success_PersistsMapping(t *testing.T) {
 		t.Fatalf("entries = %+v, want one entry with id=CMUX-WS-1 ordinal=1", ws.Entries)
 	}
 	assertWorkspaceWorkState(t, wsPath, workspaceWorkStateInProgress)
+}
+
+func TestCLI_WSOpen_InitRoot_KeepsCMUXMappingIgnoredAndCommitsMetadata(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	var createOut bytes.Buffer
+	var createErr bytes.Buffer
+	createCLI := New(&createOut, &createErr)
+	if code := createCLI.Run([]string{"ws", "create", "--no-prompt", "WS1"}); code != exitOK {
+		t.Fatalf("ws create exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, createErr.String(), createOut.String())
+	}
+
+	fake := &fakeCMUXOpenClient{
+		capabilities: cmuxctl.Capabilities{Methods: map[string]struct{}{
+			"workspace.create": {},
+			"workspace.rename": {},
+		}},
+		createID: "CMUX-WS-1",
+	}
+	previousClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient { return fake }
+	t.Cleanup(func() { newCMUXOpenClient = previousClient })
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	c := New(&out, &errOut)
+	code := c.Run([]string{"ws", "open", "--format", "json", "--id", "WS1"})
+	if code != exitOK {
+		t.Fatalf("ws open exit code = %d, want %d (stderr=%q out=%q)", code, exitOK, errOut.String(), out.String())
+	}
+	resp := decodeJSONResponse(t, out.String())
+	if !resp.OK || resp.Action != "ws.open" {
+		t.Fatalf("unexpected response: %+v", resp)
+	}
+
+	mappingPathspec := filepath.ToSlash(filepath.Join(".kra", "state", "cmux-workspaces.json"))
+	mapping, loadErr := cmuxmap.NewStore(env.Root).Load()
+	if loadErr != nil {
+		t.Fatalf("load mapping: %v", loadErr)
+	}
+	if got := mapping.Workspaces["WS1"].Entries; len(got) != 1 || got[0].CMUXWorkspaceID != "CMUX-WS-1" {
+		t.Fatalf("mapping = %+v", mapping.Workspaces["WS1"])
+	}
+	if ignored := strings.TrimSpace(runGit(t, env.Root, "check-ignore", "--", mappingPathspec)); ignored != mappingPathspec {
+		t.Fatalf("check-ignore = %q, want %q", ignored, mappingPathspec)
+	}
+	if tracked := strings.TrimSpace(runGit(t, env.Root, "ls-files", "--", mappingPathspec)); tracked != "" {
+		t.Fatalf("runtime mapping is tracked: %q", tracked)
+	}
+	if status := strings.TrimSpace(runGit(t, env.Root, "status", "--porcelain")); status != "" {
+		t.Fatalf("runtime mapping artifacts must stay out of git status: %q", status)
+	}
+	if subject := strings.TrimSpace(runGit(t, env.Root, "log", "-1", "--pretty=%s")); subject != "open: WS1" {
+		t.Fatalf("HEAD subject = %q, want %q", subject, "open: WS1")
+	}
+	changed := strings.Fields(runGit(t, env.Root, "show", "--pretty=format:", "--name-only", "HEAD"))
+	wantChanged := filepath.ToSlash(filepath.Join("workspaces", "WS1", workspaceMetaFilename))
+	if len(changed) != 1 || changed[0] != wantChanged {
+		t.Fatalf("HEAD changed paths = %v, want [%s]", changed, wantChanged)
+	}
+	assertWorkspaceWorkState(t, filepath.Join(env.Root, "workspaces", "WS1"), workspaceWorkStateInProgress)
+}
+
+func TestCLI_WSOpen_AllInvalidTargetsHaveNoCMUXSideEffects(t *testing.T) {
+	env := testutil.NewEnv(t)
+	initAndConfigureRootRepo(t, env.Root)
+
+	clientCreations := 0
+	previousClient := newCMUXOpenClient
+	newCMUXOpenClient = func() cmuxOpenClient {
+		clientCreations++
+		return &fakeCMUXOpenClient{}
+	}
+	t.Cleanup(func() { newCMUXOpenClient = previousClient })
+
+	var out bytes.Buffer
+	var errOut bytes.Buffer
+	code := New(&out, &errOut).Run([]string{
+		"ws", "open", "--multi-select", "--concurrency", "2",
+		"--workspace", "MISSING-1", "--workspace", "MISSING-2", "--format", "json",
+	})
+	if code != exitError || errOut.Len() != 0 {
+		t.Fatalf("exit=%d stderr=%q output=%q", code, errOut.String(), out.String())
+	}
+	if clientCreations != 0 {
+		t.Fatalf("cmux client creations = %d, want no runtime access", clientCreations)
+	}
+	response := decodeJSONResponse(t, out.String())
+	if response.OK || response.Error.Code != "partial_failure" {
+		t.Fatalf("response = %#v", response)
+	}
+	if response.Result["succeeded"] != float64(0) || response.Result["failed"] != float64(2) {
+		t.Fatalf("result = %#v", response.Result)
+	}
+	if _, err := os.Stat(cmuxmap.MappingPath(env.Root)); !os.IsNotExist(err) {
+		t.Fatalf("cmux mapping should not be created, stat err=%v", err)
+	}
 }
 
 func TestCLI_CMUX_Open_JSON_Command_CreatesWorkspaceWithCommandAfterCD(t *testing.T) {
@@ -749,7 +852,7 @@ func TestCLI_CMUX_Open_JSON_MultiConcurrency_PartialFailure(t *testing.T) {
 	assertWorkspaceWorkState(t, wsPath1, workspaceWorkStateInProgress)
 }
 
-func TestCLI_CMUX_Open_JSON_FailsWhenSetStatusFails(t *testing.T) {
+func TestCLI_CMUX_Open_JSON_FailsWhenRenameFails(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	wsPath := filepath.Join(root, "workspaces", "WS1")
 	if err := os.MkdirAll(wsPath, 0o755); err != nil {
@@ -768,8 +871,8 @@ func TestCLI_CMUX_Open_JSON_FailsWhenSetStatusFails(t *testing.T) {
 				"workspace.select": {},
 			},
 		},
-		createID:     "CMUX-WS-1",
-		setStatusErr: errors.New("boom"),
+		createID:  "CMUX-WS-1",
+		renameErr: errors.New("boom"),
 	}
 	prevClient := newCMUXOpenClient
 	newCMUXOpenClient = func() cmuxOpenClient { return fake }
@@ -803,7 +906,7 @@ func TestCLI_CMUX_Open_JSON_FailsWhenSetStatusFails(t *testing.T) {
 	if resp.OK || resp.Error.Code != "partial_failure" {
 		t.Fatalf("unexpected response: %+v", resp)
 	}
-	if len(resp.Result.Failures) != 1 || resp.Result.Failures[0].Code != "cmux_set_status_failed" {
+	if len(resp.Result.Failures) != 1 || resp.Result.Failures[0].Code != "cmux_rename_failed" {
 		t.Fatalf("unexpected failure detail: %+v", resp.Result.Failures)
 	}
 }
@@ -865,9 +968,6 @@ func TestCLI_WS_Open_JSON_ReusesExistingMapping_AsSwitchFallback(t *testing.T) {
 	}
 	if fake.selectWorkspace != "" {
 		t.Fatalf("select should be skipped for ws open, got %q", fake.selectWorkspace)
-	}
-	if fake.statusWorkspace != "" {
-		t.Fatalf("status should not be called when mapping exists: workspace=%q", fake.statusWorkspace)
 	}
 	if fake.notify.Workspace != "CMUX-EXISTING" || fake.notify.Surface != "surface-id-CMUX-EXISTING" || fake.notify.Subtitle != "WS1" {
 		t.Fatalf("notify args = %+v", fake.notify)
