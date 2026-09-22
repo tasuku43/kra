@@ -10,13 +10,13 @@ This guide explains repository registration and per-task attachment.
 
 `kra` separates repository registration from workspace attachment:
 
-1. `kra repo add ...` registers repositories into the shared repo pool.
+1. `kra repo add ...` registers repositories into the current root's repo pool.
 2. `kra ws add-repo --id <id>` attaches selected repositories as worktrees in that workspace.
 
 This keeps active workspace context minimal and task-scoped.
 
 ```text
-Repo Pool ($KRA_HOME/repo-pool)       Picked Workspace (KRA_ROOT)
+Repo Pool (KRA_ROOT/.kra/repo-pool)    Picked Workspace (KRA_ROOT)
 ---------------------------------      -----------------------------
 backend.git   (bare)   ---\            workspaces/PROJ-1236/
 frontend.git  (bare)   ----+--------->   └─ repos/
@@ -27,8 +27,13 @@ infra.git     (bare)   ---/                 ├─ backend/   (worktree)
 
 ## Where data is stored
 
-- shared pool: `$KRA_HOME/repo-pool/` (default: `~/.kra/repo-pool/`)
+- root-local pool: `<KRA_ROOT>/.kra/repo-pool/`
 - workspace attachments: `workspaces/<id>/repos/<alias>/`
+
+Each KRA root has an independent physical pool. This keeps the pool available when an agent
+isolation tool mounts only `KRA_ROOT`. Existing users can run `kra root migrate --apply` once to
+copy the legacy `$KRA_HOME/repo-pool/` into the current root; the legacy pool is not deleted.
+Migration refuses to copy while the legacy pool has linked worktrees; close those workspaces first.
 
 ## Typical multi-repo flow
 

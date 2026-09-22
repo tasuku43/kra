@@ -7,18 +7,27 @@ import (
 	"testing"
 )
 
-func TestDefaultRepoPoolPath_UsesKraHomeDefault(t *testing.T) {
+func TestRepoPoolPath_IsRootLocal(t *testing.T) {
+	root := filepath.Join(string(filepath.Separator), "tmp", "kra-root")
+	got := RepoPoolPath(root)
+	want := filepath.Join(root, ".kra", "repo-pool")
+	if got != want {
+		t.Fatalf("RepoPoolPath() = %q, want %q", got, want)
+	}
+}
+
+func TestLegacyRepoPoolPath_UsesKraHome(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("KRA_HOME", "")
 
-	got, err := DefaultRepoPoolPath()
+	got, err := LegacyRepoPoolPath()
 	if err != nil {
-		t.Fatalf("DefaultRepoPoolPath() err = %v", err)
+		t.Fatalf("LegacyRepoPoolPath() err = %v", err)
 	}
 	want := filepath.Join(home, ".kra", "repo-pool")
 	if got != want {
-		t.Fatalf("DefaultRepoPoolPath() = %q, want %q", got, want)
+		t.Fatalf("LegacyRepoPoolPath() = %q, want %q", got, want)
 	}
 }
 
@@ -71,9 +80,9 @@ func TestPaths_UsesKraHomeOverride(t *testing.T) {
 	kraHome := filepath.Join(t.TempDir(), ".kra")
 	t.Setenv("KRA_HOME", kraHome)
 
-	gotPool, err := DefaultRepoPoolPath()
+	gotPool, err := LegacyRepoPoolPath()
 	if err != nil {
-		t.Fatalf("DefaultRepoPoolPath() err = %v", err)
+		t.Fatalf("LegacyRepoPoolPath() err = %v", err)
 	}
 	if gotPool != filepath.Join(kraHome, "repo-pool") {
 		t.Fatalf("repo pool path = %q", gotPool)

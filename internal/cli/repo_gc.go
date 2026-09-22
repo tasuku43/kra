@@ -15,7 +15,6 @@ import (
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/infra/appports"
 	"github.com/tasuku43/kra/internal/infra/gitutil"
-	"github.com/tasuku43/kra/internal/infra/stateregistry"
 )
 
 type repoGCCandidate struct {
@@ -26,7 +25,6 @@ type repoGCCandidate struct {
 
 	CurrentRootRegistered bool
 	CurrentWorkspaceBound bool
-	OtherRootRefCount     int
 	HasWorktrees          bool
 
 	Inspectable bool
@@ -37,7 +35,7 @@ func (c repoGCCandidate) eligible() bool {
 	if !c.Inspectable {
 		return false
 	}
-	return !c.CurrentRootRegistered && !c.CurrentWorkspaceBound && c.OtherRootRefCount == 0 && !c.HasWorktrees
+	return !c.CurrentRootRegistered && !c.CurrentWorkspaceBound && !c.HasWorktrees
 }
 
 var promptRepoGCSelection = func(c *CLI, candidates []workspaceSelectorCandidate) ([]string, error) {
@@ -389,7 +387,10 @@ func buildRepoGCCandidates(ctx context.Context, root string, repoPoolPath string
 
 	currentRepoSet := map[string]bool{}
 
-	globalRefCount, currentRootRefCount, err := collectRegistryRepoRefCountsFromMetadata(root)
+	// The pool is root-local, so only metadata in the current root can protect
+	// a bare repository from collection. References in other roots belong to
+	// different physical pools.
+	currentRootRefCount, err := scanRootRepoRefsFromMetadata(root)
 	if err != nil {
 		return nil, err
 	}
@@ -418,15 +419,6 @@ func buildRepoGCCandidates(ctx context.Context, root string, repoPoolPath string
 		cand.Inspectable = true
 		cand.CurrentRootRegistered = currentRepoSet[repoUID]
 		cand.CurrentWorkspaceBound = currentRootRefCount[repoUID] > 0
-
-		refCount := globalRefCount[repoUID]
-		if currentRootRefCount[repoUID] > 0 {
-			refCount -= currentRootRefCount[repoUID]
-			if refCount < 0 {
-				refCount = 0
-			}
-		}
-		cand.OtherRootRefCount = refCount
 
 		hasWorktrees, err := bareRepoHasLinkedWorktrees(ctx, barePath)
 		if err != nil {
@@ -531,72 +523,6 @@ func listRepoPoolBareRepos(repoPoolPath string) ([]string, error) {
 	return roots, nil
 }
 
-func collectRegistryRepoRefCountsFromMetadata(currentRoot string) (map[string]int, map[string]int, error) {
-	registryPath, err := stateregistry.Path()
-	if err != nil {
-		return nil, nil, fmt.Errorf("resolve root registry path: %w", err)
-	}
-	entries, err := stateregistry.Load(registryPath)
-	if err != nil {
-		return nil, nil, err
-	}
-	seenRoot := map[string]bool{}
-	currentMarked := map[string]bool{}
-	counts := map[string]int{}
-	currentCounts := map[string]int{}
-
-	addRoot := func(rootPath string, collectCurrent bool) error {
-		rootPath = strings.TrimSpace(rootPath)
-		if rootPath == "" {
-			return nil
-		}
-		if seenRoot[rootPath] {
-			if collectCurrent && !currentMarked[rootPath] {
-				refs, err := scanRootRepoRefsFromMetadata(rootPath)
-				if err != nil {
-					return fmt.Errorf("scan root repo refs from metadata %s: %w", rootPath, err)
-				}
-				for uid, n := range refs {
-					currentCounts[uid] += n
-				}
-				currentMarked[rootPath] = true
-			}
-			return nil
-		}
-		seenRoot[rootPath] = true
-		if _, statErr := os.Stat(rootPath); statErr != nil {
-			if errors.Is(statErr, os.ErrNotExist) {
-				return nil
-			}
-			return fmt.Errorf("stat root %s: %w", rootPath, statErr)
-		}
-		refs, err := scanRootRepoRefsFromMetadata(rootPath)
-		if err != nil {
-			return fmt.Errorf("scan root repo refs from metadata %s: %w", rootPath, err)
-		}
-		for uid, n := range refs {
-			counts[uid] += n
-			if collectCurrent {
-				currentCounts[uid] += n
-			}
-		}
-		if collectCurrent {
-			currentMarked[rootPath] = true
-		}
-		return nil
-	}
-
-	for _, e := range entries {
-		if err := addRoot(e.RootPath, false); err != nil {
-			return nil, nil, err
-		}
-	}
-	if err := addRoot(currentRoot, true); err != nil {
-		return nil, nil, err
-	}
-	return counts, currentCounts, nil
-}
-
 func scanRootRepoRefsFromMetadata(root string) (map[string]int, error) {
 	counts := map[string]int{}
 	for _, scope := range []string{"workspaces", "archive"} {
@@ -647,8 +573,6 @@ func describeRepoGCSkipReason(c repoGCCandidate) string {
 		return "workspace bindings exist in current root"
 	case c.CurrentRootRegistered:
 		return "still registered in current root"
-	case c.OtherRootRefCount > 0:
-		return fmt.Sprintf("referenced by %d other root(s)", c.OtherRootRefCount)
 	case c.HasWorktrees:
 		return "linked worktrees still exist"
 	default:

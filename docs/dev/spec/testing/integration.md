@@ -53,8 +53,8 @@ This section maps the spec scenarios to concrete CLI integration tests.
 
 - settings drift by `root_path`:
   - `internal/cli/drift_test.go`: `TestCLI_Init_SettingsDrift_ErrorsOnDifferentRoot`
-- settings drift by `repo_pool_path`:
-  - `internal/cli/drift_test.go`: `TestCLI_Init_SettingsDrift_ErrorsOnDifferentRepoPool`
+- root-local repo pool placement:
+  - `internal/cli/repo_test.go`: `TestCLI_RepoAdd_AddsPoolAndRegistersRepo`
 
 ### `ws create`
 

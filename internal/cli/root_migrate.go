@@ -3,9 +3,12 @@ package cli
 import (
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/tasuku43/kra/internal/infra/paths"
 )
 
 type rootMigrateOptions struct {
@@ -120,6 +123,12 @@ func planRootMigration(root string) (rootMigrationPlan, error) {
 	plan := rootMigrationPlan{Root: root}
 	actions := make([]rootMigrateAction, 0)
 
+	var err error
+	actions, err = appendLegacyRepoPoolMigrationAction(actions, root)
+	if err != nil {
+		return plan, err
+	}
+
 	addWorkspaceSeedActions := func(base string, label string) error {
 		next, err := appendWorkspaceDocumentMigrationAction(actions, base, label)
 		if err != nil {
@@ -170,6 +179,156 @@ func planRootMigration(root string) (rootMigrationPlan, error) {
 	}
 	plan.Actions = actions
 	return plan, nil
+}
+
+func appendLegacyRepoPoolMigrationAction(actions []rootMigrateAction, root string) ([]rootMigrateAction, error) {
+	legacyPath, err := paths.LegacyRepoPoolPath()
+	if err != nil {
+		return actions, fmt.Errorf("resolve legacy repo pool path: %w", err)
+	}
+	rootPoolPath := paths.RepoPoolPath(root)
+	if filepath.Clean(legacyPath) == filepath.Clean(rootPoolPath) {
+		return actions, nil
+	}
+
+	rootPoolInfo, rootPoolErr := os.Stat(rootPoolPath)
+	switch {
+	case rootPoolErr == nil:
+		if !rootPoolInfo.IsDir() {
+			return actions, fmt.Errorf("root repo pool path is not a directory: %s", rootPoolPath)
+		}
+		return actions, nil
+	case rootPoolErr != nil && !os.IsNotExist(rootPoolErr):
+		return actions, fmt.Errorf("stat root repo pool: %w", rootPoolErr)
+	}
+
+	legacyInfo, legacyErr := os.Stat(legacyPath)
+	switch {
+	case os.IsNotExist(legacyErr):
+		return actions, nil
+	case legacyErr != nil:
+		return actions, fmt.Errorf("stat legacy repo pool: %w", legacyErr)
+	case !legacyInfo.IsDir():
+		return actions, fmt.Errorf("legacy repo pool path is not a directory: %s", legacyPath)
+	default:
+		if err := ensureNoLinkedWorktreesInRepoPool(legacyPath); err != nil {
+			return actions, err
+		}
+		actions = append(actions, rootMigrateAction{
+			Path:        rootPoolPath,
+			Description: fmt.Sprintf("copy legacy repo pool from %s", legacyPath),
+			apply: func() error {
+				return copyDirectoryAtomically(legacyPath, rootPoolPath)
+			},
+		})
+		return actions, nil
+	}
+}
+
+func ensureNoLinkedWorktreesInRepoPool(repoPoolPath string) error {
+	bareRepos, err := listRepoPoolBareRepos(repoPoolPath)
+	if err != nil {
+		return fmt.Errorf("inspect legacy repo pool worktrees: %w", err)
+	}
+	for _, barePath := range bareRepos {
+		worktreesPath := filepath.Join(barePath, "worktrees")
+		entries, err := os.ReadDir(worktreesPath)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return fmt.Errorf("inspect linked worktrees in %s: %w", barePath, err)
+		}
+		if len(entries) > 0 {
+			return fmt.Errorf("legacy repo pool contains linked worktrees: %s (close them before migration)", barePath)
+		}
+	}
+	return nil
+}
+
+func copyDirectoryAtomically(src string, dst string) error {
+	if info, err := os.Stat(dst); err == nil {
+		if info.IsDir() {
+			return fmt.Errorf("destination already exists: %s", dst)
+		}
+		return fmt.Errorf("destination already exists and is not a directory: %s", dst)
+	} else if !os.IsNotExist(err) {
+		return err
+	}
+
+	if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
+		return fmt.Errorf("create repo pool parent: %w", err)
+	}
+	tmp, err := os.MkdirTemp(filepath.Dir(dst), ".repo-pool-migrate-*")
+	if err != nil {
+		return fmt.Errorf("create repo pool migration temp dir: %w", err)
+	}
+	tmpCleanup := true
+	defer func() {
+		if tmpCleanup {
+			_ = os.RemoveAll(tmp)
+		}
+	}()
+
+	if err := copyDirectoryContents(src, tmp); err != nil {
+		return fmt.Errorf("copy repo pool: %w", err)
+	}
+	if err := os.Rename(tmp, dst); err != nil {
+		return fmt.Errorf("install root-local repo pool: %w", err)
+	}
+	tmpCleanup = false
+	return nil
+}
+
+func copyDirectoryContents(src string, dst string) error {
+	return filepath.WalkDir(src, func(path string, entry fs.DirEntry, walkErr error) error {
+		if walkErr != nil {
+			return walkErr
+		}
+		if path == src {
+			return nil
+		}
+		rel, err := filepath.Rel(src, path)
+		if err != nil {
+			return err
+		}
+		target := filepath.Join(dst, rel)
+		if entry.Type()&os.ModeSymlink != 0 {
+			return fmt.Errorf("repo pool contains unsupported symlink: %s", filepath.ToSlash(rel))
+		}
+		info, err := entry.Info()
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return os.MkdirAll(target, info.Mode().Perm())
+		}
+		if !info.Mode().IsRegular() {
+			return fmt.Errorf("repo pool contains unsupported file type: %s", filepath.ToSlash(rel))
+		}
+		return copyRegularFile(path, target, info.Mode().Perm())
+	})
+}
+
+func copyRegularFile(src string, dst string, perm fs.FileMode) error {
+	in, err := os.Open(src)
+	if err != nil {
+		return err
+	}
+	defer in.Close()
+
+	out, err := os.OpenFile(dst, os.O_CREATE|os.O_EXCL|os.O_WRONLY, perm)
+	if err != nil {
+		return err
+	}
+	if _, err := io.Copy(out, in); err != nil {
+		_ = out.Close()
+		return err
+	}
+	if err := out.Close(); err != nil {
+		return err
+	}
+	return nil
 }
 
 func ensureDefaultWorkspaceTemplateForRootMigrate(root string) error {

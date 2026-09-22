@@ -115,7 +115,8 @@ func (c *CLI) printRootMigrateUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra root migrate [--apply] [--format human|json]
 
-Plan or apply missing default template and active workspace handoff files.
+Plan or apply missing default template and active workspace handoff files, and copy a legacy
+global repo pool into <KRA_ROOT>/.kra/repo-pool/ when needed.
 Existing files are never overwritten.
 `)
 }
@@ -125,11 +126,11 @@ func (c *CLI) printRepoUsage(w io.Writer) {
   kra repo <subcommand> [args]
 
 Subcommands:
-  add               Add repositories into shared repo pool
+  add               Add repositories into current root repo pool
   discover          Discover repositories from provider and add selected
   preset            Manage reusable repo presets for ws add-repo
   remove            Remove repositories from current root registration
-  gc                Garbage-collect removable bare repos from shared pool
+  gc                Garbage-collect removable bare repos from current root pool
   help              Show this help
 `)
 }
@@ -535,7 +536,7 @@ func (c *CLI) printRepoAddUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra repo add [--format human|json] <repo-spec>...
 
-Add one or more repositories into the shared repo pool and register them in the current root index.
+Add one or more repositories into the current root repo pool and register them in the current root index.
 
 Accepted repo-spec formats:
   - git@<host>:<owner>/<repo>.git
@@ -548,7 +549,7 @@ func (c *CLI) printRepoDiscoverUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra repo discover --org <org> [--provider github]
 
-Discover repositories from provider, select multiple repos, and add them into the shared repo pool.
+Discover repositories from provider, select multiple repos, and add them into the current root repo pool.
 
 Options:
   --org             Organization name (required)
@@ -583,7 +584,7 @@ Modes:
   - direct mode:   pass one or more repo keys
 
 Notes:
-  - Physical bare repos in the shared pool are NOT deleted by this command.
+  - Physical bare repos in the current root pool are NOT deleted by this command.
   - Repos still bound to any workspace in this root cannot be removed.
   - --format json mode requires one or more repo keys.
 `)
@@ -593,7 +594,7 @@ func (c *CLI) printRepoGCUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra repo gc [--format human|json] [--yes] [<repo-key|repo-uid>...]
 
-Garbage-collect bare repositories from shared repo pool when safety gates pass.
+Garbage-collect bare repositories from the current root repo pool when safety gates pass.
 
 Modes:
   - selector mode: omit args (interactive TTY required)
@@ -602,7 +603,6 @@ Modes:
 Safety gates:
   - not registered in current root repos
   - not referenced by current root workspace metadata
-  - not referenced by other known roots (root registry scan)
   - no linked worktrees in bare repository
 
 Notes:

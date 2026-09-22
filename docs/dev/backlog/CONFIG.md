@@ -7,7 +7,8 @@ status: planned
 
 - [x] CONFIG-001: Global runtime/state paths under `~/.kra`
   - What: relocate global runtime paths to `~/.kra` (`state/current-context`,
-    `state/root-registry.json`, `repo-pool/`) and keep tests isolated via `KRA_HOME`.
+    `state/root-registry.json`) and keep tests isolated via `KRA_HOME`; the active repo pool is
+    root-local under `<KRA_ROOT>/.kra/repo-pool/`.
   - Specs:
     - `docs/dev/spec/concepts/state-store.md`
     - `docs/dev/spec/commands/context.md`

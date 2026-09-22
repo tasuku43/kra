@@ -13,7 +13,7 @@ kra repo gc [--format human|json] [--yes] [<repo-key|repo-uid>...]
 
 ## Purpose
 
-Garbage-collect physical bare repositories from the shared repo pool when safe.
+Garbage-collect physical bare repositories from the current root's repo pool when safe.
 
 `repo gc` is intentionally separate from `repo remove` to keep logical detach and physical deletion distinct.
 
@@ -24,9 +24,8 @@ Before deleting a bare repo from pool, command must verify:
 1. no current-root registration references (`repos`)
 2. no current-root workspace metadata references
 3. no live worktrees from that bare repo (`git worktree list --porcelain`)
-4. no references from other known roots (loaded from root registry entries)
-
-If any gate fails, that repo is not included in gc candidates.
+If any gate fails, that repo is not included in gc candidates. Other roots are independent because
+their pools are physically separate.
 
 ## Candidate discovery
 
@@ -56,11 +55,10 @@ JSON mode:
 
 ## Scope
 
-- default: shared repo pool path from settings/XDG
+- default: `<KRA_ROOT>/.kra/repo-pool/`
 - no automatic execution from `repo remove`
 
 ## FS metadata safety behavior
 
 - Safety gate evaluation must include FS-based references from workspace/archive `.kra.meta.json`.
-- Cross-root checks should work without SQL joins, using canonical metadata + registry/index scan.
 - Missing/corrupt index data must not permit unsafe deletion; command should rebuild index or fail closed.

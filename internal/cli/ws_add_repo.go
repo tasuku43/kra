@@ -328,11 +328,7 @@ func (c *CLI) runWSAddRepo(args []string) int {
 	}
 
 	ctx := context.Background()
-	repoPoolPath, err := paths.DefaultRepoPoolPath()
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve repo pool path: %v\n", err)
-		return exitError
-	}
+	repoPoolPath := paths.RepoPoolPath(root)
 
 	workspaceID := ""
 	var resolveErr error

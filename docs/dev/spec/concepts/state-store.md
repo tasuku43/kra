@@ -71,11 +71,14 @@ Optional index/cache layers are allowed for UX/performance, with these constrain
 - Global config: `~/.kra/config.yaml`
 - Current context pointer: `~/.kra/state/current-context`
 - Root registry: `~/.kra/state/root-registry.json`
-- Repo pool: `~/.kra/repo-pool/`
+- Repo pool: `<KRA_ROOT>/.kra/repo-pool/`
 
 Environment override:
 
 - `$KRA_HOME` (default: `~/.kra`)
+
+`$KRA_HOME` controls global configuration, current context, and root discovery metadata;
+it does not control the active root's physical repo pool.
 
 ## Legacy compatibility
 
@@ -84,3 +87,5 @@ Environment override:
 - If legacy SQLite files exist from older versions, they are ignored.
 - Legacy root-local files such as `workspace-workstate.json` and `workspace-baselines/<id>.json`
   are recovery inputs only and should be reported by `doctor` until migrated or removed.
+- The legacy global pool at `$KRA_HOME/repo-pool/` is a migration source only. It remains untouched
+  until `kra root migrate --apply` copies it to `<KRA_ROOT>/.kra/repo-pool/`.

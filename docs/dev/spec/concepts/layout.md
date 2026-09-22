@@ -35,6 +35,7 @@ KRA_ROOT/
   workspace.md      # optional root inbox / cross-workspace task document
   .kra/
     config.yaml
+    repo-pool/              # root-local bare repositories (Git-ignored)
     logs/
     state/
       cmux-sessions.json
@@ -61,6 +62,10 @@ Notes:
 - Workspace IDs are user-provided. The validation rules should follow `gion` (e.g. reject `/`).
 - Template names follow the same validation rules as workspace IDs.
 - Repo aliases are derived from the repo URL tail (e.g. `.../sugoroku.git` -> `sugoroku`).
+- The bare repo pool is root-local at `<KRA_ROOT>/.kra/repo-pool/`. Different roots do not share
+  physical bare repositories.
+- The legacy global pool at `$KRA_HOME/repo-pool/` is not deleted automatically. Run
+  `kra root migrate --apply` to copy it into the current root before using the new layout.
 
 ## Git tracking policy
 
@@ -78,6 +83,7 @@ Notes:
   - `.kra/state/cmux-workspaces.json`
   - `.kra/state/root-repos.json`
   - `.kra/state/operations/**`
+  - `.kra/repo-pool/**`
   - `.DS_Store`
 
 Notes:

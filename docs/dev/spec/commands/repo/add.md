@@ -13,7 +13,7 @@ kra repo add [--format human|json] <repo-spec>...
 
 ## Purpose
 
-Register repositories into the shared bare repo pool and the current root index.
+Register repositories into the current root's bare repo pool and root index.
 
 ## Root resolution
 
@@ -36,7 +36,7 @@ Register repositories into the shared bare repo pool and the current root index.
 Per input repo (best-effort):
 
 1. normalize `repo-spec` into `repo_uid` / `repo_key`
-2. upsert shared bare pool state:
+2. upsert root-local bare pool state under `<KRA_ROOT>/.kra/repo-pool/`:
   - if bare missing: `git clone --bare` only (no immediate fetch)
   - if bare already exists: reuse it without remote sync (no fetch)
 3. upsert current root `repos` row:

@@ -126,8 +126,8 @@ status: planned
   - Depends: MVP-050
   - Parallel: yes
 
-- [x] MVP-060: `kra repo add` (shared pool upsert)
-  - What: add root-scoped repo registration command that upserts shared bare pool and current root `repos` rows
+- [x] MVP-060: `kra repo add` (root-local pool upsert)
+  - What: add root-scoped repo registration command that upserts the current root's bare pool and root `repos` rows
     from repo specs (best-effort, conflict-safe).
   - Specs:
     - `docs/dev/spec/commands/repo/add.md`
@@ -155,7 +155,7 @@ status: planned
   - Parallel: yes
 
 - [x] MVP-063: `kra repo gc` (safe physical pool cleanup)
-  - What: garbage-collect bare repos from shared pool only when safety gates pass.
+  - What: garbage-collect bare repos from the current root pool only when safety gates pass.
   - Specs:
     - `docs/dev/spec/commands/repo/gc.md`
     - `docs/dev/spec/commands/state/registry.md`

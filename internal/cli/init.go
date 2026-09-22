@@ -327,6 +327,7 @@ func managedRootGitignorePatterns() []string {
 	return []string{
 		"workspaces/**/repos/**",
 		".DS_Store",
+		".kra/repo-pool/**",
 		".kra/logs/",
 		".kra/state/cmux-sessions.json",
 		".kra/state/cmux-workspaces.json",
@@ -523,8 +524,8 @@ Notes vs artifacts:
 
 ## Git policy
 
-- Track: everything except workspaces/**/repos/**
-- Ignore: workspaces/**/repos/**
+- Track: everything except workspaces/**/repos/** and .kra/repo-pool/**
+- Ignore: workspaces/**/repos/** and .kra/repo-pool/**
 `
 }
 

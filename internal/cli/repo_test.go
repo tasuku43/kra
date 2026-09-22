@@ -56,6 +56,13 @@ func TestCLI_RepoAdd_AddsPoolAndRegistersRepo(t *testing.T) {
 	if fi, statErr := os.Stat(barePath); statErr != nil || !fi.IsDir() {
 		t.Fatalf("bare repo missing: %s", barePath)
 	}
+	if strings.HasPrefix(filepath.Clean(barePath), filepath.Clean(env.KraHome)+string(filepath.Separator)) {
+		t.Fatalf("bare repo must not be stored under KRA_HOME: %s", barePath)
+	}
+	legacyPool := filepath.Join(env.KraHome, "repo-pool")
+	if _, statErr := os.Stat(legacyPool); !os.IsNotExist(statErr) {
+		t.Fatalf("legacy global pool should remain unused, stat err=%v", statErr)
+	}
 
 	repoUID := fmt.Sprintf("%s/%s/%s", spec.Host, spec.Owner, spec.Repo)
 	if strings.TrimSpace(repoUID) == "" {

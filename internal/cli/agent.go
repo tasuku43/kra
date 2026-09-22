@@ -22,7 +22,7 @@ var defaultAgentPrompt = agentPromptSpec{
 	WhatKraIs: []string{
 		"kra is a filesystem-based workspace lifecycle CLI.",
 		"Main lifecycle: init -> ws create -> ws add-repo -> ws open -> ws close/reopen/purge.",
-		"KRA_ROOT stores active and archived workspaces; shared state lives under KRA_HOME.",
+		"KRA_ROOT stores active and archived workspaces and the root-local repo pool; global context state lives under KRA_HOME.",
 	},
 	RecommendedWorkflow: []string{
 		"kra init --root <path> --context <name> --format json",

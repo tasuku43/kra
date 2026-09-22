@@ -138,6 +138,72 @@ func TestCLI_RootMigrate_PlanDoesNotWrite(t *testing.T) {
 	}
 }
 
+func TestCLI_RootMigrate_CopiesLegacyRepoPoolWithoutDeletingSource(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	legacyPool := filepath.Join(os.Getenv("KRA_HOME"), "repo-pool")
+	legacyRepo := filepath.Join(legacyPool, "github.com", "example-org", "legacy.git")
+	if err := os.MkdirAll(legacyRepo, 0o755); err != nil {
+		t.Fatalf("mkdir legacy repo pool: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyRepo, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+		t.Fatalf("write legacy repo marker: %v", err)
+	}
+
+	rootPoolRepo := filepath.Join(root, ".kra", "repo-pool", "github.com", "example-org", "legacy.git", "HEAD")
+	var planOut bytes.Buffer
+	var planErr bytes.Buffer
+	if code := New(&planOut, &planErr).Run([]string{"root", "migrate"}); code != exitOK {
+		t.Fatalf("root migrate plan exit code=%d, want=%d (stderr=%q)", code, exitOK, planErr.String())
+	}
+	if !strings.Contains(planOut.String(), "copy legacy repo pool") {
+		t.Fatalf("plan should include repo pool migration: %q", planOut.String())
+	}
+	if _, err := os.Stat(rootPoolRepo); !os.IsNotExist(err) {
+		t.Fatalf("plan should not create root pool: stat err=%v", err)
+	}
+
+	var applyOut bytes.Buffer
+	var applyErr bytes.Buffer
+	if code := New(&applyOut, &applyErr).Run([]string{"root", "migrate", "--apply"}); code != exitOK {
+		t.Fatalf("root migrate apply exit code=%d, want=%d (stderr=%q)", code, exitOK, applyErr.String())
+	}
+	got, err := os.ReadFile(rootPoolRepo)
+	if err != nil {
+		t.Fatalf("read copied repo marker: %v", err)
+	}
+	if string(got) != "ref: refs/heads/main\n" {
+		t.Fatalf("copied repo marker = %q", string(got))
+	}
+	if _, err := os.Stat(filepath.Join(legacyRepo, "HEAD")); err != nil {
+		t.Fatalf("legacy repo pool should remain: %v", err)
+	}
+}
+
+func TestCLI_RootMigrate_RefusesLegacyRepoPoolWithLinkedWorktrees(t *testing.T) {
+	root := prepareCurrentRootForTest(t)
+	legacyPool := filepath.Join(os.Getenv("KRA_HOME"), "repo-pool")
+	legacyRepo := filepath.Join(legacyPool, "github.com", "example-org", "active.git")
+	if err := os.MkdirAll(filepath.Join(legacyRepo, "worktrees", "WS-1"), 0o755); err != nil {
+		t.Fatalf("mkdir legacy linked worktree marker: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(legacyRepo, "HEAD"), []byte("ref: refs/heads/main\n"), 0o644); err != nil {
+		t.Fatalf("write legacy repo marker: %v", err)
+	}
+
+	var out bytes.Buffer
+	var errBuf bytes.Buffer
+	code := New(&out, &errBuf).Run([]string{"root", "migrate", "--apply"})
+	if code != exitError {
+		t.Fatalf("root migrate exit code=%d, want=%d (stdout=%q stderr=%q)", code, exitError, out.String(), errBuf.String())
+	}
+	if !strings.Contains(errBuf.String(), "close them before migration") {
+		t.Fatalf("stderr missing linked worktree guidance: %q", errBuf.String())
+	}
+	if _, err := os.Stat(filepath.Join(root, ".kra", "repo-pool")); !os.IsNotExist(err) {
+		t.Fatalf("root pool should not be created on blocked migration: stat err=%v", err)
+	}
+}
+
 func TestCLI_RootMigrate_ApplyWritesDefaultTemplateAndActiveWorkspaces(t *testing.T) {
 	root := prepareCurrentRootForTest(t)
 	if err := os.MkdirAll(filepath.Join(root, "templates", "default"), 0o755); err != nil {

@@ -38,7 +38,7 @@ func NewEnv(t *testing.T) Env {
 }
 
 func (e Env) RepoPoolPath() string {
-	return filepath.Join(e.KraHome, "repo-pool")
+	return paths.RepoPoolPath(e.Root)
 }
 
 func (e Env) EnsureRootLayout(t *testing.T) {

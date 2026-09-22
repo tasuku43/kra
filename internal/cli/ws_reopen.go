@@ -139,11 +139,7 @@ func (c *CLI) runWSReopen(args []string) int {
 	}
 
 	ctx := context.Background()
-	repoPoolPath, err := paths.DefaultRepoPoolPath()
-	if err != nil {
-		fmt.Fprintf(c.Err, "resolve repo pool path: %v\n", err)
-		return exitError
-	}
+	repoPoolPath := paths.RepoPoolPath(root)
 
 	if doCommit {
 		if err := ensureRootGitWorktree(ctx, root); err != nil {

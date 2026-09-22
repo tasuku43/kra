@@ -26,7 +26,9 @@ Global path may be overridden with `$KRA_HOME`:
 - `<KRA_HOME>/config.yaml`
 - `<KRA_HOME>/state/current-context`
 - `<KRA_HOME>/state/root-registry.json`
-- `<KRA_HOME>/repo-pool/`
+
+The active root's bare repo pool is always root-local:
+- `<KRA_ROOT>/.kra/repo-pool/`
 
 ## Merge precedence
 

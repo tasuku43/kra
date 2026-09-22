@@ -20,7 +20,7 @@ type Port interface {
 	EnsureGitInPath() error
 	ResolveRoot(cwd string) (string, error)
 	EnsureDebugLog(root string, tag string) error
-	ResolveRepoPoolPath() (string, error)
+	ResolveRepoPoolPath(root string) (string, error)
 	TouchRegistry(root string) error
 }
 
@@ -49,7 +49,7 @@ func (s *Service) Run(ctx context.Context, req Request) (Session, error) {
 		}
 	}
 
-	repoPoolPath, err := s.port.ResolveRepoPoolPath()
+	repoPoolPath, err := s.port.ResolveRepoPoolPath(root)
 	if err != nil {
 		return Session{}, err
 	}

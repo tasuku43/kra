@@ -7,7 +7,8 @@ The default template includes `notes/` and `artifacts/`, and you can define your
 `kra` works standalone for workspace lifecycle operations, and becomes even more valuable when paired with `cmux` for agent runtime/workspace integration.
 Ticket providers are designed to be extensible; currently, Jira is supported.
 
-`<KRA_ROOT>` stores task workspaces and `archive/`, while `$KRA_HOME` (default: `~/.kra/`) stores shared state such as config and the repo pool.
+`<KRA_ROOT>` stores task workspaces, `archive/`, and the root-local repo pool, while `$KRA_HOME`
+(default: `~/.kra/`) stores global state.
 
 ## One-minute mental model
 
@@ -205,14 +206,14 @@ For command-specific details, see:
 
 `kra` separates repository registration from workspace attachment:
 
-1. `kra repo add` registers repositories into the shared repo pool.
+1. `kra repo add` registers repositories into the current root's repo pool.
 2. `kra ws add-repo --id <id>` selects from that pool and attaches worktrees into the workspace.
 
 Operational notes:
 
 - `repo pool` stores managed bare repositories and root-level registration state.
-- Physical shared pool location is `$KRA_HOME/repo-pool/` (default: `~/.kra/repo-pool/`; `$KRA_HOME` default is `~/.kra/`).
-- `kra repo add` creates/updates shared bare mirrors in this pool, and `ws add-repo` uses them to create workspace worktrees.
+- Physical pool location is `<KRA_ROOT>/.kra/repo-pool/`.
+- `kra repo add` creates/updates root-local bare mirrors in this pool, and `ws add-repo` uses them to create workspace worktrees.
 - Worktree alias is derived from repository identity and must be unique per workspace.
 - `ws add-repo` prompts for `base_ref` and `branch` (with defaults), so branch context is explicit and reproducible per task.
 

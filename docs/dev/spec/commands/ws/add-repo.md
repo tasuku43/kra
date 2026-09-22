@@ -36,7 +36,7 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 ## Selection source
 
 - Candidate repos are taken from current root index (`repo add` registered repos).
-- Existing bare repos in shared repo pool that are not registered in current root must not be listed.
+- Existing bare repos in the current root's repo pool that are not registered in current root must not be listed.
 - No direct repo URL input in this command.
 - Repos already bound in the target workspace are excluded from candidates.
 - `--preset` strict behavior:

@@ -4,7 +4,8 @@
 It creates an isolated workspace per task, attaches only the repositories you need as Git worktrees, and closes work safely into `archive/` when done.
 It is useful standalone for workspace lifecycle operations, and becomes more valuable with `cmux` by aligning ticket, `kra` workspace, and `cmux` workspace in a 1:1:1 operating model.
 The default workspace template starts with `notes/`, `artifacts/`, and `workspace.md`; you can extend it with your own files and directories.
-`<KRA_ROOT>` stores active/archived task workspaces, while `$KRA_HOME` (default: `~/.kra/`) stores shared state such as config and the repo pool.
+`<KRA_ROOT>` stores active/archived task workspaces and its root-local repo pool under
+`<KRA_ROOT>/.kra/repo-pool/`; `$KRA_HOME` (default: `~/.kra/`) stores global config and root context metadata.
 
 > [!TIP]
 > Looking for a more inventory-driven workspace tool?
@@ -43,7 +44,8 @@ PROJ-1236  --->   workspaces/PROJ-1236/ --->  workspace: PROJ-1236
                   └─ artifacts/
 ```
 
-`<KRA_ROOT>` stores active/archived task workspaces, while `$KRA_HOME` (default: `~/.kra/`) stores shared state such as config and the repo pool.
+`<KRA_ROOT>` stores active/archived task workspaces and the root-local repo pool, while `$KRA_HOME`
+(default: `~/.kra/`) stores global config and root context metadata.
 
 - `kra ws create <ID>`: creates `<KRA_ROOT>/workspaces/<ID>/`
 - `kra ws close --id <ID>`: archives to `<KRA_ROOT>/archive/<ID>/`
@@ -107,7 +109,7 @@ kra ws open --id TASK-1234
 Guide: `docs/user/guides/CMUX.md`
 
 ### 3) Per-task worktree attach/remove
-Register repositories in the shared repo pool, then attach and remove only the repositories needed per task as worktrees so each workspace keeps only the required repo context.
+Register repositories in the current root's repo pool, then attach and remove only the repositories needed per task as worktrees so each workspace keeps only the required repo context.
 
 Example:
 

@@ -26,6 +26,11 @@ Provide root-level helpers around the conceptual `KRA_ROOT`.
 
 - `kra root migrate [--apply] [--format human|json]`
   - plan by default; mutate only when `--apply` is set
+  - when `<KRA_ROOT>/.kra/repo-pool/` is absent and the legacy `$KRA_HOME/repo-pool/` exists,
+    plan an atomic copy into the root-local pool
+  - refuse the pool migration when the legacy pool contains linked worktrees; close those
+    workspaces first and rerun the migration
+  - leave the legacy global pool untouched; it is a migration source only
   - add missing default template workspace scaffold:
     - `templates/default/workspace.md`
   - add the same missing workspace scaffold to active existing workspaces:
@@ -45,7 +50,7 @@ Provide root-level helpers around the conceptual `KRA_ROOT`.
       - `<KRA_ROOT>/workspaces/<id>/.cmux/dock.json`
       - `~/.config/cmux/dock.json`
     - invalid Dock JSON is also ignored because Dock files are outside this command's managed scope
-  - human output includes the root, action count, and planned/applied workspace handoff actions
+  - human output includes the root, action count, and planned/applied migration actions
   - json output includes:
     - `action=root.migrate`
     - `result.root`

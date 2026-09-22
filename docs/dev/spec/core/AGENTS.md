@@ -45,8 +45,8 @@ Include:
   - propose capture in conversation first
   - persist only after approval via `kra ws insight add ... --approved`
 - Git policy:
-  - track: everything except `workspaces/**/repos/**`
-  - ignore: `workspaces/**/repos/**`
+  - track: everything except `workspaces/**/repos/**` and `.kra/repo-pool/**`
+  - ignore: `workspaces/**/repos/**` and `.kra/repo-pool/**`
 
 ### `KRA_ROOT/workspaces/<id>/AGENTS.md` (optional, template-defined)
 

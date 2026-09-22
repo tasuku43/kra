@@ -547,10 +547,7 @@ func (c *CLI) autoAttachGitHubRepoToWorkspace(ctx context.Context, root string, 
 	if err := gitutil.EnsureGitInPath(); err != nil {
 		return err
 	}
-	repoPoolPath, err := paths.DefaultRepoPoolPath()
-	if err != nil {
-		return fmt.Errorf("resolve repo pool path: %w", err)
-	}
+	repoPoolPath := paths.RepoPoolPath(root)
 	remoteURL := fmt.Sprintf("git@github.com:%s.git", strings.TrimSpace(repoKey))
 	req := repoPoolAddRequest{RepoSpecInput: remoteURL}
 	outcomes := applyRepoPoolAdds(ctx, repoPoolPath, []repoPoolAddRequest{req}, 1, c.debugf, nil)

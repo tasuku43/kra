@@ -13,7 +13,7 @@ kra repo discover --org <org> [--provider github]
 
 ## Purpose
 
-Discover repositories from provider API and bulk-add selected repos into the shared repo pool.
+Discover repositories from provider API and bulk-add selected repos into the current root's repo pool.
 
 ## Root resolution
 

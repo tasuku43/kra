@@ -47,12 +47,11 @@ func (p *RepoPort) EnsureDebugLog(root string, tag string) error {
 	return nil
 }
 
-func (p *RepoPort) ResolveRepoPoolPath() (string, error) {
-	repoPoolPath, err := paths.DefaultRepoPoolPath()
-	if err != nil {
-		return "", fmt.Errorf("resolve repo pool path: %w", err)
+func (p *RepoPort) ResolveRepoPoolPath(root string) (string, error) {
+	if root == "" {
+		return "", fmt.Errorf("resolve repo pool path: root is empty")
 	}
-	return repoPoolPath, nil
+	return paths.RepoPoolPath(root), nil
 }
 
 func (p *RepoPort) TouchRegistry(root string) error {

@@ -10,8 +10,14 @@ import (
 
 const kraHomeEnv = "KRA_HOME"
 
-// DefaultRepoPoolPath returns the default location for the bare repo pool.
-func DefaultRepoPoolPath() (string, error) {
+// RepoPoolPath returns the root-local location for the bare repo pool.
+func RepoPoolPath(root string) string {
+	return filepath.Join(root, ".kra", "repo-pool")
+}
+
+// LegacyRepoPoolPath returns the pre-root-local global repo pool location.
+// It is used only as a migration source.
+func LegacyRepoPoolPath() (string, error) {
 	home, err := KraHomeDir()
 	if err != nil {
 		return "", err

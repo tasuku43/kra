@@ -10,7 +10,7 @@ status: implemented
 Remove repository registrations from the current root index.
 
 This command is a logical detach from the current root context.  
-It does not delete physical bare repositories from the shared repo pool.
+It does not delete physical bare repositories from the current root's repo pool.
 
 ## Root resolution
 
@@ -52,7 +52,7 @@ It does not delete physical bare repositories from the shared repo pool.
 
 ## Safety notes
 
-- Physical bare repo directories under repo pool are kept.
+- Physical bare repo directories under `<KRA_ROOT>/.kra/repo-pool/` are kept.
 - Physical cleanup is handled by a separate `repo gc` flow.
 
 ## JSON mode (`--format json`)
