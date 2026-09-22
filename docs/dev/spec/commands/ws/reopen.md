@@ -36,7 +36,7 @@ This supports the common case where a task was considered done, but more work is
 
 For each recorded workspace repo entry:
 - Ensure the bare repo exists in the repo pool and `fetch` (prefetch should start as soon as possible)
-- Create a worktree at `KRA_ROOT/workspaces/<id>/repos/<alias>`
+- Create a worktree at `KRA_ROOT/workspaces/<id>/repos/<alias>` using Git relative-path mode.
 - Check out the recorded branch:
   - if the remote branch exists, check it out (track it)
   - otherwise, create it from the default branch
@@ -86,3 +86,8 @@ In default commit mode, unrelated changes must not be included in lifecycle comm
 - On success, update `.kra.meta.json.workspace.status` to `active` atomically.
 - On success, reset `.kra.meta.json.workspace.work_state` to `todo`.
 - On successful reopen, refresh `.kra.meta.json.baseline` from reopened state.
+
+## Concurrency
+
+`ws reopen` holds the root-local repo-pool operation lock while restoring the workspace,
+refreshing bare repositories, and recreating worktrees.

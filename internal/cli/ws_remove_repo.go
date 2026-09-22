@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tasuku43/kra/internal/app/repolock"
 	"github.com/tasuku43/kra/internal/core/workspacerisk"
 	"github.com/tasuku43/kra/internal/infra/gitutil"
 	"github.com/tasuku43/kra/internal/infra/paths"
@@ -171,6 +172,24 @@ func (c *CLI) runWSRemoveRepo(args []string) int {
 	}
 
 	ctx := context.Background()
+	releaseRepoLock, lockErr := repolock.Acquire(ctx, root)
+	if lockErr != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:          false,
+				Action:      "remove-repo",
+				WorkspaceID: workspaceID,
+				Error: &cliJSONError{
+					Code:    "conflict",
+					Message: lockErr.Error(),
+				},
+			})
+			return exitError
+		}
+		fmt.Fprintf(c.Err, "%v\n", lockErr)
+		return exitError
+	}
+	defer releaseRepoLock()
 	if outputFormat == "json" {
 		if len(repoKeysFromFlag) == 0 {
 			_ = writeCLIJSON(c.Out, cliJSONResponse{

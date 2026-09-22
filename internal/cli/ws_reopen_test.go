@@ -56,6 +56,13 @@ func TestCLI_WS_Reopen_RestoresWorkspaceRecreatesWorktreesAndCanCommitAndUpdates
 	if _, err := os.Stat(filepath.Join(worktree, ".git")); err != nil {
 		t.Fatalf("reopened worktree missing .git: %v", err)
 	}
+	gitFile, err := os.ReadFile(filepath.Join(worktree, ".git"))
+	if err != nil {
+		t.Fatalf("read reopened worktree .git: %v", err)
+	}
+	if strings.Contains(string(gitFile), "gitdir: /") {
+		t.Fatalf("reopened worktree .git should use a relative gitdir: %q", gitFile)
+	}
 
 	subj := strings.TrimSpace(mustGitOutput(t, env.Root, "log", "-1", "--pretty=%s"))
 	if subj != "reopen: WS1" {

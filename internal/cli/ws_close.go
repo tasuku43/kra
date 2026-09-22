@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tasuku43/kra/internal/app/repolock"
 	"github.com/tasuku43/kra/internal/config"
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/workspacerisk"
@@ -193,6 +194,26 @@ func (c *CLI) runWSClose(args []string) int {
 			return exitUsage
 		}
 		directWorkspaceID = fromCWD.ID
+	}
+	var releaseRepoLock func()
+	if !dryRun {
+		releaseRepoLock, err = repolock.Acquire(ctx, root)
+		if err != nil {
+			if outputFormat == "json" {
+				_ = writeCLIJSON(c.Out, cliJSONResponse{
+					OK:     false,
+					Action: "close",
+					Error: &cliJSONError{
+						Code:    "conflict",
+						Message: err.Error(),
+					},
+				})
+				return exitError
+			}
+			fmt.Fprintf(c.Err, "%v\n", err)
+			return exitError
+		}
+		defer releaseRepoLock()
 	}
 	if outputFormat == "json" {
 		return c.runWSCloseJSON(directWorkspaceID, force, wd, root, doCommit, dryRun, emptyRecordPolicy)

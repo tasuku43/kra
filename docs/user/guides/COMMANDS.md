@@ -30,7 +30,7 @@ Notes:
 - `kra init` - initialize root and context.
 - `kra context ...` - current/list/create/use/rename/rm context operations.
 - `kra root ...` - conceptual KRA_ROOT helpers (resolve/open).
-- `kra root migrate` - plan/apply safe scaffold updates for the current root and active workspaces.
+- `kra root migrate` - plan/apply safe pool, worktree-link, and scaffold migrations for the current root.
 - `kra repo ...` - add/discover/remove/gc for repo pool registration.
 - `kra repo preset ...` - manage reusable repo sets for `ws add-repo`.
 - `kra template create` - create a workspace template scaffold.

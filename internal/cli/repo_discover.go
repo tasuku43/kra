@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/tasuku43/kra/internal/app/repocmd"
+	"github.com/tasuku43/kra/internal/app/repolock"
 	"github.com/tasuku43/kra/internal/infra/appports"
 	"github.com/tasuku43/kra/internal/repodiscovery"
 )
@@ -108,6 +109,12 @@ func (c *CLI) runRepoDiscover(args []string) int {
 		fmt.Fprintf(c.Err, "discover repos: %v\n", err)
 		return exitError
 	}
+	releaseRepoLock, err := repolock.Acquire(ctx, session.Root)
+	if err != nil {
+		fmt.Fprintf(c.Err, "%v\n", err)
+		return exitError
+	}
+	defer releaseRepoLock()
 
 	registered, err := loadRootRepoRegistry(session.Root)
 	if err != nil {

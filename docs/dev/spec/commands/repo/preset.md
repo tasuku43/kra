@@ -28,9 +28,8 @@ This feature is intentionally separate from workspace templates:
 
 `kra repo preset` resolves root in this order:
 
-1. `KRA_ROOT`
-2. current context (`~/.kra/state/current-context`)
-3. walk-up discovery from cwd
+1. current context (`~/.kra/state/current-context`)
+2. walk-up discovery from cwd
 
 ## Storage
 

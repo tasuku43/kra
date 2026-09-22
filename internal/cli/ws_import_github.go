@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tasuku43/kra/internal/app/repolock"
 	"github.com/tasuku43/kra/internal/app/wsimport"
 	"github.com/tasuku43/kra/internal/config"
 	"github.com/tasuku43/kra/internal/infra/appports"
@@ -547,6 +548,11 @@ func (c *CLI) autoAttachGitHubRepoToWorkspace(ctx context.Context, root string, 
 	if err := gitutil.EnsureGitInPath(); err != nil {
 		return err
 	}
+	releaseRepoLock, err := repolock.Acquire(ctx, root)
+	if err != nil {
+		return err
+	}
+	defer releaseRepoLock()
 	repoPoolPath := paths.RepoPoolPath(root)
 	remoteURL := fmt.Sprintf("git@github.com:%s.git", strings.TrimSpace(repoKey))
 	req := repoPoolAddRequest{RepoSpecInput: remoteURL}

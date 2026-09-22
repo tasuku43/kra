@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/tasuku43/kra/internal/app/repocmd"
+	"github.com/tasuku43/kra/internal/app/repolock"
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/infra/appports"
 	"github.com/tasuku43/kra/internal/infra/gitutil"
@@ -146,6 +147,23 @@ func (c *CLI) runRepoGC(args []string) int {
 		return exitError
 	}
 	c.debugf("run repo gc args=%d", len(selectArgs))
+	releaseRepoLock, err := repolock.Acquire(ctx, session.Root)
+	if err != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.gc",
+				Error: &cliJSONError{
+					Code:    "conflict",
+					Message: err.Error(),
+				},
+			})
+			return exitError
+		}
+		fmt.Fprintf(c.Err, "%v\n", err)
+		return exitError
+	}
+	defer releaseRepoLock()
 
 	candidates, err := buildRepoGCCandidates(ctx, session.Root, session.RepoPoolPath, c.debugf)
 	if err != nil {

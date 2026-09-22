@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/tasuku43/kra/internal/app/repocmd"
+	"github.com/tasuku43/kra/internal/app/repolock"
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/repostore"
 	"github.com/tasuku43/kra/internal/infra/appports"
@@ -94,6 +95,23 @@ func (c *CLI) runRepoAdd(args []string) int {
 		return exitError
 	}
 	c.debugf("run repo add count=%d", len(repoSpecs))
+	releaseRepoLock, err := repolock.Acquire(ctx, session.Root)
+	if err != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "repo.add",
+				Error: &cliJSONError{
+					Code:    "conflict",
+					Message: err.Error(),
+				},
+			})
+			return exitError
+		}
+		fmt.Fprintf(c.Err, "%v\n", err)
+		return exitError
+	}
+	defer releaseRepoLock()
 
 	existing, err := loadRootRepoRegistry(session.Root)
 	if err != nil {

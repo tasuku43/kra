@@ -16,9 +16,8 @@ It does not delete physical bare repositories from the current root's repo pool.
 
 `kra repo remove` resolves root in this order:
 
-1. `KRA_ROOT`
-2. current context (`~/.kra/state/current-context`)
-3. walk-up discovery from cwd
+1. current context (`~/.kra/state/current-context`)
+2. walk-up discovery from cwd
 
 ## Selection behavior
 
@@ -64,3 +63,8 @@ It does not delete physical bare repositories from the current root's repo pool.
   - `total`
   - `repos[]`
 - blocked removal (workspace refs) returns `ok=false`, `error.code=conflict`.
+
+## Concurrency
+
+The command holds the root-local repo-pool operation lock while selecting candidates and updating
+the root registry.

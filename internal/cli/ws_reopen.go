@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/tasuku43/kra/internal/app/repolock"
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/repostore"
 	"github.com/tasuku43/kra/internal/infra/gitutil"
@@ -140,6 +141,12 @@ func (c *CLI) runWSReopen(args []string) int {
 
 	ctx := context.Background()
 	repoPoolPath := paths.RepoPoolPath(root)
+	releaseRepoLock, err := repolock.Acquire(ctx, root)
+	if err != nil {
+		fmt.Fprintf(c.Err, "%v\n", err)
+		return exitError
+	}
+	defer releaseRepoLock()
 
 	if doCommit {
 		if err := ensureRootGitWorktree(ctx, root); err != nil {
@@ -440,7 +447,7 @@ func recreateWorkspaceWorktreesFromMeta(ctx context.Context, root string, repoPo
 			}
 		}
 
-		if _, err := gitutil.RunBare(ctx, barePath, "worktree", "add", worktreePath, r.Branch); err != nil {
+		if _, err := gitutil.RunBare(ctx, barePath, "worktree", "add", "--relative-paths", worktreePath, r.Branch); err != nil {
 			msg := err.Error()
 			if strings.Contains(msg, "already checked out") || strings.Contains(msg, "already used by worktree") {
 				return fmt.Errorf("branch is already checked out by another worktree: %s", r.Branch)

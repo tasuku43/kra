@@ -132,7 +132,7 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 
 6. Apply (all-or-nothing)
   - create local branches as needed
-  - create worktrees under `KRA_ROOT/workspaces/<id>/repos/<alias>`
+  - create worktrees under `KRA_ROOT/workspaces/<id>/repos/<alias>` using Git relative-path mode
   - record workspace-repo bindings in index
   - on any failure, rollback all created branches/worktrees/bindings
 
@@ -177,7 +177,10 @@ Add repositories from the existing repo pool to a workspace as Git worktrees.
 
 ## Concurrency
 
-- Command uses workspace-scoped lock.
+- Command uses the root-local repo-pool operation lock and a workspace-scoped lock.
+- The root-local lock is shared at `<KRA_ROOT>/.kra/state/operations/repo-pool.lock`, so a host
+  process and an isolated process using the same mounted root cannot mutate the pool or worktree
+  administration files concurrently.
 - Concurrent `ws add-repo` on the same workspace must fail fast.
 - Lock file stores owner PID metadata.
 - If an existing lock is stale (owner process no longer alive), command must auto-recover by removing stale lock

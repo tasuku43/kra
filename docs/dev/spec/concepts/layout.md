@@ -20,6 +20,11 @@ A directory "looks like a root" when both of these exist and are directories:
 - `workspaces/`
 - `archive/`
 
+When running inside an isolated environment, start the command from the mounted
+`KRA_ROOT` (or one of its descendants) so the walk-up fallback can resolve the
+same root even when the host's `$KRA_HOME` is not mounted. `KRA_ROOT` is not an
+environment-variable override; root selection remains context-first.
+
 ## Workspace folders
 
 At the workspace level, we separate "text-first" logs from "file-first" artifacts.
@@ -64,8 +69,15 @@ Notes:
 - Repo aliases are derived from the repo URL tail (e.g. `.../sugoroku.git` -> `sugoroku`).
 - The bare repo pool is root-local at `<KRA_ROOT>/.kra/repo-pool/`. Different roots do not share
   physical bare repositories.
+- Repo-pool and worktree mutations are serialized by the root-local lock at
+  `<KRA_ROOT>/.kra/state/operations/repo-pool.lock`, which is ignored and shared by
+  host and isolated processes when the same root is mounted.
+- New worktrees use Git's relative path mode so moving the mounted root between
+  host and isolation does not invalidate their `.git` links. `kra root migrate --apply`
+  normalizes existing root-local worktree links as well.
 - The legacy global pool at `$KRA_HOME/repo-pool/` is not deleted automatically. Run
-  `kra root migrate --apply` to copy it into the current root before using the new layout.
+  `kra root migrate --apply` to copy or merge missing entries into the current root before using
+  the new layout.
 
 ## Git tracking policy
 

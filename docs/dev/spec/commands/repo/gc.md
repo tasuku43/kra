@@ -58,6 +58,12 @@ JSON mode:
 - default: `<KRA_ROOT>/.kra/repo-pool/`
 - no automatic execution from `repo remove`
 
+## Concurrency
+
+`repo gc` holds `<KRA_ROOT>/.kra/state/operations/repo-pool.lock` from candidate inspection
+through confirmation and deletion, preventing a concurrent pool/worktree mutation from changing
+the safety decision.
+
 ## FS metadata safety behavior
 
 - Safety gate evaluation must include FS-based references from workspace/archive `.kra.meta.json`.

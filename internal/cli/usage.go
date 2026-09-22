@@ -115,8 +115,8 @@ func (c *CLI) printRootMigrateUsage(w io.Writer) {
 	fmt.Fprint(w, `Usage:
   kra root migrate [--apply] [--format human|json]
 
-Plan or apply missing default template and active workspace handoff files, and copy a legacy
-global repo pool into <KRA_ROOT>/.kra/repo-pool/ when needed.
+Plan or apply missing default template and active workspace handoff files, migrate missing entries
+from the legacy global repo pool, and normalize root-local worktree links for host/isolation use.
 Existing files are never overwritten.
 `)
 }

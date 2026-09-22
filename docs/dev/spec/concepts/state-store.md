@@ -38,6 +38,7 @@ Examples:
 - `cmux-sessions.json`
 - `root-repos.json`
 - `operations/ws-close/<id>.json`
+- `operations/repo-pool.lock`
 
 Rules:
 
@@ -72,6 +73,7 @@ Optional index/cache layers are allowed for UX/performance, with these constrain
 - Current context pointer: `~/.kra/state/current-context`
 - Root registry: `~/.kra/state/root-registry.json`
 - Repo pool: `<KRA_ROOT>/.kra/repo-pool/`
+- Repo-pool/worktree operation lock: `<KRA_ROOT>/.kra/state/operations/repo-pool.lock`
 
 Environment override:
 
@@ -88,4 +90,6 @@ it does not control the active root's physical repo pool.
 - Legacy root-local files such as `workspace-workstate.json` and `workspace-baselines/<id>.json`
   are recovery inputs only and should be reported by `doctor` until migrated or removed.
 - The legacy global pool at `$KRA_HOME/repo-pool/` is a migration source only. It remains untouched
-  until `kra root migrate --apply` copies it to `<KRA_ROOT>/.kra/repo-pool/`.
+  until `kra root migrate --apply` copies missing bare repositories to `<KRA_ROOT>/.kra/repo-pool/`.
+  If the root-local pool already exists, migration merges only entries that are not already present
+  and never overwrites the root-local copy.

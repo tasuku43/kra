@@ -44,6 +44,14 @@ func TestCLI_WS_AddRepo_JSON_DefaultBranchUsesWorkspaceBranchTemplate(t *testing
 	if branch != "feature/WS1/"+repoKey[strings.LastIndex(repoKey, "/")+1:] {
 		t.Fatalf("branch=%q, want template-rendered value", branch)
 	}
+	worktreePath := filepath.Join(env.Root, "workspaces", "WS1", "repos", repoKey[strings.LastIndex(repoKey, "/")+1:])
+	gitFile, err := os.ReadFile(filepath.Join(worktreePath, ".git"))
+	if err != nil {
+		t.Fatalf("read worktree .git: %v", err)
+	}
+	if strings.Contains(string(gitFile), "gitdir: /") {
+		t.Fatalf("worktree .git should use a relative gitdir: %q", gitFile)
+	}
 }
 
 func TestCLI_WS_AddRepo_JSON_BranchFlagOverridesWorkspaceBranchTemplate(t *testing.T) {

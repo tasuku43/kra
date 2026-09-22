@@ -63,7 +63,9 @@ kra ws open --id TASK-1234 --command "claude"
 When using `cmux`, `kra ws open` creates or reuses the corresponding `cmux` workspace and sends a cmux notification from that workspace. Use the notification action in cmux to jump to the workspace; `kra ws open` does not automatically steal focus. Pass `--command "<cmd>"` to send a startup command to the workspace terminal after it has opened in the workspace directory.
 In single-target open, if `cmux` capabilities are unavailable, `kra` falls back to directory-open behavior; with shell integration, it can also sync parent shell `cwd`.
 cmux Workspace Groups organize a KRA root and its workspaces, while `kra ws task sync` explicitly reconciles structured tasks with cmux native Todo. kra no longer creates or installs cmux Dock controls. Existing user-authored `.cmux/dock.json` files are preserved but unmanaged.
-For an existing root and active workspaces, run `kra root migrate --apply` to add missing workspace handoff files without overwriting custom files.
+For an existing root and active workspaces, run `kra root migrate --apply` to migrate the legacy pool,
+normalize existing worktree links for host/isolation use, and add missing workspace handoff files
+without overwriting custom files.
 
 For day-to-day operations (`repo add`, `ws add-repo`, `ws close`, `ws task`, `ws doc open`), see:
 

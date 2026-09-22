@@ -18,6 +18,7 @@ import (
 	"time"
 
 	"github.com/mattn/go-isatty"
+	"github.com/tasuku43/kra/internal/app/repolock"
 	"github.com/tasuku43/kra/internal/config"
 	"github.com/tasuku43/kra/internal/core/repospec"
 	"github.com/tasuku43/kra/internal/core/repostore"
@@ -353,6 +354,23 @@ func (c *CLI) runWSAddRepo(args []string) int {
 		c.printWSAddRepoUsage(c.Err)
 		return exitUsage
 	}
+	releaseRepoLock, lockErr := repolock.Acquire(ctx, root)
+	if lockErr != nil {
+		if outputFormat == "json" {
+			_ = writeCLIJSON(c.Out, cliJSONResponse{
+				OK:     false,
+				Action: "add-repo",
+				Error: &cliJSONError{
+					Code:    "conflict",
+					Message: lockErr.Error(),
+				},
+			})
+			return exitError
+		}
+		fmt.Fprintf(c.Err, "%v\n", lockErr)
+		return exitError
+	}
+	defer releaseRepoLock()
 	if outputFormat == "json" {
 		return c.runWSAddRepoJSON(workspaceID, root, repoPoolPath, repoKeysFromFlag, presetName, presetRepoKeys, baseRefFromFlag, branchFromFlag, branchTemplate, forceApply, addRepoFetchOptions{
 			Refresh: refreshFetch,
@@ -2107,7 +2125,7 @@ func applyAddRepoPlanAllOrNothing(ctx context.Context, plan []addRepoPlanItem, d
 			current.CreatedLocalBranch = true
 		}
 
-		if _, err := gitutil.RunBare(ctx, p.Candidate.BarePath, "worktree", "add", p.WorktreePath, p.Branch); err != nil {
+		if _, err := gitutil.RunBare(ctx, p.Candidate.BarePath, "worktree", "add", "--relative-paths", p.WorktreePath, p.Branch); err != nil {
 			rollbackAddRepoApplied(ctx, append(applied, current), debugf)
 			return nil, fmt.Errorf("create worktree for %s: %w", p.Candidate.RepoKey, err)
 		}

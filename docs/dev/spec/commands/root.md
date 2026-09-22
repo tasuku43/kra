@@ -26,11 +26,15 @@ Provide root-level helpers around the conceptual `KRA_ROOT`.
 
 - `kra root migrate [--apply] [--format human|json]`
   - plan by default; mutate only when `--apply` is set
-  - when `<KRA_ROOT>/.kra/repo-pool/` is absent and the legacy `$KRA_HOME/repo-pool/` exists,
-    plan an atomic copy into the root-local pool
+  - when the legacy `$KRA_HOME/repo-pool/` exists, plan an atomic copy of the whole pool when the
+    root-local pool is absent; when the root-local pool already exists, merge only missing bare
+    repositories and never overwrite existing root-local entries
   - refuse the pool migration when the legacy pool contains linked worktrees; close those
     workspaces first and rerun the migration
   - leave the legacy global pool untouched; it is a migration source only
+  - plan normalization of existing root-local worktree links to Git relative-path mode
+    so the root can be mounted at a different host/isolation path
+  - `--apply` holds the root-local repo-pool operation lock for the complete plan
   - add missing default template workspace scaffold:
     - `templates/default/workspace.md`
   - add the same missing workspace scaffold to active existing workspaces:

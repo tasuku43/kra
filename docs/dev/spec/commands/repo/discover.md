@@ -19,9 +19,8 @@ Discover repositories from provider API and bulk-add selected repos into the cur
 
 `kra repo discover` resolves root in this order:
 
-1. `KRA_ROOT`
-2. current context (`~/.kra/state/current-context`)
-3. walk-up discovery from cwd
+1. current context (`~/.kra/state/current-context`)
+2. walk-up discovery from cwd
 
 ## Provider model
 
@@ -64,3 +63,8 @@ Discover repositories from provider API and bulk-add selected repos into the cur
 - non-TTY: append progress lines as a fallback
 - `Result:` prints summary (`Added <n> / <m>`) and failure details only
 - one or more failures result in `exitError`
+
+## Concurrency
+
+The selected-repository apply phase holds `<KRA_ROOT>/.kra/state/operations/repo-pool.lock`
+through pool and root-registry updates.

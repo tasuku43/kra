@@ -31,9 +31,16 @@ infra.git     (bare)   ---/                 ├─ backend/   (worktree)
 - workspace attachments: `workspaces/<id>/repos/<alias>/`
 
 Each KRA root has an independent physical pool. This keeps the pool available when an agent
-isolation tool mounts only `KRA_ROOT`. Existing users can run `kra root migrate --apply` once to
-copy the legacy `$KRA_HOME/repo-pool/` into the current root; the legacy pool is not deleted.
-Migration refuses to copy while the legacy pool has linked worktrees; close those workspaces first.
+isolation tool mounts only `KRA_ROOT`. Run commands from the mounted root (or a descendant) so
+root discovery works even when the host's `$KRA_HOME` is not mounted. Existing users can run
+`kra root migrate --apply` once to copy or merge the legacy `$KRA_HOME/repo-pool/` into the current
+root; the legacy pool is not deleted. Migration refuses to copy while the legacy pool has linked
+worktrees; close those workspaces first. New worktrees use relative Git links, and migration
+normalizes existing root-local links for the same host/isolation portability.
+
+All pool and worktree mutations use the shared lock at
+`<KRA_ROOT>/.kra/state/operations/repo-pool.lock`, so host and isolated processes sharing the
+mounted root are serialized safely.
 
 ## Typical multi-repo flow
 

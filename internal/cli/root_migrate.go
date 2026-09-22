@@ -1,13 +1,17 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
+	"github.com/tasuku43/kra/internal/app/repolock"
+	"github.com/tasuku43/kra/internal/infra/gitutil"
 	"github.com/tasuku43/kra/internal/infra/paths"
 )
 
@@ -42,6 +46,15 @@ func (c *CLI) runRootMigrate(args []string) int {
 	root, code := c.resolveRootForRootCommand(opts.format, "root.migrate")
 	if code != exitOK {
 		return code
+	}
+
+	var releaseRepoLock func()
+	if opts.apply {
+		releaseRepoLock, err = repolock.Acquire(context.Background(), root)
+		if err != nil {
+			return c.writeRootRuntimeError(opts.format, "root.migrate", "conflict", err.Error())
+		}
+		defer releaseRepoLock()
 	}
 
 	plan, err := planRootMigration(root)
@@ -128,6 +141,10 @@ func planRootMigration(root string) (rootMigrationPlan, error) {
 	if err != nil {
 		return plan, err
 	}
+	actions, err = appendRootWorktreeRelativePathMigrationActions(actions, root)
+	if err != nil {
+		return plan, err
+	}
 
 	addWorkspaceSeedActions := func(base string, label string) error {
 		next, err := appendWorkspaceDocumentMigrationAction(actions, base, label)
@@ -181,6 +198,87 @@ func planRootMigration(root string) (rootMigrationPlan, error) {
 	return plan, nil
 }
 
+func appendRootWorktreeRelativePathMigrationActions(actions []rootMigrateAction, root string) ([]rootMigrateAction, error) {
+	workspacesDir := filepath.Join(root, "workspaces")
+	workspaceEntries, err := os.ReadDir(workspacesDir)
+	if err != nil {
+		return actions, fmt.Errorf("read workspaces/: %w", err)
+	}
+	rootPoolPath := paths.RepoPoolPath(root)
+	for _, workspaceEntry := range workspaceEntries {
+		if !workspaceEntry.IsDir() {
+			continue
+		}
+		workspaceID := strings.TrimSpace(workspaceEntry.Name())
+		if err := validateWorkspaceID(workspaceID); err != nil {
+			continue
+		}
+		reposDir := filepath.Join(workspacesDir, workspaceID, "repos")
+		repoEntries, err := os.ReadDir(reposDir)
+		if os.IsNotExist(err) {
+			continue
+		}
+		if err != nil {
+			return actions, fmt.Errorf("read workspace repos %s: %w", workspaceID, err)
+		}
+		for _, repoEntry := range repoEntries {
+			if !repoEntry.IsDir() {
+				continue
+			}
+			worktreePath := filepath.Join(reposDir, repoEntry.Name())
+			gitPath := filepath.Join(worktreePath, ".git")
+			gitInfo, err := os.Stat(gitPath)
+			if os.IsNotExist(err) || (err == nil && gitInfo.IsDir()) {
+				continue
+			}
+			if err != nil {
+				return actions, fmt.Errorf("stat worktree metadata %s: %w", worktreePath, err)
+			}
+			barePath, err := resolveBarePathFromWorktreeGitdir(worktreePath)
+			if err != nil {
+				return actions, fmt.Errorf("inspect worktree %s: %w", worktreePath, err)
+			}
+			if !isPathInside(rootPoolPath, barePath) {
+				continue
+			}
+			relative, err := worktreeUsesRelativeGitdir(worktreePath)
+			if err != nil {
+				return actions, fmt.Errorf("inspect worktree path mode %s: %w", worktreePath, err)
+			}
+			if relative {
+				continue
+			}
+			path := worktreePath
+			bare := barePath
+			actions = append(actions, rootMigrateAction{
+				Path:        path,
+				Description: fmt.Sprintf("normalize worktree links for %s", path),
+				apply: func() error {
+					if _, err := gitutil.RunBare(context.Background(), bare, "worktree", "repair", "--relative-paths", path); err != nil {
+						return err
+					}
+					return nil
+				},
+			})
+		}
+	}
+	return actions, nil
+}
+
+func worktreeUsesRelativeGitdir(worktreePath string) (bool, error) {
+	gitPath := filepath.Join(worktreePath, ".git")
+	b, err := os.ReadFile(gitPath)
+	if err != nil {
+		return false, err
+	}
+	line := strings.TrimSpace(string(b))
+	const prefix = "gitdir:"
+	if !strings.HasPrefix(strings.ToLower(line), prefix) {
+		return false, fmt.Errorf("unexpected .git format: %s", gitPath)
+	}
+	return !filepath.IsAbs(strings.TrimSpace(line[len(prefix):])), nil
+}
+
 func appendLegacyRepoPoolMigrationAction(actions []rootMigrateAction, root string) ([]rootMigrateAction, error) {
 	legacyPath, err := paths.LegacyRepoPoolPath()
 	if err != nil {
@@ -189,17 +287,6 @@ func appendLegacyRepoPoolMigrationAction(actions []rootMigrateAction, root strin
 	rootPoolPath := paths.RepoPoolPath(root)
 	if filepath.Clean(legacyPath) == filepath.Clean(rootPoolPath) {
 		return actions, nil
-	}
-
-	rootPoolInfo, rootPoolErr := os.Stat(rootPoolPath)
-	switch {
-	case rootPoolErr == nil:
-		if !rootPoolInfo.IsDir() {
-			return actions, fmt.Errorf("root repo pool path is not a directory: %s", rootPoolPath)
-		}
-		return actions, nil
-	case rootPoolErr != nil && !os.IsNotExist(rootPoolErr):
-		return actions, fmt.Errorf("stat root repo pool: %w", rootPoolErr)
 	}
 
 	legacyInfo, legacyErr := os.Stat(legacyPath)
@@ -214,15 +301,96 @@ func appendLegacyRepoPoolMigrationAction(actions []rootMigrateAction, root strin
 		if err := ensureNoLinkedWorktreesInRepoPool(legacyPath); err != nil {
 			return actions, err
 		}
+
+		rootPoolInfo, rootPoolErr := os.Stat(rootPoolPath)
+		switch {
+		case os.IsNotExist(rootPoolErr):
+			actions = append(actions, rootMigrateAction{
+				Path:        rootPoolPath,
+				Description: fmt.Sprintf("copy legacy repo pool from %s", legacyPath),
+				apply: func() error {
+					return copyDirectoryAtomically(legacyPath, rootPoolPath)
+				},
+			})
+			return actions, nil
+		case rootPoolErr != nil:
+			return actions, fmt.Errorf("stat root repo pool: %w", rootPoolErr)
+		case !rootPoolInfo.IsDir():
+			return actions, fmt.Errorf("root repo pool path is not a directory: %s", rootPoolPath)
+		}
+
+		missing, err := missingRepoPoolBareRepos(legacyPath, rootPoolPath)
+		if err != nil {
+			return actions, err
+		}
+		if len(missing) == 0 {
+			return actions, nil
+		}
 		actions = append(actions, rootMigrateAction{
 			Path:        rootPoolPath,
-			Description: fmt.Sprintf("copy legacy repo pool from %s", legacyPath),
+			Description: fmt.Sprintf("merge legacy repo pool entries from %s", legacyPath),
 			apply: func() error {
-				return copyDirectoryAtomically(legacyPath, rootPoolPath)
+				return mergeRepoPoolBareRepos(legacyPath, rootPoolPath, missing)
 			},
 		})
 		return actions, nil
 	}
+}
+
+func missingRepoPoolBareRepos(src string, dst string) ([]string, error) {
+	bareRepos, err := listRepoPoolBareRepos(src)
+	if err != nil {
+		return nil, fmt.Errorf("inspect legacy repo pool: %w", err)
+	}
+	missing := make([]string, 0, len(bareRepos))
+	for _, barePath := range bareRepos {
+		rel, err := filepath.Rel(src, barePath)
+		if err != nil {
+			return nil, fmt.Errorf("resolve legacy repo pool entry: %w", err)
+		}
+		target := filepath.Join(dst, rel)
+		info, err := os.Stat(target)
+		switch {
+		case os.IsNotExist(err):
+			missing = append(missing, barePath)
+		case err != nil:
+			return nil, fmt.Errorf("stat existing root repo pool entry %s: %w", target, err)
+		case !info.IsDir():
+			return nil, fmt.Errorf("root repo pool entry is not a directory: %s", target)
+		case func() bool {
+			_, headErr := os.Stat(filepath.Join(target, "HEAD"))
+			return headErr != nil
+		}():
+			return nil, fmt.Errorf("root repo pool entry is not a bare repository: %s", target)
+		}
+	}
+	slices.Sort(missing)
+	return missing, nil
+}
+
+func mergeRepoPoolBareRepos(src string, dst string, bareRepos []string) error {
+	for _, barePath := range bareRepos {
+		rel, err := filepath.Rel(src, barePath)
+		if err != nil {
+			return fmt.Errorf("resolve legacy repo pool entry: %w", err)
+		}
+		target := filepath.Join(dst, rel)
+		if info, statErr := os.Stat(target); statErr == nil {
+			if !info.IsDir() {
+				return fmt.Errorf("root repo pool entry is not a directory: %s", target)
+			}
+			if _, headErr := os.Stat(filepath.Join(target, "HEAD")); headErr != nil {
+				return fmt.Errorf("root repo pool entry is not a bare repository: %s", target)
+			}
+			continue
+		} else if !os.IsNotExist(statErr) {
+			return fmt.Errorf("stat root repo pool entry %s: %w", target, statErr)
+		}
+		if err := copyDirectoryAtomically(barePath, target); err != nil {
+			return fmt.Errorf("copy legacy repo pool entry %s: %w", filepath.ToSlash(rel), err)
+		}
+	}
+	return nil
 }
 
 func ensureNoLinkedWorktreesInRepoPool(repoPoolPath string) error {

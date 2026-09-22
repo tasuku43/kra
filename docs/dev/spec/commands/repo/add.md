@@ -19,9 +19,8 @@ Register repositories into the current root's bare repo pool and root index.
 
 `kra repo add` resolves root in this order:
 
-1. `KRA_ROOT`
-2. current context (`~/.kra/state/current-context`)
-3. walk-up discovery from cwd
+1. current context (`~/.kra/state/current-context`)
+2. walk-up discovery from cwd
 
 ## Inputs
 
@@ -78,3 +77,9 @@ Conflict policy:
   - `total`
   - `items[]` (`repo_key`, `success`, `skipped`, `reason`)
 - failure returns `ok=false` with `error.code=conflict` and includes partial result counts.
+
+## Concurrency
+
+The command holds `<KRA_ROOT>/.kra/state/operations/repo-pool.lock` while reading and updating
+the root repo registry and bare pool. This serializes host and isolated invocations sharing the
+same mounted root.
