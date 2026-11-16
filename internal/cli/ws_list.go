@@ -430,12 +430,22 @@ func listWorkspaceReposFromFilesystem(ctx context.Context, root string, scope st
 			continue
 		}
 		alias := strings.TrimSpace(e.Name())
-		if alias == "" {
+		if alias == "" || strings.HasPrefix(alias, ".") {
 			continue
 		}
 		repoPath := filepath.Join(reposDir, alias)
+		if _, err := os.Stat(filepath.Join(repoPath, ".git")); err != nil {
+			continue
+		}
+		gitDir, absErr := filepath.Abs(filepath.Join(repoPath, ".git"))
+		if absErr != nil {
+			return nil, absErr
+		}
+		if out, runErr := gitutil.Run(ctx, repoPath, "--git-dir", gitDir, "rev-parse", "--is-inside-work-tree"); runErr != nil || strings.TrimSpace(out) != "true" {
+			continue
+		}
 		branch := ""
-		if out, runErr := gitutil.Run(ctx, repoPath, "rev-parse", "--abbrev-ref", "HEAD"); runErr == nil {
+		if out, runErr := gitutil.Run(ctx, repoPath, "--git-dir", gitDir, "rev-parse", "--abbrev-ref", "HEAD"); runErr == nil {
 			branch = strings.TrimSpace(out)
 		}
 		restore := restoreByAlias[alias]

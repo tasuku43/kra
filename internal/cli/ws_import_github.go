@@ -296,7 +296,11 @@ func (c *CLI) applyWSImportGitHubPlan(ctx context.Context, root string, cfg conf
 			continue
 		}
 		if err := c.autoAttachGitHubRepoToWorkspace(ctx, root, cfg, in.ID, in.Repository, in.Branch); err != nil {
-			markWSImportGitHubCreateItemAsFailed(plan, in, "create_failed", err.Error())
+			message := err.Error()
+			if cleanupErr := os.RemoveAll(filepath.Join(root, "workspaces", in.ID)); cleanupErr != nil {
+				message += "; remove failed workspace: " + cleanupErr.Error()
+			}
+			markWSImportGitHubCreateItemAsFailed(plan, in, "create_failed", message)
 			plan.Summary.Failed++
 			continue
 		}
@@ -554,7 +558,31 @@ func (c *CLI) autoAttachGitHubRepoToWorkspace(ctx context.Context, root string, 
 	}
 	defer releaseRepoLock()
 	repoPoolPath := paths.RepoPoolPath(root)
-	remoteURL := fmt.Sprintf("git@github.com:%s.git", strings.TrimSpace(repoKey))
+	remoteURL := fmt.Sprintf("https://github.com/%s.git", strings.TrimSpace(repoKey))
+	registered, err := loadRootRepoRegistry(root)
+	if err != nil {
+		return fmt.Errorf("load root repo registry: %w", err)
+	}
+	foundRemote := false
+	for _, entry := range registered {
+		if strings.EqualFold(entry.RepoUID, "github.com/"+strings.TrimSpace(repoKey)) {
+			remoteURL = entry.RemoteURL
+			foundRemote = true
+			break
+		}
+	}
+	if !foundRemote {
+		barePath := filepath.Join(repoPoolPath, "github.com", filepath.FromSlash(strings.TrimSpace(repoKey))+".git")
+		if _, statErr := os.Stat(barePath); statErr == nil {
+			origin, originErr := gitutil.RunBare(ctx, barePath, "config", "--get", "remote.origin.url")
+			if originErr != nil {
+				return fmt.Errorf("resolve pool remote: %w", originErr)
+			}
+			remoteURL = strings.TrimSpace(origin)
+		} else if !os.IsNotExist(statErr) {
+			return fmt.Errorf("stat pool repo: %w", statErr)
+		}
+	}
 	req := repoPoolAddRequest{RepoSpecInput: remoteURL}
 	outcomes := applyRepoPoolAdds(ctx, repoPoolPath, []repoPoolAddRequest{req}, 1, c.debugf, nil)
 	if len(outcomes) != 1 || !outcomes[0].Success {

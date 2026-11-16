@@ -623,6 +623,7 @@ func TestListRowsFromFilesystem_DoesNotReadLegacyBaselineWhenMetaBaselineMissing
 	if err := os.MkdirAll(filepath.Join(wsPath, "repos", "r"), 0o755); err != nil {
 		t.Fatalf("mkdir repos: %v", err)
 	}
+	runGit(t, filepath.Join(wsPath, "repos", "r"), "init")
 	if err := os.MkdirAll(filepath.Join(root, "archive"), 0o755); err != nil {
 		t.Fatalf("mkdir archive: %v", err)
 	}

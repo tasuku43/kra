@@ -30,6 +30,7 @@ This flow must be recoverable when interrupted after irreversible filesystem pha
 
 1) Inspect repo risk (live)
 
+- Only directories with their own `.git` entry are considered repositories; ignore hidden directories. Git status must not discover a parent repository.
 - For each repo under `KRA_ROOT/workspaces/<id>/repos/<alias>`:
   - compute risk similar to `gion` (dirty / unpushed / diverged / unknown / clean)
 - If any repo is not clean, prompt for confirmation before continuing.

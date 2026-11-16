@@ -48,6 +48,8 @@ This command is for workspace creation (0..N), not for actions on existing works
   - `owner-repo-pr-<number>`
 - Typical workspace title source is the GitHub pull request title.
 - After workspace creation, the matching repository is automatically added to the workspace.
+- Use its registered root repository remote URL when available; otherwise use the pool bare origin URL, or HTTPS for an unregistered repository.
+- If attachment fails, remove the newly created workspace and report the failure message in the JSON item. If cleanup fails, report that error as well.
 - Auto-added repository branch behavior:
   - use the pull request head branch (`headRefName`)
 

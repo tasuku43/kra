@@ -29,7 +29,11 @@ func inspectGitRepoSnapshot(ctx context.Context, dir string) gitRepoSnapshot {
 		return gitRepoSnapshot{Status: workspacerisk.RepoStatus{Error: err}}
 	}
 
-	out, err := gitutil.Run(ctx, dir, "status", "--porcelain=v2", "--branch")
+	gitDir, err := filepath.Abs(filepath.Join(dir, ".git"))
+	if err != nil {
+		return gitRepoSnapshot{Status: workspacerisk.RepoStatus{Error: err}}
+	}
+	out, err := gitutil.Run(ctx, dir, "--git-dir", gitDir, "status", "--porcelain=v2", "--branch")
 	if err != nil {
 		return gitRepoSnapshot{Status: workspacerisk.RepoStatus{Error: err}}
 	}
